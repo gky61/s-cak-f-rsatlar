@@ -25,7 +25,7 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.sicakfirsatlar.sicak_firsatlar"
-    compileSdkVersion 34
+    compileSdkVersion 35
     ndkVersion flutter.ndkVersion
 
     compileOptions {
@@ -44,7 +44,7 @@ android {
     defaultConfig {
         applicationId "com.sicakfirsatlar.sicak_firsatlar"
         minSdkVersion 21
-        targetSdkVersion 34
+        targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }

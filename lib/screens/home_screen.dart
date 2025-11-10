@@ -160,11 +160,12 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           // Kategori filtreleme chip'leri
           Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            height: 70,
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 10),
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: Category.categories.length,
               itemBuilder: (context, index) {
                 final category = Category.categories[index];

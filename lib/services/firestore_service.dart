@@ -40,6 +40,42 @@ class FirestoreService {
     }
   }
 
+  // Yeni deal oluşturma (parametrelerle)
+  Future<String?> createDeal({
+    required String title,
+    required String description,
+    required double price,
+    required String store,
+    required String category,
+    required String imageUrl,
+    required String url,
+    required String userId,
+  }) async {
+    try {
+      final deal = Deal(
+        id: '', // Firestore otomatik ID oluşturacak
+        title: title,
+        price: price,
+        store: store,
+        category: category,
+        link: url, // Deal modelinde 'link' kullanılıyor
+        imageUrl: imageUrl,
+        postedBy: userId, // Deal modelinde 'postedBy' kullanılıyor
+        hotVotes: 0,
+        coldVotes: 0,
+        commentCount: 0,
+        createdAt: DateTime.now(),
+        isEditorPick: false,
+      );
+      
+      final docRef = await _firestore.collection('deals').add(deal.toFirestore());
+      return docRef.id;
+    } catch (e) {
+      print('Deal oluşturma hatası: $e');
+      return null;
+    }
+  }
+
   // Deal güncelleme
   Future<bool> updateDeal(String dealId, Map<String, dynamic> updates) async {
     try {
