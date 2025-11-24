@@ -13,6 +13,8 @@ class AdminScreen extends StatefulWidget {
   State<AdminScreen> createState() => _AdminScreenState();
 }
 
+enum _AdminListType { pending, expired }
+
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
   late TabController _tabController;
@@ -36,25 +38,29 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           tabs: const [
             Tab(text: 'Onay Bekleyen'),
-            Tab(text: 'Tüm İlanlar'),
+            Tab(text: 'Süresi Biten'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildDealList(isPending: true),
-          _buildDealList(isPending: false),
+          _buildDealList(_AdminListType.pending),
+          _buildDealList(_AdminListType.expired),
         ],
       ),
     );
   }
 
-  Widget _buildDealList({required bool isPending}) {
+  Widget _buildDealList(_AdminListType type) {
+    final bool isPending = type == _AdminListType.pending;
+    final bool isExpiredList = type == _AdminListType.expired;
+
     return StreamBuilder<List<Deal>>(
-      stream: isPending 
-          ? _firestoreService.getPendingDealsStream() 
-          : _firestoreService.getAllDealsStream(),
+      stream: switch (type) {
+        _AdminListType.pending => _firestoreService.getPendingDealsStream(),
+        _AdminListType.expired => _firestoreService.getExpiredDealsStream(),
+      },
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -68,13 +74,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  isPending ? Icons.check_circle_outline : Icons.list_alt,
+                  isPending ? Icons.check_circle_outline : Icons.hourglass_disabled_outlined,
                   size: 64,
                   color: Colors.grey[300],
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  isPending ? 'Onay bekleyen yok' : 'Hiç ilan yok',
+                  isPending ? 'Onay bekleyen yok' : 'Süresi biten ilan yok',
                   style: const TextStyle(color: Colors.grey),
                 ),
               ],
@@ -86,20 +92,44 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           padding: const EdgeInsets.all(12),
           itemCount: deals.length,
           itemBuilder: (context, index) {
-            return _buildAdminCard(deals[index], isPending);
+            return _buildAdminCard(
+              deals[index],
+              type,
+            );
           },
         );
       },
     );
   }
 
-  Widget _buildAdminCard(Deal deal, bool isPending) {
+  Widget _buildAdminCard(Deal deal, _AdminListType type) {
+    final bool isPending = type == _AdminListType.pending;
+    final bool isExpiredCard = type == _AdminListType.expired;
     final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Column(
         children: [
+          if (isExpiredCard)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.08),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning_amber_outlined, color: Colors.red, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'Bu fırsat süresi dolduğu için pasife alınmış.',
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
           ListTile(
             contentPadding: const EdgeInsets.all(12),
             leading: ClipRRect(
@@ -172,6 +202,22 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               ],
             ),
           ],
+          if (isExpiredCard)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Detay sayfasından bilgileri güncelleyebilir veya tekrar aktifleştirebilirsiniz.',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

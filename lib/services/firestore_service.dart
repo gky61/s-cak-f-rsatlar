@@ -40,6 +40,19 @@ class FirestoreService {
     });
   }
 
+  // Süresi bitmiş (isExpired: true) tüm deal'leri getir (admin için)
+  Stream<List<Deal>> getExpiredDealsStream() {
+    return _firestore
+        .collection('deals')
+        .where('isExpired', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
+      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
+      deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return deals;
+    });
+  }
+
   // Onay bekleyen deal'leri dinleme
   Stream<List<Deal>> getPendingDealsStream() {
     return _firestore
