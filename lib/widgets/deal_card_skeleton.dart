@@ -7,13 +7,17 @@ class DealCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBackgroundColor = isDark ? AppTheme.darkSurface : const Color(0xFFFBFCFE);
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFD5DAE2);
+    
     return Container(
       margin: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFFBFCFE),
+        color: cardBackgroundColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFFD5DAE2),
+          color: borderColor,
           width: 1.2,
         ),
         boxShadow: [
@@ -32,15 +36,15 @@ class DealCardSkeleton extends StatelessWidget {
             children: [
               // Görsel Skeleton (Sol Taraf)
               Shimmer.fromColors(
-                baseColor: Colors.grey[300]!,
-                highlightColor: Colors.grey[100]!,
+                baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                 period: const Duration(milliseconds: 1200),
                 child: Container(
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    color: Colors.white,
+                    color: isDark ? AppTheme.darkSurface : Colors.white,
                   ),
                 ),
               ),
@@ -55,28 +59,28 @@ class DealCardSkeleton extends StatelessWidget {
                     Row(
                       children: [
                         Shimmer.fromColors(
-                          baseColor: Colors.grey[300]!,
-                          highlightColor: Colors.grey[100]!,
+                          baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                          highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                           period: const Duration(milliseconds: 1200),
                           child: Container(
                             width: 60,
                             height: 18,
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: isDark ? AppTheme.darkSurface : Colors.white,
                               borderRadius: BorderRadius.circular(6),
                             ),
                           ),
                         ),
                         const Spacer(),
                         Shimmer.fromColors(
-                          baseColor: Colors.grey[300]!,
-                          highlightColor: Colors.grey[100]!,
+                          baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                          highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                           period: const Duration(milliseconds: 1200),
                           child: Container(
                             width: 40,
                             height: 14,
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: isDark ? AppTheme.darkSurface : Colors.white,
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
@@ -86,28 +90,28 @@ class DealCardSkeleton extends StatelessWidget {
                     const SizedBox(height: 2),
                     // Başlık Skeleton
                     Shimmer.fromColors(
-                      baseColor: Colors.grey[300]!,
-                      highlightColor: Colors.grey[100]!,
+                      baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                      highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                       period: const Duration(milliseconds: 1200),
                       child: Container(
                         width: double.infinity,
                         height: 16,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: isDark ? AppTheme.darkSurface : Colors.white,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Shimmer.fromColors(
-                      baseColor: Colors.grey[300]!,
-                      highlightColor: Colors.grey[100]!,
+                      baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                      highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                       period: const Duration(milliseconds: 1200),
                       child: Container(
                         width: 120,
                         height: 16,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: isDark ? AppTheme.darkSurface : Colors.white,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -118,28 +122,28 @@ class DealCardSkeleton extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Shimmer.fromColors(
-                          baseColor: Colors.grey[300]!,
-                          highlightColor: Colors.grey[100]!,
+                          baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                          highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                           period: const Duration(milliseconds: 1200),
                           child: Container(
                             width: 70,
                             height: 24,
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: isDark ? AppTheme.darkSurface : Colors.white,
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
                         ),
                         const Spacer(),
                         Shimmer.fromColors(
-                          baseColor: Colors.grey[300]!,
-                          highlightColor: Colors.grey[100]!,
+                          baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                          highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                           period: const Duration(milliseconds: 1200),
                           child: Container(
                             width: 50,
                             height: 20,
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: isDark ? AppTheme.darkSurface : Colors.white,
                               borderRadius: BorderRadius.circular(20),
                             ),
                           ),

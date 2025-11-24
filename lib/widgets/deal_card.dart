@@ -102,17 +102,23 @@ class _DealCardState extends State<DealCard> {
     final deal = widget.deal;
     final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
     final isExpired = deal.isExpired;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     final Border? highlightBorder = isExpired
         ? Border.all(color: Colors.red[300]!, width: 2)
         : deal.isEditorPick
             ? Border.all(color: Colors.orange[200]!, width: 2)
             : null;
-    const borderColor = Color(0xFFD5DAE2);
+    
+    final borderColor = isDark ? const Color(0xFF2D2D2D) : const Color(0xFFD5DAE2);
     final Border defaultBorder = Border.all(
       color: borderColor,
       width: 1.2,
     );
-    final cardBackgroundColor = isExpired ? Colors.red[50] : const Color(0xFFFBFCFE);
+    
+    final cardBackgroundColor = isDark
+        ? (isExpired ? Colors.red[900]!.withOpacity(0.2) : AppTheme.darkSurface)
+        : (isExpired ? Colors.red[50] : const Color(0xFFFBFCFE));
 
     return AnimatedScale(
       scale: _isPressed ? 0.98 : 1,
@@ -129,7 +135,9 @@ class _DealCardState extends State<DealCard> {
                   ? Colors.red.withOpacity(0.1)
                   : deal.isEditorPick
                       ? Colors.orange.withOpacity(0.15)
-                      : Colors.black.withOpacity(0.03),
+                      : (isDark 
+                          ? Colors.black.withOpacity(0.3)
+                          : Colors.black.withOpacity(0.03)),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -170,7 +178,7 @@ class _DealCardState extends State<DealCard> {
                                   height: 80,
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(12),
-                                    color: Colors.grey[100],
+                                    color: isDark ? Colors.grey[800] : Colors.grey[100],
                                   ),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
@@ -179,7 +187,7 @@ class _DealCardState extends State<DealCard> {
                                             imageUrl: _effectiveImageUrl!,
                                             fit: BoxFit.contain,
                                             placeholder: (context, url) => Container(
-                                              color: Colors.grey[100],
+                                              color: isDark ? Colors.grey[800] : Colors.grey[100],
                                               child: const Center(
                                                 child: SizedBox(
                                                   width: 20,
@@ -189,19 +197,19 @@ class _DealCardState extends State<DealCard> {
                                               ),
                                             ),
                                             errorWidget: (context, url, error) => Container(
-                                              color: Colors.grey[100],
+                                              color: isDark ? Colors.grey[800] : Colors.grey[100],
                                               child: Icon(
                                                 Icons.image_not_supported_rounded,
-                                                color: Colors.grey[300],
+                                                color: isDark ? Colors.grey[600] : Colors.grey[300],
                                                 size: 32,
                                               ),
                                             ),
                                           )
                                         : Container(
-                                            color: Colors.grey[100],
+                                            color: isDark ? Colors.grey[800] : Colors.grey[100],
                                             child: Icon(
                                               Icons.image_not_supported_rounded,
-                                              color: Colors.grey[300],
+                                              color: isDark ? Colors.grey[600] : Colors.grey[300],
                                               size: 32,
                                             ),
                                           ),
@@ -250,7 +258,7 @@ class _DealCardState extends State<DealCard> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey[100],
+                                    color: isDark ? Colors.grey[800] : Colors.grey[100],
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -258,7 +266,7 @@ class _DealCardState extends State<DealCard> {
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.grey[700],
+                                      color: isDark ? Colors.grey[300] : Colors.grey[700],
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -273,7 +281,7 @@ class _DealCardState extends State<DealCard> {
                                   _formatRelativeTime(deal.createdAt),
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: Colors.grey[400],
+                                    color: isDark ? Colors.grey[500] : Colors.grey[400],
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -297,7 +305,9 @@ class _DealCardState extends State<DealCard> {
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
                                       height: 1.2,
-                                      color: isExpired ? Colors.red[700] : AppTheme.textPrimary,
+                                      color: isExpired 
+                                          ? Colors.red[700] 
+                                          : (isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
                                     ),
                                   ),
                                 ),
@@ -319,9 +329,9 @@ class _DealCardState extends State<DealCard> {
                                     if (deal.originalPrice != null && deal.originalPrice! > deal.price)
                                       Text(
                                         currencyFormat.format(deal.originalPrice),
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
-                                          color: AppTheme.textSecondary,
+                                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
                                           decoration: TextDecoration.lineThrough,
                                         ),
                                       ),
@@ -343,8 +353,8 @@ class _DealCardState extends State<DealCard> {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: (deal.hotVotes - deal.coldVotes) >= 0 
-                                        ? AppTheme.primary.withOpacity(0.1)
-                                        : Colors.blue.withOpacity(0.1),
+                                        ? AppTheme.primary.withOpacity(isDark ? 0.2 : 0.1)
+                                        : Colors.blue.withOpacity(isDark ? 0.2 : 0.1),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Row(

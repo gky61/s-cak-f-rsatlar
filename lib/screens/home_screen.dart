@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
+import '../services/theme_service.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../models/category.dart';
@@ -23,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
+  final ThemeService _themeService = ThemeService();
   
   String _selectedCategory = 'tumu';
   String? _selectedSubCategory;
@@ -40,6 +42,20 @@ class _HomeScreenState extends State<HomeScreen> {
     _notificationService.setupNotificationListeners();
     _cleanupExpiredDeals();
     _loadFollowedCategories();
+    // Theme service listener ekle
+    _themeService.addListener(_onThemeChanged);
+  }
+
+  void _onThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _themeService.removeListener(_onThemeChanged);
+    super.dispose();
   }
 
   Future<void> _loadFollowedCategories() async {
@@ -164,8 +180,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
       appBar: AppBar(
         systemOverlayStyle: SystemUiOverlayStyle.dark,
         title: InkWell(
@@ -191,6 +208,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         centerTitle: false,
         actions: [
+          // Karanlık Mod Toggle
+          IconButton(
+            icon: Icon(
+              _themeService.isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+            ),
+            onPressed: () => _themeService.toggleTheme(),
+            tooltip: _themeService.isDarkMode ? 'Açık Mod' : 'Karanlık Mod',
+          ),
           if (_isAdmin)
             IconButton(
               icon: const Icon(Icons.admin_panel_settings_rounded, color: AppTheme.error),

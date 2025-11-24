@@ -283,10 +283,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // _currentDeal null ise loading göster
     if (_currentDeal == null) {
       return Scaffold(
-        backgroundColor: AppTheme.background,
+        backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -296,10 +297,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
   Widget _buildDealDetail(BuildContext context, Deal deal) {
     final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -464,7 +466,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           Text(
                             deal.title,
                             style: theme.textTheme.headlineMedium?.copyWith(
-                              color: AppTheme.accent,
+                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
                               fontWeight: FontWeight.w900,
                               fontSize: 22,
                               height: 1.3,
@@ -483,17 +485,17 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: Colors.grey[50],
+                                color: isDark ? AppTheme.darkSurface : Colors.grey[50],
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: Colors.grey[200]!,
+                                  color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
                                   width: 1,
                                 ),
                               ),
                               child: Text(
                                 deal.description,
                                 style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: Colors.grey[800],
+                                  color: isDark ? AppTheme.darkTextPrimary : Colors.grey[800],
                                   fontSize: 15,
                                   height: 1.5,
                                   fontWeight: FontWeight.w400,
@@ -584,14 +586,21 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey[100],
+                                    color: isDark ? Colors.grey[800] : Colors.grey[100],
                                     borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: Colors.grey[300]!, width: 1),
+                                    border: Border.all(
+                                      color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                                      width: 1,
+                                    ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.store_rounded, size: 18, color: Colors.grey[700]),
+                                      Icon(
+                                        Icons.store_rounded,
+                                        size: 18,
+                                        color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                      ),
                                       const SizedBox(width: 6),
                                       Expanded(
                                         child: Text(
@@ -599,7 +608,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           style: TextStyle(
                                             fontSize: 14,
                                             fontWeight: FontWeight.w700,
-                                            color: Colors.grey[800],
+                                            color: isDark ? AppTheme.darkTextPrimary : Colors.grey[800],
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -640,11 +649,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: isDark ? AppTheme.darkSurface : Colors.white,
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
+                                  color: isDark
+                                      ? Colors.black.withValues(alpha: 0.3)
+                                      : Colors.black.withValues(alpha: 0.04),
                                   blurRadius: 10,
                                   offset: const Offset(0, 2),
                                 ),
@@ -666,7 +677,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     ),
                                   ),
                                 ),
-                                Container(width: 1, height: 30, color: Colors.grey[200]),
+                                Container(
+                                  width: 1,
+                                  height: 30,
+                                  color: isDark ? AppTheme.darkBorder : Colors.grey[200],
+                                ),
                                 Expanded(
                                   child: GestureDetector(
                                     onTap: () => _handleVote(false),
@@ -680,7 +695,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     ),
                                   ),
                                 ),
-                                Container(width: 1, height: 30, color: Colors.grey[200]),
+                                Container(
+                                  width: 1,
+                                  height: 30,
+                                  color: isDark ? AppTheme.darkBorder : Colors.grey[200],
+                                ),
                                 Expanded(
                                   child: GestureDetector(
                                     onTap: () => _showCommentsBottomSheet(context, deal),
@@ -844,6 +863,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     bool isSaving = false;
     String? errorText;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -937,11 +957,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
+                            Text(
                               'Fırsatı Düzenle',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w800,
+                                color: isDark ? AppTheme.darkTextPrimary : Colors.black87,
                               ),
                             ),
                             IconButton(
@@ -962,12 +983,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'Kategori',
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey,
+                                  color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -997,23 +1018,33 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey[300]!),
+                                    border: Border.all(
+                                      color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                                    ),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.category, color: Colors.grey),
+                                      Icon(
+                                        Icons.category,
+                                        color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
+                                      ),
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Text(
                                           _getCategoryDisplayText(selectedCategoryId, selectedSubCategory),
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,
+                                            color: isDark ? AppTheme.darkTextPrimary : Colors.black87,
                                           ),
                                         ),
                                       ),
-                                      const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                                      Icon(
+                                        Icons.arrow_forward_ios,
+                                        size: 16,
+                                        color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -1108,6 +1139,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -1115,10 +1147,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Colors.grey,
+              color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
             ),
           ),
           const SizedBox(height: 6),
@@ -1126,8 +1158,31 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
             controller: controller,
             maxLines: maxLines,
             keyboardType: keyboardType,
+            style: TextStyle(
+              color: isDark ? AppTheme.darkTextPrimary : Colors.black87,
+            ),
             decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: AppTheme.primary,
+                  width: 2,
+                ),
+              ),
+              filled: true,
+              fillColor: isDark ? AppTheme.darkBackground : Colors.white,
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             ),
           ),
@@ -1142,20 +1197,28 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     required VoidCallback? onPressed,
     Color? color,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.85),
+        color: isDark
+            ? AppTheme.darkSurface.withValues(alpha: 0.9)
+            : Colors.white.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.4)
+                : Colors.black.withValues(alpha: 0.12),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
         ],
       ),
       child: IconButton(
-        icon: Icon(icon, color: color ?? AppTheme.accent),
+        icon: Icon(
+          icon,
+          color: color ?? (isDark ? AppTheme.darkTextPrimary : AppTheme.accent),
+        ),
         onPressed: onPressed,
       ),
     );
@@ -1166,15 +1229,21 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     required String label,
     required Color color,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppTheme.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!, width: 1),
+        border: Border.all(
+          color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.3)
+                : Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1191,7 +1260,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[800],
+                color: isDark ? AppTheme.darkTextPrimary : Colors.grey[800],
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -1209,6 +1278,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     bool isSelected = false,
     bool isLoading = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1233,7 +1303,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w900,
-            color: isSelected ? color : AppTheme.accent,
+            color: isSelected
+                ? color
+                : (isDark ? AppTheme.darkTextPrimary : AppTheme.accent),
           ),
         ),
         const SizedBox(height: 1),
@@ -1242,7 +1314,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           style: TextStyle(
             fontSize: 10,
             fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-            color: isSelected ? color : Colors.grey[600],
+            color: isSelected
+                ? color
+                : (isDark ? AppTheme.darkTextSecondary : Colors.grey[600]),
           ),
         ),
       ],
@@ -2231,10 +2305,11 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
       minChildSize: 0.5,
       maxChildSize: 0.95,
       builder: (context, scrollController) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Container(
-          decoration: const BoxDecoration(
-            color: AppTheme.background,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkBackground : AppTheme.background,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             children: [
@@ -2243,17 +2318,19 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   border: Border(
-                    bottom: BorderSide(color: Colors.grey[200]!),
+                    bottom: BorderSide(
+                      color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
+                    ),
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Text(
+                    Text(
                       'Yorumlar',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
-                        color: AppTheme.accent,
+                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
                       ),
                     ),
                     const Spacer(),
@@ -2287,7 +2364,9 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                               padding: const EdgeInsets.all(16),
                               child: Text(
                                 'Hata: ${snapshot.error}',
-                                style: TextStyle(color: Colors.grey[600]),
+                                style: TextStyle(
+                                  color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
+                                ),
                                 textAlign: TextAlign.center,
                               ),
                             ),
@@ -2308,14 +2387,14 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                             Icon(
                               Icons.comment_outlined,
                               size: 64,
-                              color: Colors.grey[400],
+                              color: isDark ? AppTheme.darkTextSecondary : Colors.grey[400],
                             ),
                             const SizedBox(height: 16),
                             Text(
                               'Henüz yorum yok',
                               style: TextStyle(
                                 fontSize: 16,
-                                color: Colors.grey[600],
+                                color: isDark ? AppTheme.darkTextPrimary : Colors.grey[600],
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -2324,7 +2403,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                               'İlk yorumu siz yapın!',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey[500],
+                                color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
                               ),
                             ),
                           ],
@@ -2350,9 +2429,11 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: isDark ? AppTheme.darkSurface : Colors.white,
                   border: Border(
-                    top: BorderSide(color: Colors.grey[200]!),
+                    top: BorderSide(
+                      color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
+                    ),
                   ),
                 ),
                 child: SafeArea(
@@ -2361,18 +2442,29 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                       Expanded(
                           child: TextField(
                           controller: _commentController,
-                          style: const TextStyle(color: Colors.black),
+                          style: TextStyle(
+                            color: isDark ? AppTheme.darkTextPrimary : Colors.black,
+                          ),
                           decoration: InputDecoration(
                             hintText: _replyingTo != null 
                                 ? '@${_replyingTo!.userName} kullanıcısına cevap verin...' 
                                 : 'Yorumunuzu yazın...',
+                            hintStyle: TextStyle(
+                              color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
+                            ),
+                            filled: true,
+                            fillColor: isDark ? AppTheme.darkBackground : Colors.white,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
+                              borderSide: BorderSide(
+                                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
+                              borderSide: BorderSide(
+                                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(20),
@@ -2403,10 +2495,14 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                           child: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.grey[200],
+                              color: isDark ? AppTheme.darkBorder : Colors.grey[200],
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Icon(Icons.close, size: 20, color: Colors.grey),
+                            child: Icon(
+                              Icons.close,
+                              size: 20,
+                              color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
+                            ),
                           ),
                         ),
                       ],
@@ -2446,6 +2542,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
   }
 
   Widget _buildCommentItem(Comment comment, bool isAdmin, List<Comment> allComments, ScrollController scrollController) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isReply = comment.parentCommentId != null;
     return Container(
       margin: EdgeInsets.only(
@@ -2454,16 +2551,28 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
       ),
       padding: EdgeInsets.all(isReply ? 8 : 10),
       decoration: BoxDecoration(
-        color: isReply ? Colors.grey[50] : Colors.white, // Cevaplar için farklı arka plan
+        color: isReply
+            ? (isDark ? AppTheme.darkBackground : Colors.grey[50])
+            : (isDark ? AppTheme.darkSurface : Colors.white), // Cevaplar için farklı arka plan
         borderRadius: BorderRadius.circular(12),
-        border: isReply ? Border.all(color: Colors.grey[300]!, width: 1) : null, // Cevaplar için border
-        boxShadow: isReply ? null : [ // Cevaplar için shadow yok
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        border: isReply
+            ? Border.all(
+                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                width: 1,
+              )
+            : null, // Cevaplar için border
+        boxShadow: isReply
+            ? null
+            : [
+                // Cevaplar için shadow yok
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.3)
+                      : Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 1),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2475,7 +2584,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                 Icon(
                   Icons.reply_rounded,
                   size: 12,
-                  color: Colors.grey[400],
+                  color: isDark ? AppTheme.darkTextSecondary : Colors.grey[400],
                 ),
                 const SizedBox(width: 6),
               ],
@@ -2508,7 +2617,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: isReply ? 12 : 13,
-                              color: AppTheme.accent,
+                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -2535,7 +2644,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                       _formatCommentTime(comment.createdAt),
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.grey[500],
+                        color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -2545,7 +2654,11 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
               // Admin butonları
               if (isAdmin)
                 PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert_rounded, color: Colors.grey[600], size: 16),
+                  icon: Icon(
+                    Icons.more_vert_rounded,
+                    color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
+                    size: 16,
+                  ),
                   onSelected: (value) {
                     if (value == 'delete') {
                       _deleteComment(comment);
@@ -2583,7 +2696,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
             comment.text,
             style: TextStyle(
               fontSize: isReply ? 13 : 14,
-              color: AppTheme.accent,
+              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
               fontWeight: FontWeight.w500,
               height: 1.4,
             ),
