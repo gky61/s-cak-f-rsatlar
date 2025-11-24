@@ -78,8 +78,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return StreamBuilder(
       stream: _authService.authStateChanges,
       builder: (context, snapshot) {
-        // İlk yükleme durumu
+        // İlk yükleme durumu - Firebase Auth'un mevcut kullanıcısını kontrol et
         if (snapshot.connectionState == ConnectionState.waiting) {
+          // Stream henüz hazır değilse, mevcut kullanıcıyı kontrol et
+          final currentUser = _authService.currentUser;
+          if (currentUser != null) {
+            // Kullanıcı zaten giriş yapmış, bildirim servisini başlat ve HomeScreen'e git
+            if (_lastUserId != currentUser.uid) {
+              _lastUserId = currentUser.uid;
+              _initializeNotificationService(currentUser.uid);
+            }
+            return const HomeScreen();
+          }
+          // Kullanıcı yoksa loading göster
           return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(),
@@ -90,6 +101,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
         // Hata durumu
         if (snapshot.hasError) {
           print('Auth error: ${snapshot.error}');
+          // Hata olsa bile mevcut kullanıcıyı kontrol et
+          final currentUser = _authService.currentUser;
+          if (currentUser != null) {
+            if (_lastUserId != currentUser.uid) {
+              _lastUserId = currentUser.uid;
+              _initializeNotificationService(currentUser.uid);
+            }
+            return const HomeScreen();
+          }
           return const AuthScreen();
         }
         
@@ -104,6 +124,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
           }
           print('User logged in: ${snapshot.data!.email}');
           // Herkes normal ekrana gider, yönetici paneline geçiş butonu HomeScreen'de olacak
+          return const HomeScreen();
+        }
+        
+        // Stream null döndüyse, mevcut kullanıcıyı tekrar kontrol et
+        final currentUser = _authService.currentUser;
+        if (currentUser != null) {
+          // Kullanıcı varsa ama stream henüz güncellenmemiş, HomeScreen'e git
+          if (_lastUserId != currentUser.uid) {
+            _lastUserId = currentUser.uid;
+            _initializeNotificationService(currentUser.uid);
+          }
           return const HomeScreen();
         }
         

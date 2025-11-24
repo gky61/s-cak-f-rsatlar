@@ -9,6 +9,7 @@ class Deal {
   final int? discountRate; // İndirim Oranı
   final String store;
   final String category;
+  final String? subCategory;
   final String link;
   final String imageUrl;
   final int hotVotes;
@@ -29,6 +30,7 @@ class Deal {
     this.discountRate,
     required this.store,
     required this.category,
+    this.subCategory,
     required this.link,
     required this.imageUrl,
     required this.hotVotes,
@@ -112,6 +114,7 @@ class Deal {
       discountRate: data['discountRate'] != null ? (data['discountRate'] as num).toInt() : null,
       store: data['store'] ?? '',
       category: data['category'] ?? '',
+      subCategory: data['subCategory'],
       link: data['link'] ?? '',
       imageUrl: data['imageUrl'] ?? '',
       hotVotes: (data['hotVotes'] ?? 0) is int ? (data['hotVotes'] ?? 0) : ((data['hotVotes'] ?? 0) as num).toInt(),
@@ -135,6 +138,7 @@ class Deal {
       'discountRate': discountRate,
       'store': store,
       'category': category,
+      'subCategory': subCategory,
       'link': link,
       'imageUrl': imageUrl,
       'hotVotes': hotVotes,

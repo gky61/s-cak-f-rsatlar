@@ -102,6 +102,17 @@ class _DealCardState extends State<DealCard> {
     final deal = widget.deal;
     final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
     final isExpired = deal.isExpired;
+    final Border? highlightBorder = isExpired
+        ? Border.all(color: Colors.red[300]!, width: 2)
+        : deal.isEditorPick
+            ? Border.all(color: Colors.orange[200]!, width: 2)
+            : null;
+    const borderColor = Color(0xFFD5DAE2);
+    final Border defaultBorder = Border.all(
+      color: borderColor,
+      width: 1.2,
+    );
+    final cardBackgroundColor = isExpired ? Colors.red[50] : const Color(0xFFFBFCFE);
 
     return AnimatedScale(
       scale: _isPressed ? 0.98 : 1,
@@ -109,18 +120,18 @@ class _DealCardState extends State<DealCard> {
       child: Container(
         margin: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4),
         decoration: BoxDecoration(
-          color: isExpired ? Colors.red[50] : Colors.white,
+          color: cardBackgroundColor,
           borderRadius: BorderRadius.circular(16),
-          border: isExpired 
-              ? Border.all(color: Colors.red[300]!, width: 2)
-              : null,
+          border: highlightBorder ?? defaultBorder,
           boxShadow: [
             BoxShadow(
-              color: isExpired 
+              color: isExpired
                   ? Colors.red.withOpacity(0.1)
-                  : Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+                  : deal.isEditorPick
+                      ? Colors.orange.withOpacity(0.15)
+                      : Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),

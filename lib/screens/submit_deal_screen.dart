@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../models/category.dart';
+import '../widgets/category_selector_widget.dart';
 
 class SubmitDealScreen extends StatefulWidget {
   const SubmitDealScreen({super.key});
@@ -22,7 +23,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   final _imageUrlController = TextEditingController();
   final _urlController = TextEditingController();
   
-  String _selectedCategory = 'bilgisayar';
+  String _selectedCategory = 'elektronik';
+  String? _selectedSubCategory;
   bool _isLoading = false;
 
   @override
@@ -34,6 +36,33 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     _imageUrlController.dispose();
     _urlController.dispose();
     super.dispose();
+  }
+
+  String _getCategoryDisplayText() {
+    final category = Category.getById(_selectedCategory);
+    if (_selectedSubCategory != null) {
+      return '${category.icon} ${category.name} > $_selectedSubCategory';
+    }
+    return '${category.icon} ${category.name}';
+  }
+
+  void _showCategorySelector() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => CategorySelectorWidget(
+        selectedCategoryId: _selectedCategory,
+        selectedSubCategory: _selectedSubCategory,
+        onCategorySelected: (categoryId, subCategory) {
+          setState(() {
+            _selectedCategory = categoryId;
+            _selectedSubCategory = subCategory;
+          });
+          Navigator.pop(context);
+        },
+      ),
+    );
   }
 
   Future<void> _submitDeal() async {
@@ -61,6 +90,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         price: double.parse(_priceController.text.trim()),
         store: _storeController.text.trim(),
         category: Category.getNameById(_selectedCategory),
+        subCategory: _selectedSubCategory,
         imageUrl: _imageUrlController.text.trim(),
         url: _urlController.text.trim(),
         userId: user.uid,
@@ -129,34 +159,46 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Kategori
-            DropdownButtonFormField<String>(
-              value: _selectedCategory,
-              decoration: InputDecoration(
-                labelText: 'Kategori *',
-                border: OutlineInputBorder(
+            // Kategori Seçimi
+            InkWell(
+              onTap: () => _showCategorySelector(),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                prefixIcon: const Icon(Icons.category),
+                child: Row(
+                  children: [
+                    const Icon(Icons.category, color: Colors.grey),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Kategori *',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _getCategoryDisplayText(),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                  ],
+                ),
               ),
-              items: Category.categories
-                  .where((cat) => cat.id != 'tumu')
-                  .map((category) => DropdownMenuItem(
-                        value: category.id,
-                        child: Row(
-                          children: [
-                            Text(category.icon),
-                            const SizedBox(width: 8),
-                            Text(category.name),
-                          ],
-                        ),
-                      ))
-                  .toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedCategory = value!;
-                });
-              },
             ),
             const SizedBox(height: 16),
 

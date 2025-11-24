@@ -36,6 +36,10 @@ dependencies:
   # HTML parsing ve metadata
   html: ^0.15.4
   metadata_fetch: ^0.4.2
+  share_plus: ^10.0.0
+  
+  # Shimmer effect for skeleton loading
+  shimmer: ^3.0.0
 
 dev_dependencies:
   flutter_test:

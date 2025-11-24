@@ -7,10 +7,12 @@ import 'package:photo_view/photo_view.dart';
 
 import '../models/deal.dart';
 import '../models/comment.dart';
+import '../models/category.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/link_preview_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/category_selector_widget.dart';
 
 class DealDetailScreen extends StatefulWidget {
   final String dealId;
@@ -617,7 +619,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               Expanded(
                                 child: _buildCompactInfoChip(
                                   icon: Icons.local_offer_outlined,
-                                  label: deal.category,
+                                  label: _getCategoryDisplayTextForDeal(deal),
                                   color: AppTheme.primary,
                                 ),
                               ),
@@ -818,7 +820,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     final titleController = TextEditingController(text: deal.title);
     final descriptionController = TextEditingController(text: deal.description);
     final storeController = TextEditingController(text: deal.store);
-    final categoryController = TextEditingController(text: deal.category);
     final linkController = TextEditingController(text: deal.link);
     final priceController = TextEditingController(text: deal.price.toStringAsFixed(0));
     final originalPriceController = TextEditingController(
@@ -828,6 +829,15 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       text: deal.discountRate != null ? deal.discountRate!.toString() : '',
     );
 
+    // Eğer kategori "Tümü" ise, varsayılan olarak "elektronik" kullan
+    String initialCategoryId = Category.getIdByName(deal.category) ?? 'elektronik';
+    if (initialCategoryId == 'tumu') {
+      initialCategoryId = 'elektronik'; // "Tümü" seçilemez, varsayılan kategori kullan
+    }
+
+    // State değişkenleri closure içinde tutulmalı (StatefulBuilder dışında)
+    String selectedCategoryId = initialCategoryId;
+    String? selectedSubCategory = deal.subCategory;
     bool isEditorPick = deal.isEditorPick;
     bool isApproved = deal.isApproved;
     bool isExpired = deal.isExpired;
@@ -866,7 +876,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                 'title': titleController.text.trim(),
                 'description': descriptionController.text.trim(),
                 'store': storeController.text.trim(),
-                'category': categoryController.text.trim(),
+                'category': Category.getNameById(selectedCategoryId) ?? deal.category,
+                'subCategory': selectedSubCategory,
                 'link': linkController.text.trim(),
                 'price': price,
                 'originalPrice': (originalPrice ?? 0) > 0 ? originalPrice : null,
@@ -945,7 +956,71 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         _buildAdminTextField('Başlık', titleController),
                         _buildAdminTextField('Açıklama', descriptionController, maxLines: 3),
                         _buildAdminTextField('Mağaza', storeController),
-                        _buildAdminTextField('Kategori', categoryController),
+                        // Kategori Seçimi
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Kategori',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              InkWell(
+                                onTap: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: Colors.transparent,
+                                    builder: (selectorContext) {
+                                      return CategorySelectorWidget(
+                                        selectedCategoryId: selectedCategoryId,
+                                        selectedSubCategory: selectedSubCategory,
+                                        onCategorySelected: (categoryId, subCategory) {
+                                          // StatefulBuilder içindeki değişkenleri güncelle
+                                          setSheetState(() {
+                                            selectedCategoryId = categoryId;
+                                            selectedSubCategory = subCategory;
+                                          });
+                                          // CategorySelectorWidget kendisi kapanacağı için burada pop çağrısı yok
+                                        },
+                                      );
+                                    },
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey[300]!),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.category, color: Colors.grey),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          _getCategoryDisplayText(selectedCategoryId, selectedSubCategory),
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                      const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                         _buildAdminTextField('Bağlantı', linkController),
                         Row(
                           children: [
@@ -1004,6 +1079,27 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         );
       },
     );
+  }
+
+  String _getCategoryDisplayText(String categoryId, String? subCategory) {
+    final category = Category.getById(categoryId);
+    if (subCategory != null) {
+      return '${category.icon} ${category.name} > $subCategory';
+    }
+    return '${category.icon} ${category.name}';
+  }
+
+  String _getCategoryDisplayTextForDeal(Deal deal) {
+    final categoryId = Category.getIdByName(deal.category);
+    if (categoryId != null) {
+      final category = Category.getById(categoryId);
+      if (deal.subCategory != null && deal.subCategory!.isNotEmpty) {
+        return '${category.icon} ${category.name} > ${deal.subCategory}';
+      }
+      return '${category.icon} ${category.name}';
+    }
+    // Fallback: Eğer kategori bulunamazsa sadece deal.category'yi göster
+    return deal.category;
   }
 
   Widget _buildAdminTextField(

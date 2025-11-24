@@ -194,7 +194,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 Container(width: 1, height: 30, color: Colors.grey[200]),
                 Expanded(
                   child: TextButton.icon(
-                    onPressed: () => _approveDeal(deal.id),
+                    onPressed: () => _showApproveOptions(deal.id),
                     icon: const Icon(Icons.check, color: Colors.green),
                     label: const Text('Onayla', style: TextStyle(color: Colors.green)),
                   ),
@@ -205,14 +205,35 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           if (isExpiredCard)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Row(
+              child: Column(
                 children: [
-                  const Icon(Icons.info_outline, size: 16, color: Colors.grey),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Detay sayfasından bilgileri güncelleyebilir veya tekrar aktifleştirebilirsiniz.',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  Row(
+                    children: [
+                      const Icon(Icons.info_outline, size: 16, color: Colors.grey),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Detay sayfasından bilgileri güncelleyebilir veya tekrar aktifleştirebilirsiniz.',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _reactivateDeal(deal.id),
+                      icon: const Icon(Icons.restore, size: 20),
+                      label: const Text('Tekrar Yayına Al'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -223,11 +244,59 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     );
   }
 
-  Future<void> _approveDeal(String id) async {
-    await _firestoreService.updateDeal(id, {'isApproved': true});
+  Future<void> _showApproveOptions(String id) async {
+    final option = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Onaylama Seçeneği'),
+        content: const Text('Bu fırsatı nasıl onaylamak istersiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'normal'),
+            child: const Text('Normal Onayla'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'editor'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.orange[700],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.star, size: 18),
+                SizedBox(width: 4),
+                Text('Editörün Seçimi'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (option == null) return;
+
+    if (option == 'normal') {
+      await _approveDeal(id, isEditorPick: false);
+    } else if (option == 'editor') {
+      await _approveDeal(id, isEditorPick: true);
+    }
+  }
+
+  Future<void> _approveDeal(String id, {bool isEditorPick = false}) async {
+    await _firestoreService.updateDeal(id, {
+      'isApproved': true,
+      'isEditorPick': isEditorPick,
+    });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fırsat Onaylandı ✅'), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text(
+            isEditorPick
+                ? 'Fırsat Editörün Seçimi olarak onaylandı ⭐'
+                : 'Fırsat Onaylandı ✅',
+          ),
+          backgroundColor: isEditorPick ? Colors.orange[700] : Colors.green,
+        ),
       );
     }
   }
@@ -238,6 +307,41 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fırsat Reddedildi ❌'), backgroundColor: Colors.red),
       );
+    }
+  }
+
+  Future<void> _reactivateDeal(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fırsatı Aktif Et'),
+        content: const Text('Bu fırsatı tekrar aktif etmek istediğinize emin misiniz? Tüm kullanıcılar görebilecek.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Evet, Aktif Et'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final success = await _firestoreService.unexpireDeal(id);
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fırsat tekrar yayına alındı ✅'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bir hata oluştu ❌'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 }

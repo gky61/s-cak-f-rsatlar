@@ -13,6 +13,33 @@ class NotificationService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
+  // Topic adını geçerli formata çevir (Firebase Cloud Messaging kurallarına uygun)
+  String _sanitizeTopicName(String name) {
+    // Türkçe karakterleri İngilizce karşılıklarına çevir
+    String sanitized = name
+        .toLowerCase()
+        .replaceAll('ç', 'c')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ı', 'i')
+        .replaceAll('ö', 'o')
+        .replaceAll('ş', 's')
+        .replaceAll('ü', 'u')
+        .replaceAll('Ç', 'c')
+        .replaceAll('Ğ', 'g')
+        .replaceAll('İ', 'i')
+        .replaceAll('Ö', 'o')
+        .replaceAll('Ş', 's')
+        .replaceAll('Ü', 'u');
+    
+    // Boşlukları ve özel karakterleri tire ile değiştir
+    sanitized = sanitized
+        .replaceAll(RegExp(r'[^a-z0-9-]'), '-')
+        .replaceAll(RegExp(r'-+'), '-') // Birden fazla tireyi tek tireye çevir
+        .replaceAll(RegExp(r'^-|-$'), ''); // Başta ve sonda tireyi kaldır
+    
+    return sanitized;
+  }
+
   // Local notifications'ı başlat
   Future<void> initializeLocalNotifications() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -108,7 +135,8 @@ class NotificationService {
   // Alt kategori bildirimine abone ol
   Future<void> subscribeToSubCategory(String categoryId, String subCategoryId) async {
     try {
-      final topic = 'subcategory_${categoryId}_$subCategoryId';
+      final sanitizedSubCategory = _sanitizeTopicName(subCategoryId);
+      final topic = 'subcategory_${categoryId}_$sanitizedSubCategory';
       await _messaging.subscribeToTopic(topic);
       print('✅ Topic abone olundu: $topic');
       
@@ -124,6 +152,7 @@ class NotificationService {
           await _firestore.collection('users').doc(userId).set({
             'followedSubCategories': [subCategoryKey],
             'followedCategories': [],
+            'allNotificationsEnabled': true,
             'createdAt': FieldValue.serverTimestamp(),
           });
         } else {
@@ -146,7 +175,8 @@ class NotificationService {
   // Alt kategori bildiriminden çık
   Future<void> unsubscribeFromSubCategory(String categoryId, String subCategoryId) async {
     try {
-      final topic = 'subcategory_${categoryId}_$subCategoryId';
+      final sanitizedSubCategory = _sanitizeTopicName(subCategoryId);
+      final topic = 'subcategory_${categoryId}_$sanitizedSubCategory';
       await _messaging.unsubscribeFromTopic(topic);
       print('✅ Topic abonelikten çıkıldı: $topic');
       
@@ -218,6 +248,7 @@ class NotificationService {
             'fcmToken': token,
             'followedCategories': [],
             'followedSubCategories': [],
+            'allNotificationsEnabled': true,
             'createdAt': FieldValue.serverTimestamp(),
           });
         } else {
@@ -257,13 +288,8 @@ class NotificationService {
   Future<void> initializeForUser({bool isAdmin = false}) async {
     await saveFCMToken();
     
-    // Genel bildirimlere abone ol
-    try {
-      await _messaging.subscribeToTopic('all_deals');
-      print('✅ Genel bildirimlere (all_deals) abone olundu');
-    } catch (e) {
-      print('❌ Genel abonelik hatası: $e');
-    }
+    final generalEnabled = await getGeneralNotificationsEnabled();
+    await _setAllDealsSubscription(generalEnabled);
 
     // Eğer admin ise admin bildirimlerine de abone ol
     if (isAdmin) {
@@ -292,7 +318,8 @@ class NotificationService {
         if (parts.length == 2) {
           final categoryId = parts[0];
           final subCategoryId = parts[1];
-          final topic = 'subcategory_${categoryId}_$subCategoryId';
+          final sanitizedSubCategory = _sanitizeTopicName(subCategoryId);
+          final topic = 'subcategory_${categoryId}_$sanitizedSubCategory';
           await _messaging.subscribeToTopic(topic);
           print('✅ Alt kategori topic abone olundu: $topic');
         }
@@ -397,6 +424,59 @@ class NotificationService {
         }
       }
     });
+  }
+
+  Future<void> _setAllDealsSubscription(bool enabled) async {
+    try {
+      if (enabled) {
+        await _messaging.subscribeToTopic('all_deals');
+        print('✅ Genel bildirimlere (all_deals) abone olundu');
+      } else {
+        await _messaging.unsubscribeFromTopic('all_deals');
+        print('🚫 Genel bildirimler kapatıldı (all_deals topic)');
+      }
+    } catch (e) {
+      print('❌ Genel bildirim abonelik hatası: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> getGeneralNotificationsEnabled() async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return true;
+
+      final doc = await _firestore.collection('users').doc(userId).get();
+      if (doc.exists) {
+        final data = doc.data();
+        if (data != null && data.containsKey('allNotificationsEnabled')) {
+          return data['allNotificationsEnabled'] as bool? ?? true;
+        }
+      }
+      return true;
+    } catch (e) {
+      print('Genel bildirim tercih okuma hatası: $e');
+      return true;
+    }
+  }
+
+  Future<void> setGeneralNotifications(bool enabled) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+
+    try {
+      await _setAllDealsSubscription(enabled);
+      await _firestore.collection('users').doc(userId).set(
+        {'allNotificationsEnabled': enabled},
+        SetOptions(merge: true),
+      );
+      print(enabled
+          ? '✅ Genel bildirimler kaydedildi (açık)'
+          : '🚫 Genel bildirimler kaydedildi (kapalı)');
+    } catch (e) {
+      print('Genel bildirim tercih güncelleme hatası: $e');
+      rethrow;
+    }
   }
 }
 

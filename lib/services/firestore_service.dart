@@ -100,6 +100,7 @@ class FirestoreService {
     required double price,
     required String store,
     required String category,
+    String? subCategory,
     required String imageUrl,
     required String url,
     required String userId,
@@ -111,6 +112,7 @@ class FirestoreService {
         price: price,
         store: store,
         category: category,
+        subCategory: subCategory,
         link: url, // Deal modelinde 'link' kullanılıyor
         imageUrl: imageUrl,
         postedBy: userId, // Deal modelinde 'postedBy' kullanılıyor
@@ -408,6 +410,19 @@ class FirestoreService {
       return true;
     } catch (e) {
       print('Kullanıcı engelleme hatası: $e');
+      return false;
+    }
+  }
+
+  // Fırsatı tekrar aktif etme (süresi bitmişlikten çıkarma)
+  Future<bool> unexpireDeal(String dealId) async {
+    try {
+      await _firestore.collection('deals').doc(dealId).update({
+        'isExpired': false,
+      });
+      return true;
+    } catch (e) {
+      print('Deal aktif etme hatası: $e');
       return false;
     }
   }
