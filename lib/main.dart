@@ -1,15 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
+import 'screens/admin_screen.dart';
+import 'screens/deal_detail_screen.dart';
+import 'theme/app_theme.dart';
+
+// Global navigator key for navigation from anywhere
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// Background message handler
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print('📬 Background bildirim alındı: ${message.notification?.title}');
+  print('📬 Bildirim verisi: ${message.data}');
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // Background message handler'ı kaydet
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  
+  print('🔥 Sıcak Fırsatlar uygulaması başlatılıyor...');
+  print('📱 Build zamanı: ${DateTime.now()}');
   runApp(const MyApp());
 }
 
@@ -20,26 +42,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Sıcak Fırsatlar',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFF6B35),
-          brightness: Brightness.light,
-        ),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-        ),
-        cardTheme: CardTheme(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-      ),
-      home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      navigatorKey: navigatorKey,
+      home: const AuthWrapper(),
     );
   }
 }
@@ -53,6 +59,19 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   final AuthService _authService = AuthService();
+  final NotificationService _notificationService = NotificationService();
+  String? _lastUserId;
+
+  // Bildirim servisini başlat
+  void _initializeNotificationService(String userId) async {
+    // Admin kontrolü yap
+    final isAdmin = await _authService.isAdmin();
+    print('👤 Kullanıcı Admin mi? $isAdmin');
+
+    _notificationService.initializeForUser(isAdmin: isAdmin).catchError((e) {
+      print('Bildirim servisi başlatma hatası: $e');
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,11 +95,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
         
         // Kullanıcı giriş yapmış
         if (snapshot.hasData && snapshot.data != null) {
+          final currentUserId = snapshot.data!.uid;
+          // Kullanıcı değiştiyse _lastUserId'yi güncelle ve bildirim servisini başlat
+          if (_lastUserId != currentUserId) {
+            _lastUserId = currentUserId;
+            // Kullanıcı giriş yaptığında bildirim servisini başlat
+            _initializeNotificationService(currentUserId);
+          }
           print('User logged in: ${snapshot.data!.email}');
+          // Herkes normal ekrana gider, yönetici paneline geçiş butonu HomeScreen'de olacak
           return const HomeScreen();
         }
         
         // Kullanıcı giriş yapmamış
+        _lastUserId = null;
         print('No user logged in');
         return const AuthScreen();
       },

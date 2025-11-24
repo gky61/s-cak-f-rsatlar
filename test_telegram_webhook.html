@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Webhook Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .result.info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        .info-box p {
+            color: #666;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .example {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Telegram Webhook Test</h1>
+        <p class="subtitle">Telegram bot'unuzun webhook'unu test edin</p>
+
+        <div class="info-box">
+            <h3>📋 Nasıl Kullanılır?</h3>
+            <p>1. Bot token'ınızı girin (BotFather'dan aldığınız token)</p>
+            <p>2. Webhook URL'inizi girin (Firebase deploy sonrası aldığınız URL)</p>
+            <p>3. Test mesajınızı yazın ve gönderin</p>
+        </div>
+
+        <form id="testForm">
+            <div class="form-group">
+                <label for="botToken">Bot Token</label>
+                <input type="text" id="botToken" placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz" required>
+            </div>
+
+            <div class="form-group">
+                <label for="webhookUrl">Webhook URL</label>
+                <input type="url" id="webhookUrl" placeholder="https://us-central1-xxx.cloudfunctions.net/telegramWebhook" required>
+            </div>
+
+            <div class="form-group">
+                <label for="testMessage">Test Mesajı</label>
+                <textarea id="testMessage" placeholder="RTX 4090 Ekran Kartı&#10;Fiyat: 45.000 TL&#10;Mağaza: Trendyol&#10;https://www.trendyol.com/urun/..." required></textarea>
+                <div class="example">Örnek format:
+RTX 4090 Ekran Kartı
+Fiyat: 45.000 TL
+Mağaza: Trendyol
+https://www.trendyol.com/urun/...</div>
+            </div>
+
+            <button type="submit">🚀 Test Et</button>
+        </form>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const botToken = document.getElementById('botToken').value;
+            const webhookUrl = document.getElementById('webhookUrl').value;
+            const testMessage = document.getElementById('testMessage').value;
+            const resultDiv = document.getElementById('result');
+            
+            resultDiv.style.display = 'none';
+            
+            try {
+                // Önce webhook'u ayarla
+                const setWebhookResponse = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        url: webhookUrl
+                    })
+                });
+                
+                const setWebhookData = await setWebhookResponse.json();
+                
+                if (!setWebhookData.ok) {
+                    throw new Error(setWebhookData.description || 'Webhook ayarlanamadı');
+                }
+                
+                // Webhook bilgilerini kontrol et
+                const getWebhookResponse = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`);
+                const webhookInfo = await getWebhookResponse.json();
+                
+                // Test mesajını webhook'a gönder (simüle et)
+                const testUpdate = {
+                    update_id: Date.now(),
+                    message: {
+                        message_id: 1,
+                        from: {
+                            id: 123456789,
+                            is_bot: false,
+                            first_name: "Test",
+                            username: "test_user"
+                        },
+                        chat: {
+                            id: -123456789,
+                            type: "group",
+                            title: "Test Grubu"
+                        },
+                        date: Math.floor(Date.now() / 1000),
+                        text: testMessage,
+                        entities: []
+                    }
+                };
+                
+                const webhookResponse = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testUpdate)
+                });
+                
+                const webhookResult = await webhookResponse.text();
+                
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = `
+                    <strong>✅ Başarılı!</strong><br><br>
+                    <strong>Webhook Durumu:</strong><br>
+                    URL: ${webhookInfo.result.url || 'Ayarlanmamış'}<br>
+                    Pending Updates: ${webhookInfo.result.pending_update_count || 0}<br><br>
+                    <strong>Test Sonucu:</strong><br>
+                    ${webhookResponse.ok ? '✅ Webhook mesajı başarıyla alındı!' : '⚠️ Webhook yanıt verdi ama hata olabilir'}<br>
+                    Yanıt: ${webhookResult}<br><br>
+                    <strong>💡 İpucu:</strong> Şimdi gerçek Telegram grubunuza mesaj gönderin ve Firestore'da kontrol edin!
+                `;
+                resultDiv.style.display = 'block';
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <strong>❌ Hata!</strong><br><br>
+                    ${error.message}<br><br>
+                    <strong>Kontrol Edin:</strong><br>
+                    • Bot token'ı doğru mu?<br>
+                    • Webhook URL'i doğru mu?<br>
+                    • Firebase function deploy edildi mi?<br>
+                    • Firebase config ayarlandı mı?
+                `;
+                resultDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+

@@ -1,0 +1,15 @@
+# Telegram API Bilgileri
+TELEGRAM_API_ID=your_api_id_here
+TELEGRAM_API_HASH=your_api_hash_here
+TELEGRAM_SESSION_NAME=telegram_session
+
+# Telegram Kanalları (virgülle ayrılmış)
+TELEGRAM_CHANNELS=@indirimkaplani,-3371238729
+
+# Firebase
+FIREBASE_CREDENTIALS_PATH=firebase_key.json
+
+
+
+
+

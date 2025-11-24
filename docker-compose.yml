@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  telegram-bot:
+    build: .
+    container_name: sicak_firsatlar_bot
+    restart: always  # Çökerse veya sunucu yeniden başlarsa otomatik başlat
+    volumes:
+      - ./logs:/app/logs  # Logları dışarı aktar
+      - ./telegram_session_new.session:/app/telegram_session_new.session  # Session dosyasını koru
+    environment:
+      - TZ=Europe/Istanbul
+      - TELEGRAM_SESSION_NAME=telegram_session_new
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+

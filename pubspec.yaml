@@ -23,6 +23,19 @@ dependencies:
   # UI ve yardımcı paketler
   cupertino_icons: ^1.0.2
   intl: ^0.19.0
+  google_fonts: ^6.1.0
+  cached_network_image: ^3.3.1
+  photo_view: ^0.14.0
+  
+  # Bildirimler
+  flutter_local_notifications: ^17.0.0
+  
+  # Link ve URL işlemleri
+  url_launcher: ^6.2.4
+  
+  # HTML parsing ve metadata
+  html: ^0.15.4
+  metadata_fetch: ^0.4.2
 
 dev_dependencies:
   flutter_test:

@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
-import '../models/deal.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-class DealCard extends StatelessWidget {
+import '../models/deal.dart';
+import '../services/firestore_service.dart';
+import '../services/auth_service.dart';
+import '../services/link_preview_service.dart';
+import '../theme/app_theme.dart';
+
+class DealCard extends StatefulWidget {
   final Deal deal;
   final VoidCallback? onTap;
 
@@ -13,264 +19,357 @@ class DealCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(
-      symbol: '₺',
-      decimalDigits: 0,
-    );
+  State<DealCard> createState() => _DealCardState();
+}
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-            spreadRadius: 0,
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
+class _DealCardState extends State<DealCard> {
+  bool _isPressed = false;
+  String? _effectiveImageUrl;
+  bool _isLoadingImage = false;
+  bool _imageLoadAttempted = false; // Görsel yükleme denemesi yapıldı mı?
+
+  final FirestoreService _firestoreService = FirestoreService();
+  final AuthService _authService = AuthService();
+  final LinkPreviewService _linkPreviewService = LinkPreviewService();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkImage();
+  }
+
+  @override
+  void didUpdateWidget(DealCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Deal değiştiyse görseli yeniden kontrol et
+    if (oldWidget.deal.id != widget.deal.id || oldWidget.deal.imageUrl != widget.deal.imageUrl) {
+      _checkImage();
+    }
+  }
+    
+  void _checkImage() {
+    final dealImageUrl = widget.deal.imageUrl.trim();
+    final isBlobUrl = dealImageUrl.startsWith('blob:');
+    
+    if (isBlobUrl) {
+      _effectiveImageUrl = null;
+    } else {
+      _effectiveImageUrl = dealImageUrl.isNotEmpty ? dealImageUrl : null;
+    }
+    
+    // Sadece bir kez deneme yap
+    if (!_imageLoadAttempted && (_effectiveImageUrl == null || isBlobUrl) && widget.deal.link.isNotEmpty) {
+      _imageLoadAttempted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadImageFromLink();
+      });
+    }
+  }
+  
+  Future<void> _loadImageFromLink() async {
+    if (_isLoadingImage || !mounted) return;
+    if (widget.deal.link.isEmpty) return;
+
+    // setState'i minimize et - sadece görsel değiştiğinde çağır
+    _isLoadingImage = true;
+
+    try {
+      final preview = await _linkPreviewService.fetchMetadata(widget.deal.link)
+          .timeout(const Duration(seconds: 8), onTimeout: () => null);
+      
+      if (mounted && preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
+        // Görsel bulundu, setState ile güncelle
+        if (mounted) {
+          setState(() {
+            _effectiveImageUrl = preview.imageUrl;
+            _isLoadingImage = false;
+          });
+        }
+      } else if (mounted) {
+        // Görsel bulunamadı, sessizce bitir
+        _isLoadingImage = false;
+      }
+    } catch (e) {
+      // Hata durumunda sessizce bitir, kartı kaybetme
+      if (mounted) {
+        _isLoadingImage = false;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final deal = widget.deal;
+    final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
+    final isExpired = deal.isExpired;
+
+    return AnimatedScale(
+      scale: _isPressed ? 0.98 : 1,
+      duration: const Duration(milliseconds: 100),
+      child: Container(
+        margin: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4),
+        decoration: BoxDecoration(
+          color: isExpired ? Colors.red[50] : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: isExpired 
+              ? Border.all(color: Colors.red[300]!, width: 2)
+              : null,
+          boxShadow: [
+            BoxShadow(
+              color: isExpired 
+                  ? Colors.red.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: widget.onTap,
+            onHighlightChanged: (v) => setState(() => _isPressed = v),
+            child: Stack(
               children: [
-                // Resim ve Editör Rozeti
-                Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
-                      ),
-                      child: deal.imageUrl.isNotEmpty
-                          ? Image.network(
-                              deal.imageUrl,
-                              height: 220,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return _buildPlaceholderImage();
-                              },
-                            )
-                          : _buildPlaceholderImage(),
-                    ),
-                    // Gradient overlay
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        height: 80,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withOpacity(0.3),
-                            ],
-                          ),
-                        ),
+                if (isExpired)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        color: Colors.red.withOpacity(0.05),
                       ),
                     ),
-                    // Editörün Seçimi Rozeti
-                    if (deal.isEditorPick)
-                      Positioned(
-                        top: 16,
-                        right: 16,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)],
-                            ),
-                            borderRadius: BorderRadius.circular(25),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFFF6B35).withOpacity(0.4),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.star_rounded,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Editörün Seçimi',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
+                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 1. GÖRSEL (Kare ve Sol Tarafta)
+                        Stack(
+                          children: [
+                            Hero(
+                              tag: 'deal_${deal.id}_image',
+                              child: Opacity(
+                                opacity: isExpired ? 0.5 : 1.0,
+                                child: Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    color: Colors.grey[100],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
+                                        ? CachedNetworkImage(
+                                            imageUrl: _effectiveImageUrl!,
+                                            fit: BoxFit.contain,
+                                            placeholder: (context, url) => Container(
+                                              color: Colors.grey[100],
+                                              child: const Center(
+                                                child: SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                                ),
+                                              ),
+                                            ),
+                                            errorWidget: (context, url, error) => Container(
+                                              color: Colors.grey[100],
+                                              child: Icon(
+                                                Icons.image_not_supported_rounded,
+                                                color: Colors.grey[300],
+                                                size: 32,
+                                              ),
+                                            ),
+                                          )
+                                        : Container(
+                                            color: Colors.grey[100],
+                                            child: Icon(
+                                              Icons.image_not_supported_rounded,
+                                              color: Colors.grey[300],
+                                              size: 32,
+                                            ),
+                                          ),
+                                  ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                // İçerik
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Kategori Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.grey[100]!,
-                              Colors.grey[50]!,
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.grey[200]!,
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          deal.category.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[700],
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // Başlık
-                      Text(
-                        deal.title,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          height: 1.3,
-                          letterSpacing: -0.5,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 16),
-                      // Fiyat ve Mağaza
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Fiyat
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
                             ),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)],
+                            // İndirim Rozeti (Sol Üst)
+                            if (deal.discountRate != null && deal.discountRate! > 0)
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.error,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(12),
+                                      bottomRight: Radius.circular(12),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '%${deal.discountRate}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
                               ),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFFF6B35).withOpacity(0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
+                          ],
+                        ),
+                        const SizedBox(width: 12),
+                        // 2. İÇERİK (Sağ Taraf)
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                          // Üst Bilgi: Kategori ve Mağaza
+                          Opacity(
+                            opacity: isExpired ? 0.6 : 1.0,
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey[700],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isExpired) ...[
+                                  const SizedBox(width: 6),
+                                  _buildExpiredBadge(inline: true),
+                                ],
+                                const Spacer(),
+                                Text(
+                                  _formatRelativeTime(deal.createdAt),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey[400],
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ],
                             ),
-                            child: Text(
-                              currencyFormat.format(deal.price),
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                letterSpacing: -0.5,
-                              ),
+                          ),
+                          
+                          const SizedBox(height: 2),
+                          
+                          // Başlık
+                          Opacity(
+                            opacity: isExpired ? 0.6 : 1.0,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    deal.title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.2,
+                                      color: isExpired ? Colors.red[700] : AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          // Mağaza
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.store_rounded,
-                                size: 18,
-                                color: Colors.grey[600],
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                deal.store,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey[700],
+                          
+                          const SizedBox(height: 4),
+                          
+                          // Fiyat Alanı
+                          Opacity(
+                            opacity: isExpired ? 0.6 : 1.0,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (deal.originalPrice != null && deal.originalPrice! > deal.price)
+                                      Text(
+                                        currencyFormat.format(deal.originalPrice),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppTheme.textSecondary,
+                                          decoration: TextDecoration.lineThrough,
+                                        ),
+                                      ),
+                                    Text(
+                                      currencyFormat.format(deal.price),
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        color: isExpired ? Colors.red[700] : AppTheme.primary,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
+                                const Spacer(),
+                                
+                                // Sıcaklık Göstergesi (Mini)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (deal.hotVotes - deal.coldVotes) >= 0 
+                                        ? AppTheme.primary.withOpacity(0.1)
+                                        : Colors.blue.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        (deal.hotVotes - deal.coldVotes) >= 0 
+                                            ? Icons.whatshot_rounded 
+                                            : Icons.ac_unit_rounded,
+                                        size: 14,
+                                        color: (deal.hotVotes - deal.coldVotes) >= 0 
+                                            ? AppTheme.primary
+                                            : Colors.blue,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${deal.hotVotes - deal.coldVotes}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: (deal.hotVotes - deal.coldVotes) >= 0 
+                                              ? AppTheme.primary
+                                              : Colors.blue,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                             ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      // Divider
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: Colors.grey[200],
-                      ),
-                      const SizedBox(height: 16),
-                      // Oy ve Yorum sayıları
-                      Row(
-                        children: [
-                          // Hot Votes
-                          _buildStatChip(
-                            icon: Icons.whatshot_rounded,
-                            count: deal.hotVotes,
-                            color: const Color(0xFFFF4757),
-                            label: 'Sıcak',
-                          ),
-                          const SizedBox(width: 12),
-                          // Cold Votes
-                          _buildStatChip(
-                            icon: Icons.ac_unit_rounded,
-                            count: deal.coldVotes,
-                            color: const Color(0xFF3742FA),
-                            label: 'Soğuk',
-                          ),
-                          const Spacer(),
-                          // Yorum sayısı
-                          _buildStatChip(
-                            icon: Icons.comment_rounded,
-                            count: deal.commentCount,
-                            color: Colors.grey[600]!,
-                            label: 'Yorum',
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -281,59 +380,55 @@ class DealCard extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaceholderImage() {
+  Widget _buildExpiredBadge({bool inline = false}) {
     return Container(
-      height: 220,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.grey[200]!,
-            Colors.grey[100]!,
-          ],
-        ),
+      padding: EdgeInsets.symmetric(
+        horizontal: inline ? 8 : 10,
+        vertical: inline ? 3 : 4,
       ),
-      child: Icon(
-        Icons.image_outlined,
-        size: 60,
-        color: Colors.grey[400],
-      ),
-    );
-  }
-
-  Widget _buildStatChip({
-    required IconData icon,
-    required int count,
-    required Color color,
-    required String label,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        color: inline ? Colors.red.withOpacity(0.1) : Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.red[200]!),
+        boxShadow: [
+          if (!inline)
+            BoxShadow(
+              color: Colors.red.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            icon,
-            size: 18,
-            color: color,
+            Icons.hourglass_disabled_rounded,
+            size: inline ? 12 : 14,
+            color: Colors.red,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           Text(
-            '$count',
+            'Bitti',
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: color,
+              fontSize: inline ? 10 : 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.red,
+              letterSpacing: -0.1,
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _formatRelativeTime(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inMinutes < 1) return 'Şimdi';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}dk';
+    if (difference.inHours < 24) return '${difference.inHours}sa';
+    return DateFormat('d MMM').format(date);
   }
 }

@@ -180,4 +180,22 @@ class AuthService {
       return null;
     }
   }
+
+  // Admin kontrolü
+  Future<bool> isAdmin() async {
+    try {
+      final user = currentUser;
+      if (user == null) return false;
+      
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        return data?['isAdmin'] == true;
+      }
+      return false;
+    } catch (e) {
+      print('Admin kontrolü hatası: $e');
+      return false;
+    }
+  }
 }

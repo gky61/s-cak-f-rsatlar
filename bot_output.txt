@@ -1,0 +1,148 @@
+2025-11-21 23:53:18,511 - __main__ - INFO - ✅ Firebase başlatıldı (firebase-admin - Storage: sicak-firsatlar-e6eae.firebasestorage.app)
+2025-11-21 23:53:19,047 - __main__ - INFO - ✅ Bucket sicak-firsatlar-e6eae.firebasestorage.app mevcut
+2025-11-21 23:53:19,051 - telethon.network.mtprotosender - INFO - Connecting to 149.154.167.92:443/TcpFull...
+2025-11-21 23:53:19,108 - telethon.network.mtprotosender - INFO - Connection to 149.154.167.92:443/TcpFull complete!
+2025-11-21 23:53:19,451 - __main__ - INFO - ✅ Telegram Client başlatıldı
+2025-11-21 23:53:19,451 - __main__ - INFO - ==================================================
+2025-11-21 23:53:19,451 - __main__ - INFO - 🎧 EVENT LISTENER BAŞLATILIYOR
+2025-11-21 23:53:19,451 - __main__ - INFO - 📡 İzlenen Kanal Sayısı: 2
+2025-11-21 23:53:19,451 - __main__ - INFO - 📋 Kanallar: ['@indirimkaplani', '-3371238729']
+2025-11-21 23:53:19,451 - __main__ - INFO - ==================================================
+2025-11-21 23:53:19,451 - __main__ - INFO - ✅ Bot aktif ve dinliyor... (Durdurmak için CTRL+C)
+2025-11-22 00:08:19,518 - telethon.client.updates - INFO - Got difference for account updates
+2025-11-22 00:08:19,723 - asyncio - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-26' coro=<UpdateMethods._dispatch_update() done, defined at /Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py:521> exception=ValueError('Cannot find any entity corresponding to "-3371238729"')>
+Traceback (most recent call last):
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py", line 561, in _dispatch_update
+    await builder.resolve(self)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 99, in resolve
+    await self._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/newmessage.py", line 93, in _resolve
+    await super()._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 103, in _resolve
+    self.chats = await _into_id_set(client, self.chats)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 33, in _into_id_set
+    chat = await client.get_input_entity(chat)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 439, in get_input_entity
+    await self._get_entity_from_string(peer))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 576, in _get_entity_from_string
+    raise ValueError(
+        'Cannot find any entity corresponding to "{}"'.format(string)
+    )
+ValueError: Cannot find any entity corresponding to "-3371238729"
+2025-11-22 00:08:19,850 - asyncio - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-28' coro=<UpdateMethods._dispatch_update() done, defined at /Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py:521> exception=ValueError('Cannot find any entity corresponding to "-3371238729"')>
+Traceback (most recent call last):
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py", line 561, in _dispatch_update
+    await builder.resolve(self)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 99, in resolve
+    await self._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/newmessage.py", line 93, in _resolve
+    await super()._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 103, in _resolve
+    self.chats = await _into_id_set(client, self.chats)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 33, in _into_id_set
+    chat = await client.get_input_entity(chat)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 439, in get_input_entity
+    await self._get_entity_from_string(peer))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 576, in _get_entity_from_string
+    raise ValueError(
+        'Cannot find any entity corresponding to "{}"'.format(string)
+    )
+ValueError: Cannot find any entity corresponding to "-3371238729"
+2025-11-22 00:08:19,966 - asyncio - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-29' coro=<UpdateMethods._dispatch_update() done, defined at /Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py:521> exception=ValueError('Cannot find any entity corresponding to "-3371238729"')>
+Traceback (most recent call last):
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py", line 561, in _dispatch_update
+    await builder.resolve(self)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 99, in resolve
+    await self._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/newmessage.py", line 93, in _resolve
+    await super()._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 103, in _resolve
+    self.chats = await _into_id_set(client, self.chats)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 33, in _into_id_set
+    chat = await client.get_input_entity(chat)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 439, in get_input_entity
+    await self._get_entity_from_string(peer))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 576, in _get_entity_from_string
+    raise ValueError(
+        'Cannot find any entity corresponding to "{}"'.format(string)
+    )
+ValueError: Cannot find any entity corresponding to "-3371238729"
+2025-11-22 00:08:20,029 - telethon.client.users - INFO - Sleeping for 29s (0:00:29) on GetContactsRequest flood wait
+2025-11-22 00:08:49,174 - asyncio - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-30' coro=<UpdateMethods._dispatch_update() done, defined at /Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py:521> exception=ValueError('Cannot find any entity corresponding to "-3371238729"')>
+Traceback (most recent call last):
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py", line 561, in _dispatch_update
+    await builder.resolve(self)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 99, in resolve
+    await self._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/newmessage.py", line 93, in _resolve
+    await super()._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 103, in _resolve
+    self.chats = await _into_id_set(client, self.chats)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 33, in _into_id_set
+    chat = await client.get_input_entity(chat)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 439, in get_input_entity
+    await self._get_entity_from_string(peer))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 576, in _get_entity_from_string
+    raise ValueError(
+        'Cannot find any entity corresponding to "{}"'.format(string)
+    )
+ValueError: Cannot find any entity corresponding to "-3371238729"
+2025-11-22 00:08:49,303 - asyncio - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-33' coro=<UpdateMethods._dispatch_update() done, defined at /Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py:521> exception=ValueError('Cannot find any entity corresponding to "-3371238729"')>
+Traceback (most recent call last):
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py", line 561, in _dispatch_update
+    await builder.resolve(self)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 99, in resolve
+    await self._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/newmessage.py", line 93, in _resolve
+    await super()._resolve(client)
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 103, in _resolve
+    self.chats = await _into_id_set(client, self.chats)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/events/common.py", line 33, in _into_id_set
+    chat = await client.get_input_entity(chat)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 439, in get_input_entity
+    await self._get_entity_from_string(peer))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 576, in _get_entity_from_string
+    raise ValueError(
+        'Cannot find any entity corresponding to "{}"'.format(string)
+    )
+ValueError: Cannot find any entity corresponding to "-3371238729"
+2025-11-22 00:10:20,233 - telethon.client.updates - INFO - Cannot get difference since the account is not logged in: AuthKeyDuplicatedError
+2025-11-22 00:10:20,236 - telethon.network.mtprotosender - INFO - Disconnecting from 149.154.167.92:443/TcpFull...
+2025-11-22 00:10:20,238 - telethon.network.mtprotosender - INFO - Disconnection from 149.154.167.92:443/TcpFull complete!
+2025-11-22 00:10:20,239 - telethon.network.mtprotosender - INFO - Not disconnecting (already have no connection)
+2025-11-22 00:10:20,241 - __main__ - ERROR - ❌ Bot kritik hata ile durdu: The authorization key (session file) was used under two different IP addresses simultaneously, and can no longer be used. Use the same session exclusively, or use different sessions (caused by GetDifferenceRequest)
+Traceback (most recent call last):
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/telegram_bot.py", line 2005, in run
+    else:
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py", line 38, in _run_until_disconnected
+    raise self._updates_error
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/updates.py", line 308, in _update_loop
+    diff = await self(get_diff)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 30, in __call__
+    return await self._call(self._sender, request, ordered=ordered)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/venv/lib/python3.13/site-packages/telethon/client/users.py", line 87, in _call
+    result = await future
+             ^^^^^^^^^^^^
+telethon.errors.rpcerrorlist.AuthKeyDuplicatedError: The authorization key (session file) was used under two different IP addresses simultaneously, and can no longer be used. Use the same session exclusively, or use different sessions (caused by GetDifferenceRequest)

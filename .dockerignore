@@ -1,0 +1,13 @@
+__pycache__
+venv
+.git
+.gitignore
+logs
+*.md
+*.sh
+test
+build
+android
+ios
+functions
+

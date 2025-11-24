@@ -13,6 +13,9 @@ class AppUser {
     this.followedCategories = const [],
   });
 
+  // displayName getter (username ile aynı)
+  String get displayName => username;
+
   // Firestore'dan AppUser oluşturma
   factory AppUser.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;

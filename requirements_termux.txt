@@ -1,0 +1,10 @@
+# Termux için basitleştirilmiş requirements
+# firebase-admin yerine Firebase REST API kullanılacak
+
+telethon==1.34.0
+beautifulsoup4==4.12.3
+aiohttp==3.9.3
+python-dotenv==1.0.1
+google-auth==2.35.0
+requests==2.31.0
+cloudscraper==1.2.71
