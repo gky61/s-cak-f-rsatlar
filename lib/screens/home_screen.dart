@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import 'deal_detail_screen.dart';
 import 'submit_deal_screen.dart';
 import 'admin_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,6 +34,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Set<String> _followedCategories = {};
   Set<String> _followedSubCategories = {};
   bool _isGeneralNotificationsEnabled = true;
+  final ScrollController _scrollController = ScrollController();
+  bool _showScrollToTop = false;
 
   @override
   void initState() {
@@ -44,6 +47,33 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadFollowedCategories();
     // Theme service listener ekle
     _themeService.addListener(_onThemeChanged);
+    // Scroll listener ekle
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    
+    final offset = _scrollController.offset;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    
+    // 150 piksel aşağı kaydırıldıysa veya en alta yakınsa butonu göster
+    final shouldShow = offset > 150 || (maxScroll > 0 && offset > maxScroll * 0.1);
+    
+    // Sadece değişiklik olduğunda setState çağır
+    if (shouldShow != _showScrollToTop && mounted) {
+      setState(() {
+        _showScrollToTop = shouldShow;
+      });
+    }
+  }
+
+  void _scrollToTop() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
   }
 
   void _onThemeChanged() {
@@ -55,6 +85,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _themeService.removeListener(_onThemeChanged);
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -194,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             children: [
               const Text(
-                'Sıcak Fırsatlar 🔥',
+                'FIRSATKOLİK 🔥',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               const SizedBox(width: 8),
@@ -208,14 +240,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         centerTitle: false,
         actions: [
-          // Karanlık Mod Toggle
-          IconButton(
-            icon: Icon(
-              _themeService.isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-            ),
-            onPressed: () => _themeService.toggleTheme(),
-            tooltip: _themeService.isDarkMode ? 'Açık Mod' : 'Karanlık Mod',
-          ),
+          // Karanlık Mod Toggle - Şık animasyonlu
+          _buildThemeToggleButton(),
           if (_isAdmin)
             IconButton(
               icon: const Icon(Icons.admin_panel_settings_rounded, color: AppTheme.error),
@@ -225,13 +251,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () => _authService.signOut(),
+            icon: const Icon(Icons.person_rounded),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
+          Column(
+            children: [
           // Ana Kategoriler (Yatay Kaydırmalı Chip'ler)
           Container(
             height: 60,
@@ -352,6 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: StreamBuilder<List<Deal>>(
               stream: _firestoreService.getDealsStream(),
               builder: (context, snapshot) {
+                // StreamBuilder'ı optimize et - sadece gerekli durumlarda rebuild
                 // Hata durumu
                 if (snapshot.hasError) {
                   return Center(
@@ -378,6 +410,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Yükleniyor durumu - Skeleton Loading
                 if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                   return ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.only(bottom: 80, top: 8),
                     itemCount: 8, // 8 adet skeleton kart göster
                     itemBuilder: (context, index) {
@@ -423,18 +456,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     await Future.delayed(const Duration(milliseconds: 500));
                   },
                   child: ListView.builder(
+                    controller: _scrollController,
                     key: ValueKey('deal_list_$_selectedCategory'), // Kategori değişince listeyi yeniden oluştur
                     padding: const EdgeInsets.only(bottom: 80, top: 8),
                     itemCount: filteredDeals.length,
+                    cacheExtent: 500, // Performans için cache
                     itemBuilder: (context, index) {
                       final deal = filteredDeals[index];
-                      return DealCard(
-                        key: ValueKey('deal_card_${deal.id}'), // Her kart için unique key
-                        deal: deal,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DealDetailScreen(dealId: deal.id),
+                      return RepaintBoundary(
+                        key: ValueKey('deal_card_${deal.id}'),
+                        child: DealCard(
+                          key: ValueKey('deal_card_${deal.id}'), // Her kart için unique key
+                          deal: deal,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DealDetailScreen(dealId: deal.id),
+                            ),
                           ),
                         ),
                       );
@@ -442,6 +480,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 );
               },
+            ),
+          ),
+            ],
+          ),
+          // Yukarı Çık Butonu - Sağ alt köşede, FAB'ın üstünde
+          Positioned(
+            right: 16,
+            bottom: 120, // FAB'ın üstünde, daha fazla mesafe ile
+            child: AnimatedOpacity(
+              opacity: _showScrollToTop ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 300),
+              child: IgnorePointer(
+                ignoring: !_showScrollToTop,
+                child: FloatingActionButton(
+                  mini: true,
+                  onPressed: _scrollToTop,
+                  backgroundColor: AppTheme.primary,
+                  child: const Icon(Icons.keyboard_arrow_up, color: Colors.white),
+                ),
+              ),
             ),
           ),
         ],
@@ -626,6 +684,110 @@ class _HomeScreenState extends State<HomeScreen> {
           }).toList(),
         const Divider(height: 1),
       ],
+    );
+  }
+
+  Widget _buildThemeToggleButton() {
+    final isDark = _themeService.isDarkMode;
+    
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutCubic,
+      width: 56,
+      height: 32,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: isDark
+            ? LinearGradient(
+                colors: [
+                  Colors.orange.shade400,
+                  Colors.deepOrange.shade600,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : LinearGradient(
+                colors: [
+                  Colors.amber.shade300,
+                  Colors.orange.shade400,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+        boxShadow: [
+          BoxShadow(
+            color: (isDark ? Colors.deepOrange : Colors.orange).withValues(alpha: 0.4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            // Haptic feedback ekle
+            HapticFeedback.lightImpact();
+            _themeService.toggleTheme();
+          },
+          child: Stack(
+            children: [
+              // Arka plan animasyonu
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOutCubic,
+                left: isDark ? 24 : 0,
+                top: 0,
+                bottom: 0,
+                child: Container(
+                  width: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // İkonlar
+              Center(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) {
+                    return RotationTransition(
+                      turns: Tween<double>(begin: 0.5, end: 1.0).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeInOut,
+                        ),
+                      ),
+                      child: FadeTransition(
+                        opacity: animation,
+                        child: ScaleTransition(
+                          scale: animation,
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Icon(
+                    isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                    key: ValueKey<bool>(isDark),
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

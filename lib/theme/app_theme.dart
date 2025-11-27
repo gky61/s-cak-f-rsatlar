@@ -27,7 +27,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: baseColorScheme,
       scaffoldBackgroundColor: background,
-      fontFamily: 'Roboto', // Varsayılan font
+      // Sistem fontunu kullan (Türkçe karakter desteği için)
     );
 
     return base.copyWith(
@@ -168,7 +168,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: baseColorScheme,
       scaffoldBackgroundColor: darkBackground,
-      fontFamily: 'Roboto',
+      // Sistem fontunu kullan
     );
 
     return base.copyWith(

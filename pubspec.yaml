@@ -43,12 +43,28 @@ dependencies:
   
   # SharedPreferences for storing user preferences
   shared_preferences: ^2.2.2
+  
+  # Image picker and Firebase Storage for avatar upload
+  image_picker: ^1.0.7
+  firebase_storage: ^11.6.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
+  
+  assets:
+    - assets/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.jpg"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/logo.jpg"
+  remove_alpha_ios: true
 

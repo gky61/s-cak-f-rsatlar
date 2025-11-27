@@ -124,10 +124,28 @@ class FirestoreService {
       );
       
       final docRef = await _firestore.collection('deals').add(deal.toFirestore());
+      
+      // Kullanıcının puanını artır (her paylaşım 5 puan)
+      await _incrementUserPoints(userId, points: 5, dealCount: 1);
+      
       return docRef.id;
     } catch (e) {
       print('Deal oluşturma hatası: $e');
       return null;
+    }
+  }
+
+  // Kullanıcı puanını artır
+  Future<void> _incrementUserPoints(String userId, {int points = 0, int dealCount = 0, int totalLikes = 0}) async {
+    try {
+      final userRef = _firestore.collection('users').doc(userId);
+      await userRef.set({
+        'points': FieldValue.increment(points),
+        'dealCount': FieldValue.increment(dealCount),
+        'totalLikes': FieldValue.increment(totalLikes),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      print('Kullanıcı puanı güncelleme hatası: $e');
     }
   }
 
@@ -195,6 +213,14 @@ class FirestoreService {
       });
       
       await batch.commit();
+      
+      // Deal sahibinin puanını artır (her hot vote 2 puan)
+      final deal = await getDeal(dealId);
+      if (deal != null && !voteDoc.exists) {
+        // Sadece yeni beğeni ise puan ver (daha önce beğenmişse puan verme)
+        await _incrementUserPoints(deal.postedBy, points: 2, totalLikes: 1);
+      }
+      
       return true;
     } catch (e) {
       print('Hot vote ekleme hatası: $e');
@@ -290,6 +316,64 @@ class FirestoreService {
     }
   }
 
+  // Expired vote ekleme (Fırsat Bitti oyu)
+  Future<bool> addExpiredVote(String dealId, String userId) async {
+    try {
+      final batch = _firestore.batch();
+      
+      // Önceki oyu kontrol et
+      final voteRef = _firestore
+          .collection('deals')
+          .doc(dealId)
+          .collection('votes')
+          .doc(userId);
+      
+      final voteDoc = await voteRef.get();
+      if (voteDoc.exists) {
+        final currentType = voteDoc.data()?['type'] as String?;
+        if (currentType == 'expired') {
+          // Zaten expired vote vermiş
+          return true;
+        }
+        // Diğer oyları temizle (hot/cold)
+        if (currentType == 'hot') {
+          batch.update(_firestore.collection('deals').doc(dealId), {
+            'hotVotes': FieldValue.increment(-1),
+          });
+        } else if (currentType == 'cold') {
+          batch.update(_firestore.collection('deals').doc(dealId), {
+            'coldVotes': FieldValue.increment(-1),
+          });
+        }
+      }
+      
+      // Expired vote ekle/güncelle
+      batch.set(voteRef, {'type': 'expired'}, SetOptions(merge: true));
+      
+      // Expired votes sayısını artır
+      final dealRef = _firestore.collection('deals').doc(dealId);
+      batch.update(dealRef, {
+        'expiredVotes': FieldValue.increment(1),
+      });
+      
+      await batch.commit();
+      
+      // Oyları kontrol et, 10'a ulaştıysa otomatik olarak bitir
+      final dealDoc = await dealRef.get();
+      if (dealDoc.exists) {
+        final expiredVotes = (dealDoc.data()?['expiredVotes'] ?? 0) as int;
+        if (expiredVotes >= 10) {
+          await dealRef.update({'isExpired': true});
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      print('Expired vote ekleme hatası: $e');
+      return false;
+    }
+  }
+
   // Deal'i bitmiş olarak işaretle
   Future<bool> markDealAsExpired(String dealId) async {
     try {
@@ -323,6 +407,7 @@ class FirestoreService {
     required String text,
     String? parentCommentId,
     String? replyToUserName,
+    String? userProfileImageUrl,
   }) async {
     try {
       final batch = _firestore.batch();
@@ -340,6 +425,7 @@ class FirestoreService {
         userId: userId,
         userName: userName,
         userEmail: userEmail,
+        userProfileImageUrl: userProfileImageUrl ?? '',
         text: text,
         createdAt: DateTime.now(),
         parentCommentId: parentCommentId,
@@ -470,6 +556,20 @@ class FirestoreService {
     } catch (e) {
       print('❌ Expired deal temizleme hatası: $e');
     }
+  }
+
+  // Kullanıcının paylaştığı fırsatları getir
+  Stream<List<Deal>> getUserDealsStream(String userId) {
+    return _firestore
+        .collection('deals')
+        .where('postedBy', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) {
+      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
+      // Client-side'da tarihe göre sırala (index gerektirmez)
+      deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return deals;
+    });
   }
 }
 

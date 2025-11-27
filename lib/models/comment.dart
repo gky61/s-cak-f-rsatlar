@@ -6,6 +6,7 @@ class Comment {
   final String userId;
   final String userName;
   final String userEmail;
+  final String userProfileImageUrl; // Kullanıcı profil resmi
   final String text;
   final DateTime createdAt;
   final String? parentCommentId; // Ana yorum ID'si (cevap ise)
@@ -17,6 +18,7 @@ class Comment {
     required this.userId,
     required this.userName,
     required this.userEmail,
+    this.userProfileImageUrl = '', // Boş olabilir
     required this.text,
     required this.createdAt,
     this.parentCommentId,
@@ -32,6 +34,7 @@ class Comment {
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? '',
       userEmail: data['userEmail'] ?? '',
+      userProfileImageUrl: data['userProfileImageUrl'] ?? '',
       text: data['text'] ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       parentCommentId: data['parentCommentId'],
@@ -46,6 +49,7 @@ class Comment {
       'userId': userId,
       'userName': userName,
       'userEmail': userEmail,
+      'userProfileImageUrl': userProfileImageUrl,
       'text': text,
       'createdAt': Timestamp.fromDate(createdAt),
     };

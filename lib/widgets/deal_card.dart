@@ -75,7 +75,7 @@ class _DealCardState extends State<DealCard> {
 
     try {
       final preview = await _linkPreviewService.fetchMetadata(widget.deal.link)
-          .timeout(const Duration(seconds: 8), onTimeout: () => null);
+          .timeout(const Duration(seconds: 5), onTimeout: () => null);
       
       if (mounted && preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
         // Görsel bulundu, setState ile güncelle
@@ -105,15 +105,17 @@ class _DealCardState extends State<DealCard> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     final Border? highlightBorder = isExpired
-        ? Border.all(color: Colors.red[300]!, width: 2)
+        ? Border.all(color: Colors.red[400]!, width: 2.5)
         : deal.isEditorPick
-            ? Border.all(color: Colors.orange[200]!, width: 2)
+            ? Border.all(color: Colors.orange[400]!, width: 2.5)
             : null;
     
-    final borderColor = isDark ? const Color(0xFF2D2D2D) : const Color(0xFFD5DAE2);
+    final borderColor = isDark 
+        ? const Color(0xFF404040)  // Daha belirgin koyu mod border
+        : const Color(0xFFC0C8D0); // Daha belirgin açık mod border
     final Border defaultBorder = Border.all(
       color: borderColor,
-      width: 1.2,
+      width: 2.0, // 1.2'den 2.0'a çıkarıldı
     );
     
     final cardBackgroundColor = isDark
@@ -124,7 +126,7 @@ class _DealCardState extends State<DealCard> {
       scale: _isPressed ? 0.98 : 1,
       duration: const Duration(milliseconds: 100),
       child: Container(
-        margin: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4),
+        margin: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4), // Kartlar arası mesafe
         decoration: BoxDecoration(
           color: cardBackgroundColor,
           borderRadius: BorderRadius.circular(16),
@@ -132,14 +134,23 @@ class _DealCardState extends State<DealCard> {
           boxShadow: [
             BoxShadow(
               color: isExpired
-                  ? Colors.red.withOpacity(0.1)
+                  ? Colors.red.withValues(alpha: 0.15)
                   : deal.isEditorPick
-                      ? Colors.orange.withOpacity(0.15)
+                      ? Colors.orange.withValues(alpha: 0.2)
                       : (isDark 
-                          ? Colors.black.withOpacity(0.3)
-                          : Colors.black.withOpacity(0.03)),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+                          ? Colors.black.withValues(alpha: 0.4)
+                          : Colors.black.withValues(alpha: 0.08)),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+              spreadRadius: 0.5,
+            ),
+            // İkinci shadow katmanı - daha yumuşak derinlik efekti
+            BoxShadow(
+              color: isDark 
+                  ? Colors.black.withValues(alpha: 0.2)
+                  : Colors.black.withValues(alpha: 0.03),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
             ),
           ],
         ),
@@ -186,6 +197,9 @@ class _DealCardState extends State<DealCard> {
                                         ? CachedNetworkImage(
                                             imageUrl: _effectiveImageUrl!,
                                             fit: BoxFit.contain,
+                                            memCacheWidth: 400, // Performans için cache boyutu
+                                            memCacheHeight: 400,
+                                            fadeInDuration: const Duration(milliseconds: 200),
                                             placeholder: (context, url) => Container(
                                               color: isDark ? Colors.grey[800] : Colors.grey[100],
                                               child: const Center(

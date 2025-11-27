@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'dart:io' show Platform;
 import '../services/auth_service.dart';
 import 'home_screen.dart';
@@ -78,7 +77,7 @@ class _AuthScreenState extends State<AuthScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFFFF6B35).withOpacity(0.1),
+              const Color(0xFFFF6B35).withValues(alpha: 0.1),
               Colors.white,
             ],
           ),
@@ -100,7 +99,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFF6B35).withOpacity(0.3),
+                          color: const Color(0xFFFF6B35).withValues(alpha: 0.3),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
@@ -114,7 +113,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: 32),
                   const Text(
-                    'Sıcak Fırsatlar',
+                    'FIRSATKOLİK',
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,

@@ -14,6 +14,7 @@ class Deal {
   final String imageUrl;
   final int hotVotes;
   final int coldVotes;
+  final int expiredVotes;
   final int commentCount;
   final String postedBy;
   final DateTime createdAt;
@@ -33,9 +34,10 @@ class Deal {
     this.subCategory,
     required this.link,
     required this.imageUrl,
-    required this.hotVotes,
-    required this.coldVotes,
-    required this.commentCount,
+      required this.hotVotes,
+      required this.coldVotes,
+      this.expiredVotes = 0,
+      required this.commentCount,
     required this.postedBy,
     required this.createdAt,
     required this.isEditorPick,
@@ -119,6 +121,7 @@ class Deal {
       imageUrl: data['imageUrl'] ?? '',
       hotVotes: (data['hotVotes'] ?? 0) is int ? (data['hotVotes'] ?? 0) : ((data['hotVotes'] ?? 0) as num).toInt(),
       coldVotes: (data['coldVotes'] ?? 0) is int ? (data['coldVotes'] ?? 0) : ((data['coldVotes'] ?? 0) as num).toInt(),
+      expiredVotes: (data['expiredVotes'] ?? 0) is int ? (data['expiredVotes'] ?? 0) : ((data['expiredVotes'] ?? 0) as num).toInt(),
       commentCount: (data['commentCount'] ?? 0) is int ? (data['commentCount'] ?? 0) : ((data['commentCount'] ?? 0) as num).toInt(),
       postedBy: data['postedBy'] ?? '',
       createdAt: createdAt,
@@ -143,6 +146,7 @@ class Deal {
       'imageUrl': imageUrl,
       'hotVotes': hotVotes,
       'coldVotes': coldVotes,
+      'expiredVotes': expiredVotes,
       'commentCount': commentCount,
       'postedBy': postedBy,
       'createdAt': Timestamp.fromDate(createdAt),

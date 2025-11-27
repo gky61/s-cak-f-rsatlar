@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../services/category_detection_service.dart';
 import '../models/category.dart';
 import '../widgets/category_selector_widget.dart';
 
@@ -26,9 +27,90 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   String _selectedCategory = 'elektronik';
   String? _selectedSubCategory;
   bool _isLoading = false;
+  bool _isAutoDetecting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Başlık veya açıklama değiştiğinde kategori tespit et
+    _titleController.addListener(_onTextChanged);
+    _descriptionController.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    final title = _titleController.text.trim();
+    final description = _descriptionController.text.trim();
+    
+    if (title.isEmpty && description.isEmpty) return;
+    
+    // Kısa bir gecikme ile tespit yap (kullanıcı yazmayı bitirsin)
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (!mounted || _isAutoDetecting) return;
+      _detectCategory();
+    });
+  }
+
+  void _detectCategory() {
+    final title = _titleController.text.trim();
+    final description = _descriptionController.text.trim();
+    
+    if (title.isEmpty && description.isEmpty) return;
+    
+    // Başlık ve açıklamayı birleştir
+    final combinedText = '$title $description';
+    
+    print('🔍 Kategori tespiti yapılıyor: $combinedText');
+    final result = CategoryDetectionService.detectCategory(combinedText);
+    print('✅ Tespit sonucu: $result');
+    
+    if (result != null && mounted) {
+      final categoryId = result['categoryId'];
+      final subCategory = result['subCategory'];
+      
+      if (categoryId != null && categoryId != _selectedCategory) {
+        print('📝 Kategori güncelleniyor: $categoryId, alt kategori: $subCategory');
+        _isAutoDetecting = true;
+        setState(() {
+          _selectedCategory = categoryId;
+          _selectedSubCategory = subCategory;
+        });
+        _isAutoDetecting = false;
+        
+        print('✅ Kategori güncellendi: ${Category.getById(categoryId).name}');
+        
+        // Kullanıcıya bildirim göster
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Kategori otomatik tespit edildi: ${Category.getById(categoryId).name}${subCategory != null ? " > $subCategory" : ""}',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: 'Değiştir',
+                textColor: Colors.white,
+                onPressed: () => _showCategorySelector(),
+              ),
+            ),
+          );
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {
+    _titleController.removeListener(_onTextChanged);
+    _descriptionController.removeListener(_onTextChanged);
     _titleController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
@@ -56,6 +138,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         selectedSubCategory: _selectedSubCategory,
         onCategorySelected: (categoryId, subCategory) {
           setState(() {
+            _isAutoDetecting = false; // Manuel seçim yapıldı, otomatik tespiti durdur
             _selectedCategory = categoryId;
             _selectedSubCategory = subCategory;
           });
@@ -169,8 +252,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   border: Border.all(color: Colors.grey[300]!),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
-                  children: [
+                        child: Row(
+                          children: [
                     const Icon(Icons.category, color: Colors.grey),
                     const SizedBox(width: 12),
                     Expanded(
@@ -182,7 +265,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey,
-                            ),
+                        ),
                           ),
                           const SizedBox(height: 4),
                           Text(

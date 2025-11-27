@@ -31,7 +31,7 @@ void main() async {
   // Background message handler'ı kaydet
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   
-  print('🔥 Sıcak Fırsatlar uygulaması başlatılıyor...');
+  print('🔥 FIRSATKOLİK uygulaması başlatılıyor...');
   print('📱 Build zamanı: ${DateTime.now()}');
   runApp(const MyApp());
 }
@@ -67,14 +67,21 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Sıcak Fırsatlar',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: _themeService.themeMode,
-      navigatorKey: navigatorKey,
-      home: const AuthWrapper(),
+    return AnimatedTheme(
+      duration: const Duration(milliseconds: 300), // Daha hızlı animasyon
+      curve: Curves.easeInOut,
+      data: _themeService.themeMode == ThemeMode.dark 
+          ? AppTheme.darkTheme 
+          : AppTheme.lightTheme,
+      child: MaterialApp(
+        title: 'FIRSATKOLİK',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: _themeService.themeMode,
+        navigatorKey: navigatorKey,
+        home: const AuthWrapper(),
+      ),
     );
   }
 }
