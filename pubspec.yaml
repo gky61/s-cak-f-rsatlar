@@ -43,7 +43,7 @@ dependencies:
   
   # SharedPreferences for storing user preferences
   shared_preferences: ^2.2.2
-  
+
   # Image picker and Firebase Storage for avatar upload
   image_picker: ^1.0.7
   firebase_storage: ^11.6.0

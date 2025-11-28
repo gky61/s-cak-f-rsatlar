@@ -3,8 +3,6 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/deal.dart';
-import '../services/firestore_service.dart';
-import '../services/auth_service.dart';
 import '../services/link_preview_service.dart';
 import '../theme/app_theme.dart';
 
@@ -28,8 +26,6 @@ class _DealCardState extends State<DealCard> {
   bool _isLoadingImage = false;
   bool _imageLoadAttempted = false; // Görsel yükleme denemesi yapıldı mı?
 
-  final FirestoreService _firestoreService = FirestoreService();
-  final AuthService _authService = AuthService();
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
 
   @override
@@ -122,9 +118,8 @@ class _DealCardState extends State<DealCard> {
         ? (isExpired ? Colors.red[900]!.withOpacity(0.2) : AppTheme.darkSurface)
         : (isExpired ? Colors.red[50] : const Color(0xFFFBFCFE));
 
-    return AnimatedScale(
-      scale: _isPressed ? 0.98 : 1,
-      duration: const Duration(milliseconds: 100),
+    return Transform.scale(
+      scale: _isPressed ? 0.98 : 1.0,
       child: Container(
         margin: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4), // Kartlar arası mesafe
         decoration: BoxDecoration(
@@ -132,25 +127,18 @@ class _DealCardState extends State<DealCard> {
           borderRadius: BorderRadius.circular(16),
           border: highlightBorder ?? defaultBorder,
           boxShadow: [
+            // Tek shadow katmanı - performans için optimize edildi
             BoxShadow(
               color: isExpired
-                  ? Colors.red.withValues(alpha: 0.15)
+                  ? Colors.red.withValues(alpha: 0.12)
                   : deal.isEditorPick
-                      ? Colors.orange.withValues(alpha: 0.2)
+                      ? Colors.orange.withValues(alpha: 0.15)
                       : (isDark 
-                          ? Colors.black.withValues(alpha: 0.4)
-                          : Colors.black.withValues(alpha: 0.08)),
-              blurRadius: 12,
-              offset: const Offset(0, 3),
-              spreadRadius: 0.5,
-            ),
-            // İkinci shadow katmanı - daha yumuşak derinlik efekti
-            BoxShadow(
-              color: isDark 
-                  ? Colors.black.withValues(alpha: 0.2)
-                  : Colors.black.withValues(alpha: 0.03),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
+                          ? Colors.black.withValues(alpha: 0.3)
+                          : Colors.black.withValues(alpha: 0.06)),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+              spreadRadius: 0,
             ),
           ],
         ),
@@ -187,47 +175,64 @@ class _DealCardState extends State<DealCard> {
                                 child: Container(
                                   width: 80,
                                   height: 80,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 80,
+                                    maxWidth: 80,
+                                    minHeight: 80,
+                                    maxHeight: 80,
+                                  ),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(12),
                                     color: isDark ? Colors.grey[800] : Colors.grey[100],
                                   ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
-                                        ? CachedNetworkImage(
+                                  clipBehavior: Clip.antiAlias, // Container seviyesinde clip - görselin taşmasını önler
+                                  child: _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
+                                      ? Padding(
+                                          padding: const EdgeInsets.all(4.0), // Görsele padding ekle - daha küçük görünsün
+                                          child: CachedNetworkImage(
                                             imageUrl: _effectiveImageUrl!,
-                                            fit: BoxFit.contain,
-                                            memCacheWidth: 400, // Performans için cache boyutu
-                                            memCacheHeight: 400,
-                                            fadeInDuration: const Duration(milliseconds: 200),
+                                            fit: BoxFit.contain, // contain kullan - görselin tamamı görünsün, taşmasın
+                                            memCacheWidth: 144, // (80-8)x2 için optimize edildi
+                                            memCacheHeight: 144,
+                                            maxWidthDiskCache: 288, // Disk cache boyutu
+                                            maxHeightDiskCache: 288,
+                                            fadeInDuration: const Duration(milliseconds: 150),
+                                            fadeOutDuration: const Duration(milliseconds: 100),
+                                            alignment: Alignment.center, // Görseli ortala
                                             placeholder: (context, url) => Container(
+                                              width: 72,
+                                              height: 72,
                                               color: isDark ? Colors.grey[800] : Colors.grey[100],
                                               child: const Center(
                                                 child: SizedBox(
-                                                  width: 20,
-                                                  height: 20,
+                                                  width: 16,
+                                                  height: 16,
                                                   child: CircularProgressIndicator(strokeWidth: 2),
                                                 ),
                                               ),
                                             ),
                                             errorWidget: (context, url, error) => Container(
+                                              width: 72,
+                                              height: 72,
                                               color: isDark ? Colors.grey[800] : Colors.grey[100],
                                               child: Icon(
                                                 Icons.image_not_supported_rounded,
                                                 color: isDark ? Colors.grey[600] : Colors.grey[300],
-                                                size: 32,
+                                                size: 28,
                                               ),
                                             ),
-                                          )
-                                        : Container(
-                                            color: isDark ? Colors.grey[800] : Colors.grey[100],
-                                            child: Icon(
-                                              Icons.image_not_supported_rounded,
-                                              color: isDark ? Colors.grey[600] : Colors.grey[300],
-                                              size: 32,
-                                            ),
                                           ),
-                                  ),
+                                        )
+                                      : Container(
+                                          width: 80,
+                                          height: 80,
+                                          color: isDark ? Colors.grey[800] : Colors.grey[100],
+                                          child: Icon(
+                                            Icons.image_not_supported_rounded,
+                                            color: isDark ? Colors.grey[600] : Colors.grey[300],
+                                            size: 32,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ),

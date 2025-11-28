@@ -148,12 +148,14 @@ class AppTheme {
     );
   }
 
-  // Dark Theme Renkleri
-  static const Color darkBackground = Color(0xFF121212); // Koyu Zemin
-  static const Color darkSurface = Color(0xFF1E1E1E); // Koyu Kart Zemini
-  static const Color darkTextPrimary = Color(0xFFE5E5E5); // Açık Metin
-  static const Color darkTextSecondary = Color(0xFFB0B0B0); // İkincil Metin
-  static const Color darkBorder = Color(0xFF2D2D2D); // Koyu Border
+  // Dark Theme Renkleri - İyileştirilmiş kontrast ve görünürlük
+  static const Color darkBackground = Color(0xFF0D0D0D); // Daha koyu zemin (daha iyi kontrast)
+  static const Color darkSurface = Color(0xFF1A1A1A); // Koyu Kart Zemini (daha belirgin)
+  static const Color darkSurfaceElevated = Color(0xFF242424); // Yükseltilmiş yüzeyler için
+  static const Color darkTextPrimary = Color(0xFFF5F5F5); // Daha açık metin (daha iyi okunabilirlik)
+  static const Color darkTextSecondary = Color(0xFFB8B8B8); // İkincil Metin (daha belirgin)
+  static const Color darkBorder = Color(0xFF333333); // Daha belirgin border
+  static const Color darkDivider = Color(0xFF2A2A2A); // Divider rengi
 
   static ThemeData get darkTheme {
     final baseColorScheme = ColorScheme.fromSeed(
@@ -225,7 +227,7 @@ class AppTheme {
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: darkBorder, width: 1),
+          side: BorderSide(color: darkBorder, width: 1.5), // Daha belirgin border
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -286,21 +288,34 @@ class AppTheme {
         selectedLabelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
         unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
       ),
-      dividerColor: darkBorder,
+      dividerColor: darkDivider,
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: darkSurface,
+        fillColor: darkSurfaceElevated,
+        labelStyle: const TextStyle(color: darkTextSecondary),
+        hintStyle: const TextStyle(color: darkTextSecondary),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: darkBorder),
+          borderSide: BorderSide(color: darkBorder, width: 1.5),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: darkBorder),
+          borderSide: BorderSide(color: darkBorder, width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: primary, width: 2),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: darkSurfaceElevated,
+        selectedColor: primary.withOpacity(0.2),
+        labelStyle: const TextStyle(color: darkTextPrimary),
+        secondaryLabelStyle: const TextStyle(color: darkTextPrimary),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: darkBorder, width: 1),
         ),
       ),
     );

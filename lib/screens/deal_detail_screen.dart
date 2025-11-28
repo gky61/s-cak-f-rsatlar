@@ -347,6 +347,15 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         onPressed: _isLoadingFavorite ? null : _toggleFavorite,
                         color: _isFavorite ? Colors.red : null,
                       ),
+                      if (_isAdmin) ...[
+                        const SizedBox(width: 8),
+                        _buildGlassButton(
+                          context: context,
+                          icon: Icons.delete_outline_rounded,
+                          onPressed: () => _showDeleteDialog(context, deal),
+                          color: Colors.red,
+                        ),
+                      ],
                       const SizedBox(width: 8),
                       _buildGlassButton(
                         context: context,
@@ -2289,6 +2298,52 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showDeleteDialog(BuildContext context, Deal deal) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fırsatı Sil'),
+        content: Text('Bu fırsatı kalıcı olarak silmek istediğinize emin misiniz?\n\n"${deal.title}"\n\nBu işlem geri alınamaz.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Evet, Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final success = await _firestoreService.deleteDeal(deal.id);
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fırsat silindi 🗑️'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        // Silme işlemi başarılıysa geri dön
+        Navigator.of(context).pop();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Silme işlemi başarısız ❌'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildShareOption(

@@ -199,6 +199,14 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     label: const Text('Onayla', style: TextStyle(color: Colors.green)),
                   ),
                 ),
+                Container(width: 1, height: 30, color: Colors.grey[200]),
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: () => _deleteDeal(deal.id),
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    label: const Text('Sil', style: TextStyle(color: Colors.red)),
+                  ),
+                ),
               ],
             ),
           ],
@@ -220,21 +228,40 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ],
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _reactivateDeal(deal.id),
-                      icon: const Icon(Icons.restore, size: 20),
-                      label: const Text('Tekrar Yayına Al'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _reactivateDeal(deal.id),
+                          icon: const Icon(Icons.restore, size: 20),
+                          label: const Text('Tekrar Yayına Al'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _deleteDeal(deal.id),
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          label: const Text('Sil'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -340,6 +367,48 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Bir hata oluştu ❌'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteDeal(String id) async {
+    // Önce deal bilgisini al (başlık göstermek için)
+    final deal = await _firestoreService.getDeal(id);
+    final dealTitle = deal?.title ?? 'Bu fırsat';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fırsatı Sil'),
+        content: Text('Bu fırsatı kalıcı olarak silmek istediğinize emin misiniz?\n\n"$dealTitle"\n\nBu işlem geri alınamaz.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Evet, Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final success = await _firestoreService.deleteDeal(id);
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fırsat silindi 🗑️'), backgroundColor: Colors.red),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Silme işlemi başarısız ❌'), backgroundColor: Colors.red),
         );
       }
     }

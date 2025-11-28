@@ -71,10 +71,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           totalLikes: 0,
         );
         await _firestore.collection('users').doc(user.uid).set(newUser.toFirestore());
-        setState(() {
+          setState(() {
           _user = newUser;
           _nicknameController.text = '';
-        });
+          });
       }
     } catch (e) {
       print('Kullanıcı bilgisi yükleme hatası: $e');
@@ -128,7 +128,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: AppTheme.primary.withValues(alpha: 0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
-                          ),
+                ),
                         ],
                       ),
                       child: ClipOval(
@@ -177,8 +177,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SnackBar(
             content: Text('Avatar seçildi ✅'),
             backgroundColor: Colors.green,
-          ),
-        );
+            ),
+          );
       }
     } catch (e) {
       print('Avatar güncelleme hatası: $e');
@@ -291,25 +291,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // Avatar
                   GestureDetector(
                     onTap: _showAvatarSelection,
-                    child: Stack(
-                      children: [
-                        Container(
+                        child: Stack(
+                          children: [
+                                  Container(
                           width: 120,
                           height: 120,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
                               color: AppTheme.primary,
                               width: 3,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
                                 color: AppTheme.primary.withValues(alpha: 0.3),
                                 blurRadius: 12,
                                 offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
+                                        ),
+                                      ],
+                                    ),
                           child: ClipOval(
                             child: _user!.profileImageUrl.isNotEmpty
                                 ? (_user!.profileImageUrl.startsWith('assets/')
@@ -323,7 +323,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               Icons.person,
                                               size: 60,
                                               color: Colors.grey[600],
-                                            ),
+                                              ),
                                           );
                                         },
                                       )
@@ -351,10 +351,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       Icons.person,
                                       size: 60,
                                       color: Colors.grey[600],
-                                    ),
-                                  ),
-                          ),
+                              ),
+                            ),
                         ),
+                      ),
                         Positioned(
                           bottom: 0,
                           right: 0,
@@ -371,11 +371,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: Colors.white,
                               size: 18,
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                   const SizedBox(height: 16),
                   // Username
                   Text(
@@ -385,7 +385,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       fontWeight: FontWeight.w600,
                       color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
                     ),
-                  ),
+                                  ),
                   const SizedBox(height: 8),
                   // Nickname
                   Row(
@@ -395,18 +395,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         SizedBox(
                           width: 200,
                           child: TextField(
-                            controller: _nicknameController,
+                                    controller: _nicknameController,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                                    style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
-                            ),
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
+                                    ),
+                                    decoration: InputDecoration(
+                                      border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
+                                      ),
                             autofocus: true,
                           ),
                         ),
@@ -440,11 +440,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             setState(() {
                               _isEditingNickname = true;
                             });
-                          },
+                                    },
                         ),
                       ],
                     ],
-                  ),
+                                  ),
                   const SizedBox(height: 16),
                   // Güvenilirlik Yıldızları ve Seviye
                   Container(
@@ -467,7 +467,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: [
                         // Yıldızlar
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                                              mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(5, (index) {
                             return Icon(
                               index < _user!.trustStars
@@ -482,14 +482,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 8),
                         // Güvenilirlik Seviyesi
-                        Text(
+                                                Text(
                           _user!.trustLevel,
-                          style: TextStyle(
-                            fontSize: 16,
+                                                  style: TextStyle(
+                                                    fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: AppTheme.primary,
-                          ),
-                        ),
+                                                  ),
+                                                ),
                         const SizedBox(height: 4),
                         // Puan
                         Text(
@@ -497,17 +497,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: TextStyle(
                             fontSize: 14,
                             color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                   const SizedBox(height: 16),
                   // İstatistikler
-                  Padding(
+                                Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
+                                  child: Row(
+                                    children: [
                         Expanded(
                           child: _buildStatCard(
                             icon: Icons.local_fire_department_rounded,
@@ -515,21 +515,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             value: '${_user!.dealCount}',
                             color: AppTheme.primary,
                             isDark: isDark,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
                           child: _buildStatCard(
                             icon: Icons.favorite_rounded,
                             label: 'Beğeni',
                             value: '${_user!.totalLikes}',
                             color: Colors.red,
                             isDark: isDark,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                   const SizedBox(height: 32),
                   // Kullanıcının Fırsatları
                   Padding(
@@ -549,10 +549,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   // Fırsatlar Listesi
-                  StreamBuilder<List<Deal>>(
+                                StreamBuilder<List<Deal>>(
                     stream: _firestoreService.getUserDealsStream(_user!.uid),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
+                                  builder: (context, snapshot) {
+                                    if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(
                           child: Padding(
                             padding: EdgeInsets.all(24.0),
@@ -564,58 +564,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (snapshot.hasError) {
                         return Center(
                           child: Text('Hata: ${snapshot.error}'),
-                        );
-                      }
-
-                      final deals = snapshot.data ?? [];
-
-                      if (deals.isEmpty) {
-                        return Padding(
+                                      );
+                                    }
+                                    
+                                    final deals = snapshot.data ?? [];
+                                    
+                                    if (deals.isEmpty) {
+                                      return Padding(
                           padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            children: [
-                              Icon(
+                                          child: Column(
+                                            children: [
+                                              Icon(
                                 Icons.inbox_outlined,
                                 size: 64,
                                 color: Colors.grey[400],
-                              ),
+                                              ),
                               const SizedBox(height: 16),
-                              Text(
+                                              Text(
                                 'Henüz fırsat paylaşmadınız',
                                 style: TextStyle(
-                                  color: Colors.grey[600],
+                                                      color: Colors.grey[600],
                                   fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
+                                                    ),
+                                              ),
+                                            ],
+                                        ),
+                                      );
+                                    }
+                                    
                       return ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
+                                      shrinkWrap: true,
+                                      physics: const NeverScrollableScrollPhysics(),
                         padding: const EdgeInsets.only(bottom: 100),
-                        itemCount: deals.length,
-                        itemBuilder: (context, index) {
-                          return DealCard(
-                            deal: deals[index],
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
+                                      itemCount: deals.length,
+                                      itemBuilder: (context, index) {
+                                        return DealCard(
+                                          deal: deals[index],
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
                                   builder: (_) => DealDetailScreen(dealId: deals[index].id),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      },
+                                    );
+                                  },
+                          ),
+                          const SizedBox(height: 24),
                   // Çıkış Butonu
-                  Padding(
+                                Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: SizedBox(
                       width: double.infinity,
@@ -628,19 +628,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           side: const BorderSide(color: Colors.red, width: 2),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        ),
+                                      ),
                     ),
                   ),
                   const SizedBox(height: 32),
-                ],
-              ),
-            ),
-    );
-  }
-
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    
   Widget _buildStatCard({
     required IconData icon,
     required String label,
@@ -650,43 +650,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+                                                      decoration: BoxDecoration(
         color: isDark ? AppTheme.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
           width: 1.5,
         ),
-        boxShadow: [
-          BoxShadow(
+                                                        boxShadow: [
+                                                          BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
             blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+                                                            offset: const Offset(0, 2),
+                                                          ),
+                                                        ],
+                                                      ),
       child: Column(
-        children: [
+                                                        children: [
           Icon(icon, color: color, size: 32),
           const SizedBox(height: 8),
-          Text(
+                                                          Text(
             value,
-            style: TextStyle(
+                                                            style: TextStyle(
               fontSize: 20,
-              fontWeight: FontWeight.bold,
+                                                    fontWeight: FontWeight.bold,
               color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-            ),
-          ),
+                                                  ),
+                                            ),
           const SizedBox(height: 4),
-          Text(
+                                            Text(
             label,
             style: TextStyle(
               fontSize: 12,
               color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
