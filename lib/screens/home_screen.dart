@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:async';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
@@ -38,12 +37,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _showScrollToTop = false;
   
-  // Pagination için state
-  List<Deal> _allDeals = [];
-  List<Deal> _displayedDeals = [];
-  int _displayLimit = 20;
-  bool _isLoadingMore = false;
-  bool _hasMore = true;
+  // Görüntüleme modu: 'list', 'grid', 'compact'
+  String _viewMode = 'list';
 
   @override
   void initState() {
@@ -74,41 +69,13 @@ class _HomeScreenState extends State<HomeScreen> {
         _showScrollToTop = shouldShow;
       });
     }
-    
-    // Infinite scroll: En alta yaklaşıldığında daha fazla yükle
-    if (offset > maxScroll - 200 && _hasMore && !_isLoadingMore && mounted) {
-      _loadMoreDeals();
-    }
-  }
-
-  void _loadMoreDeals() {
-    if (_isLoadingMore || !_hasMore) return;
-    
-    setState(() {
-      _isLoadingMore = true;
-    });
-    
-    // Daha fazla deal göster
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        final newLimit = _displayLimit + 20;
-        final hasMore = newLimit < _allDeals.length;
-        
-        setState(() {
-          _displayLimit = newLimit;
-          _displayedDeals = _allDeals.take(_displayLimit).toList();
-          _hasMore = hasMore;
-          _isLoadingMore = false;
-        });
-      }
-    });
   }
 
   void _scrollToTop() {
     _scrollController.animateTo(
       0,
-      duration: const Duration(milliseconds: 400), // Daha hızlı scroll
-      curve: Curves.easeOut, // Daha hızlı curve
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
     );
   }
 
@@ -162,6 +129,48 @@ class _HomeScreenState extends State<HomeScreen> {
             backgroundColor: Colors.red,
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _deleteDeal(Deal deal) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fırsatı Sil'),
+        content: Text('"${deal.title}" fırsatını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final success = await _firestoreService.deleteDeal(deal.id);
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Fırsat silindi'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Fırsat silinirken hata oluştu'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -260,22 +269,121 @@ class _HomeScreenState extends State<HomeScreen> {
             });
           },
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'FIRSATKOLİK 🔥',
-                style: TextStyle(fontWeight: FontWeight.w800),
+              Flexible(
+                child: Text(
+                  'FIRSATKOLİK 🔥',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               AnimatedRotation(
                 turns: _isCategoryMenuExpanded ? 0.5 : 0,
                 duration: const Duration(milliseconds: 200),
-                child: const Icon(Icons.arrow_drop_down, size: 24),
+                child: const Icon(Icons.arrow_drop_down, size: 20),
               ),
             ],
           ),
         ),
         centerTitle: false,
         actions: [
+          // Görüntüleme Modu Seçici
+          PopupMenuButton<String>(
+            icon: Icon(
+              _viewMode == 'list' 
+                  ? Icons.view_list_rounded
+                  : _viewMode == 'grid'
+                      ? Icons.grid_view_rounded
+                      : _viewMode == 'compact'
+                          ? Icons.view_compact_rounded
+                          : Icons.view_agenda_rounded,
+            ),
+            onSelected: (value) {
+              setState(() {
+                _viewMode = value;
+              });
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'list',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.view_list_rounded,
+                      size: 20,
+                      color: _viewMode == 'list' ? AppTheme.primary : null,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Liste'),
+                    if (_viewMode == 'list')
+                      const Spacer(),
+                    if (_viewMode == 'list')
+                      Icon(Icons.check, size: 18, color: AppTheme.primary),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'grid',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.grid_view_rounded,
+                      size: 20,
+                      color: _viewMode == 'grid' ? AppTheme.primary : null,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Grid'),
+                    if (_viewMode == 'grid')
+                      const Spacer(),
+                    if (_viewMode == 'grid')
+                      Icon(Icons.check, size: 18, color: AppTheme.primary),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'compact',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.view_compact_rounded,
+                      size: 20,
+                      color: _viewMode == 'compact' ? AppTheme.primary : null,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Kompakt'),
+                    if (_viewMode == 'compact')
+                      const Spacer(),
+                    if (_viewMode == 'compact')
+                      Icon(Icons.check, size: 18, color: AppTheme.primary),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'small_list',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.view_agenda_rounded,
+                      size: 20,
+                      color: _viewMode == 'small_list' ? AppTheme.primary : null,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Küçük Liste'),
+                    if (_viewMode == 'small_list')
+                      const Spacer(),
+                    if (_viewMode == 'small_list')
+                      Icon(Icons.check, size: 18, color: AppTheme.primary),
+                  ],
+                ),
+              ),
+            ],
+          ),
           // Karanlık Mod Toggle - Şık animasyonlu
           _buildThemeToggleButton(),
           if (_isAdmin)
@@ -298,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Stack(
         children: [
           Column(
-            children: [
+        children: [
           // Ana Kategoriler (Yatay Kaydırmalı Chip'ler)
           Container(
             height: 60,
@@ -307,8 +415,6 @@ class _HomeScreenState extends State<HomeScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: Category.categories.length,
-              cacheExtent: 200, // Kategori listesi için cache
-              addAutomaticKeepAlives: false,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final category = Category.categories[index];
@@ -318,9 +424,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: Text(
                     '${category.icon} ${category.name}',
                     style: TextStyle(
-                      color: isSelected 
-                          ? Colors.white 
-                          : (isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
+                      color: isSelected ? Colors.white : AppTheme.textPrimary,
                       fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
@@ -329,14 +433,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     _selectedCategory = category.id;
                     _selectedSubCategory = null;
                   }),
-                  backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+                  backgroundColor: Colors.white,
                   selectedColor: AppTheme.primary,
-                  side: BorderSide(
-                    color: isDark 
-                        ? (isSelected ? AppTheme.primary : AppTheme.darkBorder)
-                        : Colors.transparent,
-                    width: isSelected ? 1.5 : 1,
-                  ),
+                  side: BorderSide.none,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
@@ -349,25 +448,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Açılır Kategori Menüsü
           AnimatedContainer(
-            duration: const Duration(milliseconds: 200), // Daha hızlı animasyon
-            curve: Curves.easeOut, // Daha hızlı curve
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
             height: _isCategoryMenuExpanded ? null : 0,
             child: _isCategoryMenuExpanded
                 ? Container(
                     constraints: const BoxConstraints(maxHeight: 400),
                     decoration: BoxDecoration(
-                      color: isDark ? AppTheme.darkSurface : Colors.white,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
-                          width: 1,
-                        ),
-                      ),
+                      color: Colors.white,
                       boxShadow: [
                         BoxShadow(
-                          color: isDark 
-                              ? Colors.black.withOpacity(0.3)
-                              : Colors.black.withOpacity(0.1),
+                          color: Colors.black.withOpacity(0.1),
                           blurRadius: 10,
                           offset: const Offset(0, 2),
                         ),
@@ -383,10 +474,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             isSelected: _selectedCategory == 'tumu' && _selectedSubCategory == null,
                             showNotification: true,
                           ),
-                          Divider(
-                            height: 1,
-                            color: isDark ? AppTheme.darkDivider : Colors.grey[200],
-                          ),
+                          const Divider(height: 1),
                           // Ana kategoriler
                           ...Category.categories
                               .where((cat) => cat.id != 'tumu')
@@ -403,24 +491,10 @@ class _HomeScreenState extends State<HomeScreen> {
           if (!_isCategoryMenuExpanded && (_selectedCategory != 'tumu' || _selectedSubCategory != null))
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark 
-                    ? AppTheme.primary.withOpacity(0.15) 
-                    : AppTheme.primary.withOpacity(0.1),
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
-                    width: 1,
-                  ),
-                ),
-              ),
+              color: AppTheme.primary.withOpacity(0.1),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.filter_alt, 
-                    size: 16, 
-                    color: AppTheme.primary,
-                  ),
+                  Icon(Icons.filter_alt, size: 16, color: AppTheme.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -477,8 +551,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                // Yükleniyor durumu - Skeleton Loading
-                if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                // Veri yoksa boş liste kullan - connectionState kontrolünü kaldırdık
+                // Çünkü StreamBuilder sürekli rebuild yapıyor ve yazılar kayboluyor
+                final deals = snapshot.data ?? [];
+                
+                // Yükleniyor durumu - Sadece ilk yüklemede skeleton göster
+                if (deals.isEmpty && snapshot.connectionState == ConnectionState.waiting) {
                   return ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.only(bottom: 80, top: 8),
@@ -488,9 +566,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   );
                 }
-
-                // Veri yoksa boş liste kullan
-                final deals = snapshot.data ?? [];
                 
                 // Filtreleme (İstemci tarafında)
                 final filteredDeals = _selectedCategory == 'tumu'
@@ -502,21 +577,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         }
                         return categoryMatch;
                       }).toList();
-
-                // Pagination için deal'leri güncelle
-                if (_allDeals != filteredDeals) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      setState(() {
-                        _allDeals = filteredDeals;
-                        _displayLimit = 20;
-                        _displayedDeals = filteredDeals.take(_displayLimit).toList();
-                        _hasMore = filteredDeals.length > _displayLimit;
-                        _isLoadingMore = false;
-                      });
-                    }
-                  });
-                }
 
                 if (filteredDeals.isEmpty) {
                   return Center(
@@ -534,65 +594,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                // Pagination için gösterilecek deal'ler
-                final dealsToShow = _displayedDeals.isEmpty 
-                    ? filteredDeals.take(_displayLimit).toList()
-                    : _displayedDeals;
-
                 return RefreshIndicator(
                   onRefresh: () async {
-                    // Haptic feedback ekle
-                    HapticFeedback.mediumImpact();
-                    
-                    // Veriyi yenile
+                    // Stream'i yeniden başlatmak için setState yeterli
+                    setState(() {});
                     await Future.delayed(const Duration(milliseconds: 500));
-                    
-                    if (mounted) {
-                      setState(() {
-                        _displayLimit = 20;
-                        _displayedDeals = _allDeals.take(_displayLimit).toList();
-                        _hasMore = _allDeals.length > _displayLimit;
-                        _isLoadingMore = false;
-                      });
-                    }
                   },
-                  color: AppTheme.primary,
-                  strokeWidth: 3.0,
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    key: ValueKey('deal_list_$_selectedCategory'), // Kategori değişince listeyi yeniden oluştur
-                    padding: const EdgeInsets.only(bottom: 80, top: 8),
-                    itemCount: dealsToShow.length + (_hasMore && _isLoadingMore ? 1 : 0),
-                    cacheExtent: 1000, // Daha fazla cache için artırıldı
-                    addAutomaticKeepAlives: false, // Görünmeyen widget'ları dispose et
-                    addRepaintBoundaries: true, // RepaintBoundary ekle
-                    itemBuilder: (context, index) {
-                      // Loading indicator göster
-                      if (index == dealsToShow.length) {
-                        return const Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                      }
-                      
-                      final deal = dealsToShow[index];
-                      return RepaintBoundary(
-                        key: ValueKey('deal_card_${deal.id}'),
-                        child: DealCard(
-                          key: ValueKey('deal_card_${deal.id}'), // Her kart için unique key
-                          deal: deal,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DealDetailScreen(dealId: deal.id),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  child: _buildDealList(filteredDeals),
                 );
               },
             ),
@@ -605,11 +613,11 @@ class _HomeScreenState extends State<HomeScreen> {
             bottom: 120, // FAB'ın üstünde, daha fazla mesafe ile
             child: AnimatedOpacity(
               opacity: _showScrollToTop ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200), // Daha hızlı animasyon
+              duration: const Duration(milliseconds: 300),
               child: IgnorePointer(
                 ignoring: !_showScrollToTop,
                 child: FloatingActionButton(
-                  heroTag: 'scroll_to_top_button', // Benzersiz Hero tag
+                  heroTag: "scroll_to_top_fab",
                   mini: true,
                   onPressed: _scrollToTop,
                   backgroundColor: AppTheme.primary,
@@ -621,7 +629,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'add_deal_fab', // Benzersiz Hero tag
+        heroTag: "add_deal_fab",
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const SubmitDealScreen()),
@@ -630,6 +638,118 @@ class _HomeScreenState extends State<HomeScreen> {
         label: const Text('Fırsat Ekle'),
       ),
     );
+  }
+
+  Widget _buildDealList(List<Deal> deals) {
+    if (_viewMode == 'grid') {
+      return GridView.builder(
+        controller: _scrollController,
+        key: ValueKey('deal_grid_${_selectedCategory}_$_viewMode'),
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.7,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: deals.length,
+        cacheExtent: 500,
+        itemBuilder: (context, index) {
+          final deal = deals[index];
+          return RepaintBoundary(
+            key: ValueKey('deal_card_boundary_${deal.id}'),
+            child: DealCard(
+              key: ValueKey('deal_card_${deal.id}'),
+              deal: deal,
+              viewMode: 'grid',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DealDetailScreen(dealId: deal.id),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    } else if (_viewMode == 'compact') {
+      return ListView.builder(
+        controller: _scrollController,
+        key: ValueKey('deal_list_compact_${_selectedCategory}_$_viewMode'),
+        padding: const EdgeInsets.only(bottom: 80, top: 8),
+        itemCount: deals.length,
+        cacheExtent: 500,
+        itemBuilder: (context, index) {
+          final deal = deals[index];
+          return RepaintBoundary(
+            key: ValueKey('deal_card_boundary_${deal.id}'),
+            child: DealCard(
+              key: ValueKey('deal_card_${deal.id}'),
+              deal: deal,
+              viewMode: 'compact',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DealDetailScreen(dealId: deal.id),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    } else if (_viewMode == 'small_list') {
+      // Küçük liste görünümü
+      return ListView.builder(
+        controller: _scrollController,
+        key: ValueKey('deal_small_list_${_selectedCategory}_$_viewMode'),
+        padding: const EdgeInsets.only(bottom: 80, top: 8),
+        itemCount: deals.length,
+        cacheExtent: 500,
+        itemBuilder: (context, index) {
+          final deal = deals[index];
+          return RepaintBoundary(
+            key: ValueKey('deal_card_boundary_${deal.id}'),
+            child: DealCard(
+              key: ValueKey('deal_card_${deal.id}'),
+              deal: deal,
+              viewMode: 'small_list',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DealDetailScreen(dealId: deal.id),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      // Liste görünümü (varsayılan)
+      return ListView.builder(
+        controller: _scrollController,
+        key: ValueKey('deal_list_${_selectedCategory}_$_viewMode'),
+        padding: const EdgeInsets.only(bottom: 80, top: 8),
+        itemCount: deals.length,
+        cacheExtent: 500,
+        itemBuilder: (context, index) {
+          final deal = deals[index];
+          return RepaintBoundary(
+            key: ValueKey('deal_card_boundary_${deal.id}'),
+            child: DealCard(
+              key: ValueKey('deal_card_${deal.id}'),
+              deal: deal,
+              viewMode: 'list',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DealDetailScreen(dealId: deal.id),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
   }
 
   String _getSelectedCategoryText() {
@@ -648,66 +768,53 @@ class _HomeScreenState extends State<HomeScreen> {
             ? _followedCategories.contains(category.id)
             : _followedSubCategories.contains('${category.id}:$subCategory');
 
-    return Builder(
-      builder: (context) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return InkWell(
-          onTap: () {
-            setState(() {
-              if (subCategory != null) {
-                _selectedCategory = category.id;
-                _selectedSubCategory = subCategory;
-              } else {
-                _selectedCategory = category.id;
-                _selectedSubCategory = null;
-              }
-              _isCategoryMenuExpanded = false;
-            });
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: isSelected 
-                ? AppTheme.primary.withOpacity(isDark ? 0.2 : 0.1) 
-                : Colors.transparent,
-            child: Row(
-              children: [
-                if (subCategory == null) ...[
-                  Text(
-                    category.icon,
-                    style: const TextStyle(fontSize: 20),
-                  ),
-                  const SizedBox(width: 12),
-                ] else ...[
-                  const SizedBox(width: 32),
-                  Icon(
-                    Icons.subdirectory_arrow_right, 
-                    size: 16, 
-                    color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    subCategory ?? category.name,
-                    style: TextStyle(
-                      fontSize: subCategory != null ? 14 : 16,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                      color: isSelected 
-                          ? AppTheme.primary 
-                          : (isDark ? AppTheme.darkTextPrimary : Colors.black87),
-                    ),
-                  ),
+    return InkWell(
+      onTap: () {
+        setState(() {
+          if (subCategory != null) {
+            _selectedCategory = category.id;
+            _selectedSubCategory = subCategory;
+          } else {
+            _selectedCategory = category.id;
+            _selectedSubCategory = null;
+          }
+          _isCategoryMenuExpanded = false;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        color: isSelected ? AppTheme.primary.withOpacity(0.1) : Colors.transparent,
+        child: Row(
+          children: [
+            if (subCategory == null) ...[
+              Text(
+                category.icon,
+                style: const TextStyle(fontSize: 20),
+              ),
+              const SizedBox(width: 12),
+            ] else ...[
+              const SizedBox(width: 32),
+              const Icon(Icons.subdirectory_arrow_right, size: 16, color: Colors.grey),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                subCategory ?? category.name,
+                style: TextStyle(
+                  fontSize: subCategory != null ? 14 : 16,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? AppTheme.primary : Colors.black87,
                 ),
-                // Bildirim butonu (Tümü kategorisi için gösterilmez)
-                if (showNotification)
-                  IconButton(
-                    icon: Icon(
-                      isNotificationEnabled ? Icons.notifications_active : Icons.notifications_off_outlined,
-                      color: isNotificationEnabled 
-                          ? AppTheme.primary 
-                          : (isDark ? AppTheme.darkTextSecondary : Colors.grey),
-                      size: 20,
-                    ),
+              ),
+            ),
+            // Bildirim butonu (Tümü kategorisi için gösterilmez)
+            if (showNotification)
+              IconButton(
+                icon: Icon(
+                  isNotificationEnabled ? Icons.notifications_active : Icons.notifications_off_outlined,
+                  color: isNotificationEnabled ? AppTheme.primary : Colors.grey,
+                  size: 20,
+                ),
                 onPressed: () {
                   if (category.id == 'tumu') {
                     _toggleGeneralNotification();
@@ -721,14 +828,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 constraints: const BoxConstraints(),
                 tooltip: isNotificationEnabled ? 'Bildirimleri Kapat' : 'Bildirimleri Aç',
               ),
-                if (showNotification) const SizedBox(width: 8),
-                if (isSelected)
-                  Icon(Icons.check, color: AppTheme.primary, size: 20),
-              ],
-            ),
-          ),
-        );
-      },
+            if (showNotification) const SizedBox(width: 8),
+            if (isSelected)
+              Icon(Icons.check, color: AppTheme.primary, size: 20),
+          ],
+        ),
+      ),
     );
   }
 
@@ -737,100 +842,85 @@ class _HomeScreenState extends State<HomeScreen> {
     final isExpanded = _selectedCategory == category.id;
     final isNotificationEnabled = _followedCategories.contains(category.id);
 
-    return Builder(
-      builder: (context) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Column(
-          children: [
-            InkWell(
-              onTap: () {
-                setState(() {
-                  if (category.subcategories.isEmpty) {
-                    // Alt kategori yoksa direkt seç
-                    _selectedCategory = category.id;
-                    _selectedSubCategory = null;
-                    _isCategoryMenuExpanded = false;
-                  } else {
-                    // Alt kategori varsa expand/collapse yap
-                    if (_selectedCategory == category.id && _selectedSubCategory == null) {
-                      _selectedCategory = 'tumu';
-                      _selectedSubCategory = null;
-                    } else {
-                      _selectedCategory = category.id;
-                      _selectedSubCategory = null;
-                    }
-                  }
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                color: isMainCategorySelected
-                    ? AppTheme.primary.withOpacity(isDark ? 0.2 : 0.1)
-                    : Colors.transparent,
-                child: Row(
-                  children: [
-                    Text(
-                      category.icon,
-                      style: const TextStyle(fontSize: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        category.name,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: isMainCategorySelected ? FontWeight.bold : FontWeight.w500,
-                          color: isMainCategorySelected 
-                              ? AppTheme.primary 
-                              : (isDark ? AppTheme.darkTextPrimary : Colors.black87),
-                        ),
-                      ),
-                    ),
-                    // Bildirim butonu
-                    IconButton(
-                      icon: Icon(
-                        isNotificationEnabled ? Icons.notifications_active : Icons.notifications_off_outlined,
-                        color: isNotificationEnabled 
-                            ? AppTheme.primary 
-                            : (isDark ? AppTheme.darkTextSecondary : Colors.grey),
-                        size: 20,
-                      ),
-                      onPressed: () => _toggleCategoryNotification(category.id),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: isNotificationEnabled ? 'Bildirimleri Kapat' : 'Bildirimleri Aç',
-                    ),
-                    const SizedBox(width: 8),
-                    if (category.subcategories.isNotEmpty)
-                      AnimatedRotation(
-                        turns: isExpanded ? 0.5 : 0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Icon(
-                          Icons.arrow_drop_down, 
-                          color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
-                        ),
-                      ),
-                    if (isMainCategorySelected)
-                      const SizedBox(width: 8),
-                    if (isMainCategorySelected)
-                      Icon(Icons.check, color: AppTheme.primary, size: 20),
-                  ],
+    return Column(
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() {
+              if (category.subcategories.isEmpty) {
+                // Alt kategori yoksa direkt seç
+                _selectedCategory = category.id;
+                _selectedSubCategory = null;
+                _isCategoryMenuExpanded = false;
+              } else {
+                // Alt kategori varsa expand/collapse yap
+                if (_selectedCategory == category.id && _selectedSubCategory == null) {
+                  _selectedCategory = 'tumu';
+                  _selectedSubCategory = null;
+                } else {
+                  _selectedCategory = category.id;
+                  _selectedSubCategory = null;
+                }
+              }
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: isMainCategorySelected
+                ? AppTheme.primary.withOpacity(0.1)
+                : Colors.transparent,
+            child: Row(
+              children: [
+                Text(
+                  category.icon,
+                  style: const TextStyle(fontSize: 20),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    category.name,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: isMainCategorySelected ? FontWeight.bold : FontWeight.w500,
+                      color: isMainCategorySelected ? AppTheme.primary : Colors.black87,
+                    ),
+                  ),
+                ),
+                // Bildirim butonu
+                IconButton(
+                  icon: Icon(
+                    isNotificationEnabled ? Icons.notifications_active : Icons.notifications_off_outlined,
+                    color: isNotificationEnabled ? AppTheme.primary : Colors.grey,
+                    size: 20,
+                  ),
+                  onPressed: () => _toggleCategoryNotification(category.id),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: isNotificationEnabled ? 'Bildirimleri Kapat' : 'Bildirimleri Aç',
+                ),
+                const SizedBox(width: 8),
+                if (category.subcategories.isNotEmpty)
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                  ),
+                if (isMainCategorySelected)
+                  const SizedBox(width: 8),
+                if (isMainCategorySelected)
+                  Icon(Icons.check, color: AppTheme.primary, size: 20),
+              ],
             ),
-            // Alt kategoriler
-            if (isExpanded && category.subcategories.isNotEmpty)
-              ...category.subcategories.map((sub) {
-                final isSubSelected = _selectedCategory == category.id && _selectedSubCategory == sub;
-                return _buildCategoryItem(category, sub, isSelected: isSubSelected);
-              }).toList(),
-            Divider(
-              height: 1,
-              color: isDark ? AppTheme.darkDivider : Colors.grey[200],
-            ),
-          ],
-        );
-      },
+          ),
+        ),
+        // Alt kategoriler
+        if (isExpanded && category.subcategories.isNotEmpty)
+          ...category.subcategories.map((sub) {
+            final isSubSelected = _selectedCategory == category.id && _selectedSubCategory == sub;
+            return _buildCategoryItem(category, sub, isSelected: isSubSelected);
+          }).toList(),
+        const Divider(height: 1),
+      ],
     );
   }
 
@@ -840,34 +930,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOutCubic,
-      width: 56,
-      height: 32,
+      width: 48,
+      height: 28,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        gradient: isDark
-            ? LinearGradient(
-                colors: [
-                  Colors.orange.shade400,
-                  Colors.deepOrange.shade600,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
-            : LinearGradient(
-                colors: [
-                  Colors.amber.shade300,
-                  Colors.orange.shade400,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-        boxShadow: [
-          BoxShadow(
-            color: (isDark ? Colors.deepOrange : Colors.orange).withValues(alpha: 0.4),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: Colors.transparent,
       ),
       child: Material(
         color: Colors.transparent,
@@ -884,11 +951,11 @@ class _HomeScreenState extends State<HomeScreen> {
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 400),
                 curve: Curves.easeInOutCubic,
-                left: isDark ? 24 : 0,
+                left: isDark ? 20 : 0,
                 top: 0,
                 bottom: 0,
                 child: Container(
-                  width: 32,
+                  width: 28,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white.withValues(alpha: 0.2),
@@ -923,11 +990,39 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     );
                   },
-                  child: Icon(
-                    isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                  child: Container(
                     key: ValueKey<bool>(isDark),
-                    color: Colors.white,
-                    size: 20,
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.asset(
+                        isDark
+                            ? 'assets/Hacker Cat  - Logo Design.jpg'
+                            : 'assets/gündüz.jpg',
+                        width: 24,
+                        height: 24,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          // Hata durumunda varsayılan ikon göster
+                          return Icon(
+                            Icons.light_mode_rounded,
+                            size: 18,
+                            color: isDark ? Colors.white : Colors.orange,
+                          );
+                        },
+                      ),
+                    ),
                   ),
                 ),
               ),

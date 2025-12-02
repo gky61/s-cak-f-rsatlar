@@ -616,9 +616,9 @@ class TelegramDealBot:
                         # Ama yine de devasa dosyaları limitleyelim (1MB)
                         if len(html) > 1000000:
                             html = html[:1000000]
-                            
-                                return {'html': html, 'final_url': final_url}
-                            else:
+                        
+                        return {'html': html, 'final_url': final_url}
+                    else:
                         logger.warning(f"⚠️ HTTP {response.status_code} - {url}")
                             
             except Exception as e:
@@ -815,9 +815,9 @@ class TelegramDealBot:
 
             # --- GENEL MANTIK (Diğer Siteler) ---
             # 1. JSON-LD Schema
-        json_ld_scripts = soup.find_all('script', type='application/ld+json')
-        for script in json_ld_scripts:
-            try:
+            json_ld_scripts = soup.find_all('script', type='application/ld+json')
+            for script in json_ld_scripts:
+                try:
                     if not script.string: continue
                     js_data = json.loads(script.string)
                     
@@ -836,27 +836,27 @@ class TelegramDealBot:
                         return None
 
                     price = find_price_recursive(js_data)
-                if price and price >= 10:
+                    if price and price >= 10:
                         data['price'] = price
-                    logger.info(f"✅ Fiyat bulundu (JSON-LD): {price} TL")
+                        logger.info(f"✅ Fiyat bulundu (JSON-LD): {price} TL")
                         return data
                 except Exception:
                     continue
 
             # 2. Meta tags
-        meta_selectors = [
-            {'property': 'product:price:amount'},
-            {'property': 'og:price:amount'},
-            {'name': 'price'},
-            {'itemprop': 'price'},
-        ]
-        for selector in meta_selectors:
-            price_meta = soup.find('meta', selector)
-            if price_meta and price_meta.get('content'):
-                price = self._parse_price(price_meta.get('content'))
-                if price >= 10:
+            meta_selectors = [
+                {'property': 'product:price:amount'},
+                {'property': 'og:price:amount'},
+                {'name': 'price'},
+                {'itemprop': 'price'},
+            ]
+            for selector in meta_selectors:
+                price_meta = soup.find('meta', selector)
+                if price_meta and price_meta.get('content'):
+                    price = self._parse_price(price_meta.get('content'))
+                    if price >= 10:
                         data['price'] = price
-                    logger.info(f"✅ Fiyat bulundu (Meta {selector}): {price} TL")
+                        logger.info(f"✅ Fiyat bulundu (Meta {selector}): {price} TL")
                         return data
 
             # 3. Genel HTML Selectors
@@ -1047,19 +1047,30 @@ class TelegramDealBot:
         """URL path'inden kategori çıkar"""
         path_lower = path.lower()
         
-        # Kategori anahtar kelimeleri
+        # Kategori anahtar kelimeleri (yeni kategori ID'leri ile)
         category_keywords = {
-            'bilgisayar': ['bilgisayar', 'computer', 'pc', 'laptop', 'notebook', 'ekran-karti', 'gpu', 'islemci', 'cpu', 'anakart', 'motherboard', 'ram', 'ssd', 'hdd', 'depolama', 'storage', 'guc-kaynagi', 'psu', 'power-supply', 'kasa', 'case'],
-            'mobil_cihazlar': ['telefon', 'phone', 'smartphone', 'iphone', 'android', 'tablet', 'ipad', 'akilli-saat', 'smartwatch', 'bileklik', 'band', 'powerbank', 'sarj', 'charger', 'kilif', 'case', 'mobil-aksesuar'],
-            'konsol_oyun': ['konsol', 'console', 'playstation', 'xbox', 'nintendo', 'switch', 'oyun', 'game', 'gamepad', 'joystick', 'direksiyon', 'steering'],
-            'ev_elektronigi_yasam': ['televizyon', 'tv', 'akilli-ev', 'smart-home', 'robot-supurge', 'vacuum', 'aydinlatma', 'lighting', 'kisisel-bakim', 'personal-care', 'tiras', 'shave', 'hobi', 'hobby', 'drone', 'kamera', 'camera'],
-            'ag_yazilim': ['modem', 'router', 'mesh', 'ag', 'network', 'yazilim', 'software', 'isletim-sistemi', 'os', 'antivirus'],
+            'elektronik': ['bilgisayar', 'computer', 'pc', 'laptop', 'notebook', 'ekran-karti', 'gpu', 'islemci', 'cpu', 'anakart', 'motherboard', 'ram', 'ssd', 'hdd', 'depolama', 'storage', 'guc-kaynagi', 'psu', 'power-supply', 'kasa', 'case', 'telefon', 'phone', 'smartphone', 'iphone', 'android', 'tablet', 'ipad', 'akilli-saat', 'smartwatch', 'bileklik', 'band', 'powerbank', 'sarj', 'charger', 'kilif', 'mobil-aksesuar', 'modem', 'router', 'mesh', 'ag', 'network', 'yazilim', 'software', 'isletim-sistemi', 'os', 'antivirus'],
+            'kitap_hobi': ['konsol', 'console', 'playstation', 'xbox', 'nintendo', 'switch', 'oyun', 'game', 'gamepad', 'joystick', 'direksiyon', 'steering'],
+            'ev_yasam': ['televizyon', 'tv', 'akilli-ev', 'smart-home', 'robot-supurge', 'vacuum', 'aydinlatma', 'lighting', 'kisisel-bakim', 'personal-care', 'tiras', 'shave', 'hobi', 'hobby', 'drone', 'kamera', 'camera'],
+        }
+        
+        # Kategori ID'den kategori ismine çevirme
+        category_id_to_name = {
+            'elektronik': 'Elektronik',
+            'moda': 'Moda & Giyim',
+            'ev_yasam': 'Ev, Yaşam & Ofis',
+            'anne_bebek': 'Anne & Bebek',
+            'kozmetik': 'Kozmetik & Bakım',
+            'spor_outdoor': 'Spor & Outdoor',
+            'supermarket': 'Süpermarket',
+            'yapi_oto': 'Yapı Market & Oto',
+            'kitap_hobi': 'Kitap, Müzik & Hobi',
         }
         
         for category_id, keywords in category_keywords.items():
             for keyword in keywords:
                 if keyword in path_lower:
-                    return category_id
+                    return category_id_to_name.get(category_id, category_id)
         
         return None
 
@@ -1105,58 +1116,332 @@ class TelegramDealBot:
         except:
             return None
 
-    def extract_category_from_title(self, title: str) -> Optional[str]:
-        """Başlıktan kategori çıkar"""
+    def _normalize_text(self, text: str) -> str:
+        """Türkçe karakterleri normalize eder"""
+        return (text
+                .replace('ı', 'i').replace('İ', 'i')
+                .replace('ğ', 'g').replace('Ğ', 'g')
+                .replace('ü', 'u').replace('Ü', 'u')
+                .replace('ş', 's').replace('Ş', 's')
+                .replace('ö', 'o').replace('Ö', 'o')
+                .replace('ç', 'c').replace('Ç', 'c'))
+    
+    def _map_bot_category_to_flutter(self, bot_category: str) -> str:
+        """Bot'un kategori ID'sini Flutter uygulamasındaki kategori ID'sine çevir"""
+        category_mapping = {
+            'bilgisayar': 'elektronik',
+            'mobil_cihazlar': 'elektronik',
+            'konsol_oyun': 'kitap_hobi',
+            'ev_elektronigi_yasam': 'ev_yasam',
+            'giyim_moda': 'moda',
+            'supermarket': 'supermarket',
+            'kozmetik_bakim': 'kozmetik',
+            'oto_yapi_market': 'yapi_oto',
+            'anne_bebek': 'anne_bebek',
+            'spor_outdoor': 'spor_outdoor',
+            'kitap_hobi': 'kitap_hobi',
+            'ag_yazilim': 'elektronik',
+        }
+        return category_mapping.get(bot_category, 'elektronik')
+    
+    def extract_category_from_title(self, title: str, url: str = '') -> Optional[Dict[str, Optional[str]]]:
+        """Başlıktan kategori ve alt kategori çıkar - Geliştirilmiş algoritma"""
         if not title:
             return None
         
-        title_lower = title.lower()
+        # Metni normalize et
+        normalized_text = self._normalize_text(title.lower())
+        original_text = title.lower()
         
-        # Kategori anahtar kelimeleri
+        # URL'den de bilgi çıkar
+        url_text = ''
+        if url:
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(url)
+                url_text = f" {parsed.hostname or ''} {parsed.path} {parsed.query}"
+                url_text = self._normalize_text(url_text.lower())
+            except:
+                pass
+        
+        combined_text = f"{normalized_text} {url_text}"
+        
+        # Flutter uygulamasındaki kategori keyword'leri (Python'a çevrilmiş)
         category_keywords = {
-            # Bilgisayar
-            'bilgisayar': ['bilgisayar', 'computer', 'pc', 'laptop', 'notebook', 'ekran kartı', 'gpu', 'işlemci', 'cpu', 'anakart', 'motherboard', 'ram', 'ssd', 'hdd', 'depolama', 'storage', 'güç kaynağı', 'psu', 'power supply', 'kasa', 'monitör', 'monitor', 'klavye', 'keyboard', 'mouse', 'fare', 'webcam', 'yazıcı', 'printer'],
-            
-            # Mobil Cihazlar
-            'mobil_cihazlar': ['telefon', 'phone', 'smartphone', 'iphone', 'android', 'samsung', 'xiaomi', 'huawei', 'tablet', 'ipad', 'akıllı saat', 'smartwatch', 'bileklik', 'powerbank', 'şarj', 'charger', 'kılıf', 'case', 'kulaklık', 'headphone', 'earphone', 'airpods', 'bluetooth'],
-            
-            # Konsol ve Oyun
-            'konsol_oyun': ['konsol', 'console', 'playstation', 'ps4', 'ps5', 'xbox', 'nintendo', 'switch', 'oyun', 'game', 'gamepad', 'joystick', 'direksiyon', 'steering', 'controller', 'steam', 'epic games', 'game pass', 'ps plus'],
-            
-            # Ev Elektroniği
-            'ev_elektronigi_yasam': ['televizyon', 'tv', 'akıllı ev', 'smart home', 'robot süpürge', 'süpürge', 'vacuum', 'aydınlatma', 'lighting', 'kişisel bakım', 'personal care', 'tıraş', 'shave', 'hobi', 'hobby', 'drone', 'kamera', 'camera', 'fotoğraf', 'photo', 'ütü', 'klima', 'vantilatör', 'airfryer', 'fritöz', 'kahve makinesi', 'çay makinesi', 'blender', 'beyaz eşya', 'buzdolabı', 'çamaşır makinesi'],
-            
-            # Giyim ve Moda
-            'giyim_moda': ['giyim', 'moda', 'kıyafet', 'elbise', 'pantolon', 'gömlek', 'tişört', 't-shirt', 'kazak', 'mont', 'ceket', 'ayakkabı', 'bot', 'terlik', 'çanta', 'saat', 'gözlük', 'aksesuar', 'takı', 'nike', 'adidas', 'puma', 'skechers', 'zara'],
-            
-            # Süpermarket
-            'supermarket': ['market', 'gıda', 'yiyecek', 'içecek', 'kahve', 'çay', 'yağ', 'un', 'şeker', 'deterjan', 'temizlik', 'kağıt havlu', 'tuvalet kağıdı', 'şampuan', 'diş macunu', 'sabun', 'migros', 'carrefour', 'a101', 'bim', 'şok', 'getir', 'yemeksepeti', 'omo', 'ariel', 'persil', 'fairy', 'yumoş'],
-            
-            # Kozmetik
-            'kozmetik_bakim': ['kozmetik', 'bakım', 'makyaj', 'parfüm', 'ruj', 'krem', 'cilt bakımı', 'saç bakımı', 'tıraş', 'jilet', 'epilasyon', 'fön', 'düzleştirici', 'gratis', 'watsons'],
-            
-            # Oto & Yapı
-            'oto_yapi_market': ['oto', 'araba', 'araç', 'lastik', 'silecek', 'motor yağı', 'yapı market', 'matkap', 'tornavida', 'boya', 'ampul', 'bahçe', 'mangal', 'koçtaş', 'bauhaus'],
-            
-            # Anne & Bebek
-            'anne_bebek': ['bebek', 'anne', 'çocuk', 'bebek bezi', 'mama', 'biberon', 'emzik', 'bebek arabası', 'oto koltuğu', 'oyuncak', 'lego', 'barbie', 'hot wheels', 'prima', 'sleepy'],
-            
-            # Spor & Outdoor
-            'spor_outdoor': ['spor', 'kamp', 'çadır', 'uyku tulumu', 'termos', 'matara', 'bisiklet', 'scooter', 'kaykay', 'top', 'forma', 'decathlon'],
-            
-            # Kitap & Hobi
-            'kitap_hobi': ['kitap', 'roman', 'dergi', 'hobi', 'puzzle', 'kutu oyunu', 'kırtasiye', 'kalem', 'defter', 'okul'],
-            
-            # Ağ & Yazılım
-            'ag_yazilim': ['modem', 'router', 'mesh', 'ağ', 'network', 'yazılım', 'software', 'işletim sistemi', 'os', 'antivirus', 'antivirüs', 'vpn', 'lisans', 'windows', 'office'],
+            'elektronik': {
+                'Telefon & Aksesuarları': [
+                    'telefon', 'iphone', 'samsung', 'xiaomi', 'huawei', 'oppo', 'vivo', 'realme', 'oneplus', 'google pixel',
+                    'akilli telefon', 'cep telefonu', 'mobil telefon', 'telefon kilifi', 'telefon cami', 'telefon ekran',
+                    'telefon batarya', 'telefon sarj', 'powerbank', 'power bank', 'sarj aleti', 'kablosuz sarj',
+                    'kulaklik', 'airpods', 'earbuds', 'tws', 'bluetooth kulaklik', 'kablosuz kulaklik',
+                    'telefon aksesuar', 'ekran koruyucu', 'tempered glass', 'galaxy', 'note', 's series', 'a series',
+                    'redmi', 'poco', 'honor', 'motorola', 'nokia', 'sony xperia', 'phone', 'smartphone', 'mobile',
+                    'charger', 'case', 'headphone', 'earphone', 'earbud', 'wireless charger'
+                ],
+                'Bilgisayar & Tablet': [
+                    'laptop', 'notebook', 'macbook', 'tablet', 'ipad', 'surface', 'chromebook', 'thinkpad', 'dell xps',
+                    'bilgisayar', 'pc', 'masaustu', 'desktop', 'all in one', 'aio', 'monitor', 'klavye', 'keyboard',
+                    'mouse', 'gaming mouse', 'oyun mouse', 'mekanik klavye', 'mechanical keyboard', 'webcam', 'speaker',
+                    'mikrofon', 'microphone', 'yazici', 'printer', 'scanner', 'tarayici', 'harddisk', 'hdd', 'ssd',
+                    'nvme', 'm.2', 'usb bellek', 'flash bellek', 'hafiza karti', 'memory card', 'sd kart', 'micro sd',
+                    'ram', 'islemci', 'processor', 'cpu', 'ekran karti', 'graphics card', 'gpu', 'asus', 'acer', 'hp',
+                    'lenovo', 'msi', 'razer', 'alienware', 'rog', 'gaming laptop'
+                ],
+                'TV & Ses Sistemleri': [
+                    'televizyon', 'tv', 'smart tv', 'led tv', 'oled', 'qled', 'soundbar', 'hoparlor', 'bluetooth hoparlor',
+                    'kablosuz hoparlor', 'ses sistemi', 'home theater', 'projeksiyon', 'projector', 'anten', 'uydu alici'
+                ],
+                'Beyaz Eşya & Küçük Ev Aletleri': [
+                    'buzdolabi', 'camasir makinesi', 'bulasik makinesi', 'firin', 'ocak', 'klima', 'aspirator',
+                    'elektrikli supurge', 'robot supurge', 'utu', 'kahve makinesi', 'su isitici', 'tost makinesi',
+                    'mikser', 'blender', 'dondurucu', 'derin dondurucu', 'mini buzdolabi'
+                ],
+                'Fotoğraf & Kamera': [
+                    'kamera', 'fotograf makinesi', 'dijital kamera', 'dslr', 'mirrorless', 'action kamera', 'go pro',
+                    'drone', 'quadcopter', 'lens', 'tripod', 'kamera aksesuar', 'hafiza karti', 'batarya', 'sarj cihazi'
+                ],
+            },
+            'moda': {
+                'Kadın Giyim': [
+                    'kadin', 'kadin giyim', 'bayan', 'kadin kiyafet', 'elbise', 'dress', 'bluz', 'blouse', 'gomlek',
+                    'shirt', 'pantolon', 'pants', 'jean', 'jeans', 'etek', 'skirt', 'sort', 'shorts', 'ceket', 'jacket',
+                    'mont', 'coat', 'kaban', 'trenckot', 'trench coat', 'sweatshirt', 'sweat', 'hoodie', 'tisort',
+                    't-shirt', 'tshirt', 'kazak', 'sweater', 'hirka', 'cardigan', 'tayt', 'leggings', 'pijama', 'pajama',
+                    'ic camasiri', 'underwear', 'sutyen', 'bra', 'corap', 'socks', 'kadin ayakkabi', 'women shoes',
+                    'topuklu', 'heels', 'babet', 'ballet flat', 'sandalet', 'sandal', 'bot', 'boots', 'cizme',
+                    'kadin canta', 'women bag', 'el cantasi', 'handbag', 'sirt cantasi', 'backpack', 'clutch',
+                    'crossbody', 'tote bag'
+                ],
+                'Erkek Giyim': [
+                    'erkek', 'erkek giyim', 'men', 'erkek kiyafet', 'gomlek', 'shirt', 'dress shirt', 'pantolon', 'pants',
+                    'jean', 'jeans', 'kisa pantolon', 'shorts', 'sort', 'tisort', 't-shirt', 'tshirt', 'polo', 'polo shirt',
+                    'kazak', 'sweater', 'sweatshirt', 'sweat', 'hoodie', 'ceket', 'jacket', 'mont', 'coat', 'kaban',
+                    'trenckot', 'trench coat', 'blazer', 'takim elbise', 'suit', 'yelek', 'vest', 'ic camasiri', 'underwear',
+                    'boxer', 'boxer short', 'corap', 'socks', 'erkek ayakkabi', 'men shoes', 'spor ayakkabi', 'sneaker',
+                    'klasik ayakkabi', 'dress shoes', 'bot', 'boots', 'terlik', 'slippers', 'sandalet', 'sandal', 'loafer',
+                    'oxford', 'derby'
+                ],
+                'Ayakkabı & Çanta': [
+                    'ayakkabi', 'spor ayakkabi', 'sneaker', 'krampon', 'bot', 'cizme', 'terlik', 'sandalet', 'topuklu',
+                    'babet', 'balerin', 'shoe', 'shoes', 'sandal', 'boot', 'boots', 'canta', 'el cantasi', 'sirt cantasi',
+                    'laptop cantasi', 'valiz', 'bavul', 'cuzdan', 'kemer', 'bag', 'backpack', 'handbag'
+                ],
+                'Saat & Aksesuar': [
+                    'saat', 'kol saati', 'akilli saat', 'smartwatch', 'apple watch', 'aksesuar', 'kemer', 'cuzdan',
+                    'gunes gozlugu', 'sapka', 'bere', 'eldiven', 'atki', 'kolye', 'kupe', 'yuzuk', 'bilezik', 'bileklik'
+                ],
+                'Çocuk Giyim': [
+                    'cocuk', 'bebek', 'cocuk giyim', 'bebek giyim', 'cocuk ayakkabi', 'bebek ayakkabi', 'okul kiyafeti',
+                    'cocuk canta', 'bebek bezi', 'cocuk oyuncak', 'bebek oyuncak'
+                ],
+            },
+            'ev_yasam': {
+                'Mobilya': [
+                    'mobilya', 'kanepe', 'koltuk', 'masa', 'sandalye', 'yatak', 'dolap', 'gardirob', 'komodin', 'sehpa',
+                    'tv unitesi', 'kitaplik', 'rafli dolap', 'mutfak dolabi', 'banyo dolabi', 'calisma masasi', 'ofis koltuğu'
+                ],
+                'Ev Tekstili': [
+                    'carsaf', 'yorgan', 'battaniye', 'yastik', 'nevresim', 'perde', 'hali', 'kilim', 'paspas', 'havlu',
+                    'bornoz', 'terlik', 'ev terligi'
+                ],
+                'Mutfak Gereçleri': [
+                    'tava', 'tencere', 'tava seti', 'tencere seti', 'bicak', 'bicak seti', 'kesme tahtasi', 'saklama kabi',
+                    'cam kavanoz', 'termos', 'su sisesi', 'fincan', 'bardak', 'tabak', 'catal', 'kasik', 'servis takimi'
+                ],
+                'Aydınlatma & Dekorasyon': [
+                    'lamba', 'avize', 'aydinlatma', 'led', 'ampul', 'dekorasyon', 'duvar saati', 'resim', 'tablo', 'vazo',
+                    'mum', 'mumluk', 'ayna', 'panjur', 'stor', 'jaluzi'
+                ],
+                'Kırtasiye & Ofis Malzemeleri': [
+                    'kalem', 'defter', 'ajanda', 'planner', 'dosya', 'klasor', 'zarf', 'kagit', 'a4', 'yazici kagidi',
+                    'murekkpli kalem', 'tukenmez kalem', 'kursun kalem', 'silgi', 'kalemtras', 'makas', 'yapistirici',
+                    'bant', 'zimba', 'delgec', 'not defteri', 'post it', 'etiket'
+                ],
+            },
+            'anne_bebek': {
+                'Bebek Bezi & Islak Mendil': [
+                    'bebek bezi', 'bez', 'islak mendil', 'bebek mendili', 'alt acma', 'bebek bakim', 'pisik kremi', 'bebek losyonu'
+                ],
+                'Bebek Arabası & Oto Koltuğu': [
+                    'bebek arabasi', 'puset', 'oyuncak arabasi', 'oto koltuğu', 'bebek koltuğu', 'arac koltuğu',
+                    'bebek tasiyici', 'kanguru', 'sling'
+                ],
+                'Beslenme & Emzirme': [
+                    'biberon', 'emzik', 'mama kabi', 'mama kasigi', 'suluk', 'bebek catali', 'emzirme yastigi',
+                    'gogus pompasi', 'sut saklama', 'mama isitici'
+                ],
+                'Bebek Odası & Güvenlik': [
+                    'bebek yatagi', 'besik', 'bebek karyolasi', 'bebek odasi', 'bebek mobilya', 'bebek guvenlik',
+                    'bebek kapisi', 'priz koruyucu', 'kose koruyucu'
+                ],
+                'Bebek Oyuncakları': [
+                    'bebek oyuncak', 'oyuncak', 'egitici oyuncak', 'bebek oyuncagi', 'pelus oyuncak', 'bebek bebek',
+                    'oyuncak araba', 'lego', 'puzzle'
+                ],
+            },
+            'kozmetik': {
+                'Parfüm & Deodorant': [
+                    'parfum', 'kolonya', 'deodorant', 'roll on', 'sprey', 'parfum seti', 'kadin parfum', 'erkek parfum',
+                    'unisex parfum', 'body spray'
+                ],
+                'Makyaj Ürünleri': [
+                    'ruj', 'fondoten', 'kapatıcı', 'pudra', 'allik', 'firca', 'makyaj fircasi', 'goz kalemi', 'maskara',
+                    'far', 'palet', 'highlighter', 'kontur', 'dudak parlatıcı', 'lipstick', 'lip gloss', 'eyeshadow', 'eyeliner'
+                ],
+                'Cilt & Yüz Bakımı': [
+                    'nemlendirici', 'krem', 'yuz kremi', 'gunes kremi', 'spf', 'serum', 'tonik', 'temizleme', 'yuz temizleme',
+                    'peeling', 'maske', 'yuz maskesi', 'goz kremi', 'anti aging', 'yaslanma karsiti', 'cilt bakim'
+                ],
+                'Saç Bakımı': [
+                    'sampuan', 'sac kremi', 'bakim kremi', 'sac maskesi', 'sac spreyl', 'jole', 'wax', 'sac fircasi',
+                    'tarak', 'sac kurutma', 'fon makinesi', 'duzlestirici', 'masa', 'sac boyasi', 'renk acici'
+                ],
+                'Ağız & Diş Bakımı': [
+                    'dis fircasi', 'elektrikli dis fircasi', 'dis macunu', 'agiz bakim suyu', 'gargara', 'dis ipi',
+                    'dis beyazlatici', 'agiz spreyl'
+                ],
+            },
+            'spor_outdoor': {
+                'Spor Giyim & Ayakkabı': [
+                    'spor ayakkabi', 'kosu ayakkabi', 'fitness', 'egzersiz', 'spor kiyafet', 'esofman', 'sort', 'tisort',
+                    'spor corap', 'spor canta', 'mat', 'yoga mati', 'pilates mati', 'dambil', 'halter', 'agirlik'
+                ],
+                'Fitness & Kondisyon': [
+                    'fitness', 'kosu bandi', 'bisiklet', 'eliptik', 'dambil', 'halter', 'agirlik seti', 'fitness ekipman',
+                    'ev spor aleti'
+                ],
+                'Kamp & Doğa Malzemeleri': [
+                    'cadir', 'uyku tulumu', 'mat', 'kamp', 'kamp malzemesi', 'kamp cantasi', 'kamp sandalyesi',
+                    'kamp masasi', 'fener', 'kafa lambasi', 'termos', 'kamp ocagi', 'tup', 'doga yuruyusu', 'trekking'
+                ],
+                'Bisiklet & Ekipmanları': [
+                    'bisiklet', 'mountain bike', 'sehir bisikleti', 'elektrikli bisiklet', 'bisiklet kaski',
+                    'bisiklet aksesuar', 'bisiklet pompasi', 'bisiklet kilidi'
+                ],
+            },
+            'supermarket': {
+                'Gıda Ürünleri': [
+                    'gida', 'yiyecek', 'food', 'icecek', 'drink', 'atistirmalik', 'snack', 'cikolata', 'chocolate',
+                    'biskuvi', 'biscuit', 'cips', 'chips', 'kraker', 'cracker', 'konserve', 'canned', 'makarna', 'pasta',
+                    'pirinc', 'rice', 'bulgur', 'bakliyat', 'legume', 'zeytinyagi', 'olive oil', 'aycicek yagi',
+                    'sunflower oil', 'salca', 'tomato paste', 'baharat', 'spice', 'cay', 'tea', 'kahve', 'coffee',
+                    'sut', 'milk', 'yogurt', 'peynir', 'cheese', 'yumurta', 'egg', 'et', 'meat', 'tavuk', 'chicken',
+                    'balik', 'fish', 'ekmek', 'bread', 'su', 'water', 'meyve suyu', 'juice', 'soda', 'gazli icecek', 'soft drink'
+                ],
+                'Deterjan & Temizlik': [
+                    'deterjan', 'camasir deterjani', 'bulasik deterjani', 'yumusatici', 'temizlik', 'cam temizleyici',
+                    'yuzey temizleyici', 'banyo temizleyici', 'tuvalet temizleyici', 'sivi sabun', 'el sabunu',
+                    'bulasik süngeri', 'temizlik bezi', 'mop', 'paspas'
+                ],
+                'Kağıt Ürünleri': [
+                    'tuvalet kagidi', 'pecete', 'kagit havlu', 'mendil', 'hijyenik ped', 'bebek bezi', 'islak mendil',
+                    'aluminyum folyo', 'streç film', 'buzdolabi poseti', 'cop poseti'
+                ],
+                'Kedi & Köpek Ürünleri': [
+                    'kedi mamasi', 'kopek mamasi', 'kuru mama', 'yas mama', 'konserve', 'kedi kumu', 'kum kabi',
+                    'oyuncak', 'tasma', 'kemer', 'kopek tasmasi', 'kedi tirmalama', 'kopek yatagi', 'kedi yatagi'
+                ],
+            },
+            'yapi_oto': {
+                'Elektrikli Aletler & Hırdavat': [
+                    'matkap', 'vidalama', 'tornavida', 'anahtar', 'pense', 'cekich', 'keski', 'testere', 'elektrikli alet',
+                    'akulu matkap', 'sarjli matkap', 'hirdavat', 'vida', 'civi', 'dubel', 'zimba', 'zimba teli'
+                ],
+                'Oto Aksesuar & Bakım': [
+                    'oto', 'araba', 'arac', 'oto aksesuar', 'arac aksesuar', 'koltuk kilifi', 'paspas', 'arac paspasi',
+                    'arac temizlik', 'cam suyu', 'motor yagi', 'fren balata', 'lastik', 'jant', 'arac bakim', 'oto bakim'
+                ],
+                'Banyo & Tesisat': [
+                    'banyo', 'lavabo', 'klozet', 'dusakabin', 'kuvet', 'musluk', 'batarya', 'dus basligi', 'banyo aksesuar',
+                    'banyo dolabi', 'ayna', 'banyo aynasi', 'havlu askisi', 'sabunluk', 'dis fircasi kabi'
+                ],
+                'Bahçe Malzemeleri': [
+                    'bahce', 'cim bicme', 'cim bicme makinesi', 'tirpan', 'budama makasi', 'bahce hortumu', 'sulama',
+                    'sulama sistemi', 'gubre', 'toprak', 'saksi', 'bitki', 'tohum', 'fide', 'bahce aleti'
+                ],
+            },
+            'kitap_hobi': {
+                'Kitap & Dergi': [
+                    'kitap', 'roman', 'hikaye', 'ders kitabi', 'test kitabi', 'yaprak test', 'ders notu', 'ders anlatim',
+                    'edebiyat', 'tarih', 'felsefe', 'bilim', 'dergi', 'magazin', 'gazete', 'manga', 'cizgi roman', 'comic'
+                ],
+                'Müzik Enstrümanları': [
+                    'gitar', 'piyano', 'keman', 'baglama', 'saz', 'davul', 'bateri', 'flut', 'klarnet', 'saksafon',
+                    'trompet', 'muzik aleti', 'enstruman', 'gitar teli', 'akort aleti', 'metronom', 'mikrofon', 'hoparlor'
+                ],
+                'Oyun Konsolları & Video Oyunları': [
+                    'playstation', 'xbox', 'nintendo', 'switch', 'oyun konsolu', 'konsol', 'oyun', 'video oyun',
+                    'oyun kumandasi', 'joystick', 'oyun koltuğu', 'gaming', 'oyun bilgisayari', 'gaming laptop',
+                    'gaming mouse', 'gaming klavye'
+                ],
+                'Hobi & Sanat Malzemeleri': [
+                    'hobi', 'sanat', 'resim', 'boya', 'firca', 'tuval', 'palet', 'kalem', 'kursun kalem', 'pastel',
+                    'suluboya', 'akrilik', 'yagli boya', 'guaj', 'maket', 'model', 'puzzle', 'yapboz', 'lego', 'oyuncak',
+                    'el isi', 'dikis', 'nakis', 'orgu', 'tig', 'sis', 'iplik', 'kumas'
+                ],
+            },
         }
         
-        for category_id, keywords in category_keywords.items():
-            for keyword in keywords:
-                if keyword in title_lower:
-                    return category_id
+        # Her kategori için skor hesapla
+        category_scores = {}
         
-        return None
+        for category_id, subcategories in category_keywords.items():
+            category_scores[category_id] = {}
+            
+            for subcategory, keywords in subcategories.items():
+                score = 0.0
+                
+                for keyword in keywords:
+                    normalized_keyword = self._normalize_text(keyword.lower())
+                    
+                    # Tam eşleşme (en yüksek skor)
+                    if normalized_text.find(normalized_keyword) != -1 or original_text.find(keyword.lower()) != -1:
+                        score += 5.0
+                    
+                    # URL'de eşleşme
+                    if url_text and normalized_keyword in url_text:
+                        score += 2.0
+                    
+                    # Kelime bazlı eşleşme
+                    words = re.split(r'[^\wğüşıöçĞÜŞİÖÇ]+', normalized_text)
+                    for word in words:
+                        if len(word) >= 3:
+                            if word == normalized_keyword:
+                                score += 3.0
+                            elif normalized_keyword in word or word in normalized_keyword:
+                                score += 1.5
+                    
+                    # Çok kelimeli keyword kontrolü
+                    if ' ' in normalized_keyword:
+                        keyword_words = normalized_keyword.split()
+                        matched_words = sum(1 for kw in keyword_words if len(kw) >= 3 and kw in normalized_text)
+                        if matched_words == len(keyword_words) and len(keyword_words) > 1:
+                            score += 2.0
+                
+                if score > 0:
+                    category_scores[category_id][subcategory] = score
+        
+        # En yüksek skorlu kategori ve alt kategoriyi bul
+        best_category_id = None
+        best_subcategory = None
+        best_score = 0.0
+        
+        for category_id, subcategories in category_scores.items():
+            for subcategory, score in subcategories.items():
+                if score > best_score:
+                    best_score = score
+                    best_category_id = category_id
+                    best_subcategory = subcategory
+        
+        # Minimum skor eşiği
+        min_score = 2.5 if not url else 2.0
+        if best_score < min_score:
+            return None
+        
+        return {
+            'categoryId': best_category_id,
+            'subCategory': best_subcategory,
+        }
 
     def _map_category_keyword(self, keyword: str, title: str = '') -> Optional[str]:
         """Anahtar kelimeyi kategori ID'sine çevir - İyileştirilmiş eşleşme"""
@@ -1247,9 +1532,32 @@ class TelegramDealBot:
             'office': 'ag_yazilim',
         }
         
+        # Kategori ID'den kategori ismine çevirme mapping'i
+        category_id_to_name = {
+            'elektronik': 'Elektronik',
+            'moda': 'Moda & Giyim',
+            'ev_yasam': 'Ev, Yaşam & Ofis',
+            'anne_bebek': 'Anne & Bebek',
+            'kozmetik': 'Kozmetik & Bakım',
+            'spor_outdoor': 'Spor & Outdoor',
+            'supermarket': 'Süpermarket',
+            'yapi_oto': 'Yapı Market & Oto',
+            'kitap_hobi': 'Kitap, Müzik & Hobi',
+            # Eski bot kategori ID'leri için mapping
+            'bilgisayar': 'Elektronik',
+            'mobil_cihazlar': 'Elektronik',
+            'konsol_oyun': 'Kitap, Müzik & Hobi',
+            'ev_elektronigi_yasam': 'Ev, Yaşam & Ofis',
+            'giyim_moda': 'Moda & Giyim',
+            'kozmetik_bakim': 'Kozmetik & Bakım',
+            'oto_yapi_market': 'Yapı Market & Oto',
+            'ag_yazilim': 'Elektronik',
+        }
+        
         # Direkt eşleşme
         if keyword_lower in category_mapping:
-            return category_mapping[keyword_lower]
+            category_id = category_mapping[keyword_lower]
+            return category_id_to_name.get(category_id, category_id)
         
         # Kısmi eşleşme (anahtar kelime içeriyorsa)
         # Önce uzun anahtar kelimeleri kontrol et (örn: "bebek bezi" > "bebek")
@@ -1260,7 +1568,7 @@ class TelegramDealBot:
             # Tam kelime eşleşmesi veya sınır kontrolü ile eşleşme
             pattern = r'(^|\s|[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ])' + re.escape(key) + r'($|\s|[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ])'
             if re.search(pattern, keyword_lower) or re.search(pattern, combined):
-                return category_id
+                return category_id_to_name.get(category_id, category_id)
         
         return None
 
@@ -1418,7 +1726,7 @@ class TelegramDealBot:
             'title': '',
             'price': 0.0,
             'store': '',
-            'category': 'tumu',  # Varsayılan kategori 'tumu' (veya 'diger') olarak değiştirildi.
+            'category': 'Elektronik',  # Varsayılan kategori (kategori ismi olarak)
             'link': '',
             'description': message_text
         }
@@ -1685,7 +1993,28 @@ class TelegramDealBot:
                     category_from_html = self.extract_category_from_html(link_data['html'], final_url, parsed_deal['title'])
                     if category_from_html:
                         logger.info(f"✅ HTML'den kategori bulundu: {category_from_html}")
-                        parsed_deal['category'] = category_from_html
+                        # Kategori ID'sini kategori ismine çevir
+                        category_name_map = {
+                            'elektronik': 'Elektronik',
+                            'moda': 'Moda & Giyim',
+                            'ev_yasam': 'Ev, Yaşam & Ofis',
+                            'anne_bebek': 'Anne & Bebek',
+                            'kozmetik': 'Kozmetik & Bakım',
+                            'spor_outdoor': 'Spor & Outdoor',
+                            'supermarket': 'Süpermarket',
+                            'yapi_oto': 'Yapı Market & Oto',
+                            'kitap_hobi': 'Kitap, Müzik & Hobi',
+                            # Eski bot kategori ID'leri için mapping
+                            'bilgisayar': 'Elektronik',
+                            'mobil_cihazlar': 'Elektronik',
+                            'konsol_oyun': 'Kitap, Müzik & Hobi',
+                            'ev_elektronigi_yasam': 'Ev, Yaşam & Ofis',
+                            'giyim_moda': 'Moda & Giyim',
+                            'kozmetik_bakim': 'Kozmetik & Bakım',
+                            'oto_yapi_market': 'Yapı Market & Oto',
+                            'ag_yazilim': 'Elektronik',
+                        }
+                        parsed_deal['category'] = category_name_map.get(category_from_html, category_from_html)
                         category_found = True
                 
                 # 2. HTML çekilemediyse veya kategori bulunamadıysa URL'den çıkar
@@ -1693,27 +2022,104 @@ class TelegramDealBot:
                     category_from_url = self.extract_category_from_url(parsed_deal['link'], parsed_deal['title'])
                     if category_from_url:
                         logger.info(f"✅ URL'den kategori bulundu: {category_from_url}")
-                        parsed_deal['category'] = category_from_url
+                        # Kategori ID'sini kategori ismine çevir
+                        category_name_map = {
+                            'elektronik': 'Elektronik',
+                            'moda': 'Moda & Giyim',
+                            'ev_yasam': 'Ev, Yaşam & Ofis',
+                            'anne_bebek': 'Anne & Bebek',
+                            'kozmetik': 'Kozmetik & Bakım',
+                            'spor_outdoor': 'Spor & Outdoor',
+                            'supermarket': 'Süpermarket',
+                            'yapi_oto': 'Yapı Market & Oto',
+                            'kitap_hobi': 'Kitap, Müzik & Hobi',
+                            # Eski bot kategori ID'leri için mapping
+                            'bilgisayar': 'Elektronik',
+                            'mobil_cihazlar': 'Elektronik',
+                            'konsol_oyun': 'Kitap, Müzik & Hobi',
+                            'ev_elektronigi_yasam': 'Ev, Yaşam & Ofis',
+                            'giyim_moda': 'Moda & Giyim',
+                            'kozmetik_bakim': 'Kozmetik & Bakım',
+                            'oto_yapi_market': 'Yapı Market & Oto',
+                            'ag_yazilim': 'Elektronik',
+                        }
+                        parsed_deal['category'] = category_name_map.get(category_from_url, category_from_url)
                         category_found = True
                 
-                # 3. URL'den de bulunamadıysa başlıktan çıkar
+                # 3. URL'den de bulunamadıysa başlıktan çıkar (geliştirilmiş algoritma)
                 if not category_found:
-                    category_from_title = self.extract_category_from_title(parsed_deal['title'])
-                    if category_from_title:
-                        logger.info(f"✅ Başlıktan kategori bulundu: {category_from_title}")
-                        parsed_deal['category'] = category_from_title
-                        category_found = True
+                    category_result = self.extract_category_from_title(parsed_deal['title'], parsed_deal['link'])
+                    if category_result:
+                        category_id = category_result.get('categoryId')
+                        subcategory = category_result.get('subCategory')
+                        if category_id:
+                            logger.info(f"✅ Başlıktan kategori bulundu: {category_id} > {subcategory}")
+                            # Flutter uygulamasındaki kategori isimlerine çevir
+                            category_name_map = {
+                                'elektronik': 'Elektronik',
+                                'moda': 'Moda & Giyim',
+                                'ev_yasam': 'Ev, Yaşam & Ofis',
+                                'anne_bebek': 'Anne & Bebek',
+                                'kozmetik': 'Kozmetik & Bakım',
+                                'spor_outdoor': 'Spor & Outdoor',
+                                'supermarket': 'Süpermarket',
+                                'yapi_oto': 'Yapı Market & Oto',
+                                'kitap_hobi': 'Kitap, Müzik & Hobi',
+                            }
+                            parsed_deal['category'] = category_name_map.get(category_id, category_id)
+                            parsed_deal['subCategory'] = subcategory
+                            category_found = True
             else:
-                # Link yoksa sadece başlıktan kategori çıkarmayı dene
-                category_from_title = self.extract_category_from_title(parsed_deal['title'])
-                if category_from_title:
-                    logger.info(f"✅ Başlıktan kategori bulundu: {category_from_title}")
-                    parsed_deal['category'] = category_from_title
-                    category_found = True
+                # Link yoksa sadece başlıktan kategori çıkarmayı dene (geliştirilmiş algoritma)
+                category_result = self.extract_category_from_title(parsed_deal['title'], '')
+                if category_result:
+                    category_id = category_result.get('categoryId')
+                    subcategory = category_result.get('subCategory')
+                    if category_id:
+                        logger.info(f"✅ Başlıktan kategori bulundu: {category_id} > {subcategory}")
+                        # Flutter uygulamasındaki kategori isimlerine çevir
+                        category_name_map = {
+                            'elektronik': 'Elektronik',
+                            'moda': 'Moda & Giyim',
+                            'ev_yasam': 'Ev, Yaşam & Ofis',
+                            'anne_bebek': 'Anne & Bebek',
+                            'kozmetik': 'Kozmetik & Bakım',
+                            'spor_outdoor': 'Spor & Outdoor',
+                            'supermarket': 'Süpermarket',
+                            'yapi_oto': 'Yapı Market & Oto',
+                            'kitap_hobi': 'Kitap, Müzik & Hobi',
+                        }
+                        parsed_deal['category'] = category_name_map.get(category_id, category_id)
+                        parsed_deal['subCategory'] = subcategory
+                        category_found = True
             
-            # Kategori bulunamadıysa varsayılan kategoriyi kullan
+            # Kategori bulunamadıysa varsayılan kategoriyi kullan (zaten kategori ismi olarak ayarlanmış)
             if not category_found:
                 logger.info(f"📝 Kategori bulunamadı, varsayılan kategori kullanılıyor: {parsed_deal['category']}")
+                # Eğer hala kategori ID'si formatındaysa kategori ismine çevir
+                category_id_to_name = {
+                    'elektronik': 'Elektronik',
+                    'moda': 'Moda & Giyim',
+                    'ev_yasam': 'Ev, Yaşam & Ofis',
+                    'anne_bebek': 'Anne & Bebek',
+                    'kozmetik': 'Kozmetik & Bakım',
+                    'spor_outdoor': 'Spor & Outdoor',
+                    'supermarket': 'Süpermarket',
+                    'yapi_oto': 'Yapı Market & Oto',
+                    'kitap_hobi': 'Kitap, Müzik & Hobi',
+                    'tumu': 'Elektronik',  # Varsayılan olarak Elektronik
+                    # Eski bot kategori ID'leri için mapping
+                    'bilgisayar': 'Elektronik',
+                    'mobil_cihazlar': 'Elektronik',
+                    'konsol_oyun': 'Kitap, Müzik & Hobi',
+                    'ev_elektronigi_yasam': 'Ev, Yaşam & Ofis',
+                    'giyim_moda': 'Moda & Giyim',
+                    'kozmetik_bakim': 'Kozmetik & Bakım',
+                    'oto_yapi_market': 'Yapı Market & Oto',
+                    'ag_yazilim': 'Elektronik',
+                }
+                if parsed_deal['category'] in category_id_to_name:
+                    parsed_deal['category'] = category_id_to_name[parsed_deal['category']]
 
             # Store bilgisini final_url'den güncelle (redirect linklerini handle et)
             if link_data and link_data.get('final_url') and link_data['final_url'] != parsed_deal['link']:
@@ -1794,7 +2200,31 @@ class TelegramDealBot:
                     
                     # 2. Kategori düzeltme (AI genelde daha iyidir)
                     if ai_analysis.get('category'):
-                        parsed_deal['category'] = ai_analysis['category']
+                        ai_category = ai_analysis['category']
+                        # AI'dan gelen kategori ID'sini kategori ismine çevir
+                        ai_category_name_map = {
+                            'elektronik': 'Elektronik',
+                            'moda': 'Moda & Giyim',
+                            'ev_yasam': 'Ev, Yaşam & Ofis',
+                            'anne_bebek': 'Anne & Bebek',
+                            'kozmetik': 'Kozmetik & Bakım',
+                            'spor_outdoor': 'Spor & Outdoor',
+                            'supermarket': 'Süpermarket',
+                            'yapi_oto': 'Yapı Market & Oto',
+                            'kitap_hobi': 'Kitap, Müzik & Hobi',
+                            # Eski bot kategori ID'leri için mapping
+                            'bilgisayar': 'Elektronik',
+                            'mobil_cihazlar': 'Elektronik',
+                            'konsol_oyun': 'Kitap, Müzik & Hobi',
+                            'ev_elektronigi_yasam': 'Ev, Yaşam & Ofis',
+                            'giyim_moda': 'Moda & Giyim',
+                            'kozmetik_bakim': 'Kozmetik & Bakım',
+                            'oto_yapi_market': 'Yapı Market & Oto',
+                            'ag_yazilim': 'Elektronik',
+                            'evcil_hayvan': 'Süpermarket',  # Evcil hayvan ürünleri süpermarket altında
+                            'diger': 'Elektronik',  # Diğer kategorisi için varsayılan
+                        }
+                        parsed_deal['category'] = ai_category_name_map.get(ai_category, ai_category)
                     
                     # 3. Mağaza düzeltme
                     if ai_analysis.get('store'):
@@ -1841,6 +2271,35 @@ class TelegramDealBot:
             else:
                 logger.warning(f"⚠️ İndirim oranı hesaplanamadı: original_price={original_price}, price={price}")
             
+            # Kategori formatını normalize et (eski ID formatlarını kategori ismine çevir)
+            category_value = parsed_deal.get('category', 'Elektronik')
+            category_id_to_name = {
+                # Yeni kategori ID'leri
+                'elektronik': 'Elektronik',
+                'moda': 'Moda & Giyim',
+                'ev_yasam': 'Ev, Yaşam & Ofis',
+                'anne_bebek': 'Anne & Bebek',
+                'kozmetik': 'Kozmetik & Bakım',
+                'spor_outdoor': 'Spor & Outdoor',
+                'supermarket': 'Süpermarket',
+                'yapi_oto': 'Yapı Market & Oto',
+                'kitap_hobi': 'Kitap, Müzik & Hobi',
+                'tumu': 'Elektronik',
+                # Eski bot kategori ID'leri (KRİTİK - bunlar hala kullanılıyor olabilir)
+                'bilgisayar': 'Elektronik',
+                'mobil_cihazlar': 'Elektronik',
+                'konsol_oyun': 'Kitap, Müzik & Hobi',
+                'ev_elektronigi_yasam': 'Ev, Yaşam & Ofis',
+                'giyim_moda': 'Moda & Giyim',  # Bu çok önemli!
+                'kozmetik_bakim': 'Kozmetik & Bakım',
+                'oto_yapi_market': 'Yapı Market & Oto',
+                'ag_yazilim': 'Elektronik',
+                'evcil_hayvan': 'Süpermarket',
+                'diger': 'Elektronik',
+            }
+            # Eğer kategori ID formatındaysa kategori ismine çevir
+            normalized_category = category_id_to_name.get(category_value, category_value)
+            
             # Firebase'e kaydet
             deal_data = {
                 'title': parsed_deal['title'],
@@ -1848,7 +2307,8 @@ class TelegramDealBot:
                 'originalPrice': original_price,
                 'discountRate': discount_rate,
                 'store': parsed_deal['store'] or 'Bilinmeyen Mağaza',
-                'category': parsed_deal['category'],
+                'category': normalized_category,  # Normalize edilmiş kategori ismi
+                'subCategory': parsed_deal.get('subCategory'),  # Alt kategori de kaydediliyor
                 'link': final_link,  # Final URL'i kullan (redirect'leri handle et)
                 'imageUrl': image_url or '',
                 'description': parsed_deal['description'],
@@ -1870,6 +2330,10 @@ class TelegramDealBot:
                 'telegramChatUsername': chat_identifier,
                 'rawMessage': message_text,
             }
+            
+            # Log kategori bilgisi
+            if category_value != normalized_category:
+                logger.info(f"🔄 Kategori normalize edildi: '{category_value}' -> '{normalized_category}'")
 
             if USE_FIREBASE_ADMIN:
                 # firebase-admin kullan (PC için)
@@ -2085,12 +2549,22 @@ class TelegramDealBot:
         for channel in target_channels:
             try:
                 # String ID'leri integer'a çevirmeyi dene
+                entity = None
                 if channel.startswith('-100'):
+                    # Zaten doğru format
                     entity = int(channel)
                 elif channel.startswith('-'):
-                    # -33... gibi ID'ler için
+                    # -33... gibi ID'ler için -100 prefix ekle (megagroup için)
                     try:
-                        entity = int(channel)
+                        numeric_id = int(channel)
+                        # Megagroup ID'leri için -100 prefix ekle
+                        if numeric_id < -1000000000000:
+                            # Zaten -100 ile başlıyor
+                            entity = numeric_id
+                        else:
+                            # -100 prefix ekle
+                            entity = int('-100' + str(abs(numeric_id)))
+                            logger.info(f"🔧 Kanal ID formatı düzeltildi: {channel} -> {entity}")
                     except:
                         entity = channel
                 else:
@@ -2098,16 +2572,18 @@ class TelegramDealBot:
 
                 # Entity'nin geçerli olup olmadığını kontrol et
                 # get_input_entity önbellekten veya sunucudan kontrol eder
-                        try:
-                    await self.client.get_input_entity(entity)
-                    resolved_chats.append(entity)
-                    logger.info(f"✅ Kanal takibe alındı: {channel}")
+                try:
+                    input_entity = await self.client.get_input_entity(entity)
+                    resolved_chats.append(input_entity)
+                    logger.info(f"✅ Kanal takibe alındı: {channel} (entity: {entity})")
                 except ValueError:
                     logger.warning(f"⚠️ Kanal bulunamadı veya erişilemiyor (Atlanıyor): {channel}")
                     # Yine de listeye eklemeyi deneyelim, belki sonradan bulunur (ama event listener patlayabilir)
                     # resolved_chats.append(entity) 
-                        except Exception as e:
-                logger.error(f"❌ Kanal çözümlenirken hata ({channel}): {e}")
+                except Exception as e:
+                    logger.error(f"❌ Kanal çözümlenirken hata ({channel}): {e}")
+            except Exception as e:
+                logger.error(f"❌ Kanal işlenirken genel hata ({channel}): {e}")
 
         if not resolved_chats:
             logger.error("❌ Hiçbir kanal çözümlenemedi! Lütfen kanal ID'lerini kontrol edin.")
@@ -2126,12 +2602,14 @@ class TelegramDealBot:
             #     await self.fetch_channel_messages(channel)
             
             logger.info("✅ Bot aktif ve dinliyor... (Durdurmak için CTRL+C)")
-            await self.client.run_until_disconnected()
-                
+            try:
+                await self.client.run_until_disconnected()
             except KeyboardInterrupt:
-            logger.info("🛑 Bot kullanıcı tarafından durduruldu")
+                logger.info("🛑 Bot kullanıcı tarafından durduruldu")
             except Exception as e:
-            logger.error(f"❌ Bot kritik hata ile durdu: {e}", exc_info=True)
+                logger.error(f"❌ Bot kritik hata ile durdu: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"❌ Bot başlatma hatası: {e}", exc_info=True)
 
 
 async def main():

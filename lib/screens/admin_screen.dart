@@ -88,15 +88,39 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: deals.length,
-          itemBuilder: (context, index) {
-            return _buildAdminCard(
-              deals[index],
-              type,
-            );
-          },
+        return Column(
+          children: [
+            // Tümünü Sil Butonu
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: ElevatedButton.icon(
+                onPressed: () => _showDeleteAllConfirmation(type, deals.length),
+                icon: const Icon(Icons.delete_forever, size: 18),
+                label: Text('Tümünü Sil (${deals.length})'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+            // Deal Listesi
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                itemCount: deals.length,
+                itemBuilder: (context, index) {
+                  return _buildAdminCard(
+                    deals[index],
+                    type,
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -199,14 +223,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     label: const Text('Onayla', style: TextStyle(color: Colors.green)),
                   ),
                 ),
-                Container(width: 1, height: 30, color: Colors.grey[200]),
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () => _deleteDeal(deal.id),
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    label: const Text('Sil', style: TextStyle(color: Colors.red)),
-                  ),
-                ),
               ],
             ),
           ],
@@ -228,40 +244,21 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _reactivateDeal(deal.id),
-                          icon: const Icon(Icons.restore, size: 20),
-                          label: const Text('Tekrar Yayına Al'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _reactivateDeal(deal.id),
+                      icon: const Icon(Icons.restore, size: 20),
+                      label: const Text('Tekrar Yayına Al'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _deleteDeal(deal.id),
-                          icon: const Icon(Icons.delete_outline, size: 20),
-                          label: const Text('Sil'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -372,27 +369,65 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
-  Future<void> _deleteDeal(String id) async {
-    // Önce deal bilgisini al (başlık göstermek için)
-    final deal = await _firestoreService.getDeal(id);
-    final dealTitle = deal?.title ?? 'Bu fırsat';
-
+  Future<void> _showDeleteAllConfirmation(_AdminListType type, int count) async {
+    final bool isPending = type == _AdminListType.pending;
+    
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Fırsatı Sil'),
-        content: Text('Bu fırsatı kalıcı olarak silmek istediğinize emin misiniz?\n\n"$dealTitle"\n\nBu işlem geri alınamaz.'),
+        title: const Text(
+          'Tümünü Sil',
+          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isPending
+                  ? 'Tüm onay bekleyen fırsatları ($count adet) silmek istediğinize emin misiniz?'
+                  : 'Tüm süresi biten fırsatları ($count adet) silmek istediğinize emin misiniz?',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.red, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Bu işlem geri alınamaz!',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('İptal'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
             ),
-            child: const Text('Evet, Sil'),
+            child: const Text('Evet, Tümünü Sil'),
           ),
         ],
       ),
@@ -400,15 +435,64 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
     if (confirm != true) return;
 
-    final success = await _firestoreService.deleteDeal(id);
+    // Loading göster
     if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fırsat silindi 🗑️'), backgroundColor: Colors.red),
-        );
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Siliniyor...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    try {
+      int deletedCount = 0;
+      if (isPending) {
+        deletedCount = await _firestoreService.deleteAllPendingDeals();
       } else {
+        deletedCount = await _firestoreService.deleteAllExpiredDeals();
+      }
+
+      // Loading dialog'u kapat
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Silme işlemi başarısız ❌'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('$deletedCount adet fırsat silindi ✅'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      // Loading dialog'u kapat
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
     }

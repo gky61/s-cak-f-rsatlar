@@ -107,6 +107,35 @@ class Deal {
       createdAt = DateTime.now();
     }
     
+    // Kategori formatını normalize et (eski bot formatlarını yeni formata çevir)
+    String category = data['category'] ?? '';
+    final categoryIdToName = {
+      // Eski bot kategori ID'leri -> Yeni kategori isimleri
+      'giyim_moda': 'Moda & Giyim',
+      'bilgisayar': 'Elektronik',
+      'mobil_cihazlar': 'Elektronik',
+      'konsol_oyun': 'Kitap, Müzik & Hobi',
+      'ev_elektronigi_yasam': 'Ev, Yaşam & Ofis',
+      'kozmetik_bakim': 'Kozmetik & Bakım',
+      'oto_yapi_market': 'Yapı Market & Oto',
+      'ag_yazilim': 'Elektronik',
+      'evcil_hayvan': 'Süpermarket',
+      'diger': 'Elektronik',
+      'tumu': 'Elektronik',
+      // Yeni kategori ID'leri -> Kategori isimleri
+      'elektronik': 'Elektronik',
+      'moda': 'Moda & Giyim',
+      'ev_yasam': 'Ev, Yaşam & Ofis',
+      'anne_bebek': 'Anne & Bebek',
+      'kozmetik': 'Kozmetik & Bakım',
+      'spor_outdoor': 'Spor & Outdoor',
+      'supermarket': 'Süpermarket',
+      'yapi_oto': 'Yapı Market & Oto',
+      'kitap_hobi': 'Kitap, Müzik & Hobi',
+    };
+    // Eğer kategori ID formatındaysa kategori ismine çevir
+    category = categoryIdToName[category] ?? category;
+    
     return Deal(
       id: doc.id,
       title: data['title'] ?? '',
@@ -115,7 +144,7 @@ class Deal {
       originalPrice: data['originalPrice'] != null ? (data['originalPrice']).toDouble() : null,
       discountRate: data['discountRate'] != null ? (data['discountRate'] as num).toInt() : null,
       store: data['store'] ?? '',
-      category: data['category'] ?? '',
+      category: category,  // Normalize edilmiş kategori
       subCategory: data['subCategory'],
       link: data['link'] ?? '',
       imageUrl: data['imageUrl'] ?? '',

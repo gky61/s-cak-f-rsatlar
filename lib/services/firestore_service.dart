@@ -27,55 +27,6 @@ class FirestoreService {
     });
   }
 
-  // Pagination ile deal'leri getir (infinite scroll için)
-  Future<List<Deal>> getDealsPaginated({
-    int limit = 20,
-    DocumentSnapshot? lastDocument,
-    String? category,
-    String? subCategory,
-  }) async {
-    try {
-      Query query = _firestore
-          .collection('deals')
-          .where('isApproved', isEqualTo: true);
-
-      // Kategori filtresi varsa ekle
-      if (category != null && category != 'tumu') {
-        // Firestore'da category string olarak saklanıyor, Category.getNameById kullan
-        final categoryName = category; // Burada category zaten name olarak gelmeli
-        query = query.where('category', isEqualTo: categoryName);
-      }
-
-      // Sıralama ve limit
-      query = query.orderBy('createdAt', descending: true).limit(limit);
-
-      // Son dokümandan devam et (pagination)
-      if (lastDocument != null) {
-        query = query.startAfterDocument(lastDocument);
-      }
-
-      final snapshot = await query.get();
-      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
-
-      // Client-side'da bitmeyenleri önce göster
-      deals.sort((a, b) {
-        if (!a.isExpired && b.isExpired) return -1;
-        if (a.isExpired && !b.isExpired) return 1;
-        return 0; // Zaten Firestore'da sıralı
-      });
-
-      return deals;
-    } catch (e) {
-      print('Pagination hatası: $e');
-      return [];
-    }
-  }
-
-  // İlk sayfa deal'lerini getir (refresh için)
-  Future<List<Deal>> getInitialDeals({int limit = 20}) async {
-    return getDealsPaginated(limit: limit);
-  }
-
   // Tüm deal'leri getir (admin kullanıcılar için)
   Stream<List<Deal>> getAllDealsStream() {
     return _firestore
@@ -455,6 +406,7 @@ class FirestoreService {
     required String userEmail,
     required String text,
     String? parentCommentId,
+    String? replyToCommentId, // Cevaba cevap için
     String? replyToUserName,
     String? userProfileImageUrl,
   }) async {
@@ -468,6 +420,28 @@ class FirestoreService {
           .collection('comments')
           .doc();
       
+      // Eğer cevaba cevap veriliyorsa, parentCommentId'yi belirle
+      String? actualParentCommentId = parentCommentId;
+      if (replyToCommentId != null && parentCommentId == null) {
+        // Cevaba cevap veriliyor, önce cevabın parent'ını bul
+        final replyToCommentDoc = await _firestore
+            .collection('deals')
+            .doc(dealId)
+            .collection('comments')
+            .doc(replyToCommentId)
+            .get();
+        
+        if (replyToCommentDoc.exists) {
+          final replyToData = replyToCommentDoc.data();
+          // Cevabın parent'ı varsa onu kullan, yoksa cevabın kendisini parent yap
+          // Bu sayede cevaba cevap verildiğinde hiyerarşi korunur
+          actualParentCommentId = replyToData?['parentCommentId'] ?? replyToCommentId;
+        } else {
+          // Cevap bulunamadı, replyToCommentId'yi parent yap
+          actualParentCommentId = replyToCommentId;
+        }
+      }
+      
       final comment = Comment(
         id: commentRef.id,
         dealId: dealId,
@@ -477,8 +451,11 @@ class FirestoreService {
         userProfileImageUrl: userProfileImageUrl ?? '',
         text: text,
         createdAt: DateTime.now(),
-        parentCommentId: parentCommentId,
+        parentCommentId: actualParentCommentId,
+        replyToCommentId: replyToCommentId,
         replyToUserName: replyToUserName,
+        likeCount: 0,
+        likedByUsers: [],
       );
       
       batch.set(commentRef, comment.toFirestore());
@@ -496,7 +473,7 @@ class FirestoreService {
     }
   }
 
-  // Yorumları dinleme
+  // Yorumları dinleme (hiyerarşik sıralama)
   Stream<List<Comment>> getCommentsStream(String dealId) {
     return _firestore
         .collection('deals')
@@ -505,7 +482,54 @@ class FirestoreService {
         .orderBy('createdAt', descending: false)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) => Comment.fromFirestore(doc)).toList();
+      final allComments = snapshot.docs.map((doc) => Comment.fromFirestore(doc)).toList();
+      
+      // Yorumları hiyerarşik olarak sırala
+      // Ana yorumlar önce, sonra cevapları
+      final mainComments = <Comment>[];
+      final replies = <String, List<Comment>>{};
+      
+      for (var comment in allComments) {
+        if (comment.parentCommentId == null) {
+          // Ana yorum
+          mainComments.add(comment);
+        } else {
+          // Cevap - parent'ın ID'sine göre grupla
+          final parentId = comment.parentCommentId!;
+          if (!replies.containsKey(parentId)) {
+            replies[parentId] = [];
+          }
+          replies[parentId]!.add(comment);
+        }
+      }
+      
+      // Ana yorumları tarihe göre sırala
+      mainComments.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
+      // Her ana yorumun altına cevaplarını ekle (recursive olarak)
+      final sortedComments = <Comment>[];
+      
+      void addCommentWithReplies(Comment comment) {
+        sortedComments.add(comment);
+        
+        // Bu yorumun cevaplarını ekle
+        if (replies.containsKey(comment.id)) {
+          final commentReplies = replies[comment.id]!;
+          // Tarihe göre sırala
+          commentReplies.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          
+          // Her cevabı ve onun cevaplarını ekle
+          for (var reply in commentReplies) {
+            addCommentWithReplies(reply);
+          }
+        }
+      }
+      
+      for (var mainComment in mainComments) {
+        addCommentWithReplies(mainComment);
+      }
+      
+      return sortedComments;
     });
   }
 
@@ -532,6 +556,73 @@ class FirestoreService {
       return true;
     } catch (e) {
       print('Yorum silme hatası: $e');
+      return false;
+    }
+  }
+
+  // Yorum beğenme
+  Future<bool> likeComment(String dealId, String commentId, String userId) async {
+    try {
+      final batch = _firestore.batch();
+      
+      final commentRef = _firestore
+          .collection('deals')
+          .doc(dealId)
+          .collection('comments')
+          .doc(commentId);
+      
+      // Önce mevcut durumu kontrol et
+      final commentDoc = await commentRef.get();
+      if (!commentDoc.exists) {
+        return false;
+      }
+      
+      final data = commentDoc.data()!;
+      final likedByUsers = List<String>.from(data['likedByUsers'] ?? []);
+      
+      if (likedByUsers.contains(userId)) {
+        // Zaten beğenilmiş, beğeniyi kaldır
+        likedByUsers.remove(userId);
+        batch.update(commentRef, {
+          'likeCount': FieldValue.increment(-1),
+          'likedByUsers': likedByUsers,
+        });
+      } else {
+        // Beğen
+        likedByUsers.add(userId);
+        batch.update(commentRef, {
+          'likeCount': FieldValue.increment(1),
+          'likedByUsers': likedByUsers,
+        });
+      }
+      
+      await batch.commit();
+      return true;
+    } catch (e) {
+      print('Yorum beğenme hatası: $e');
+      return false;
+    }
+  }
+
+  // Kullanıcının yorumu beğenip beğenmediğini kontrol et
+  Future<bool> isCommentLiked(String dealId, String commentId, String userId) async {
+    try {
+      final commentDoc = await _firestore
+          .collection('deals')
+          .doc(dealId)
+          .collection('comments')
+          .doc(commentId)
+          .get();
+      
+      if (!commentDoc.exists) {
+        return false;
+      }
+      
+      final data = commentDoc.data()!;
+      final likedByUsers = List<String>.from(data['likedByUsers'] ?? []);
+      return likedByUsers.contains(userId);
+    } catch (e) {
+      print('Yorum beğeni kontrolü hatası: $e');
       return false;
     }
   }
@@ -621,21 +712,87 @@ class FirestoreService {
     });
   }
 
-  // Deal silme (admin için)
+  // Tek bir deal silme
   Future<bool> deleteDeal(String dealId) async {
     try {
       // Deal'i sil
       await _firestore.collection('deals').doc(dealId).delete();
       
-      // Alt koleksiyonları da sil (comments, votes, favorites)
+      // Deal'in alt koleksiyonlarını da sil (comments, votes)
       // Not: Firestore'da alt koleksiyonlar otomatik silinmez, manuel silmek gerekir
       // Ancak performans için şimdilik sadece deal'i siliyoruz
-      // İsterseniz Cloud Function ile alt koleksiyonları da temizleyebilirsiniz
       
       return true;
     } catch (e) {
       print('Deal silme hatası: $e');
       return false;
+    }
+  }
+
+  // Tüm onay bekleyen deal'leri sil
+  Future<int> deleteAllPendingDeals() async {
+    try {
+      final pendingDeals = await _firestore
+          .collection('deals')
+          .where('isApproved', isEqualTo: false)
+          .where('isExpired', isEqualTo: false)
+          .get();
+      
+      final batch = _firestore.batch();
+      int deletedCount = 0;
+      
+      for (var doc in pendingDeals.docs) {
+        batch.delete(doc.reference);
+        deletedCount++;
+        
+        // Batch limiti 500
+        if (deletedCount % 500 == 0) {
+          await batch.commit();
+        }
+      }
+      
+      // Kalan işlemleri commit et
+      if (deletedCount % 500 != 0 && deletedCount > 0) {
+        await batch.commit();
+      }
+      
+      return deletedCount;
+    } catch (e) {
+      print('Tüm onay bekleyen deal\'leri silme hatası: $e');
+      return 0;
+    }
+  }
+
+  // Tüm süresi biten deal'leri sil
+  Future<int> deleteAllExpiredDeals() async {
+    try {
+      final expiredDeals = await _firestore
+          .collection('deals')
+          .where('isExpired', isEqualTo: true)
+          .get();
+      
+      final batch = _firestore.batch();
+      int deletedCount = 0;
+      
+      for (var doc in expiredDeals.docs) {
+        batch.delete(doc.reference);
+        deletedCount++;
+        
+        // Batch limiti 500
+        if (deletedCount % 500 == 0) {
+          await batch.commit();
+        }
+      }
+      
+      // Kalan işlemleri commit et
+      if (deletedCount % 500 != 0 && deletedCount > 0) {
+        await batch.commit();
+      }
+      
+      return deletedCount;
+    } catch (e) {
+      print('Tüm süresi biten deal\'leri silme hatası: $e');
+      return 0;
     }
   }
 }
