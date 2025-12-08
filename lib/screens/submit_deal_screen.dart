@@ -4,7 +4,6 @@ import '../services/auth_service.dart';
 import '../services/category_detection_service.dart';
 import '../models/category.dart';
 import '../widgets/category_selector_widget.dart';
-import '../theme/app_theme.dart';
 
 class SubmitDealScreen extends StatefulWidget {
   const SubmitDealScreen({super.key});
@@ -29,26 +28,23 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   String? _selectedSubCategory;
   bool _isLoading = false;
   bool _isAutoDetecting = false;
-  bool _isAutoDetected = false; // Otomatik tespit yapıldı mı?
 
   @override
   void initState() {
     super.initState();
-    // Başlık, açıklama veya URL değiştiğinde kategori tespit et
+    // Başlık veya açıklama değiştiğinde kategori tespit et
     _titleController.addListener(_onTextChanged);
     _descriptionController.addListener(_onTextChanged);
-    _urlController.addListener(_onTextChanged);
   }
 
   void _onTextChanged() {
     final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
-    final url = _urlController.text.trim();
     
-    if (title.isEmpty && description.isEmpty && url.isEmpty) return;
+    if (title.isEmpty && description.isEmpty) return;
     
     // Kısa bir gecikme ile tespit yap (kullanıcı yazmayı bitirsin)
-    Future.delayed(const Duration(milliseconds: 1000), () {
+    Future.delayed(const Duration(milliseconds: 800), () {
       if (!mounted || _isAutoDetecting) return;
       _detectCategory();
     });
@@ -57,12 +53,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   void _detectCategory() {
     final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
-    final url = _urlController.text.trim();
     
-    if (title.isEmpty && description.isEmpty && url.isEmpty) return;
+    if (title.isEmpty && description.isEmpty) return;
     
     // Başlık ve açıklamayı birleştir
-    final combinedText = url.isNotEmpty ? '$title $description $url' : '$title $description';
+    final combinedText = '$title $description';
     
     print('🔍 Kategori tespiti yapılıyor: $combinedText');
     final result = CategoryDetectionService.detectCategory(combinedText);
@@ -72,17 +67,12 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       final categoryId = result['categoryId'];
       final subCategory = result['subCategory'];
       
-      // Kategori değiştiyse veya alt kategori eklendiyse güncelle
-      final shouldUpdate = categoryId != null && 
-          (categoryId != _selectedCategory || subCategory != _selectedSubCategory);
-      
-      if (shouldUpdate && !_isAutoDetecting) {
+      if (categoryId != null && categoryId != _selectedCategory) {
         print('📝 Kategori güncelleniyor: $categoryId, alt kategori: $subCategory');
         _isAutoDetecting = true;
         setState(() {
-          _selectedCategory = categoryId!;
+          _selectedCategory = categoryId;
           _selectedSubCategory = subCategory;
-          _isAutoDetected = true; // Otomatik tespit yapıldı
         });
         _isAutoDetecting = false;
         
@@ -104,7 +94,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 ],
               ),
               backgroundColor: Colors.green,
-              duration: const Duration(seconds: 4),
+              duration: const Duration(seconds: 3),
               action: SnackBarAction(
                 label: 'Değiştir',
                 textColor: Colors.white,
@@ -121,7 +111,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   void dispose() {
     _titleController.removeListener(_onTextChanged);
     _descriptionController.removeListener(_onTextChanged);
-    _urlController.removeListener(_onTextChanged);
     _titleController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
@@ -152,7 +141,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             _isAutoDetecting = false; // Manuel seçim yapıldı, otomatik tespiti durdur
             _selectedCategory = categoryId;
             _selectedSubCategory = subCategory;
-            _isAutoDetected = false; // Manuel seçim yapıldı
           });
           Navigator.pop(context);
         },
@@ -261,94 +249,36 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  border: Border.all(
-                    color: _isAutoDetected 
-                        ? AppTheme.primary.withOpacity(0.5) 
-                        : Colors.grey[300]!,
-                    width: _isAutoDetected ? 2 : 1,
-                  ),
+                  border: Border.all(color: Colors.grey[300]!),
                   borderRadius: BorderRadius.circular(12),
-                  color: _isAutoDetected 
-                      ? AppTheme.primary.withOpacity(0.05) 
-                      : Colors.transparent,
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.category,
-                      color: _isAutoDetected 
-                          ? AppTheme.primary 
-                          : Colors.grey,
-                    ),
+                        child: Row(
+                          children: [
+                    const Icon(Icons.category, color: Colors.grey),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              const Text(
-                                'Kategori *',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              if (_isAutoDetected) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.auto_awesome,
-                                        size: 10,
-                                        color: Colors.white,
-                                      ),
-                                      SizedBox(width: 2),
-                                      Text(
-                                        'Otomatik',
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
+                          const Text(
+                            'Kategori *',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                        ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             _getCategoryDisplayText(),
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: _isAutoDetected 
-                                  ? AppTheme.primary 
-                                  : Colors.black87,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Icon(
-                      Icons.arrow_forward_ios,
-                      size: 16,
-                      color: _isAutoDetected 
-                          ? AppTheme.primary 
-                          : Colors.grey,
-                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                   ],
                 ),
               ),

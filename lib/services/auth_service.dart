@@ -2,12 +2,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/user.dart' as app_user;
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  GoogleSignIn? _googleSignIn;
+  
+  // Lazy initialization - sadece gerektiğinde oluştur
+  GoogleSignIn get _googleSignInInstance {
+    _googleSignIn ??= GoogleSignIn();
+    return _googleSignIn!;
+  }
 
   // Mevcut kullanıcı
   User? get currentUser => _auth.currentUser;
@@ -18,16 +25,38 @@ class AuthService {
   // Google ile giriş
   Future<app_user.AppUser?> signInWithGoogle() async {
     try {
+      // Web için Google Sign-In yapılandırması
+      final GoogleSignIn googleSignIn;
+      if (kIsWeb) {
+        // Web'de clientId'yi manuel olarak veriyoruz
+        // Scope belirtmiyoruz - Firebase Auth zaten gerekli bilgileri sağlıyor
+        googleSignIn = GoogleSignIn(
+          clientId: '560592268193-peu6i6g5nelkklqi6gpaqq4056kgse44.apps.googleusercontent.com',
+          // Scope belirtmiyoruz - People API hatasından kaçınmak için
+        );
+      } else {
+        // Mobil platformlar için normal yapılandırma
+        googleSignIn = GoogleSignIn(
+          scopes: ['email', 'profile'],
+        );
+      }
+      
       // Google Sign-In işlemini başlat
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       
       if (googleUser == null) {
         // Kullanıcı iptal etti
+        print('Google giriş iptal edildi');
         return null;
       }
 
       // Google'dan authentication bilgilerini al
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      if (googleAuth.idToken == null) {
+        print('Google ID token alınamadı');
+        return null;
+      }
 
       // Firebase için credential oluştur
       final credential = GoogleAuthProvider.credential(
@@ -51,12 +80,15 @@ class AuthService {
             .doc(userCredential.user!.uid)
             .set(appUser.toFirestore(), SetOptions(merge: true));
 
+        print('✅ Google ile giriş başarılı: ${userCredential.user!.email}');
         return appUser;
       }
+      print('⚠️ Firebase giriş sonrası kullanıcı null');
       return null;
-    } catch (e) {
-      print('Google giriş hatası: $e');
-      return null;
+    } catch (e, stackTrace) {
+      print('❌ Google giriş hatası: $e');
+      print('Stack trace: $stackTrace');
+      rethrow; // Hata mesajını üst seviyeye ilet
     }
   }
 
@@ -163,7 +195,9 @@ class AuthService {
 
   // Çıkış
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    if (_googleSignIn != null) {
+      await _googleSignIn!.signOut();
+    }
     await _auth.signOut();
   }
 

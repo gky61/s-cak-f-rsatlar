@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../main.dart';
 import '../screens/deal_detail_screen.dart';
@@ -42,6 +43,12 @@ class NotificationService {
 
   // Local notifications'ı başlat
   Future<void> initializeLocalNotifications() async {
+    // Web'de local notifications desteklenmiyor
+    if (kIsWeb) {
+      print('⚠️ Web platformunda local notifications desteklenmiyor');
+      return;
+    }
+    
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -80,6 +87,23 @@ class NotificationService {
 
   // Bildirim izinlerini iste
   Future<void> requestPermission() async {
+    // Web'de farklı bir izin mekanizması var
+    if (kIsWeb) {
+      try {
+        NotificationSettings settings = await _messaging.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+          print('✅ Web: Kullanıcı bildirimleri kabul etti');
+        }
+      } catch (e) {
+        print('⚠️ Web bildirim izni hatası: $e');
+      }
+      return;
+    }
+    
     NotificationSettings settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -236,7 +260,8 @@ class NotificationService {
   // FCM token'ı al ve kaydet
   Future<void> saveFCMToken() async {
     try {
-      final token = await _messaging.getToken();
+      // Web'de token almak için farklı bir yaklaşım gerekebilir
+      final token = await _messaging.getToken(vapidKey: kIsWeb ? null : null);
       final userId = _auth.currentUser?.uid;
       
       if (token != null && userId != null) {
@@ -271,6 +296,8 @@ class NotificationService {
       }
     } catch (e) {
       print('❌ FCM Token kaydetme hatası: $e');
+      // Web'de token alınamazsa uygulama çalışmaya devam etmeli
+      if (!kIsWeb) rethrow;
     }
   }
   
@@ -331,6 +358,12 @@ class NotificationService {
 
   // Ön planda bildirim göster
   Future<void> _showLocalNotification(RemoteMessage message) async {
+    // Web'de local notifications desteklenmiyor
+    if (kIsWeb) {
+      print('📬 Web: Bildirim alındı: ${message.notification?.title}');
+      return;
+    }
+    
     final notification = message.notification;
     final data = message.data;
     final dealId = data['dealId'] ?? '';

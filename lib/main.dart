@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
@@ -24,15 +25,26 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
   
-  // Background message handler'ı kaydet
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    
+    // Background message handler'ı sadece web dışı platformlarda kaydet
+    if (!kIsWeb) {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    }
+    
+    print('🔥 FIRSATKOLİK uygulaması başlatılıyor...');
+    print('📱 Build zamanı: ${DateTime.now()}');
+    print('🌐 Platform: ${kIsWeb ? "Web" : "Mobile"}');
+  } catch (e, stackTrace) {
+    print('❌ Firebase başlatma hatası: $e');
+    print('Stack trace: $stackTrace');
+    // Hata olsa bile uygulamayı başlat
+  }
   
-  print('🔥 FIRSATKOLİK uygulaması başlatılıyor...');
-  print('📱 Build zamanı: ${DateTime.now()}');
   runApp(const MyApp());
 }
 

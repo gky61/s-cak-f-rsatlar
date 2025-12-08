@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import '../services/auth_service.dart';
 import 'home_screen.dart';
+import 'admin_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -13,6 +14,57 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
+  bool _isSignUp = false; // Kayıt ol / Giriş yap modu
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signInWithGoogleWeb() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = await _authService.signInWithGoogle();
+      if (user != null && mounted) {
+        // Admin kontrolü yap
+        final isAdmin = await _authService.isAdmin();
+        if (isAdmin) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AdminScreen()),
+          );
+        } else {
+          await _authService.signOut();
+          _showError('Bu hesap admin yetkisine sahip değil. Sadece admin kullanıcılar web üzerinden giriş yapabilir.');
+        }
+      } else if (mounted) {
+        _showError('Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
+      }
+    } catch (e) {
+      print('Auth screen error: $e');
+      if (mounted) {
+        String errorMessage = 'Google ile giriş yapılamadı.';
+        if (e.toString().contains('People API')) {
+          errorMessage = 'People API etkinleştirilmeli. Lütfen Firebase Console\'dan People API\'yi etkinleştirin veya Email/Şifre ile giriş yapın.';
+        } else if (e.toString().contains('popup')) {
+          errorMessage = 'Popup engelleyiciyi kapatıp tekrar deneyin';
+        } else if (e.toString().contains('network')) {
+          errorMessage = 'İnternet bağlantınızı kontrol edin';
+        }
+        _showError(errorMessage);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
@@ -23,11 +75,88 @@ class _AuthScreenState extends State<AuthScreen> {
           MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
       } else if (mounted) {
-        _showError('Google ile giriş yapılamadı');
+        _showError('Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
+      }
+    } catch (e) {
+      print('Auth screen error: $e');
+      if (mounted) {
+        final errorMessage = e.toString().contains('network')
+            ? 'İnternet bağlantınızı kontrol edin'
+            : e.toString().contains('popup')
+                ? 'Popup engelleyiciyi kapatıp tekrar deneyin'
+                : 'Bir hata oluştu: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e}';
+        _showError(errorMessage);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _signInWithEmailPassword() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    
+    setState(() => _isLoading = true);
+    try {
+      if (_isSignUp) {
+        // Kayıt ol
+        final user = await _authService.signUpWithEmail(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          username: _usernameController.text.trim(),
+        );
+        
+        if (user != null && mounted) {
+          _showError('✅ Kayıt başarılı! Firebase Console\'dan bu kullanıcıyı admin yapın, sonra giriş yapın.\nEmail: ${_emailController.text.trim()}');
+          setState(() {
+            _isSignUp = false;
+            _usernameController.clear();
+          });
+        }
+      } else {
+        // Giriş yap
+        final user = await _authService.signInWithEmail(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+        
+        if (user != null) {
+          // Admin kontrolü yap
+          final isAdmin = await _authService.isAdmin();
+          if (isAdmin) {
+            if (mounted) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const AdminScreen()),
+              );
+            }
+          } else {
+            if (mounted) {
+              await _authService.signOut();
+              _showError('Bu hesap admin yetkisine sahip değil. Sadece admin kullanıcılar web üzerinden giriş yapabilir.');
+            }
+          }
+        } else if (mounted) {
+          _showError('Email veya şifre hatalı');
+        }
       }
     } catch (e) {
       if (mounted) {
-        _showError('Bir hata oluştu: $e');
+        String errorMsg = 'Bir hata oluştu';
+        if (e.toString().contains('user-not-found')) {
+          errorMsg = 'Kullanıcı bulunamadı';
+        } else if (e.toString().contains('wrong-password')) {
+          errorMsg = 'Şifre hatalı';
+        } else if (e.toString().contains('email-already-in-use')) {
+          errorMsg = 'Bu email zaten kullanılıyor. Giriş yapın.';
+        } else if (e.toString().contains('weak-password')) {
+          errorMsg = 'Şifre çok zayıf. En az 6 karakter olmalı.';
+        } else if (e.toString().contains('invalid-email')) {
+          errorMsg = 'Geçersiz email adresi';
+        }
+        _showError(errorMsg);
       }
     } finally {
       if (mounted) {
@@ -131,27 +260,74 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: 48),
                   
-                  // Google ile Giriş Butonu
-                  _buildSocialButton(
-                    onPressed: _isLoading ? null : _signInWithGoogle,
-                    icon: Icons.g_mobiledata,
-                    label: 'Google ile Devam Et',
-                    backgroundColor: Colors.white,
-                    textColor: Colors.black87,
-                    borderColor: Colors.grey[300]!,
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Apple ile Giriş Butonu (sadece iOS)
-                  if (Platform.isIOS)
-                    _buildSocialButton(
-                      onPressed: _isLoading ? null : _signInWithApple,
-                      icon: Icons.apple,
-                      label: 'Apple ile Devam Et',
-                      backgroundColor: Colors.black,
-                      textColor: Colors.white,
-                      borderColor: Colors.black,
+                  // Web için sadece Email/Şifre (Google Sign-In web'de çalışmıyor)
+                  if (kIsWeb) ...[
+                    Text(
+                      'Admin Girişi',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
                     ),
+                    const SizedBox(height: 24),
+                    // Kayıt ol / Giriş yap toggle
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextButton(
+                          onPressed: () => setState(() => _isSignUp = false),
+                          child: Text(
+                            'Giriş Yap',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: _isSignUp ? FontWeight.normal : FontWeight.bold,
+                              color: _isSignUp ? Colors.grey : const Color(0xFFFF6B35),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          ' / ',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() => _isSignUp = true),
+                          child: Text(
+                            'Kayıt Ol',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: _isSignUp ? FontWeight.bold : FontWeight.normal,
+                              color: _isSignUp ? const Color(0xFFFF6B35) : Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildEmailPasswordForm(),
+                  ] else ...[
+                    // Mobil için Google ile Giriş Butonu
+                    _buildSocialButton(
+                      onPressed: _isLoading ? null : _signInWithGoogle,
+                      icon: Icons.g_mobiledata,
+                      label: 'Google ile Devam Et',
+                      backgroundColor: Colors.white,
+                      textColor: Colors.black87,
+                      borderColor: Colors.grey[300]!,
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Apple ile Giriş Butonu (sadece iOS)
+                    if (defaultTargetPlatform == TargetPlatform.iOS)
+                      _buildSocialButton(
+                        onPressed: _isLoading ? null : _signInWithApple,
+                        icon: Icons.apple,
+                        label: 'Apple ile Devam Et',
+                        backgroundColor: Colors.black,
+                        textColor: Colors.white,
+                        borderColor: Colors.black,
+                      ),
+                  ],
                   
                   if (_isLoading) ...[
                     const SizedBox(height: 24),
@@ -209,6 +385,129 @@ class _AuthScreenState extends State<AuthScreen> {
             side: BorderSide(color: borderColor, width: 1.5),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmailPasswordForm() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_isSignUp) ...[
+            TextFormField(
+              controller: _usernameController,
+              decoration: InputDecoration(
+                labelText: 'Kullanıcı Adı',
+                prefixIcon: const Icon(Icons.person_outlined),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Kullanıcı adı gerekli';
+                }
+                if (value.length < 3) {
+                  return 'Kullanıcı adı en az 3 karakter olmalı';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+          TextFormField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: InputDecoration(
+              labelText: 'Email',
+              prefixIcon: const Icon(Icons.email_outlined),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Email gerekli';
+              }
+              if (!value.contains('@')) {
+                return 'Geçerli bir email adresi girin';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: InputDecoration(
+              labelText: 'Şifre',
+              prefixIcon: const Icon(Icons.lock_outlined),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Şifre gerekli';
+              }
+              if (value.length < 6) {
+                return 'Şifre en az 6 karakter olmalı';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _signInWithEmailPassword,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B35),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Text(
+                      _isSignUp ? 'Kayıt Ol' : 'Giriş Yap',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _isSignUp 
+                ? 'Kayıt olduktan sonra Firebase Console\'dan bu kullanıcıyı admin yapın'
+                : 'Web üzerinden sadece admin kullanıcılar giriş yapabilir',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

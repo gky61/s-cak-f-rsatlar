@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
@@ -36,9 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isGeneralNotificationsEnabled = true;
   final ScrollController _scrollController = ScrollController();
   bool _showScrollToTop = false;
-  
-  // Görüntüleme modu: 'list', 'grid', 'compact'
-  String _viewMode = 'list';
+  bool _isGridView = false; // Listeleme modu: false = liste, true = grid
 
   @override
   void initState() {
@@ -48,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _notificationService.setupNotificationListeners();
     _cleanupExpiredDeals();
     _loadFollowedCategories();
+    _loadGridViewPreference();
     // Theme service listener ekle
     _themeService.addListener(_onThemeChanged);
     // Scroll listener ekle
@@ -106,6 +106,31 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // Listeleme modu tercihini yükle
+  Future<void> _loadGridViewPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isGridView = prefs.getBool('isGridView') ?? false;
+      if (mounted) {
+        setState(() {
+          _isGridView = isGridView;
+        });
+      }
+    } catch (e) {
+      print('Listeleme modu tercihi yüklenirken hata: $e');
+    }
+  }
+
+  // Listeleme modu tercihini kaydet
+  Future<void> _saveGridViewPreference(bool isGridView) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isGridView', isGridView);
+    } catch (e) {
+      print('Listeleme modu tercihi kaydedilirken hata: $e');
+    }
+  }
+
   Future<void> _toggleGeneralNotification() async {
     final newValue = !_isGeneralNotificationsEnabled;
     try {
@@ -129,48 +154,6 @@ class _HomeScreenState extends State<HomeScreen> {
             backgroundColor: Colors.red,
           ),
         );
-      }
-    }
-  }
-
-  Future<void> _deleteDeal(Deal deal) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Fırsatı Sil'),
-        content: Text('"${deal.title}" fırsatını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Sil'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      final success = await _firestoreService.deleteDeal(deal.id);
-      if (mounted) {
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Fırsat silindi'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Fırsat silinirken hata oluştu'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
       }
     }
   }
@@ -278,124 +261,54 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.w800,
                     fontSize: 18,
                   ),
+                  overflow: TextOverflow.ellipsis,
                   maxLines: 1,
-                  overflow: TextOverflow.visible,
                 ),
               ),
               const SizedBox(width: 4),
               AnimatedRotation(
                 turns: _isCategoryMenuExpanded ? 0.5 : 0,
                 duration: const Duration(milliseconds: 200),
-                child: const Icon(Icons.arrow_drop_down, size: 20),
+                child: const Icon(Icons.arrow_drop_down, size: 18),
               ),
             ],
           ),
         ),
         centerTitle: false,
         actions: [
-          // Görüntüleme Modu Seçici
-          PopupMenuButton<String>(
-            icon: Icon(
-              _viewMode == 'list' 
-                  ? Icons.view_list_rounded
-                  : _viewMode == 'grid'
-                      ? Icons.grid_view_rounded
-                      : _viewMode == 'compact'
-                          ? Icons.view_compact_rounded
-                          : Icons.view_agenda_rounded,
-            ),
-            onSelected: (value) {
+          // Listeleme Modu Toggle - Kompakt
+          IconButton(
+            icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view, size: 22),
+            tooltip: _isGridView ? 'Liste Görünümü' : 'Grid Görünümü',
+            padding: const EdgeInsets.all(8),
+            constraints: const BoxConstraints(),
+            onPressed: () {
               setState(() {
-                _viewMode = value;
+                _isGridView = !_isGridView;
               });
+              _saveGridViewPreference(_isGridView);
             },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'list',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.view_list_rounded,
-                      size: 20,
-                      color: _viewMode == 'list' ? AppTheme.primary : null,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text('Liste'),
-                    if (_viewMode == 'list')
-                      const Spacer(),
-                    if (_viewMode == 'list')
-                      Icon(Icons.check, size: 18, color: AppTheme.primary),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'grid',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.grid_view_rounded,
-                      size: 20,
-                      color: _viewMode == 'grid' ? AppTheme.primary : null,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text('Grid'),
-                    if (_viewMode == 'grid')
-                      const Spacer(),
-                    if (_viewMode == 'grid')
-                      Icon(Icons.check, size: 18, color: AppTheme.primary),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'compact',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.view_compact_rounded,
-                      size: 20,
-                      color: _viewMode == 'compact' ? AppTheme.primary : null,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text('Kompakt'),
-                    if (_viewMode == 'compact')
-                      const Spacer(),
-                    if (_viewMode == 'compact')
-                      Icon(Icons.check, size: 18, color: AppTheme.primary),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'small_list',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.view_agenda_rounded,
-                      size: 20,
-                      color: _viewMode == 'small_list' ? AppTheme.primary : null,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text('Küçük Liste'),
-                    if (_viewMode == 'small_list')
-                      const Spacer(),
-                    if (_viewMode == 'small_list')
-                      Icon(Icons.check, size: 18, color: AppTheme.primary),
-                  ],
-                ),
-              ),
-            ],
           ),
-          // Karanlık Mod Toggle - Şık animasyonlu
+          const SizedBox(width: 4),
+          // Karanlık Mod Toggle - Daha kompakt
           _buildThemeToggleButton(),
-          if (_isAdmin)
+          if (_isAdmin) ...[
+            const SizedBox(width: 4),
             IconButton(
-              icon: const Icon(Icons.admin_panel_settings_rounded, color: AppTheme.error),
+              icon: const Icon(Icons.admin_panel_settings_rounded, color: AppTheme.error, size: 22),
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(),
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const AdminScreen()),
               ),
             ),
+          ],
+          const SizedBox(width: 4),
           IconButton(
-            icon: const Icon(Icons.person_rounded),
+            icon: const Icon(Icons.person_rounded, size: 22),
+            padding: const EdgeInsets.all(8),
+            constraints: const BoxConstraints(),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ProfileScreen()),
@@ -551,12 +464,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                // Veri yoksa boş liste kullan - connectionState kontrolünü kaldırdık
-                // Çünkü StreamBuilder sürekli rebuild yapıyor ve yazılar kayboluyor
-                final deals = snapshot.data ?? [];
-                
-                // Yükleniyor durumu - Sadece ilk yüklemede skeleton göster
-                if (deals.isEmpty && snapshot.connectionState == ConnectionState.waiting) {
+                // Yükleniyor durumu - Skeleton Loading
+                if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                   return ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.only(bottom: 80, top: 8),
@@ -566,6 +475,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   );
                 }
+
+                // Veri yoksa boş liste kullan
+                final deals = snapshot.data ?? [];
                 
                 // Filtreleme (İstemci tarafında)
                 final filteredDeals = _selectedCategory == 'tumu'
@@ -600,7 +512,60 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {});
                     await Future.delayed(const Duration(milliseconds: 500));
                   },
-                  child: _buildDealList(filteredDeals),
+                  child: _isGridView
+                      ? GridView.builder(
+                          controller: _scrollController,
+                          key: ValueKey('deal_grid_$_selectedCategory'),
+                          padding: const EdgeInsets.all(10),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 0.68,
+                          ),
+                          itemCount: filteredDeals.length,
+                          cacheExtent: 500,
+                          itemBuilder: (context, index) {
+                            final deal = filteredDeals[index];
+                            return RepaintBoundary(
+                              key: ValueKey('deal_card_${deal.id}'),
+                              child: DealCard(
+                                key: ValueKey('deal_card_${deal.id}'),
+                                deal: deal,
+                                isGridView: true,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => DealDetailScreen(dealId: deal.id),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          controller: _scrollController,
+                          key: ValueKey('deal_list_$_selectedCategory'), // Kategori değişince listeyi yeniden oluştur
+                          padding: const EdgeInsets.only(bottom: 80, top: 8),
+                          itemCount: filteredDeals.length,
+                          cacheExtent: 500, // Performans için cache
+                          itemBuilder: (context, index) {
+                            final deal = filteredDeals[index];
+                            return RepaintBoundary(
+                              key: ValueKey('deal_card_${deal.id}'),
+                              child: DealCard(
+                              key: ValueKey('deal_card_${deal.id}'), // Her kart için unique key
+                              deal: deal,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DealDetailScreen(dealId: deal.id),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                 );
               },
             ),
@@ -617,8 +582,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: IgnorePointer(
                 ignoring: !_showScrollToTop,
                 child: FloatingActionButton(
-                  heroTag: "scroll_to_top_fab",
                   mini: true,
+                  heroTag: "scrollToTop",
                   onPressed: _scrollToTop,
                   backgroundColor: AppTheme.primary,
                   child: const Icon(Icons.keyboard_arrow_up, color: Colors.white),
@@ -629,7 +594,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        heroTag: "add_deal_fab",
+        heroTag: "addDeal",
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const SubmitDealScreen()),
@@ -638,118 +603,6 @@ class _HomeScreenState extends State<HomeScreen> {
         label: const Text('Fırsat Ekle'),
       ),
     );
-  }
-
-  Widget _buildDealList(List<Deal> deals) {
-    if (_viewMode == 'grid') {
-      return GridView.builder(
-        controller: _scrollController,
-        key: ValueKey('deal_grid_${_selectedCategory}_$_viewMode'),
-        padding: const EdgeInsets.all(12),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.7,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-        ),
-        itemCount: deals.length,
-        cacheExtent: 500,
-        itemBuilder: (context, index) {
-          final deal = deals[index];
-          return RepaintBoundary(
-            key: ValueKey('deal_card_boundary_${deal.id}'),
-            child: DealCard(
-              key: ValueKey('deal_card_${deal.id}'),
-              deal: deal,
-              viewMode: 'grid',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DealDetailScreen(dealId: deal.id),
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    } else if (_viewMode == 'compact') {
-      return ListView.builder(
-        controller: _scrollController,
-        key: ValueKey('deal_list_compact_${_selectedCategory}_$_viewMode'),
-        padding: const EdgeInsets.only(bottom: 80, top: 8),
-        itemCount: deals.length,
-        cacheExtent: 500,
-        itemBuilder: (context, index) {
-          final deal = deals[index];
-          return RepaintBoundary(
-            key: ValueKey('deal_card_boundary_${deal.id}'),
-            child: DealCard(
-              key: ValueKey('deal_card_${deal.id}'),
-              deal: deal,
-              viewMode: 'compact',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DealDetailScreen(dealId: deal.id),
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    } else if (_viewMode == 'small_list') {
-      // Küçük liste görünümü
-      return ListView.builder(
-        controller: _scrollController,
-        key: ValueKey('deal_small_list_${_selectedCategory}_$_viewMode'),
-        padding: const EdgeInsets.only(bottom: 80, top: 8),
-        itemCount: deals.length,
-        cacheExtent: 500,
-        itemBuilder: (context, index) {
-          final deal = deals[index];
-          return RepaintBoundary(
-            key: ValueKey('deal_card_boundary_${deal.id}'),
-            child: DealCard(
-              key: ValueKey('deal_card_${deal.id}'),
-              deal: deal,
-              viewMode: 'small_list',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DealDetailScreen(dealId: deal.id),
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    } else {
-      // Liste görünümü (varsayılan)
-      return ListView.builder(
-        controller: _scrollController,
-        key: ValueKey('deal_list_${_selectedCategory}_$_viewMode'),
-        padding: const EdgeInsets.only(bottom: 80, top: 8),
-        itemCount: deals.length,
-        cacheExtent: 500,
-        itemBuilder: (context, index) {
-          final deal = deals[index];
-          return RepaintBoundary(
-            key: ValueKey('deal_card_boundary_${deal.id}'),
-            child: DealCard(
-              key: ValueKey('deal_card_${deal.id}'),
-              deal: deal,
-              viewMode: 'list',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DealDetailScreen(dealId: deal.id),
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    }
   }
 
   String _getSelectedCategoryText() {
@@ -934,7 +787,30 @@ class _HomeScreenState extends State<HomeScreen> {
       height: 28,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: Colors.transparent,
+        gradient: isDark
+            ? LinearGradient(
+                colors: [
+                  Colors.orange.shade400,
+                  Colors.deepOrange.shade600,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : LinearGradient(
+                colors: [
+                  Colors.amber.shade300,
+                  Colors.orange.shade400,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+        boxShadow: [
+          BoxShadow(
+            color: (isDark ? Colors.deepOrange : Colors.orange).withValues(alpha: 0.4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -990,39 +866,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     );
                   },
-                  child: Container(
+                  child: Icon(
+                    isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
                     key: ValueKey<bool>(isDark),
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.asset(
-                        isDark
-                            ? 'assets/Hacker Cat  - Logo Design.jpg'
-                            : 'assets/gündüz.jpg',
-                        width: 24,
-                        height: 24,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          // Hata durumunda varsayılan ikon göster
-                          return Icon(
-                            Icons.light_mode_rounded,
-                            size: 18,
-                            color: isDark ? Colors.white : Colors.orange,
-                          );
-                        },
-                      ),
-                    ),
+                    color: Colors.white,
+                    size: 18,
                   ),
                 ),
               ),

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/deal.dart';
 import '../services/firestore_service.dart';
+import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import 'deal_detail_screen.dart';
 
@@ -17,6 +19,7 @@ enum _AdminListType { pending, expired }
 
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
+  final StorageService _storageService = StorageService();
   late TabController _tabController;
 
   @override
@@ -88,39 +91,15 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           );
         }
 
-        return Column(
-          children: [
-            // Tümünü Sil Butonu
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: ElevatedButton.icon(
-                onPressed: () => _showDeleteAllConfirmation(type, deals.length),
-                icon: const Icon(Icons.delete_forever, size: 18),
-                label: Text('Tümünü Sil (${deals.length})'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-            ),
-            // Deal Listesi
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                itemCount: deals.length,
-                itemBuilder: (context, index) {
-                  return _buildAdminCard(
-                    deals[index],
-                    type,
-                  );
-                },
-              ),
-            ),
-          ],
+        return ListView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: deals.length,
+          itemBuilder: (context, index) {
+            return _buildAdminCard(
+              deals[index],
+              type,
+            );
+          },
         );
       },
     );
@@ -158,20 +137,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             contentPadding: const EdgeInsets.all(12),
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: deal.imageUrl.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: deal.imageUrl,
-                      width: 60,
-                      height: 60,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(color: Colors.grey[200]),
-                    )
-                  : Container(
-                      width: 60,
-                      height: 60,
-                      color: Colors.grey[200],
-                      child: const Icon(Icons.image_not_supported),
-                    ),
+              child: _buildDealImage(deal),
             ),
             title: Text(
               deal.title,
@@ -334,6 +300,118 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
+  Widget _buildDealImage(Deal deal) {
+    if (deal.imageUrl.isEmpty || !deal.imageUrl.startsWith('http')) {
+      print('⚠️ Admin: Görsel URL boş veya geçersiz: ${deal.imageUrl}');
+      return Container(
+        width: 60,
+        height: 60,
+        color: Colors.grey[200],
+        child: const Icon(
+          Icons.image_not_supported,
+          color: Colors.grey,
+          size: 24,
+        ),
+      );
+    }
+
+    print('🖼️ Admin: Görsel yükleniyor: ${deal.imageUrl}');
+    print('🔍 Admin: Firebase Storage URL mi? ${_storageService.isFirebaseStorageUrl(deal.imageUrl)}');
+    
+    // Firebase Storage URL ise, FutureBuilder ile async yükle
+    if (_storageService.isFirebaseStorageUrl(deal.imageUrl)) {
+      print("📦 Admin: Firebase Storage URL tespit edildi, CORS-safe URL alınıyor...");
+      return FutureBuilder<String>(
+        future: _storageService.getCorsSafeImageUrl(deal.imageUrl),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            print('⏳ Admin: Firebase Storage URL bekleniyor...');
+            return Container(
+              width: 60,
+              height: 60,
+              color: Colors.grey[200],
+              child: const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+          
+          if (snapshot.hasError) {
+            print('❌ Admin: Firebase Storage URL yükleme hatası: ${snapshot.error}');
+            print('🔄 Admin: Orijinal URL ile tekrar deneniyor...');
+            // Hata olursa orijinal URL'i dene
+            return _buildNetworkImage(deal, deal.imageUrl);
+          }
+          
+          final imageUrl = snapshot.data ?? deal.imageUrl;
+          print('✅ Admin: Firebase Storage URL hazır: $imageUrl');
+          return _buildNetworkImage(deal, imageUrl);
+        },
+      );
+    }
+    
+    // Normal URL için direkt yükle
+    print('🌐 Admin: Normal URL, direkt yükleniyor...');
+    return _buildNetworkImage(deal, deal.imageUrl);
+  }
+
+  // Firebase Storage URL'sini async olarak yükle ve cache'e kaydet
+  Widget _buildNetworkImage(Deal deal, String imageUrl) {
+    return SizedBox(
+      width: 60,
+      height: 60,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+        imageUrl,
+        width: 60,
+        height: 60,
+        fit: BoxFit.cover,
+        headers: const {
+          'Accept': 'image/*',
+        },
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) {
+            print('✅ Admin: Görsel yüklendi: $imageUrl');
+            return child;
+          }
+          return Container(
+            width: 60,
+            height: 60,
+            color: Colors.grey[200],
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          print('❌ Admin: Görsel yükleme hatası - URL: $imageUrl');
+          print('❌ Admin: Hata: $error');
+          print('❌ Admin: StackTrace: $stackTrace');
+          return Container(
+            width: 60,
+            height: 60,
+            color: Colors.grey[200],
+            child: const Icon(
+              Icons.broken_image,
+              color: Colors.grey,
+              size: 24,
+            ),
+          );
+        },
+        ),
+      ),
+    );
+  }
+
   Future<void> _reactivateDeal(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -364,135 +442,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Bir hata oluştu ❌'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  Future<void> _showDeleteAllConfirmation(_AdminListType type, int count) async {
-    final bool isPending = type == _AdminListType.pending;
-    
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(
-          'Tümünü Sil',
-          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isPending
-                  ? 'Tüm onay bekleyen fırsatları ($count adet) silmek istediğinize emin misiniz?'
-                  : 'Tüm süresi biten fırsatları ($count adet) silmek istediğinize emin misiniz?',
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.warning, color: Colors.red, size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Bu işlem geri alınamaz!',
-                      style: TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Evet, Tümünü Sil'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    // Loading göster
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Siliniyor...'),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    try {
-      int deletedCount = 0;
-      if (isPending) {
-        deletedCount = await _firestoreService.deleteAllPendingDeals();
-      } else {
-        deletedCount = await _firestoreService.deleteAllExpiredDeals();
-      }
-
-      // Loading dialog'u kapat
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$deletedCount adet fırsat silindi ✅'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      // Loading dialog'u kapat
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
         );
       }
     }
