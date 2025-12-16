@@ -63,8 +63,18 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    # Model tanımlama
-    model = genai.GenerativeModel('gemini-pro')
+    # Model tanımlama - gemini-pro artık kullanılamıyor, gemini-1.5-flash veya gemini-1.5-pro kullan
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        logger.info("✅ Gemini model yüklendi: gemini-1.5-flash")
+    except Exception as e:
+        logger.warning(f"⚠️ Gemini model yüklenemedi: {e}. gemini-1.5-pro deneniyor...")
+        try:
+            model = genai.GenerativeModel('gemini-1.5-pro')
+            logger.info("✅ Gemini model yüklendi: gemini-1.5-pro")
+        except Exception as e2:
+            logger.error(f"❌ Gemini model yüklenemedi: {e2}")
+            model = None
 else:
     logger.warning("⚠️ GEMINI_API_KEY bulunamadı! Akıllı analiz çalışmayacak.")
     model = None
