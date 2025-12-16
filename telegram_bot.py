@@ -626,9 +626,9 @@ class TelegramDealBot:
                         # Ama yine de devasa dosyaları limitleyelim (1MB)
                         if len(html) > 1000000:
                             html = html[:1000000]
-                        
-                        return {'html': html, 'final_url': final_url}
-                    else:
+                            
+                                return {'html': html, 'final_url': final_url}
+                            else:
                         logger.warning(f"⚠️ HTTP {response.status_code} - {url}")
                             
             except Exception as e:
@@ -825,9 +825,9 @@ class TelegramDealBot:
 
             # --- GENEL MANTIK (Diğer Siteler) ---
             # 1. JSON-LD Schema
-            json_ld_scripts = soup.find_all('script', type='application/ld+json')
-            for script in json_ld_scripts:
-                try:
+        json_ld_scripts = soup.find_all('script', type='application/ld+json')
+        for script in json_ld_scripts:
+            try:
                     if not script.string: continue
                     js_data = json.loads(script.string)
                     
@@ -846,27 +846,27 @@ class TelegramDealBot:
                         return None
 
                     price = find_price_recursive(js_data)
-                    if price and price >= 10:
+                if price and price >= 10:
                         data['price'] = price
-                        logger.info(f"✅ Fiyat bulundu (JSON-LD): {price} TL")
+                    logger.info(f"✅ Fiyat bulundu (JSON-LD): {price} TL")
                         return data
                 except Exception:
                     continue
 
             # 2. Meta tags
-            meta_selectors = [
-                {'property': 'product:price:amount'},
-                {'property': 'og:price:amount'},
-                {'name': 'price'},
-                {'itemprop': 'price'},
-            ]
-            for selector in meta_selectors:
-                price_meta = soup.find('meta', selector)
-                if price_meta and price_meta.get('content'):
-                    price = self._parse_price(price_meta.get('content'))
-                    if price >= 10:
+        meta_selectors = [
+            {'property': 'product:price:amount'},
+            {'property': 'og:price:amount'},
+            {'name': 'price'},
+            {'itemprop': 'price'},
+        ]
+        for selector in meta_selectors:
+            price_meta = soup.find('meta', selector)
+            if price_meta and price_meta.get('content'):
+                price = self._parse_price(price_meta.get('content'))
+                if price >= 10:
                         data['price'] = price
-                        logger.info(f"✅ Fiyat bulundu (Meta {selector}): {price} TL")
+                    logger.info(f"✅ Fiyat bulundu (Meta {selector}): {price} TL")
                         return data
 
             # 3. Genel HTML Selectors
@@ -2095,22 +2095,12 @@ class TelegramDealBot:
         for channel in target_channels:
             try:
                 # String ID'leri integer'a çevirmeyi dene
-                entity = None
                 if channel.startswith('-100'):
-                    # Zaten doğru format
                     entity = int(channel)
                 elif channel.startswith('-'):
-                    # -33... gibi ID'ler için -100 prefix ekle (megagroup için)
+                    # -33... gibi ID'ler için
                     try:
-                        numeric_id = int(channel)
-                        # Megagroup ID'leri için -100 prefix ekle
-                        if numeric_id < -1000000000000:
-                            # Zaten -100 ile başlıyor
-                            entity = numeric_id
-                        else:
-                            # -100 prefix ekle
-                            entity = int('-100' + str(abs(numeric_id)))
-                            logger.info(f"🔧 Kanal ID formatı düzeltildi: {channel} -> {entity}")
+                        entity = int(channel)
                     except:
                         entity = channel
                 else:
@@ -2118,18 +2108,16 @@ class TelegramDealBot:
 
                 # Entity'nin geçerli olup olmadığını kontrol et
                 # get_input_entity önbellekten veya sunucudan kontrol eder
-                try:
-                    input_entity = await self.client.get_input_entity(entity)
-                    resolved_chats.append(input_entity)
-                    logger.info(f"✅ Kanal takibe alındı: {channel} (entity: {entity})")
+                        try:
+                    await self.client.get_input_entity(entity)
+                    resolved_chats.append(entity)
+                    logger.info(f"✅ Kanal takibe alındı: {channel}")
                 except ValueError:
                     logger.warning(f"⚠️ Kanal bulunamadı veya erişilemiyor (Atlanıyor): {channel}")
                     # Yine de listeye eklemeyi deneyelim, belki sonradan bulunur (ama event listener patlayabilir)
                     # resolved_chats.append(entity) 
-                except Exception as e:
-                    logger.error(f"❌ Kanal çözümlenirken hata ({channel}): {e}")
-            except Exception as e:
-                logger.error(f"❌ Kanal işlenirken genel hata ({channel}): {e}")
+                        except Exception as e:
+                logger.error(f"❌ Kanal çözümlenirken hata ({channel}): {e}")
 
         if not resolved_chats:
             logger.error("❌ Hiçbir kanal çözümlenemedi! Lütfen kanal ID'lerini kontrol edin.")
@@ -2148,14 +2136,12 @@ class TelegramDealBot:
             #     await self.fetch_channel_messages(channel)
             
             logger.info("✅ Bot aktif ve dinliyor... (Durdurmak için CTRL+C)")
-            try:
-                await self.client.run_until_disconnected()
+            await self.client.run_until_disconnected()
+                
             except KeyboardInterrupt:
-                logger.info("🛑 Bot kullanıcı tarafından durduruldu")
+            logger.info("🛑 Bot kullanıcı tarafından durduruldu")
             except Exception as e:
-                logger.error(f"❌ Bot kritik hata ile durdu: {e}", exc_info=True)
-        except Exception as e:
-            logger.error(f"❌ Bot başlatma hatası: {e}", exc_info=True)
+            logger.error(f"❌ Bot kritik hata ile durdu: {e}", exc_info=True)
 
 
 async def main():

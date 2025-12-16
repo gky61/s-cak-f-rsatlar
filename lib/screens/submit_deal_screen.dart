@@ -122,7 +122,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   String _getCategoryDisplayText() {
     final category = Category.getById(_selectedCategory);
-    if (_selectedSubCategory != null) {
+    if (_selectedSubCategory != null && _selectedSubCategory!.isNotEmpty) {
       return '${category.icon} ${category.name} > $_selectedSubCategory';
     }
     return '${category.icon} ${category.name}';
@@ -140,9 +140,25 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           setState(() {
             _isAutoDetecting = false; // Manuel seçim yapıldı, otomatik tespiti durdur
             _selectedCategory = categoryId;
-            _selectedSubCategory = subCategory;
+            _selectedSubCategory = subCategory; // Alt kategori bilgisi de kaydediliyor
           });
+          
+          // Seçimi doğrulama için log
+          final category = Category.getById(categoryId);
+          print('✅ Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}');
+          
           Navigator.pop(context);
+          
+          // Kullanıcıya bilgi ver
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}',
+              ),
+              duration: const Duration(seconds: 2),
+              backgroundColor: Colors.green,
+            ),
+          );
         },
       ),
     );
@@ -167,13 +183,21 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // Kategori bilgilerini doğru şekilde al
+      final categoryName = Category.getNameById(_selectedCategory);
+      final subCategoryName = _selectedSubCategory;
+      
+      print('📝 Deal kaydediliyor:');
+      print('   Ana Kategori: $categoryName (ID: $_selectedCategory)');
+      print('   Alt Kategori: ${subCategoryName ?? "Yok"}');
+      
       await _firestoreService.createDeal(
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         price: double.parse(_priceController.text.trim()),
         store: _storeController.text.trim(),
-        category: Category.getNameById(_selectedCategory),
-        subCategory: _selectedSubCategory,
+        category: categoryName, // Ana kategori adı
+        subCategory: subCategoryName, // Alt kategori adı (varsa)
         imageUrl: _imageUrlController.text.trim(),
         url: _urlController.text.trim(),
         userId: user.uid,

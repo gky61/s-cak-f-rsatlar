@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/deal.dart';
 import '../services/firestore_service.dart';
-import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import 'deal_detail_screen.dart';
 
@@ -19,7 +17,6 @@ enum _AdminListType { pending, expired }
 
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
-  final StorageService _storageService = StorageService();
   late TabController _tabController;
 
   @override
@@ -137,7 +134,20 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             contentPadding: const EdgeInsets.all(12),
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: _buildDealImage(deal),
+              child: deal.imageUrl.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: deal.imageUrl,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(color: Colors.grey[200]),
+                    )
+                  : Container(
+                      width: 60,
+                      height: 60,
+                      color: Colors.grey[200],
+                      child: const Icon(Icons.image_not_supported),
+                    ),
             ),
             title: Text(
               deal.title,
@@ -189,6 +199,14 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     label: const Text('Onayla', style: TextStyle(color: Colors.green)),
                   ),
                 ),
+                Container(width: 1, height: 30, color: Colors.grey[200]),
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: () => _deleteDeal(deal.id),
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    label: const Text('Sil', style: TextStyle(color: Colors.red)),
+                  ),
+                ),
               ],
             ),
           ],
@@ -210,21 +228,40 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ],
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _reactivateDeal(deal.id),
-                      icon: const Icon(Icons.restore, size: 20),
-                      label: const Text('Tekrar Yayına Al'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _reactivateDeal(deal.id),
+                          icon: const Icon(Icons.restore, size: 20),
+                          label: const Text('Tekrar Yayına Al'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _deleteDeal(deal.id),
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          label: const Text('Sil'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -300,118 +337,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
-  Widget _buildDealImage(Deal deal) {
-    if (deal.imageUrl.isEmpty || !deal.imageUrl.startsWith('http')) {
-      print('⚠️ Admin: Görsel URL boş veya geçersiz: ${deal.imageUrl}');
-      return Container(
-        width: 60,
-        height: 60,
-        color: Colors.grey[200],
-        child: const Icon(
-          Icons.image_not_supported,
-          color: Colors.grey,
-          size: 24,
-        ),
-      );
-    }
-
-    print('🖼️ Admin: Görsel yükleniyor: ${deal.imageUrl}');
-    print('🔍 Admin: Firebase Storage URL mi? ${_storageService.isFirebaseStorageUrl(deal.imageUrl)}');
-    
-    // Firebase Storage URL ise, FutureBuilder ile async yükle
-    if (_storageService.isFirebaseStorageUrl(deal.imageUrl)) {
-      print("📦 Admin: Firebase Storage URL tespit edildi, CORS-safe URL alınıyor...");
-      return FutureBuilder<String>(
-        future: _storageService.getCorsSafeImageUrl(deal.imageUrl),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            print('⏳ Admin: Firebase Storage URL bekleniyor...');
-            return Container(
-              width: 60,
-              height: 60,
-              color: Colors.grey[200],
-              child: const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            );
-          }
-          
-          if (snapshot.hasError) {
-            print('❌ Admin: Firebase Storage URL yükleme hatası: ${snapshot.error}');
-            print('🔄 Admin: Orijinal URL ile tekrar deneniyor...');
-            // Hata olursa orijinal URL'i dene
-            return _buildNetworkImage(deal, deal.imageUrl);
-          }
-          
-          final imageUrl = snapshot.data ?? deal.imageUrl;
-          print('✅ Admin: Firebase Storage URL hazır: $imageUrl');
-          return _buildNetworkImage(deal, imageUrl);
-        },
-      );
-    }
-    
-    // Normal URL için direkt yükle
-    print('🌐 Admin: Normal URL, direkt yükleniyor...');
-    return _buildNetworkImage(deal, deal.imageUrl);
-  }
-
-  // Firebase Storage URL'sini async olarak yükle ve cache'e kaydet
-  Widget _buildNetworkImage(Deal deal, String imageUrl) {
-    return SizedBox(
-      width: 60,
-      height: 60,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.network(
-        imageUrl,
-        width: 60,
-        height: 60,
-        fit: BoxFit.cover,
-        headers: const {
-          'Accept': 'image/*',
-        },
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) {
-            print('✅ Admin: Görsel yüklendi: $imageUrl');
-            return child;
-          }
-          return Container(
-            width: 60,
-            height: 60,
-            color: Colors.grey[200],
-            child: const Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) {
-          print('❌ Admin: Görsel yükleme hatası - URL: $imageUrl');
-          print('❌ Admin: Hata: $error');
-          print('❌ Admin: StackTrace: $stackTrace');
-          return Container(
-            width: 60,
-            height: 60,
-            color: Colors.grey[200],
-            child: const Icon(
-              Icons.broken_image,
-              color: Colors.grey,
-              size: 24,
-            ),
-          );
-        },
-        ),
-      ),
-    );
-  }
-
   Future<void> _reactivateDeal(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -442,6 +367,48 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Bir hata oluştu ❌'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteDeal(String id) async {
+    // Önce deal bilgisini al (başlık göstermek için)
+    final deal = await _firestoreService.getDeal(id);
+    final dealTitle = deal?.title ?? 'Bu fırsat';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fırsatı Sil'),
+        content: Text('Bu fırsatı kalıcı olarak silmek istediğinize emin misiniz?\n\n"$dealTitle"\n\nBu işlem geri alınamaz.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Evet, Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final success = await _firestoreService.deleteDeal(id);
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fırsat silindi 🗑️'), backgroundColor: Colors.red),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Silme işlemi başarısız ❌'), backgroundColor: Colors.red),
         );
       }
     }

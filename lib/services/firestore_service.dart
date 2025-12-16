@@ -27,6 +27,55 @@ class FirestoreService {
     });
   }
 
+  // Pagination ile deal'leri getir (infinite scroll için)
+  Future<List<Deal>> getDealsPaginated({
+    int limit = 20,
+    DocumentSnapshot? lastDocument,
+    String? category,
+    String? subCategory,
+  }) async {
+    try {
+      Query query = _firestore
+          .collection('deals')
+          .where('isApproved', isEqualTo: true);
+
+      // Kategori filtresi varsa ekle
+      if (category != null && category != 'tumu') {
+        // Firestore'da category string olarak saklanıyor, Category.getNameById kullan
+        final categoryName = category; // Burada category zaten name olarak gelmeli
+        query = query.where('category', isEqualTo: categoryName);
+      }
+
+      // Sıralama ve limit
+      query = query.orderBy('createdAt', descending: true).limit(limit);
+
+      // Son dokümandan devam et (pagination)
+      if (lastDocument != null) {
+        query = query.startAfterDocument(lastDocument);
+      }
+
+      final snapshot = await query.get();
+      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
+
+      // Client-side'da bitmeyenleri önce göster
+      deals.sort((a, b) {
+        if (!a.isExpired && b.isExpired) return -1;
+        if (a.isExpired && !b.isExpired) return 1;
+        return 0; // Zaten Firestore'da sıralı
+      });
+
+      return deals;
+    } catch (e) {
+      print('Pagination hatası: $e');
+      return [];
+    }
+  }
+
+  // İlk sayfa deal'lerini getir (refresh için)
+  Future<List<Deal>> getInitialDeals({int limit = 20}) async {
+    return getDealsPaginated(limit: limit);
+  }
+
   // Tüm deal'leri getir (admin kullanıcılar için)
   Stream<List<Deal>> getAllDealsStream() {
     return _firestore
@@ -570,6 +619,24 @@ class FirestoreService {
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return deals;
     });
+  }
+
+  // Deal silme (admin için)
+  Future<bool> deleteDeal(String dealId) async {
+    try {
+      // Deal'i sil
+      await _firestore.collection('deals').doc(dealId).delete();
+      
+      // Alt koleksiyonları da sil (comments, votes, favorites)
+      // Not: Firestore'da alt koleksiyonlar otomatik silinmez, manuel silmek gerekir
+      // Ancak performans için şimdilik sadece deal'i siliyoruz
+      // İsterseniz Cloud Function ile alt koleksiyonları da temizleyebilirsiniz
+      
+      return true;
+    } catch (e) {
+      print('Deal silme hatası: $e');
+      return false;
+    }
   }
 }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 class AppTheme {
   AppTheme._();
@@ -149,14 +148,14 @@ class AppTheme {
     );
   }
 
-  // Dark Theme Renkleri - İyileştirilmiş
-  static const Color darkBackground = Color(0xFF0F0F0F); // Daha koyu zemin
-  static const Color darkSurface = Color(0xFF1A1A1A); // Kart zemini - daha belirgin
-  static const Color darkSurfaceElevated = Color(0xFF242424); // Yükseltilmiş kartlar
-  static const Color darkTextPrimary = Color(0xFFF5F5F5); // Daha parlak ana metin
-  static const Color darkTextSecondary = Color(0xFFB8B8B8); // Daha okunabilir ikincil metin
+  // Dark Theme Renkleri - İyileştirilmiş kontrast ve görünürlük
+  static const Color darkBackground = Color(0xFF0D0D0D); // Daha koyu zemin (daha iyi kontrast)
+  static const Color darkSurface = Color(0xFF1A1A1A); // Koyu Kart Zemini (daha belirgin)
+  static const Color darkSurfaceElevated = Color(0xFF242424); // Yükseltilmiş yüzeyler için
+  static const Color darkTextPrimary = Color(0xFFF5F5F5); // Daha açık metin (daha iyi okunabilirlik)
+  static const Color darkTextSecondary = Color(0xFFB8B8B8); // İkincil Metin (daha belirgin)
   static const Color darkBorder = Color(0xFF333333); // Daha belirgin border
-  static const Color darkDivider = Color(0xFF2A2A2A); // Ayırıcı çizgiler
+  static const Color darkDivider = Color(0xFF2A2A2A); // Divider rengi
 
   static ThemeData get darkTheme {
     final baseColorScheme = ColorScheme.fromSeed(
@@ -209,28 +208,26 @@ class AppTheme {
           color: darkTextSecondary,
         ),
       ),
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: darkSurface,
         foregroundColor: darkTextPrimary,
-        titleTextStyle: const TextStyle(
+        titleTextStyle: TextStyle(
           fontWeight: FontWeight.w800,
           fontSize: 20,
           color: darkTextPrimary,
         ),
-        iconTheme: const IconThemeData(color: darkTextPrimary),
-        systemOverlayStyle: SystemUiOverlayStyle.light,
+        iconTheme: IconThemeData(color: darkTextPrimary),
       ),
       cardTheme: CardTheme(
-        color: darkSurfaceElevated,
-        elevation: 2,
+        color: darkSurface,
+        elevation: 0,
         margin: EdgeInsets.zero,
-        shadowColor: Colors.black.withOpacity(0.5),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: darkBorder.withOpacity(0.8), width: 1.5),
+          side: BorderSide(color: darkBorder, width: 1.5), // Daha belirgin border
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -269,7 +266,7 @@ class AppTheme {
         ),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: darkSurfaceElevated,
+        backgroundColor: darkSurface,
         contentTextStyle: const TextStyle(
           color: darkTextPrimary,
           fontWeight: FontWeight.w600,
@@ -278,7 +275,7 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
         ),
         behavior: SnackBarBehavior.floating,
-        elevation: 8,
+        elevation: 4,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: darkSurface,
@@ -294,7 +291,9 @@ class AppTheme {
       dividerColor: darkDivider,
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: darkSurface,
+        fillColor: darkSurfaceElevated,
+        labelStyle: const TextStyle(color: darkTextSecondary),
+        hintStyle: const TextStyle(color: darkTextSecondary),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: darkBorder, width: 1.5),
@@ -305,33 +304,18 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primary, width: 2.5),
+          borderSide: const BorderSide(color: primary, width: 2),
         ),
-        labelStyle: const TextStyle(color: darkTextSecondary),
-        hintStyle: TextStyle(color: darkTextSecondary.withOpacity(0.6)),
       ),
-      dialogTheme: DialogTheme(
+      chipTheme: ChipThemeData(
         backgroundColor: darkSurfaceElevated,
-        elevation: 8,
+        selectedColor: primary.withOpacity(0.2),
+        labelStyle: const TextStyle(color: darkTextPrimary),
+        secondaryLabelStyle: const TextStyle(color: darkTextPrimary),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           side: BorderSide(color: darkBorder, width: 1),
-        ),
-        titleTextStyle: const TextStyle(
-          color: darkTextPrimary,
-          fontWeight: FontWeight.w700,
-          fontSize: 20,
-        ),
-        contentTextStyle: const TextStyle(
-          color: darkTextSecondary,
-          fontSize: 14,
-        ),
-      ),
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: darkSurfaceElevated,
-        elevation: 8,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
       ),
     );

@@ -108,8 +108,8 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                 : _buildSubCategories(currentCategory!),
           ),
 
-          // Onay Butonu (Alt kategori seçildiyse göster)
-          if (_currentMainCategoryId != null && _selectedSubCategory != null)
+          // Onay Butonu (Ana kategori seçildiyse göster)
+          if (_currentMainCategoryId != null)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -130,9 +130,11 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'Seçimi Onayla',
-                    style: TextStyle(
+                  child: Text(
+                    _selectedSubCategory != null 
+                        ? 'Seçimi Onayla: ${currentCategory?.name ?? ""} > $_selectedSubCategory'
+                        : 'Seçimi Onayla: ${currentCategory?.name ?? ""}',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -262,9 +264,62 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: category.subcategories.length,
+            itemCount: category.subcategories.length + 1, // +1 for "Tümü" option
             itemBuilder: (context, index) {
-              final subCategory = category.subcategories[index];
+              // İlk item "Tümü" seçeneği (sadece ana kategori)
+              if (index == 0) {
+                final isSelected = _selectedSubCategory == null;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  elevation: 0,
+                  color: isSelected
+                      ? AppTheme.primary.withOpacity(0.1)
+                      : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: isSelected
+                          ? AppTheme.primary
+                          : Colors.grey[300]!,
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    leading: Icon(
+                      isSelected ? Icons.check_circle : Icons.circle_outlined,
+                      color: isSelected ? AppTheme.primary : Colors.grey,
+                    ),
+                    title: Text(
+                      'Tümü (${category.name})',
+                      style: TextStyle(
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                        color: isSelected ? AppTheme.primary : Colors.black87,
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? const Icon(
+                            Icons.check,
+                            color: AppTheme.primary,
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _selectedSubCategory = null;
+                      });
+                      _confirmSelection(); // Direkt onayla
+                    },
+                  ),
+                );
+              }
+              
+              // Diğer alt kategoriler
+              final subCategory = category.subcategories[index - 1];
               final isSelected = _selectedSubCategory == subCategory;
 
               return Card(
@@ -306,7 +361,10 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                           color: AppTheme.primary,
                         )
                       : null,
-                  onTap: () => _selectSubCategory(subCategory),
+                  onTap: () {
+                    _selectSubCategory(subCategory);
+                    _confirmSelection(); // Alt kategori seçildiğinde direkt onayla
+                  },
                 ),
               );
             },

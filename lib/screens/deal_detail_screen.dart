@@ -347,6 +347,15 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         onPressed: _isLoadingFavorite ? null : _toggleFavorite,
                         color: _isFavorite ? Colors.red : null,
                       ),
+                      if (_isAdmin) ...[
+                        const SizedBox(width: 8),
+                        _buildGlassButton(
+                          context: context,
+                          icon: Icons.delete_outline_rounded,
+                          onPressed: () => _showDeleteDialog(context, deal),
+                          color: Colors.red,
+                        ),
+                      ],
                       const SizedBox(width: 8),
                       _buildGlassButton(
                         context: context,
@@ -477,38 +486,19 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Başlık - Kompakt ama okunabilir, tıklanabilir
-                          InkWell(
-                            onTap: deal.link.isNotEmpty
-                                ? () => _openLink(context, deal.link)
-                                : null,
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    deal.title,
-                                    style: theme.textTheme.headlineMedium?.copyWith(
-                                      color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 22,
-                                      height: 1.3,
-                                      letterSpacing: -0.3,
-                                    ),
-                                    maxLines: null,
-                                    overflow: TextOverflow.visible,
-                                    textAlign: TextAlign.left,
-                                  ),
-                                ),
-                                if (deal.link.isNotEmpty) ...[
-                                  const SizedBox(width: 8),
-                                  Icon(
-                                    Icons.open_in_new_rounded,
-                                    size: 20,
-                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-                                  ),
-                                ],
-                              ],
+                          // Başlık - Kompakt ama okunabilir
+                          Text(
+                            deal.title,
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                              height: 1.3,
+                              letterSpacing: -0.3,
                             ),
+                            maxLines: null,
+                            overflow: TextOverflow.visible,
+                            textAlign: TextAlign.left,
                           ),
                           
                           const SizedBox(height: 12),
@@ -554,23 +544,23 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   });
                                 } : null,
                                 child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [AppTheme.primary, AppTheme.secondary],
-                                  ),
-                                  borderRadius: BorderRadius.circular(14),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppTheme.primary.withValues(alpha: 0.3),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [AppTheme.primary, AppTheme.secondary],
                                     ),
-                                  ],
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppTheme.primary.withValues(alpha: 0.3),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                     border: _isAdmin && !_isEditingPrice
                                         ? Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1)
                                         : null,
-                                ),
+                                  ),
                                   child: _isEditingPrice && _isAdmin
                                       ? Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -614,32 +604,32 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           ],
                                         )
                                       : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (deal.originalPrice != null && deal.originalPrice! > deal.price)
-                                      Text(
-                                        currencyFormat.format(deal.originalPrice),
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                          decoration: TextDecoration.lineThrough,
-                                          decorationColor: Colors.white70,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (deal.originalPrice != null && deal.originalPrice! > deal.price)
+                                              Text(
+                                                currencyFormat.format(deal.originalPrice),
+                                                style: const TextStyle(
+                                                  color: Colors.white70,
+                                                  fontSize: 12,
+                                                  decoration: TextDecoration.lineThrough,
+                                                  decorationColor: Colors.white70,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
                                             Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                    Text(
-                                  currencyFormat.format(deal.price),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
+                                                Text(
+                                                  currencyFormat.format(deal.price),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 20,
+                                                    fontWeight: FontWeight.w900,
+                                                    letterSpacing: -0.3,
+                                                  ),
+                                                ),
                                                 if (_isAdmin && !_isEditingPrice) ...[
                                                   const SizedBox(width: 6),
                                                   const Icon(
@@ -650,9 +640,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                 ],
                                               ],
                                             ),
-                                  ],
+                                          ],
                                         ),
-                              ),
+                                ),
                               ),
                               const SizedBox(width: 10),
                               // İndirim Oranı (Varsa)
@@ -728,10 +718,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               Expanded(
                                 child: GestureDetector(
                                   onTap: _isAdmin ? () => _showCategorySelector(deal) : null,
-                                child: _buildCompactInfoChip(
-                                  icon: Icons.local_offer_outlined,
-                                  label: _getCategoryDisplayTextForDeal(deal),
-                                  color: AppTheme.primary,
+                                  child: _buildCompactInfoChip(
+                                    icon: Icons.local_offer_outlined,
+                                    label: _getCategoryDisplayTextForDeal(deal),
+                                    color: AppTheme.primary,
                                     showEditIcon: _isAdmin,
                                   ),
                                 ),
@@ -821,29 +811,26 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           
                           const SizedBox(height: 14),
                           
-                          // Link butonu - Fırsat Bitti'nin üstüne taşındı
+                          // Yorumlar butonu - Kompakt
                           SizedBox(
                             width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                _openLink(context, deal.link);
-                              },
-                              icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                              label: const Text(
-                                'Fırsatı Görüntüle',
-                                style: TextStyle(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showCommentsBottomSheet(context, deal),
+                              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                              label: Text(
+                                'Yorumlar (${deal.commentCount})',
+                                style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primary,
-                                foregroundColor: Colors.white,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.primary,
+                                side: const BorderSide(color: AppTheme.primary, width: 2),
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
-                                elevation: 2,
                               ),
                             ),
                           ),
@@ -881,47 +868,47 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                         ),
                                       )
                                     : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
                                           Icon(
                                             _hasVotedExpired
                                                 ? Icons.check_circle
                                                 : Icons.close_rounded,
                                             size: 18,
                                           ),
-                                    const SizedBox(width: 8),
+                                          const SizedBox(width: 8),
                                           Text(
                                             _hasVotedExpired
                                                 ? 'Fırsat Bitti (Oy Verildi)'
                                                 : 'Fırsat Bitti',
                                             style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    // Sayaç
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          // Sayaç
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
                                               color: _hasVotedExpired
                                                   ? Colors.green.withValues(alpha: 0.1)
                                                   : Colors.red.withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        _getVoteCountText(deal),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              _getVoteCountText(deal),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
                                                 color: _hasVotedExpired
                                                     ? Colors.green[700]
                                                     : Colors.red[700],
-                                        ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ],
-                                ),
                               ),
                             ),
                           
@@ -955,6 +942,32 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             const SizedBox(height: 12),
                           ],
                           
+                          // Link butonu - Kompakt ve öne çıkan
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                _openLink(context, deal.link);
+                              },
+                              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                              label: const Text(
+                                'Fırsatı Görüntüle',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                elevation: 4,
+                              ),
+                            ),
+                          ),
                           const SizedBox(height: 16), // Alt padding
                         ],
                       ),
@@ -1829,16 +1842,16 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
   Future<void> _showApproveOptions(String id) async {
     final option = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
+      context: context,
+      builder: (context) => AlertDialog(
         title: const Text('Onaylama Seçeneği'),
         content: const Text('Bu fırsatı nasıl onaylamak istersiniz?'),
-          actions: [
-            TextButton(
+        actions: [
+          TextButton(
             onPressed: () => Navigator.pop(context, 'normal'),
             child: const Text('Normal Onayla'),
-            ),
-            TextButton(
+          ),
+          TextButton(
             onPressed: () => Navigator.pop(context, 'editor'),
             style: TextButton.styleFrom(
               foregroundColor: Colors.orange[700],
@@ -1851,10 +1864,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                 Text('Editörün Seçimi'),
               ],
             ),
-            ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
 
     if (option == null) return;
 
@@ -1975,25 +1988,25 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         'subCategory': subCategory,
       });
 
-        if (mounted) {
-          if (success) {
+      if (mounted) {
+        if (success) {
           await _loadDeal();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
               content: Text('Kategori güncellendi ✅'),
               backgroundColor: Colors.green,
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
               content: Text('Kategori güncellenirken hata oluştu'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       }
+    }
   }
 
   Future<void> _savePrice(String dealId) async {
@@ -2008,7 +2021,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     // Fiyatı parse et
     final cleaned = priceText.replaceAll(RegExp('[^0-9,\\.]'), '').replaceAll(',', '.');
     final price = double.tryParse(cleaned);
-      
+
     if (price == null || price <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2018,8 +2031,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           ),
         );
       }
-        return;
-      }
+      return;
+    }
 
     setState(() {
       _isEditingPrice = false;
@@ -2052,28 +2065,28 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
   Future<void> _rejectDeal(String id) async {
     final confirm = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
+      context: context,
+      builder: (context) => AlertDialog(
         title: const Text('Fırsatı Reddet'),
         content: const Text('Bu fırsatı reddetmek istediğinize emin misiniz?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('İptal'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Evet, Reddet'),
-            ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
 
     if (confirm != true) return;
 
     await _firestoreService.updateDeal(id, {'isExpired': true});
-        if (mounted) {
+    if (mounted) {
       await _loadDeal();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fırsat Reddedildi ❌'), backgroundColor: Colors.red),
@@ -2084,12 +2097,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   Future<void> _markDealAsExpired(BuildContext context, Deal deal) async {
     final user = _authService.currentUser;
     if (user == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
           content: Text('Oy vermek için giriş yapmalısınız'),
           backgroundColor: Colors.orange,
-              ),
-            );
+        ),
+      );
       return;
     }
 
@@ -2121,8 +2134,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         _isExpiredVoting = false;
       });
 
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
           content: Text('Oy gönderilirken bir hata oluştu. Lütfen tekrar deneyin.'),
           backgroundColor: Colors.redAccent,
         ),
@@ -2144,10 +2157,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Fırsat bitmiş olarak işaretlendi ✅'),
-                backgroundColor: Colors.red,
+            backgroundColor: Colors.red,
             duration: Duration(seconds: 3),
-              ),
-            );
+          ),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2285,6 +2298,52 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showDeleteDialog(BuildContext context, Deal deal) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fırsatı Sil'),
+        content: Text('Bu fırsatı kalıcı olarak silmek istediğinize emin misiniz?\n\n"${deal.title}"\n\nBu işlem geri alınamaz.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Evet, Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final success = await _firestoreService.deleteDeal(deal.id);
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fırsat silindi 🗑️'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        // Silme işlemi başarılıysa geri dön
+        Navigator.of(context).pop();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Silme işlemi başarısız ❌'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildShareOption(
@@ -2999,18 +3058,18 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                     )
                   : CircleAvatar(
                       radius: isReply ? 10 : 14,
-                backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                child: Text(
-                  comment.userName.isNotEmpty
-                      ? comment.userName[0].toUpperCase()
-                      : 'U',
-                  style: TextStyle(
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: isReply ? 11 : 13,
-                  ),
-                ),
-              ),
+                      backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                      child: Text(
+                        comment.userName.isNotEmpty
+                            ? comment.userName[0].toUpperCase()
+                            : 'U',
+                        style: TextStyle(
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: isReply ? 11 : 13,
+                        ),
+                      ),
+                    ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(

@@ -80,19 +80,19 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return AnimatedTheme(
-      duration: const Duration(milliseconds: 300), // Daha hızlı animasyon
-      curve: Curves.easeInOut,
+      duration: const Duration(milliseconds: 200), // Daha hızlı animasyon
+      curve: Curves.easeOut, // Daha hızlı curve
       data: _themeService.themeMode == ThemeMode.dark 
           ? AppTheme.darkTheme 
           : AppTheme.lightTheme,
       child: MaterialApp(
         title: 'FIRSATKOLİK',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: _themeService.themeMode,
-      navigatorKey: navigatorKey,
-      home: const AuthWrapper(),
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: _themeService.themeMode,
+        navigatorKey: navigatorKey,
+        home: const AuthWrapper(),
       ),
     );
   }

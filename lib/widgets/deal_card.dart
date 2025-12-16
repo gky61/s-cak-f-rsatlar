@@ -3,21 +3,17 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/deal.dart';
-import '../services/firestore_service.dart';
-import '../services/auth_service.dart';
 import '../services/link_preview_service.dart';
 import '../theme/app_theme.dart';
 
 class DealCard extends StatefulWidget {
   final Deal deal;
   final VoidCallback? onTap;
-  final bool isGridView; // Grid görünümü için kompakt mod
 
   const DealCard({
     super.key,
     required this.deal,
     this.onTap,
-    this.isGridView = false,
   });
 
   @override
@@ -30,8 +26,6 @@ class _DealCardState extends State<DealCard> {
   bool _isLoadingImage = false;
   bool _imageLoadAttempted = false; // Görsel yükleme denemesi yapıldı mı?
 
-  final FirestoreService _firestoreService = FirestoreService();
-  final AuthService _authService = AuthService();
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
 
   @override
@@ -124,9 +118,8 @@ class _DealCardState extends State<DealCard> {
         ? (isExpired ? Colors.red[900]!.withOpacity(0.2) : AppTheme.darkSurface)
         : (isExpired ? Colors.red[50] : const Color(0xFFFBFCFE));
 
-    return AnimatedScale(
-      scale: _isPressed ? 0.98 : 1,
-      duration: const Duration(milliseconds: 100),
+    return Transform.scale(
+      scale: _isPressed ? 0.98 : 1.0,
       child: Container(
         margin: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4), // Kartlar arası mesafe
         decoration: BoxDecoration(
@@ -134,25 +127,18 @@ class _DealCardState extends State<DealCard> {
           borderRadius: BorderRadius.circular(16),
           border: highlightBorder ?? defaultBorder,
           boxShadow: [
+            // Tek shadow katmanı - performans için optimize edildi
             BoxShadow(
               color: isExpired
-                  ? Colors.red.withValues(alpha: 0.15)
+                  ? Colors.red.withValues(alpha: 0.12)
                   : deal.isEditorPick
-                      ? Colors.orange.withValues(alpha: 0.2)
+                      ? Colors.orange.withValues(alpha: 0.15)
                       : (isDark 
-                          ? Colors.black.withValues(alpha: 0.4)
-                          : Colors.black.withValues(alpha: 0.08)),
-              blurRadius: 12,
-              offset: const Offset(0, 3),
-              spreadRadius: 0.5,
-            ),
-            // İkinci shadow katmanı - daha yumuşak derinlik efekti
-            BoxShadow(
-              color: isDark 
-                  ? Colors.black.withValues(alpha: 0.2)
-                  : Colors.black.withValues(alpha: 0.03),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
+                          ? Colors.black.withValues(alpha: 0.3)
+                          : Colors.black.withValues(alpha: 0.06)),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+              spreadRadius: 0,
             ),
           ],
         ),
@@ -174,67 +160,79 @@ class _DealCardState extends State<DealCard> {
                     ),
                   ),
                 Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: widget.isGridView ? 12 : 10,
-                    vertical: widget.isGridView ? 12 : 4,
-                  ),
-                  child: widget.isGridView
-                      ? _buildGridViewLayout(deal, currencyFormat, isExpired, isDark)
-                      : IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 1. GÖRSEL (Kare ve Sol Tarafta)
-                              Stack(
-                                children: [
-                                  Hero(
-                                    tag: 'deal_${deal.id}_image',
-                                    child: Opacity(
-                                      opacity: isExpired ? 0.5 : 1.0,
-                                      child: Container(
-                                        width: 80,
-                                        height: 80,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 1. GÖRSEL (Kare ve Sol Tarafta)
+                        Stack(
+                          children: [
+                            Hero(
+                              tag: 'deal_${deal.id}_image',
+                              child: Opacity(
+                                opacity: isExpired ? 0.5 : 1.0,
+                                child: Container(
+                                  width: 80,
+                                  height: 80,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 80,
+                                    maxWidth: 80,
+                                    minHeight: 80,
+                                    maxHeight: 80,
+                                  ),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(12),
                                     color: isDark ? Colors.grey[800] : Colors.grey[100],
                                   ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
-                                        ? CachedNetworkImage(
+                                  clipBehavior: Clip.antiAlias, // Container seviyesinde clip - görselin taşmasını önler
+                                  child: _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
+                                      ? Padding(
+                                          padding: const EdgeInsets.all(4.0), // Görsele padding ekle - daha küçük görünsün
+                                          child: CachedNetworkImage(
                                             imageUrl: _effectiveImageUrl!,
-                                            fit: BoxFit.contain,
-                                            memCacheWidth: 400, // Performans için cache boyutu
-                                            memCacheHeight: 400,
-                                            fadeInDuration: const Duration(milliseconds: 200),
+                                            fit: BoxFit.contain, // contain kullan - görselin tamamı görünsün, taşmasın
+                                            memCacheWidth: 144, // (80-8)x2 için optimize edildi
+                                            memCacheHeight: 144,
+                                            maxWidthDiskCache: 288, // Disk cache boyutu
+                                            maxHeightDiskCache: 288,
+                                            fadeInDuration: const Duration(milliseconds: 150),
+                                            fadeOutDuration: const Duration(milliseconds: 100),
+                                            alignment: Alignment.center, // Görseli ortala
                                             placeholder: (context, url) => Container(
+                                              width: 72,
+                                              height: 72,
                                               color: isDark ? Colors.grey[800] : Colors.grey[100],
                                               child: const Center(
                                                 child: SizedBox(
-                                                  width: 20,
-                                                  height: 20,
+                                                  width: 16,
+                                                  height: 16,
                                                   child: CircularProgressIndicator(strokeWidth: 2),
                                                 ),
                                               ),
                                             ),
                                             errorWidget: (context, url, error) => Container(
+                                              width: 72,
+                                              height: 72,
                                               color: isDark ? Colors.grey[800] : Colors.grey[100],
                                               child: Icon(
                                                 Icons.image_not_supported_rounded,
                                                 color: isDark ? Colors.grey[600] : Colors.grey[300],
-                                                size: 32,
+                                                size: 28,
                                               ),
                                             ),
-                                          )
-                                        : Container(
-                                            color: isDark ? Colors.grey[800] : Colors.grey[100],
-                                            child: Icon(
-                                              Icons.image_not_supported_rounded,
-                                              color: isDark ? Colors.grey[600] : Colors.grey[300],
-                                              size: 32,
-                                            ),
                                           ),
-                                  ),
+                                        )
+                                      : Container(
+                                          width: 80,
+                                          height: 80,
+                                          color: isDark ? Colors.grey[800] : Colors.grey[100],
+                                          child: Icon(
+                                            Icons.image_not_supported_rounded,
+                                            color: isDark ? Colors.grey[600] : Colors.grey[300],
+                                            size: 32,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ),
@@ -282,7 +280,16 @@ class _DealCardState extends State<DealCard> {
                                     color: isDark ? Colors.grey[800] : Colors.grey[100],
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: _buildStoreWidget(deal.store, isDark),
+                                  child: Text(
+                                    deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                                 if (isExpired) ...[
                                   const SizedBox(width: 6),
@@ -413,405 +420,6 @@ class _DealCardState extends State<DealCard> {
     );
   }
 
-  Widget _buildGridViewLayout(Deal deal, NumberFormat currencyFormat, bool isExpired, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Görsel - Üstte (Daha büyük ve belirgin)
-        Expanded(
-          flex: 5,
-          child: Stack(
-            children: [
-              Hero(
-                tag: 'deal_${deal.id}_image',
-                child: Opacity(
-                  opacity: isExpired ? 0.5 : 1.0,
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      color: isDark ? Colors.grey[800] : Colors.grey[100],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: _effectiveImageUrl!,
-                              fit: BoxFit.contain,
-                              memCacheWidth: 600,
-                              memCacheHeight: 600,
-                              fadeInDuration: const Duration(milliseconds: 200),
-                              placeholder: (context, url) => Container(
-                                color: isDark ? Colors.grey[800] : Colors.grey[100],
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                                  ),
-                                ),
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: isDark ? Colors.grey[800] : Colors.grey[100],
-                                child: Icon(
-                                  Icons.image_not_supported_rounded,
-                                  color: isDark ? Colors.grey[600] : Colors.grey[300],
-                                  size: 36,
-                                ),
-                              ),
-                            )
-                          : Container(
-                              color: isDark ? Colors.grey[800] : Colors.grey[100],
-                              child: Icon(
-                                Icons.image_not_supported_rounded,
-                                color: isDark ? Colors.grey[600] : Colors.grey[300],
-                                size: 36,
-                              ),
-                            ),
-                    ),
-                  ),
-                ),
-              ),
-              // İndirim Rozeti - Daha belirgin
-              if (deal.discountRate != null && deal.discountRate! > 0)
-                Positioned(
-                  top: 6,
-                  left: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.error,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      '%${deal.discountRate}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                  ),
-                ),
-              // Editor's Pick rozeti
-              if (deal.isEditorPick)
-                Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[400],
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.star_rounded, size: 12, color: Colors.white),
-                        const SizedBox(width: 2),
-                        Text(
-                          'Seçim',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        // İçerik - Altta (Daha düzenli)
-        Expanded(
-          flex: 4,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              // Başlık - En üstte, daha belirgin
-              Opacity(
-                opacity: isExpired ? 0.6 : 1.0,
-                child: Text(
-                  deal.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                    color: isExpired
-                        ? Colors.red[700]
-                        : (isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              // Mağaza adı - Daha küçük
-              Opacity(
-                opacity: isExpired ? 0.6 : 1.0,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.grey[800] : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Center(
-                          child: _buildStoreWidget(deal.store, isDark, isGridView: true),
-                        ),
-                      ),
-                    ),
-                    if (isExpired) ...[
-                      const SizedBox(width: 4),
-                      _buildExpiredBadge(inline: true),
-                    ],
-                  ],
-                ),
-              ),
-              const Spacer(),
-              // Fiyat ve Sıcaklık - Yan yana
-              Opacity(
-                opacity: isExpired ? 0.6 : 1.0,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        // Fiyat - Sol tarafta
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (deal.originalPrice != null && deal.originalPrice! > deal.price)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 1),
-                                  child: Text(
-                                    currencyFormat.format(deal.originalPrice),
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-                                      decoration: TextDecoration.lineThrough,
-                                      decorationThickness: 2,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              Text(
-                                currencyFormat.format(deal.price),
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w900,
-                                  color: isExpired ? Colors.red[700] : AppTheme.primary,
-                                  letterSpacing: -0.8,
-                                  height: 1.0,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        // Sıcaklık - En sağda
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: (deal.hotVotes - deal.coldVotes) >= 0
-                                ? AppTheme.primary.withOpacity(isDark ? 0.25 : 0.12)
-                                : Colors.blue.withOpacity(isDark ? 0.25 : 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                (deal.hotVotes - deal.coldVotes) >= 0
-                                    ? Icons.whatshot_rounded
-                                    : Icons.ac_unit_rounded,
-                                size: 13,
-                                color: (deal.hotVotes - deal.coldVotes) >= 0
-                                    ? AppTheme.primary
-                                    : Colors.blue,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                '${deal.hotVotes - deal.coldVotes}',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: (deal.hotVotes - deal.coldVotes) >= 0
-                                      ? AppTheme.primary
-                                      : Colors.blue,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    // Tarih - En altta, daha net
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.access_time_rounded,
-                          size: 11,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          _formatRelativeTime(deal.createdAt),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isDark ? Colors.grey[400] : Colors.grey[600],
-                            fontWeight: FontWeight.w700,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStoreWidget(String store, bool isDark, {bool isGridView = false}) {
-    final storeLower = store.toLowerCase();
-    
-    // Amazon için logo göster
-    if (storeLower.contains('amazon')) {
-      return Image.asset(
-        'assets/Amazon_logo.svg.png',
-        height: isGridView ? 14 : 12,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) {
-          // Logo yüklenemezse metin göster
-          return Text(
-            store,
-            style: TextStyle(
-              fontSize: isGridView ? 9 : 10,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.grey[300] : Colors.grey[700],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          );
-        },
-      );
-    }
-    
-    // Hepsiburada için logo göster
-    if (storeLower.contains('hepsiburada') || storeLower.contains('hepsi')) {
-      return Image.asset(
-        'assets/Hepsiburada_logo_official.svg.png',
-        height: isGridView ? 14 : 12,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) {
-          // Logo yüklenemezse metin göster
-          return Text(
-            store,
-            style: TextStyle(
-              fontSize: isGridView ? 9 : 10,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.grey[300] : Colors.grey[700],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          );
-        },
-      );
-    }
-    
-    // Trendyol için logo göster
-    if (storeLower.contains('trendyol')) {
-      return Image.asset(
-        'assets/Trendyol_online.png',
-        height: isGridView ? 14 : 12,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) {
-          // Logo yüklenemezse metin göster
-          return Text(
-            store,
-            style: TextStyle(
-              fontSize: isGridView ? 9 : 10,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.grey[300] : Colors.grey[700],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          );
-        },
-      );
-    }
-    
-    // N11 için logo göster
-    if (storeLower.contains('n11')) {
-      return Image.asset(
-        'assets/N11_logo.svg.png',
-        height: isGridView ? 14 : 12,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) {
-          // Logo yüklenemezse metin göster
-          return Text(
-            store,
-            style: TextStyle(
-              fontSize: isGridView ? 9 : 10,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.grey[300] : Colors.grey[700],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          );
-        },
-      );
-    }
-    
-    // Diğer mağazalar için metin göster
-    return Text(
-      store.isEmpty ? 'Bilinmeyen' : store,
-      style: TextStyle(
-        fontSize: isGridView ? 9 : 10,
-        fontWeight: FontWeight.w600,
-        color: isDark ? Colors.grey[300] : Colors.grey[700],
-      ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-
   Widget _buildExpiredBadge({bool inline = false}) {
     return Container(
       padding: EdgeInsets.symmetric(
@@ -861,13 +469,6 @@ class _DealCardState extends State<DealCard> {
     if (difference.inMinutes < 1) return 'Şimdi';
     if (difference.inMinutes < 60) return '${difference.inMinutes}dk';
     if (difference.inHours < 24) return '${difference.inHours}sa';
-    
-    // Türkçe ay isimleri
-    final turkishMonths = [
-      'Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz',
-      'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'
-    ];
-    
-    return '${date.day} ${turkishMonths[date.month - 1]}';
+    return DateFormat('d MMM').format(date);
   }
 }
