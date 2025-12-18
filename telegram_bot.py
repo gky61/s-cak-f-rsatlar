@@ -41,20 +41,22 @@ class TelegramDealBot:
         self.api_id = os.getenv("TELEGRAM_API_ID")
         self.api_hash = os.getenv("TELEGRAM_API_HASH")
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-        self.channels = os.getenv("SOURCE_CHANNELS", "").split(',')
+        # Hem SOURCE_CHANNELS hem de TELEGRAM_CHANNELS kontrol et
+        raw_channels = os.getenv("SOURCE_CHANNELS") or os.getenv("TELEGRAM_CHANNELS") or ""
+        self.channels = [c.strip() for c in raw_channels.split(',') if c.strip()]
         self.client = TelegramClient('bot_session', self.api_id, self.api_hash)
 
     async def initialize(self):
         """Bot'u başlat"""
         if not self.api_id or not self.api_hash or not self.bot_token:
-            logger.error("❌ .env dosyasında eksik bilgiler var!")
+            logger.error("❌ .env dosyasında eksik bilgiler var! (API_ID, HASH veya TOKEN)")
             return False
         await self.client.start(bot_token=self.bot_token)
-        logger.info("✅ Bot başarıyla başlatıldı!")
+        me = await self.client.get_me()
+        logger.info(f"✅ Bot başarıyla başlatıldı! Bot Adı: @{me.username}")
         return True
 
     def _parse_price(self, price_str: str) -> float:
-        """Fiyat metnini sayıya çevir"""
         if not price_str: return 0.0
         try:
             price_str = price_str.split('TL')[0].split('₺')[0].strip()
@@ -72,7 +74,6 @@ class TelegramDealBot:
         except: return 0.0
 
     async def fetch_link_data(self, url: str) -> Dict:
-        """Linkten HTML içeriğini çek"""
         try:
             response = curl_requests.get(url, impersonate="chrome110", timeout=30, allow_redirects=True)
             if response.status_code == 200:
@@ -83,14 +84,14 @@ class TelegramDealBot:
             return {}
 
     def extract_html_data(self, html: str, base_url: str) -> dict:
-        """Sitelerden özel fiyat çekme mantığı"""
         data = {'price': 0.0, 'original_price': 0.0}
         if not html: return data
         try:
             soup = BeautifulSoup(html, 'lxml')
             parsed_url = urlparse(base_url)
             hostname = parsed_url.hostname.lower() if parsed_url.hostname else ''
-
+            
+            # Marketler
             if any(x in hostname for x in ['migros', 'a101', 'sokmarket']):
                 selectors = ['.product-price', '.current-price', 'span[data-price]']
                 for s in selectors:
@@ -99,7 +100,8 @@ class TelegramDealBot:
                         price_text = elem['data-price'] if elem.has_attr('data-price') else elem.get_text()
                         p = self._parse_price(price_text)
                         if p >= 1: data['price'] = p; return data
-
+            
+            # Genel JSON-LD
             for script in soup.find_all('script', type='application/ld+json'):
                 try:
                     js = json.loads(script.string)
@@ -121,10 +123,9 @@ class TelegramDealBot:
         return data
 
     async def analyze_deal_with_ai(self, text: str, link: str = "") -> Dict:
-        """Gemini AI ile mesajı analiz et"""
         if not model: return {}
         try:
-            prompt = f"Sen bir e-ticaret uzmanısın. Şu mesajı analiz et ve SADECE JSON döndür:\n{text}\nLink: {link}\n\nİstenen JSON: {{\"title\": \"...\", \"price\": 0.0, \"category\": \"...\"}}"
+            prompt = f"Sen bir e-ticaret uzmanısın. Şu mesajı analiz et ve SADECE JSON döndür:\n{text}\nLink: {link}\n\nİstenen JSON: {{\"title\": \"...\", \"price\": 0.0, \"category\": \"...\", \"store\": \"...\"}}"
             response = await model.generate_content_async(prompt, generation_config=genai.types.GenerationConfig(temperature=0.1))
             return json.loads(response.text.replace('```json', '').replace('```', '').strip())
         except Exception as e:
@@ -132,32 +133,22 @@ class TelegramDealBot:
             return {}
 
     async def process_message(self, message, channel_name):
-        """Mesajı işle ve fırsatı kaydet"""
         text = message.message or ""
-        logger.info(f"📩 YENİ MESAJ GELDİ (Kanal: {channel_name}) -> İçerik: {text[:50]}...")
+        logger.info(f"📩 MESAJ İŞLENİYOR (Kanal: {channel_name}) -> Metin: {text[:50]}...")
         
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
         if not urls:
-            logger.warning("⚠️ Mesajda link bulunamadı, atlanıyor.")
+            logger.warning("⚠️ Mesajda link bulunamadı, bu bir fırsat değil.")
             return
 
         link = urls[0]
-        logger.info(f"🔗 Link algılandı: {link}")
+        logger.info(f"🔗 Link bulundu: {link}")
         
-        # 1. AI ile mesajı anla
         ai_data = await self.analyze_deal_with_ai(text, link)
-        
-        # Eğer AI başarısız olursa varsayılan değerlerle devam et
         if not ai_data:
-            logger.warning("⚠️ AI analizi yapılamadı, temel bilgilerle devam ediliyor.")
-            ai_data = {
-                "title": text[:100].replace("\n", " ") + "...",
-                "price": 0.0,
-                "category": "diğer",
-                "store": "Bilinmeyen"
-            }
-        
-        # 2. HTML'den gerçek fiyatı doğrula (AI başarısız olsa bile linkten fiyat çekmeye çalış)
+            logger.warning("⚠️ AI analizi başarısız, temel bilgilerle devam ediliyor.")
+            ai_data = {"title": text[:100], "price": 0.0, "category": "diğer", "store": "Bilinmeyen"}
+
         html_res = await self.fetch_link_data(link)
         if html_res:
             html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
@@ -165,35 +156,54 @@ class TelegramDealBot:
                 ai_data['price'] = html_data['price']
                 logger.info(f"💰 Fiyat HTML'den çekildi: {ai_data['price']} TL")
 
-        logger.info(f"✅ SONUÇ: {ai_data.get('title')} | {ai_data.get('price')} TL | Kat: {ai_data.get('category')}")
-        # İleride buraya Firestore kayıt kodu gelecek.
+        logger.info(f"✅ FIRSAT TAMAMLANDI: {ai_data.get('title')} | {ai_data.get('price')} TL")
 
     async def run(self):
         if not await self.initialize(): return
         
-        target_channels = [c.strip() for c in self.channels if c.strip()]
         resolved_chats = []
-        for channel in target_channels:
+        logger.info(f"📋 Takip edilecek kanallar: {self.channels}")
+        
+        for channel in self.channels:
             try:
                 entity = channel
                 if channel.startswith('-'):
                     try: entity = int(channel)
                     except: pass
-                await self.client.get_input_entity(entity)
-                resolved_chats.append(entity)
-                logger.info(f"✅ Takipte: {channel}")
+                
+                chat = await self.client.get_input_entity(entity)
+                resolved_chats.append(getattr(chat, 'channel_id', getattr(chat, 'chat_id', getattr(chat, 'user_id', entity))))
+                logger.info(f"✅ Kanal başarıyla listeye eklendi: {channel}")
             except Exception as e:
-                logger.error(f"❌ Kanal hatası ({channel}): {e}")
+                logger.error(f"❌ Kanal eklenemedi ({channel}): {e}")
 
-        if not resolved_chats: return
-
-        @self.client.on(events.NewMessage(chats=resolved_chats))
+        # Dinleyiciyi başlat (Tüm mesajları dinle, filtrelemeyi içeride yap)
+        @self.client.on(events.NewMessage())
         async def handler(event):
-            chat = await event.get_chat()
-            name = getattr(chat, 'username', getattr(chat, 'title', str(chat.id)))
-            await self.process_message(event.message, name)
+            try:
+                chat = await event.get_chat()
+                chat_id = chat.id
+                
+                # Debug log: Gelen her mesajı ID'si ile yaz
+                logger.info(f"DEBUG: Yeni bir mesaj yakalandı! Chat ID: {chat_id}")
+                
+                # Kanal listesinde var mı kontrol et
+                is_target = False
+                if chat_id in resolved_chats or str(chat_id) in self.channels:
+                    is_target = True
+                elif hasattr(chat, 'username') and f"@{chat.username}" in self.channels:
+                    is_target = True
+                
+                if is_target:
+                    name = getattr(chat, 'username', getattr(chat, 'title', str(chat_id)))
+                    await self.process_message(event.message, name)
+                else:
+                    # Hedef değilse nedenini yaz (ID tespiti için çok önemli)
+                    pass
+            except Exception as e:
+                logger.error(f"❌ Handler hatası: {e}")
 
-        logger.info("✅ Bot aktif ve dinliyor... (Durdurmak için CTRL+C)")
+        logger.info(f"✅ Bot aktif! Toplam {len(resolved_chats)} kanal dinleniyor.")
         await self.client.run_until_disconnected()
 
 async def main():
