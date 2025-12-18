@@ -627,8 +627,8 @@ class TelegramDealBot:
                         if len(html) > 1000000:
                             html = html[:1000000]
                             
-                                return {'html': html, 'final_url': final_url}
-                            else:
+                        return {'html': html, 'final_url': final_url}
+                    else:
                         logger.warning(f"⚠️ HTTP {response.status_code} - {url}")
                             
             except Exception as e:
@@ -915,6 +915,7 @@ class TelegramDealBot:
                     ('.newPrice ins', 'Yeni fiyat'),
                     ('.priceContainer ins', 'Fiyat container'),
                     ('.ins', 'Ins tag'),
+                    ('.product-new-price', 'Product new price'),
                 ]
                 
                 for selector, desc in price_selectors:
@@ -922,9 +923,25 @@ class TelegramDealBot:
                     if elem:
                         price_text = elem.get_text(strip=True)
                         price = self._parse_price(price_text)
-                        if price >= 10:
+                        if price >= 5:
                             data['price'] = price
                             logger.info(f"✅ N11 Fiyat: {price} TL ({desc})")
+                            break
+                
+                # Eski fiyat
+                original_selectors = [
+                    ('.oldPrice del', 'Eski fiyat del'),
+                    ('.product-old-price', 'Product old price'),
+                ]
+                
+                for selector, desc in original_selectors:
+                    elem = soup.select_one(selector)
+                    if elem:
+                        price_text = elem.get_text(strip=True)
+                        original = self._parse_price(price_text)
+                        if original > data['price'] and original > 5:
+                            data['original_price'] = original
+                            logger.info(f"✅ N11 Eski Fiyat: {original} TL ({desc})")
                             break
                 
                 if data['price'] > 0:
@@ -939,6 +956,7 @@ class TelegramDealBot:
                     ('.price', 'Price'),
                     ('.amount', 'Amount'),
                     ('span[itemprop="price"]', 'Schema price'),
+                    ('.current-price', 'Güncel fiyat'),
                 ]
                 
                 for selector, desc in price_selectors:
@@ -946,7 +964,7 @@ class TelegramDealBot:
                     if elem:
                         price_text = elem.get_text(strip=True)
                         price = self._parse_price(price_text)
-                        if price >= 10:
+                        if price >= 5:
                             data['price'] = price
                             logger.info(f"✅ Market Fiyat: {price} TL ({desc})")
                             break
@@ -1073,36 +1091,35 @@ class TelegramDealBot:
 
         try:
             prompt = f"""
-            Sen uzman bir e-ticaret asistanısın. Aşağıdaki Telegram mesajını ve linki analiz et.
+            Sen dünyanın en iyi e-ticaret veri analiz uzmanısın. Aşağıdaki Telegram mesajını ve linki analiz et.
             Bana SADECE geçerli bir JSON objesi döndür. Başka hiçbir metin yazma.
             
             Görevlerin:
-            1. Ürün adını temizle (reklam, emoji ve gereksiz kelimeleri at).
-            2. Fiyatları bul:
+            1. Ürün adını temizle (reklam, emoji, kanal adı, indirim oranları ve gereksiz kelimeleri at).
+            2. Fiyatları bul (EN ÖNEMLİ GÖREV):
                - Güncel Fiyat (price): İndirimli, ödenecek son tutar.
                - Eski Fiyat (original_price): Üstü çizili, "önceki fiyat" veya piyasa fiyatı. (Yoksa 0 yaz).
                
-               DİKKAT:
+               DİKKAT (Fiyat Kuralları):
                - "X TL x 3 ay" gibi taksit tutarlarını ASLA fiyat olarak alma.
                - Yüzdelik indirim oranlarını (örn: %57) fiyat sanma.
-               - Eğer "Sepette X TL" diyorsa, o düşük fiyatı 'price' olarak al.
+               - Eğer "Sepette X TL" veya "Kuponla X TL" diyorsa, o en düşük fiyatı 'price' olarak al.
+               - Fiyatlar her zaman TL cinsinden bir sayı olmalıdır (örn: 1299.50).
                
-            3. Mağazayı bul (Linkten veya metinden). Link 'publicis', 'ty.gl', 'app.hb.biz' gibi kısaltma/reklam linki ise, metindeki ipuçlarından veya link yapısından gerçek mağazayı (Trendyol, Hepsiburada, Amazon, Pazarama vb.) tahmin et.
+            3. Mağazayı bul: Linkten veya metinden gerçek satıcıyı (Trendyol, Hepsiburada, Amazon, Pazarama, N11, Teknosa, MediaMarkt vb.) bul.
             4. Kategoriyi belirle. Aşağıdaki listeden EN UYGUN olanı seç (ZORUNLU):
                ['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 'spor_outdoor', 'kitap_hobi', 'yapi_oto', 'supermarket']
                
                ÖNEMLİ KATEGORİ KURALLARI:
-               - 📱 'elektronik': Telefon, tablet, laptop, bilgisayar, TV, beyaz eşya, küçük ev aletleri, kulaklık, akıllı saat, konsol, oyun, kamera, drone (TÜM ELEKTRONİK ÜRÜNLER).
+               - 📱 'elektronik': Telefon, tablet, laptop, bilgisayar, TV, beyaz eşya, küçük ev aletleri (airfryer, vantilatör, kahve makinesi), kulaklık, akıllı saat, konsol, oyun, kamera, drone.
                - 👕 'moda': Kıyafet, ayakkabı, çanta, saat, gözlük, aksesuar, takı, bot, terlik, mont, kazak.
-               - 🏠 'ev_yasam': Mobilya, ev tekstili, mutfak gereçleri, aydınlatma, dekorasyon, kırtasiye.
-               - 👶 'anne_bebek': Bebek bezi, mama, biberon, emzik, bebek arabası, oto koltuğu, bebek/çocuk oyuncakları, "Baby" geçen ürünler.
+               - 🏠 'ev_yasam': Mobilya, ev tekstili (battaniye, çarşaf), mutfak gereçleri (tava, tencere), aydınlatma, dekorasyon, kırtasiye.
+               - 👶 'anne_bebek': Bebek bezi, mama, biberon, emzik, bebek arabası, oto koltuğu, bebek/çocuk oyuncakları (Lego, Barbie vb.).
                - 💄 'kozmetik': Krem, şampuan, parfüm, makyaj, tıraş, epilasyon, diş bakımı, cilt bakımı, saç bakımı.
                - ⛺ 'spor_outdoor': Kamp malzemesi, spor aleti, bisiklet, fitness ekipmanları, yoga matı, dambıl, termos.
-               - 📚 'kitap_hobi': Kitap, roman, dergi, kırtasiye malzemeleri, müzik enstrümanları, sanat malzemeleri, puzzle, kutu oyunu.
+               - 📚 'kitap_hobi': Kitap, roman, dergi, müzik enstrümanları, sanat malzemeleri, puzzle, kutu oyunu.
                - 🚗 'yapi_oto': Oto lastik, motor yağı, araç aksesuarları, matkap, tornavida, elektrik malzemeleri, bahçe aletleri, banyo/tesisat.
                - 🛒 'supermarket': Gıda, deterjan, temizlik ürünleri, kağıt ürünleri, yiyecek, içecek, kedi/köpek maması, kedi kumu.
-            
-            İPUCU: Ürün adında "Baby", "Bebek", "Çocuk" geçiyorsa öncelikli olarak 'anne_bebek' düşün. "Krem", "Losyon" varsa 'kozmetik_bakim' veya 'anne_bebek' olabilir.
             
             Girdi Metni:
             {text}
@@ -1113,22 +1130,40 @@ class TelegramDealBot:
             İstenen JSON Formatı:
             {{
                 "title": "Ürün Adı",
-                "price": 1234.50,  // İndirimli Fiyat
-                "original_price": 1500.00, // Eski Fiyat (Yoksa 0)
+                "price": 1234.50,
+                "original_price": 1500.00,
                 "store": "Mağaza Adı",
                 "category": "kategori_kodu",
                 "confidence": "high"
             }}
             """
 
-            response = await model.generate_content_async(prompt)
+            # Daha yaratıcı olmayan, kesin sonuçlar için temperature'ı düşük tutalım
+            response = await model.generate_content_async(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=500,
+                )
+            )
             
-            # JSON temizleme (Markdown ```json ... ``` bloklarını kaldır)
             json_text = response.text.replace('```json', '').replace('```', '').strip()
-            
             data = json.loads(json_text)
-            logger.info(f"🧠 AI Analiz Sonucu: {data}")
+            
+            # Veri tiplerini doğrula
+            if 'price' in data:
+                try: data['price'] = float(data['price'])
+                except: data['price'] = 0.0
+            if 'original_price' in data:
+                try: data['original_price'] = float(data['original_price'])
+                except: data['original_price'] = 0.0
+                
+            logger.info(f"🧠 AI Gelişmiş Analiz Sonucu: {data}")
             return data
+
+        except Exception as e:
+            logger.error(f"❌ AI Analiz Hatası: {e}")
+            return {}
 
         except Exception as e:
             logger.error(f"❌ AI Analiz Hatası: {e}")
@@ -1446,6 +1481,7 @@ class TelegramDealBot:
             'robot süpürge': 'elektronik', 'süpürge': 'elektronik', 'ütü': 'elektronik', 
             'vantilatör': 'elektronik', 'airfryer': 'elektronik', 'fritöz': 'elektronik', 
             'kahve makinesi': 'elektronik', 'çay makinesi': 'elektronik', 'blender': 'elektronik', 'mikser': 'elektronik',
+            'tost makinesi': 'elektronik', 'su ısıtıcı': 'elektronik', 'kettle': 'elektronik', 'saç kurutma': 'elektronik',
             # Kamera ve Drone
             'kamera': 'elektronik', 'camera': 'elektronik', 'fotoğraf makinesi': 'elektronik', 'drone': 'elektronik', 'gopro': 'elektronik',
             # Konsol ve Oyun
@@ -1473,6 +1509,7 @@ class TelegramDealBot:
             'aydınlatma': 'ev_yasam', 'lamba': 'ev_yasam', 'avize': 'ev_yasam', 'led': 'ev_yasam',
             'dekorasyon': 'ev_yasam', 'vazo': 'ev_yasam', 'tablo': 'ev_yasam', 'mum': 'ev_yasam', 'ayna': 'ev_yasam',
             'kırtasiye': 'ev_yasam', 'kalem': 'ev_yasam', 'defter': 'ev_yasam', 'ajanda': 'ev_yasam',
+            'deterjan': 'ev_yasam', # Deterjan bazen ev yaşamda da aranır
             
             # 4. ANNE & BEBEK (Flutter: 'anne_bebek')
             'bebek': 'anne_bebek', 'anne': 'anne_bebek', 'çocuk': 'anne_bebek', 'bebek bezi': 'anne_bebek', 
