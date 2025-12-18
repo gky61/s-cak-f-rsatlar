@@ -144,19 +144,29 @@ class TelegramDealBot:
         link = urls[0]
         logger.info(f"🔗 Link algılandı: {link}")
         
+        # 1. AI ile mesajı anla
         ai_data = await self.analyze_deal_with_ai(text, link)
+        
+        # Eğer AI başarısız olursa varsayılan değerlerle devam et
         if not ai_data:
-            logger.error("❌ AI analizi başarısız oldu.")
-            return
-
+            logger.warning("⚠️ AI analizi yapılamadı, temel bilgilerle devam ediliyor.")
+            ai_data = {
+                "title": text[:100].replace("\n", " ") + "...",
+                "price": 0.0,
+                "category": "diğer",
+                "store": "Bilinmeyen"
+            }
+        
+        # 2. HTML'den gerçek fiyatı doğrula (AI başarısız olsa bile linkten fiyat çekmeye çalış)
         html_res = await self.fetch_link_data(link)
         if html_res:
             html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
             if html_data.get('price', 0) > 0:
                 ai_data['price'] = html_data['price']
-                logger.info(f"💰 Fiyat HTML'den güncellendi: {ai_data['price']} TL")
+                logger.info(f"💰 Fiyat HTML'den çekildi: {ai_data['price']} TL")
 
-        logger.info(f"✅ FIRSAT İŞLENDİ: {ai_data.get('title')} | {ai_data.get('price')} TL")
+        logger.info(f"✅ SONUÇ: {ai_data.get('title')} | {ai_data.get('price')} TL | Kat: {ai_data.get('category')}")
+        # İleride buraya Firestore kayıt kodu gelecek.
 
     async def run(self):
         if not await self.initialize(): return
