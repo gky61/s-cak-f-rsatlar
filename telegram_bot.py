@@ -38,51 +38,27 @@ except Exception as e:
 
 class TelegramDealBot:
     def __init__(self):
-        # Telegram API Ayarları
         self.api_id = os.getenv("TELEGRAM_API_ID")
         self.api_hash = os.getenv("TELEGRAM_API_HASH")
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-        
-        # Dinlenecek Kanallar (ID veya Username)
         self.channels = os.getenv("SOURCE_CHANNELS", "").split(',')
-        
-        # Firestore URL (Opsiyonel)
-        self.firestore_url = os.getenv("FIRESTORE_URL")
-        
-        # Telegram Client
         self.client = TelegramClient('bot_session', self.api_id, self.api_hash)
-        
-        # Kategori anahtar kelimeleri (Yedek olarak)
-        self.category_keywords = {
-            'elektronik': ['telefon', 'laptop', 'bilgisayar', 'tv', 'kulaklık', 'mouse', 'klavye', 'monitör', 'tablet', 'iphone', 'samsung', 'xiaomi', 'huawei', 'asus', 'lenovo', 'hp', 'dell', 'msi', 'acer', 'lg', 'philips', 'sony', 'playstation', 'xbox', 'nintendo', 'airfryer', 'vantilatör', 'kahve makinesi', 'beyaz eşya', 'çamaşır makinesi', 'bulaşık makinesi', 'buzdolabı', 'fırın', 'mikrodalga', 'ütü', 'süpürge', 'tost makinesi', 'kettle', 'robot süpürge', 'akıllı saat', 'kamera', 'drone'],
-            'moda': ['ayakkabı', 'kıyafet', 'tişört', 'pantolon', 'elbise', 'mont', 'ceket', 'çanta', 'saat', 'gözlük', 'aksesuar', 'takı', 'parfüm', 'kozmetik', 'bakım', 'şampuan', 'sabun', 'diş macunu', 'fırça', 'krem', 'makyaj', 'ruj', 'fondöten', 'rimel', 'maskara', 'allık', 'pudra', 'oje'],
-            'ev_yasam': ['mobilya', 'dekorasyon', 'mutfak', 'banyo', 'yatak', 'yorgan', 'yastık', 'çarşaf', 'battaniye', 'havlu', 'perde', 'halı', 'kilim', 'aydınlatma', 'lamba', 'avize', 'tablo', 'saat', 'ayna', 'çiçek', 'saksı', 'bahçe', 'deterjan', 'temizlik', 'yumuşatıcı', 'bulaşık', 'çamaşır', 'kağıt', 'peçete', 'havlu'],
-            'anne_bebek': ['bebek', 'çocuk', 'anne', 'mama', 'bez', 'oyuncak', 'araba', 'koltuk', 'biberon', 'emzik', 'beşik'],
-            'supermarket': ['market', 'gıda', 'içecek', 'atıştırmalık', 'kahvaltılık', 'süt', 'peynir', 'yoğurt', 'yumurta', 'et', 'tavuk', 'balık', 'meyve', 'sebze', 'ekmek', 'un', 'şeker', 'tuz', 'yağ', 'bakliyat', 'makarna', 'kedi', 'köpek', 'mama']
-        }
 
     async def initialize(self):
         """Bot'u başlat"""
         if not self.api_id or not self.api_hash or not self.bot_token:
-            logger.error("❌ HATA: .env dosyasında TELEGRAM_API_ID, TELEGRAM_API_HASH veya TELEGRAM_BOT_TOKEN eksik!")
-            raise ValueError("Eksik Telegram yapılandırması!")
-            
-        try:
-            await self.client.start(bot_token=self.bot_token)
-            logger.info("✅ Bot başarıyla başlatıldı!")
-        except Exception as e:
-            logger.error(f"❌ Bot başlatılırken hata oluştu: {e}")
-            raise e
+            logger.error("❌ .env dosyasında eksik bilgiler var!")
+            return False
+        await self.client.start(bot_token=self.bot_token)
+        logger.info("✅ Bot başarıyla başlatıldı!")
+        return True
 
     def _parse_price(self, price_str: str) -> float:
-        """Fiyat metnini sayıya çevir"""
-        if not price_str:
-            return 0.0
+        """Fiyat metnini sayıya çevir - Gelişmiş Pattern"""
+        if not price_str: return 0.0
         try:
-            # Sadece sayıları, virgülü ve noktayı tut
+            price_str = price_str.split('TL')[0].split('₺')[0].strip()
             price_str = re.sub(r'[^\d,\.]', '', price_str)
-            
-            # Format: 1.859,12 veya 174,900
             if ',' in price_str and '.' in price_str:
                 if price_str.find('.') < price_str.find(','):
                     price_str = price_str.replace('.', '').replace(',', '.')
@@ -90,133 +66,91 @@ class TelegramDealBot:
                     price_str = price_str.replace(',', '').replace('.', '.')
             elif ',' in price_str:
                 parts = price_str.split(',')
-                if len(parts[-1]) <= 2:
-                    price_str = price_str.replace(',', '.')
-                else:
-                    price_str = price_str.replace(',', '')
-            
+                if len(parts[-1]) <= 2: price_str = price_str.replace(',', '.')
+                else: price_str = price_str.replace(',', '')
             return float(price_str)
-        except:
-            return 0.0
+        except: return 0.0
 
     async def fetch_link_data(self, url: str) -> Dict:
-        """Linkten ürün bilgilerini çek"""
+        """Linkten HTML içeriğini çek"""
         try:
-            response = curl_requests.get(
-                url, 
-                impersonate="chrome110",
-                timeout=30,
-                allow_redirects=True
-            )
+            response = curl_requests.get(url, impersonate="chrome110", timeout=30, allow_redirects=True)
             if response.status_code == 200:
                 return {'html': response.text, 'final_url': response.url}
             return {}
         except Exception as e:
-            logger.error(f"❌ Link çekme hatası ({url}): {e}")
+            logger.error(f"❌ Link hatası ({url}): {e}")
             return {}
 
     def extract_html_data(self, html: str, base_url: str) -> dict:
-        """HTML'den fiyat ve diğer bilgileri çek"""
+        """Sitelerden özel fiyat çekme mantığı"""
         data = {'price': 0.0, 'original_price': 0.0}
         if not html: return data
-
         try:
             soup = BeautifulSoup(html, 'lxml')
             parsed_url = urlparse(base_url)
             hostname = parsed_url.hostname.lower() if parsed_url.hostname else ''
 
-            # 1. Amazon
-            if 'amazon' in hostname:
-                price_selectors = [
-                    ('#corePriceDisplay_desktop_feature_div .a-price.priceToPay .a-offscreen', 'Ana fiyat'),
-                    ('.priceToPay span.a-offscreen', 'PriceToPay gizli')
-                ]
-                for selector, desc in price_selectors:
-                    elem = soup.select_one(selector)
+            # Marketler (Migros, A101, Şok)
+            if any(x in hostname for x in ['migros', 'a101', 'sokmarket']):
+                selectors = ['.product-price', '.current-price', 'span[data-price]', 'span[itemprop="price"]']
+                for s in selectors:
+                    elem = soup.select_one(s)
                     if elem:
-                        price = self._parse_price(elem.get_text(strip=True))
-                        if price >= 5:
-                            data['price'] = price
-                            break
-                return data
+                        price_text = elem['data-price'] if elem.has_attr('data-price') else elem.get_text()
+                        p = self._parse_price(price_text)
+                        if p >= 1:
+                            data['price'] = p
+                            return data
 
-            # 2. JSON-LD
-            json_ld_scripts = soup.find_all('script', type='application/ld+json')
-            for script in json_ld_scripts:
+            # Genel (JSON-LD)
+            for script in soup.find_all('script', type='application/ld+json'):
                 try:
-                    if not script.string: continue
-                    js_data = json.loads(script.string)
-                    
-                    def find_price_recursive(obj):
+                    js = json.loads(script.string)
+                    def find_p(obj):
                         if isinstance(obj, dict):
-                            if 'price' in obj:
-                                p = self._parse_price(str(obj['price']))
-                                if p >= 5: return p
-                            if 'offers' in obj:
-                                return find_price_recursive(obj['offers'])
-                            if 'lowPrice' in obj:
-                                return self._parse_price(str(obj['lowPrice']))
+                            if 'price' in obj: return self._parse_price(str(obj['price']))
+                            if 'offers' in obj: return find_p(obj['offers'])
+                            if 'lowPrice' in obj: return self._parse_price(str(obj['lowPrice']))
                         elif isinstance(obj, list):
-                            for item in obj:
-                                res = find_price_recursive(item)
-                                if res: return res
+                            for i in obj:
+                                r = find_p(i)
+                                if r: return r
                         return None
-
-                    p = find_price_recursive(js_data)
+                    p = find_p(js)
                     if p and p >= 5:
                         data['price'] = p
                         return data
                 except: continue
-
-            # 3. Meta tags
-            meta_selectors = [{'property': 'product:price:amount'}, {'property': 'og:price:amount'}, {'name': 'price'}]
-            for selector in meta_selectors:
-                meta = soup.find('meta', selector)
-                if meta and meta.get('content'):
-                    p = self._parse_price(meta.get('content'))
-                    if p >= 5:
-                        data['price'] = p
-                        return data
-
         except Exception as e:
             logger.error(f"HTML analiz hatası: {e}")
         return data
 
     async def analyze_deal_with_ai(self, text: str, link: str = "") -> Dict:
-        """Gemini AI ile fırsat metnini analiz et"""
+        """Gemini AI ile mesajı profesyonelce analiz et"""
         if not model: return {}
         try:
             prompt = f"""
-            Sen dünyanın en iyi e-ticaret veri analiz uzmanısın. Aşağıdaki mesajı analiz et ve SADECE JSON döndür.
-            Ürün adını temizle. En düşük fiyatı 'price' olarak al.
-            
-            Kategoriler: ['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 'spor_outdoor', 'kitap_hobi', 'yapi_oto', 'supermarket']
+            Sen dünyanın en iyi e-ticaret analiz uzmanısın. Mesajı analiz et ve SADECE JSON döndür.
+            Kurallar:
+            1. Ürün adını temizle (reklamları at).
+            2. 'price' en düşük (indirimli) fiyat olsun.
+            3. Kategori şunlardan biri olmalı: ['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 'spor_outdoor', 'kitap_hobi', 'yapi_oto', 'supermarket']
             
             Mesaj: {text}
             Link: {link}
             
-            İstenen JSON:
-            {{
-                "title": "Ürün Adı",
-                "price": 123.45,
-                "original_price": 0.0,
-                "store": "Mağaza Adı",
-                "category": "kategori_adi",
-                "confidence": "high"
-            }}
+            JSON Formatı:
+            {{"title": "...", "price": 0.0, "original_price": 0.0, "store": "...", "category": "..."}}
             """
-            response = await model.generate_content_async(
-                prompt,
-                generation_config=genai.types.GenerationConfig(temperature=0.1)
-            )
-            json_text = response.text.replace('```json', '').replace('```', '').strip()
-            return json.loads(json_text)
+            response = await model.generate_content_async(prompt, generation_config=genai.types.GenerationConfig(temperature=0.1))
+            return json.loads(response.text.replace('```json', '').replace('```', '').strip())
         except Exception as e:
-            logger.error(f"❌ AI Analiz Hatası: {e}")
+            logger.error(f"❌ AI hatası: {e}")
             return {}
 
     async def process_message(self, message, channel_name):
-        """Mesajı işle ve fırsatı kaydet"""
+        """Ana işleme mantığı"""
         text = message.message or ""
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
         if not urls: return
@@ -224,48 +158,45 @@ class TelegramDealBot:
         link = urls[0]
         logger.info(f"🔗 İşleniyor: {link} (Kanal: {channel_name})")
         
-        # AI Analizi
+        # 1. AI Analizi
         ai_data = await self.analyze_deal_with_ai(text, link)
         if not ai_data: return
 
-        # HTML Analizi (Fiyatı doğrulamak için)
+        # 2. HTML Doğrulama
         html_res = await self.fetch_link_data(link)
         if html_res:
             html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
             if html_data.get('price', 0) > 0:
                 ai_data['price'] = html_data['price']
 
-        logger.info(f"✅ Fırsat Yakalandı: {ai_data.get('title')} - {ai_data.get('price')} TL")
+        logger.info(f"✅ FIRSAT: {ai_data.get('title')} | {ai_data.get('price')} TL | Kat: {ai_data.get('category')}")
 
     async def run(self):
-        """Bot'u çalıştır"""
-        await self.initialize()
+        if not await self.initialize(): return
         
         target_channels = [c.strip() for c in self.channels if c.strip()]
-        if not target_channels:
-            logger.error("❌ Kanal listesi boş!")
-            return
-
         resolved_chats = []
         for channel in target_channels:
             try:
-                if channel.startswith('-100'): entity = int(channel)
-                else: entity = channel
+                # Sayısal ID'leri düzelt
+                entity = channel
+                if channel.startswith('-'):
+                    try: entity = int(channel)
+                    except: pass
+                
                 await self.client.get_input_entity(entity)
                 resolved_chats.append(entity)
                 logger.info(f"✅ Takipte: {channel}")
             except Exception as e:
                 logger.error(f"❌ Kanal hatası ({channel}): {e}")
 
-        if not resolved_chats:
-            logger.error("❌ Hiçbir kanal takip edilemedi!")
-            return
+        if not resolved_chats: return
 
         @self.client.on(events.NewMessage(chats=resolved_chats))
         async def handler(event):
             chat = await event.get_chat()
-            channel_name = getattr(chat, 'username', getattr(chat, 'title', str(chat.id)))
-            await self.process_message(event.message, channel_name)
+            name = getattr(chat, 'username', getattr(chat, 'title', 'Bilinmeyen'))
+            await self.process_message(event.message, name)
 
         logger.info("✅ Bot aktif ve dinliyor... (Durdurmak için CTRL+C)")
         await self.client.run_until_disconnected()
