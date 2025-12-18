@@ -1,150 +1,251 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import '../theme/app_theme.dart';
+import 'package:sicak_firsatlar/theme/app_theme.dart';
+import 'package:sicak_firsatlar/services/theme_service.dart';
 
 class DealCardSkeleton extends StatelessWidget {
-  const DealCardSkeleton({super.key});
+  final CardViewMode viewMode;
+
+  const DealCardSkeleton({
+    super.key,
+    this.viewMode = CardViewMode.vertical,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBackgroundColor = isDark ? AppTheme.darkSurface : const Color(0xFFFBFCFE);
-    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFD5DAE2);
+    
+    if (viewMode == CardViewMode.horizontal) {
+      return _buildHorizontalSkeleton(context, isDark);
+    } else {
+      return _buildVerticalSkeleton(context, isDark);
+    }
+  }
+
+  Widget _buildVerticalSkeleton(BuildContext context, bool isDark) {
+    final cardBackgroundColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final borderColor = isDark ? AppTheme.darkBorder : Colors.black.withValues(alpha: 0.05);
     
     return Container(
-      margin: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4),
       decoration: BoxDecoration(
         color: cardBackgroundColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: borderColor,
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+          width: 1,
           ),
-        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: IntrinsicHeight(
-          child: Row(
+      child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Görsel Skeleton (Sol Taraf)
+          // Görsel Skeleton
               Shimmer.fromColors(
                 baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                 highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                period: const Duration(milliseconds: 1200),
+            child: AspectRatio(
+              aspectRatio: 1.0,
                 child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: isDark ? AppTheme.darkSurface : Colors.white,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
+                ),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              // İçerik Skeleton (Sağ Taraf)
+          // İçerik Skeleton
               Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Üst Bilgi: Mağaza ve Zaman
-                    Row(
+                  // Mağaza
+                  Shimmer.fromColors(
+                    baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                    highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                    child: Container(
+                      width: 60,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  // Başlık
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Shimmer.fromColors(
                           baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                           highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                          period: const Duration(milliseconds: 1200),
                           child: Container(
-                            width: 60,
-                            height: 18,
+                          width: double.infinity,
+                          height: 10,
                             decoration: BoxDecoration(
-                              color: isDark ? AppTheme.darkSurface : Colors.white,
-                              borderRadius: BorderRadius.circular(6),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Shimmer.fromColors(
+                        baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                        highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                        child: Container(
+                          width: 80,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
                             ),
                           ),
                         ),
-                        const Spacer(),
+                    ],
+                  ),
+                  // Fiyat
                         Shimmer.fromColors(
                           baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                           highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                          period: const Duration(milliseconds: 1200),
                           child: Container(
-                            width: 40,
-                            height: 14,
+                      width: 50,
+                      height: 12,
                             decoration: BoxDecoration(
-                              color: isDark ? AppTheme.darkSurface : Colors.white,
+                        color: Colors.white,
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    // Başlık Skeleton
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHorizontalSkeleton(BuildContext context, bool isDark) {
+    final cardBackgroundColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final borderColor = isDark ? AppTheme.darkBorder : Colors.black.withValues(alpha: 0.05);
+
+    return Container(
+      height: 140,
+      decoration: BoxDecoration(
+        color: cardBackgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: borderColor,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Görsel Skeleton
+          Shimmer.fromColors(
+            baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+            highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+            child: Container(
+              width: 112,
+              height: 112,
+              margin: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          // İçerik Skeleton
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Kategori & Mağaza
+                  Row(
+                    children: [
                     Shimmer.fromColors(
                       baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                       highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                      period: const Duration(milliseconds: 1200),
                       child: Container(
-                        width: double.infinity,
-                        height: 16,
+                          width: 60,
+                          height: 10,
                         decoration: BoxDecoration(
-                          color: isDark ? AppTheme.darkSurface : Colors.white,
+                            color: Colors.white,
                           borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
+                      const SizedBox(width: 8),
                     Shimmer.fromColors(
                       baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                       highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                      period: const Duration(milliseconds: 1200),
                       child: Container(
-                        width: 120,
-                        height: 16,
+                          width: 50,
+                          height: 10,
                         decoration: BoxDecoration(
-                          color: isDark ? AppTheme.darkSurface : Colors.white,
+                            color: Colors.white,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
+                      ),
+                    ],
                     ),
-                    const SizedBox(height: 4),
-                    // Fiyat ve Sıcaklık Skeleton
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
+                  const SizedBox(height: 12),
+                  // Başlık
+                  Shimmer.fromColors(
+                    baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                    highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                    child: Container(
+                      width: double.infinity,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                         Shimmer.fromColors(
                           baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                           highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                          period: const Duration(milliseconds: 1200),
                           child: Container(
-                            width: 70,
-                            height: 24,
+                      width: 150,
+                      height: 14,
                             decoration: BoxDecoration(
-                              color: isDark ? AppTheme.darkSurface : Colors.white,
+                        color: Colors.white,
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
                         ),
                         const Spacer(),
+                  // Fiyat & Buton
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
                         Shimmer.fromColors(
                           baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                           highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                          period: const Duration(milliseconds: 1200),
                           child: Container(
-                            width: 50,
+                          width: 80,
                             height: 20,
                             decoration: BoxDecoration(
-                              color: isDark ? AppTheme.darkSurface : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                      Shimmer.fromColors(
+                        baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                        highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                        child: Container(
+                          width: 70,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
                             ),
                           ),
                         ),
@@ -153,11 +254,9 @@ class DealCardSkeleton extends StatelessWidget {
                   ],
                 ),
               ),
-            ],
           ),
-        ),
+        ],
       ),
     );
   }
 }
-

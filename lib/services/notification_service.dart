@@ -511,5 +511,74 @@ class NotificationService {
       rethrow;
     }
   }
+
+  // Anahtar kelime bildirimleri için metodlar
+  Future<List<String>> getNotificationKeywords() async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return [];
+
+      final doc = await _firestore.collection('users').doc(userId).get();
+      if (doc.exists) {
+        final data = doc.data();
+        return List<String>.from(data?['notificationKeywords'] ?? []);
+      }
+      return [];
+    } catch (e) {
+      print('Anahtar kelime alma hatası: $e');
+      return [];
+    }
+  }
+
+  Future<void> addNotificationKeyword(String keyword) async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return;
+
+      final trimmedKeyword = keyword.trim().toLowerCase();
+      if (trimmedKeyword.isEmpty) return;
+
+      // Kullanıcı dokümanının var olup olmadığını kontrol et
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) {
+        await _firestore.collection('users').doc(userId).set({
+          'notificationKeywords': [trimmedKeyword],
+          'followedCategories': [],
+          'followedSubCategories': [],
+          'allNotificationsEnabled': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        final currentKeywords = List<String>.from(
+          userDoc.data()?['notificationKeywords'] ?? [],
+        );
+        if (!currentKeywords.contains(trimmedKeyword)) {
+          await _firestore.collection('users').doc(userId).update({
+            'notificationKeywords': FieldValue.arrayUnion([trimmedKeyword]),
+          });
+        }
+      }
+      print('✅ Anahtar kelime eklendi: $trimmedKeyword');
+    } catch (e) {
+      print('❌ Anahtar kelime ekleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> removeNotificationKeyword(String keyword) async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return;
+
+      final trimmedKeyword = keyword.trim().toLowerCase();
+      await _firestore.collection('users').doc(userId).update({
+        'notificationKeywords': FieldValue.arrayRemove([trimmedKeyword]),
+      });
+      print('✅ Anahtar kelime kaldırıldı: $trimmedKeyword');
+    } catch (e) {
+      print('❌ Anahtar kelime kaldırma hatası: $e');
+      rethrow;
+    }
+  }
 }
 

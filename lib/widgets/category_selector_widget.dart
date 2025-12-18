@@ -123,7 +123,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                 child: ElevatedButton(
                   onPressed: _confirmSelection,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -176,11 +176,11 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
           child: Container(
             decoration: BoxDecoration(
               color: isSelected
-                  ? AppTheme.primary.withOpacity(0.1)
+                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
                   : Colors.grey[50],
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isSelected ? AppTheme.primary : Colors.grey[300]!,
+                color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey[300]!,
                 width: isSelected ? 2 : 1,
               ),
             ),
@@ -198,7 +198,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    color: isSelected ? AppTheme.primary : Colors.black87,
+                    color: isSelected ? Theme.of(context).colorScheme.primary : Colors.black87,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -227,7 +227,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
         // Seçilen Ana Kategori Bilgisi
         Container(
           padding: const EdgeInsets.all(16),
-          color: AppTheme.primary.withOpacity(0.1),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
           child: Row(
             children: [
               Text(
@@ -273,13 +273,13 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                   margin: const EdgeInsets.only(bottom: 8),
                   elevation: 0,
                   color: isSelected
-                      ? AppTheme.primary.withOpacity(0.1)
+                      ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
                       : Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
                       color: isSelected
-                          ? AppTheme.primary
+                          ? Theme.of(context).colorScheme.primary
                           : Colors.grey[300]!,
                       width: isSelected ? 2 : 1,
                     ),
@@ -291,7 +291,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                     ),
                     leading: Icon(
                       isSelected ? Icons.check_circle : Icons.circle_outlined,
-                      color: isSelected ? AppTheme.primary : Colors.grey,
+                      color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey,
                     ),
                     title: Text(
                       'Tümü (${category.name})',
@@ -299,13 +299,13 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                         fontWeight: isSelected
                             ? FontWeight.bold
                             : FontWeight.w500,
-                        color: isSelected ? AppTheme.primary : Colors.black87,
+                        color: isSelected ? Theme.of(context).colorScheme.primary : Colors.black87,
                       ),
                     ),
                     trailing: isSelected
-                        ? const Icon(
+                        ? Icon(
                             Icons.check,
-                            color: AppTheme.primary,
+                            color: Theme.of(context).colorScheme.primary,
                           )
                         : null,
                     onTap: () {
@@ -326,13 +326,13 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                 margin: const EdgeInsets.only(bottom: 8),
                 elevation: 0,
                 color: isSelected
-                    ? AppTheme.primary.withOpacity(0.1)
+                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
                     : Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
                     color: isSelected
-                        ? AppTheme.primary
+                        ? Theme.of(context).colorScheme.primary
                         : Colors.grey[300]!,
                     width: isSelected ? 2 : 1,
                   ),
@@ -344,7 +344,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                   ),
                   leading: Icon(
                     isSelected ? Icons.check_circle : Icons.circle_outlined,
-                    color: isSelected ? AppTheme.primary : Colors.grey,
+                    color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey,
                   ),
                   title: Text(
                     subCategory,
@@ -352,13 +352,13 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                       fontWeight: isSelected
                           ? FontWeight.bold
                           : FontWeight.w500,
-                      color: isSelected ? AppTheme.primary : Colors.black87,
+                      color: isSelected ? Theme.of(context).colorScheme.primary : Colors.black87,
                     ),
                   ),
                   trailing: isSelected
-                      ? const Icon(
+                      ? Icon(
                           Icons.check,
-                          color: AppTheme.primary,
+                          color: Theme.of(context).colorScheme.primary,
                         )
                       : null,
                   onTap: () {

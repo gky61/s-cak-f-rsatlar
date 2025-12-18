@@ -823,8 +823,139 @@ class TelegramDealBot:
                 
                 return data
 
+            # --- HEPSİBURADA ÖZEL MANTIK ---
+            if 'hepsiburada' in hostname:
+                logger.info("🔍 Hepsiburada fiyat analizi yapılıyor...")
+                
+                # Hepsiburada selector'ları
+                price_selectors = [
+                    ('div[data-bind="markupText:\'currentPrice\'"]', 'Ana fiyat kutusu'),
+                    ('span[data-bind="markupText:\'currentPrice\'"]', 'Span fiyat'),
+                    ('div.product-price span', 'Product price span'),
+                    ('.price-value', 'Price value'),
+                ]
+                
+                for selector, desc in price_selectors:
+                    elem = soup.select_one(selector)
+                    if elem:
+                        price_text = elem.get_text(strip=True)
+                        logger.debug(f"🔍 Selector '{desc}' bulundu: '{price_text}'")
+                        price = self._parse_price(price_text)
+                        if price >= 10:
+                            data['price'] = price
+                            logger.info(f"✅ Hepsiburada Fiyat Bulundu: {price} TL ({desc})")
+                            break
+                
+                # Eski fiyat için
+                original_selectors = [
+                    ('div[data-bind="markupText:\'oldPrice\'"]', 'Eski fiyat kutusu'),
+                    ('.old-price', 'Old price'),
+                    ('.strikethrough', 'Strikethrough price'),
+                ]
+                
+                for selector, desc in original_selectors:
+                    elem = soup.select_one(selector)
+                    if elem:
+                        price_text = elem.get_text(strip=True)
+                        original = self._parse_price(price_text)
+                        if original > data['price'] and original > 10:
+                            data['original_price'] = original
+                            logger.info(f"✅ Hepsiburada Eski Fiyat: {original} TL ({desc})")
+                            break
+                
+                if data['price'] > 0:
+                    return data
+            
+            # --- TRENDYOL ÖZEL MANTIK ---
+            if 'trendyol' in hostname:
+                logger.info("🔍 Trendyol fiyat analizi yapılıyor...")
+                
+                price_selectors = [
+                    ('span.prc-dsc', 'İndirimli fiyat'),
+                    ('div.prc-box-dscntd', 'İndirim kutusu'),
+                    ('span.prc-slg', 'Satış fiyatı'),
+                    ('.product-price', 'Product price'),
+                ]
+                
+                for selector, desc in price_selectors:
+                    elem = soup.select_one(selector)
+                    if elem:
+                        price_text = elem.get_text(strip=True)
+                        price = self._parse_price(price_text)
+                        if price >= 10:
+                            data['price'] = price
+                            logger.info(f"✅ Trendyol Fiyat: {price} TL ({desc})")
+                            break
+                
+                # Eski fiyat
+                original_selectors = [
+                    ('span.prc-org', 'Orijinal fiyat'),
+                    ('div.prc-box-orgnl', 'Orijinal kutu'),
+                    ('.old-price', 'Old price'),
+                ]
+                
+                for selector, desc in original_selectors:
+                    elem = soup.select_one(selector)
+                    if elem:
+                        price_text = elem.get_text(strip=True)
+                        original = self._parse_price(price_text)
+                        if original > data['price'] and original > 10:
+                            data['original_price'] = original
+                            logger.info(f"✅ Trendyol Eski Fiyat: {original} TL ({desc})")
+                            break
+                
+                if data['price'] > 0:
+                    return data
+            
+            # --- N11 ÖZEL MANTIK ---
+            if 'n11.com' in hostname:
+                logger.info("🔍 N11 fiyat analizi yapılıyor...")
+                
+                price_selectors = [
+                    ('.newPrice ins', 'Yeni fiyat'),
+                    ('.priceContainer ins', 'Fiyat container'),
+                    ('.ins', 'Ins tag'),
+                ]
+                
+                for selector, desc in price_selectors:
+                    elem = soup.select_one(selector)
+                    if elem:
+                        price_text = elem.get_text(strip=True)
+                        price = self._parse_price(price_text)
+                        if price >= 10:
+                            data['price'] = price
+                            logger.info(f"✅ N11 Fiyat: {price} TL ({desc})")
+                            break
+                
+                if data['price'] > 0:
+                    return data
+            
+            # --- MİGROS & A101 & ŞOK ÖZEL MANTIK ---
+            if any(x in hostname for x in ['migros', 'a101', 'sokmarket']):
+                logger.info(f"🔍 {hostname} fiyat analizi yapılıyor...")
+                
+                price_selectors = [
+                    ('.product-price', 'Product price'),
+                    ('.price', 'Price'),
+                    ('.amount', 'Amount'),
+                    ('span[itemprop="price"]', 'Schema price'),
+                ]
+                
+                for selector, desc in price_selectors:
+                    elem = soup.select_one(selector)
+                    if elem:
+                        price_text = elem.get_text(strip=True)
+                        price = self._parse_price(price_text)
+                        if price >= 10:
+                            data['price'] = price
+                            logger.info(f"✅ Market Fiyat: {price} TL ({desc})")
+                            break
+                
+                if data['price'] > 0:
+                    return data
+
             # --- GENEL MANTIK (Diğer Siteler) ---
-            # 1. JSON-LD Schema
+            # 1. JSON-LD Schema (EN ÖNCELİKLİ)
         json_ld_scripts = soup.find_all('script', type='application/ld+json')
         for script in json_ld_scripts:
             try:
@@ -833,12 +964,26 @@ class TelegramDealBot:
                     
                     def find_price_recursive(obj):
                         if isinstance(obj, dict):
+                            # Price field'ı
                             if 'price' in obj and (isinstance(obj['price'], (int, float, str))):
-                                return self._parse_price(str(obj['price']))
+                                price = self._parse_price(str(obj['price']))
+                                if price >= 10:
+                                    return price
+                            # Offers içinde price
                             if 'offers' in obj:
-                                return find_price_recursive(obj['offers'])
+                                result = find_price_recursive(obj['offers'])
+                                if result:
+                                    return result
+                            # lowPrice (en düşük fiyat)
                             if 'lowPrice' in obj:
-                                return self._parse_price(str(obj['lowPrice']))
+                                price = self._parse_price(str(obj['lowPrice']))
+                                if price >= 10:
+                                    return price
+                            # highPrice varsa eski fiyat olabilir
+                            if 'highPrice' in obj and data['price'] > 0:
+                                high = self._parse_price(str(obj['highPrice']))
+                                if high > data['price']:
+                                    data['original_price'] = high
                         elif isinstance(obj, list):
                             for item in obj:
                                 res = find_price_recursive(item)
@@ -850,7 +995,8 @@ class TelegramDealBot:
                         data['price'] = price
                     logger.info(f"✅ Fiyat bulundu (JSON-LD): {price} TL")
                         return data
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"JSON-LD parse hatası: {e}")
                     continue
 
             # 2. Meta tags
@@ -859,6 +1005,7 @@ class TelegramDealBot:
             {'property': 'og:price:amount'},
             {'name': 'price'},
             {'itemprop': 'price'},
+            {'property': 'product:sale_price:amount'},
         ]
         for selector in meta_selectors:
             price_meta = soup.find('meta', selector)
@@ -869,19 +1016,47 @@ class TelegramDealBot:
                     logger.info(f"✅ Fiyat bulundu (Meta {selector}): {price} TL")
                         return data
 
-            # 3. Genel HTML Selectors
+            # 3. Genel HTML Selectors (Geniş Kapsam)
             general_selectors = [
-                '.product-price', '.price', '.current-price', 
-                'span[itemprop="price"]', '.amount', 
-                'div[class*="price"]', 'span[class*="price"]'
+                # Öncelikli
+                'span[itemprop="price"]',
+                'meta[itemprop="price"]',
+                '.product-price',
+                '.price',
+                '.current-price',
+                '.sale-price',
+                '.amount',
+                # Yaygın class isimleri
+                '.price-value',
+                '.product-price-value',
+                '.selling-price',
+                '.final-price',
+                '.discounted-price',
+                # Data attribute'ları
+                '[data-price]',
+                '[data-product-price]',
+                # Genel
+                'div[class*="price"]',
+                'span[class*="price"]',
+                'div[class*="Price"]',
+                'span[class*="Price"]',
             ]
             
             for selector in general_selectors:
                 elem = soup.select_one(selector)
                 if elem:
-                    price = self._parse_price(elem.get_text(strip=True))
+                    # Data attribute kontrolü
+                    if elem.has_attr('data-price'):
+                        price_text = elem['data-price']
+                    elif elem.has_attr('content'):
+                        price_text = elem['content']
+                    else:
+                        price_text = elem.get_text(strip=True)
+                    
+                    price = self._parse_price(price_text)
                     if price >= 10:
                         data['price'] = price
+                        logger.info(f"✅ Fiyat bulundu (HTML {selector}): {price} TL")
                         break
 
         except Exception as e:
@@ -914,21 +1089,18 @@ class TelegramDealBot:
                
             3. Mağazayı bul (Linkten veya metinden). Link 'publicis', 'ty.gl', 'app.hb.biz' gibi kısaltma/reklam linki ise, metindeki ipuçlarından veya link yapısından gerçek mağazayı (Trendyol, Hepsiburada, Amazon, Pazarama vb.) tahmin et.
             4. Kategoriyi belirle. Aşağıdaki listeden EN UYGUN olanı seç (ZORUNLU):
-               ['bilgisayar', 'mobil_cihazlar', 'konsol_oyun', 'ev_elektronigi_yasam', 'giyim_moda', 'supermarket', 'kozmetik_bakim', 'oto_yapi_market', 'anne_bebek', 'spor_outdoor', 'kitap_hobi', 'ag_yazilim', 'evcil_hayvan', 'diger']
+               ['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 'spor_outdoor', 'kitap_hobi', 'yapi_oto', 'supermarket']
                
                ÖNEMLİ KATEGORİ KURALLARI:
-               - 📱 'mobil_cihazlar': Sadece telefon, tablet, akıllı saat, kulaklık ve powerbank için.
-               - 💻 'bilgisayar': Laptop, PC, monitör, mouse, klavye, donanım parçaları.
-               - 🏠 'ev_elektronigi_yasam': TV, robot süpürge, airfryer, beyaz eşya, akıllı priz/ampul.
-               - 🐶 'evcil_hayvan': Kedi/Köpek maması, kum, "Akıllı" mama kabı, tasmalar (İçinde elektronik olsa bile buraya aittir!).
-               - 👶 'anne_bebek': Bebek bezi, "Baby" geçen ürünler, pişik kremi, mama, oyuncak, bebek arabası, oto koltuğu.
-               - 💄 'kozmetik_bakim': Krem, şampuan, parfüm, makyaj, diş macunu, güneş kremi.
-               - 🛒 'supermarket': Gıda, deterjan, kağıt havlu, yağ, çay, kahve.
-               - 👕 'giyim_moda': Kıyafet, ayakkabı, çanta, saat (akıllı olmayan).
-               - ⛺ 'spor_outdoor': Kamp malzemesi, spor aleti, bisiklet, termos.
-               - 🚗 'oto_yapi_market': Oto lastik, yağ, matkap, boya, hırdavat.
-               - 📚 'kitap_hobi': Kitap, kırtasiye, kutu oyunu.
-               - 🌐 'ag_yazilim': Modem, router, antivirüs, lisans.
+               - 📱 'elektronik': Telefon, tablet, laptop, bilgisayar, TV, beyaz eşya, küçük ev aletleri, kulaklık, akıllı saat, konsol, oyun, kamera, drone (TÜM ELEKTRONİK ÜRÜNLER).
+               - 👕 'moda': Kıyafet, ayakkabı, çanta, saat, gözlük, aksesuar, takı, bot, terlik, mont, kazak.
+               - 🏠 'ev_yasam': Mobilya, ev tekstili, mutfak gereçleri, aydınlatma, dekorasyon, kırtasiye.
+               - 👶 'anne_bebek': Bebek bezi, mama, biberon, emzik, bebek arabası, oto koltuğu, bebek/çocuk oyuncakları, "Baby" geçen ürünler.
+               - 💄 'kozmetik': Krem, şampuan, parfüm, makyaj, tıraş, epilasyon, diş bakımı, cilt bakımı, saç bakımı.
+               - ⛺ 'spor_outdoor': Kamp malzemesi, spor aleti, bisiklet, fitness ekipmanları, yoga matı, dambıl, termos.
+               - 📚 'kitap_hobi': Kitap, roman, dergi, kırtasiye malzemeleri, müzik enstrümanları, sanat malzemeleri, puzzle, kutu oyunu.
+               - 🚗 'yapi_oto': Oto lastik, motor yağı, araç aksesuarları, matkap, tornavida, elektrik malzemeleri, bahçe aletleri, banyo/tesisat.
+               - 🛒 'supermarket': Gıda, deterjan, temizlik ürünleri, kağıt ürünleri, yiyecek, içecek, kedi/köpek maması, kedi kumu.
             
             İPUCU: Ürün adında "Baby", "Bebek", "Çocuk" geçiyorsa öncelikli olarak 'anne_bebek' düşün. "Krem", "Losyon" varsa 'kozmetik_bakim' veya 'anne_bebek' olabilir.
             
@@ -1057,13 +1229,86 @@ class TelegramDealBot:
         """URL path'inden kategori çıkar"""
         path_lower = path.lower()
         
-        # Kategori anahtar kelimeleri
+        # Kategori anahtar kelimeleri - Flutter kategorilerine uygun
         category_keywords = {
-            'bilgisayar': ['bilgisayar', 'computer', 'pc', 'laptop', 'notebook', 'ekran-karti', 'gpu', 'islemci', 'cpu', 'anakart', 'motherboard', 'ram', 'ssd', 'hdd', 'depolama', 'storage', 'guc-kaynagi', 'psu', 'power-supply', 'kasa', 'case'],
-            'mobil_cihazlar': ['telefon', 'phone', 'smartphone', 'iphone', 'android', 'tablet', 'ipad', 'akilli-saat', 'smartwatch', 'bileklik', 'band', 'powerbank', 'sarj', 'charger', 'kilif', 'case', 'mobil-aksesuar'],
-            'konsol_oyun': ['konsol', 'console', 'playstation', 'xbox', 'nintendo', 'switch', 'oyun', 'game', 'gamepad', 'joystick', 'direksiyon', 'steering'],
-            'ev_elektronigi_yasam': ['televizyon', 'tv', 'akilli-ev', 'smart-home', 'robot-supurge', 'vacuum', 'aydinlatma', 'lighting', 'kisisel-bakim', 'personal-care', 'tiras', 'shave', 'hobi', 'hobby', 'drone', 'kamera', 'camera'],
-            'ag_yazilim': ['modem', 'router', 'mesh', 'ag', 'network', 'yazilim', 'software', 'isletim-sistemi', 'os', 'antivirus'],
+            'elektronik': [
+                'elektronik', 'bilgisayar', 'computer', 'pc', 'laptop', 'notebook', 'tablet', 'ipad',
+                'telefon', 'phone', 'smartphone', 'iphone', 'android', 'samsung', 'xiaomi',
+                'ekran-karti', 'gpu', 'islemci', 'cpu', 'anakart', 'motherboard', 'ram', 'ssd', 'hdd',
+                'monitor', 'monitör', 'klavye', 'keyboard', 'mouse', 'fare', 'kulaklik', 'airpods',
+                'televizyon', 'tv', 'akilli-saat', 'smartwatch', 'powerbank', 'sarj', 'charger',
+                'beyaz-esya', 'buzdolabi', 'camasir-makinesi', 'bulasik-makinesi',
+                'robot-supurge', 'vacuum', 'kahve-makinesi', 'mikser', 'blender',
+                'kamera', 'camera', 'drone', 'gopro', 'fotograf',
+                'konsol', 'playstation', 'xbox', 'nintendo', 'switch', 'oyun', 'game',
+            ],
+            'moda': [
+                'giyim', 'moda', 'fashion', 'kiyafet', 'elbise', 'pantolon', 'gomlek',
+                'tisort', 't-shirt', 'kazak', 'mont', 'ceket', 'ayakkabi', 'shoe',
+                'bot', 'terlik', 'sandalet', 'topuklu', 'canta', 'bag', 'saat', 'watch',
+                'gozluk', 'sunglasses', 'aksesuar', 'taki', 'jewelry', 'nike', 'adidas',
+                'sort', 'etek', 'bluz', 'sweatshirt', 'hoodie', 'kemer', 'belt',
+            ],
+            'ev_yasam': [
+                'mobilya', 'furniture', 'kanepe', 'sofa', 'koltuk', 'masa', 'table',
+                'sandalye', 'chair', 'yatak', 'bed', 'dolap', 'wardrobe', 'sehpa',
+                'ev-tekstili', 'carsaf', 'sheet', 'yorgan', 'battaniye', 'yastik',
+                'perde', 'curtain', 'hali', 'carpet', 'havlu', 'towel',
+                'mutfak', 'tava', 'pan', 'tencere', 'pot', 'bicak', 'knife',
+                'tabak', 'plate', 'bardak', 'glass', 'fincan', 'cup',
+                'aydinlatma', 'lighting', 'lamba', 'lamp', 'avize', 'led',
+                'dekorasyon', 'decoration', 'vazo', 'vase', 'tablo', 'painting',
+                'kirtasiye', 'stationery', 'kalem', 'pen', 'defter', 'notebook',
+            ],
+            'anne_bebek': [
+                'bebek', 'baby', 'anne', 'cocuk', 'child', 'bebek-bezi', 'diaper',
+                'mama', 'biberon', 'bottle', 'emzik', 'pacifier', 'bebek-arabasi',
+                'stroller', 'oto-koltugu', 'car-seat', 'oyuncak', 'toy', 'lego',
+                'barbie', 'hot-wheels', 'prima', 'sleepy', 'molfix', 'islak-mendil',
+            ],
+            'kozmetik': [
+                'kozmetik', 'cosmetic', 'bakim', 'care', 'makyaj', 'makeup', 'parfum',
+                'perfume', 'ruj', 'lipstick', 'krem', 'cream', 'sampuan', 'shampoo',
+                'sac-kremi', 'conditioner', 'tiras', 'shave', 'jilet', 'razor',
+                'epilasyon', 'fon', 'dryer', 'duzlestirici', 'straightener',
+                'dis-fircasi', 'toothbrush', 'dis-macunu', 'toothpaste',
+                'gratis', 'watsons', 'rossmann', 'deodorant', 'roll-on',
+            ],
+            'spor_outdoor': [
+                'spor', 'sport', 'fitness', 'kosu', 'running', 'yoga', 'pilates',
+                'kamp', 'camping', 'cadir', 'tent', 'uyku-tulumu', 'sleeping-bag',
+                'termos', 'thermos', 'matara', 'flask', 'bisiklet', 'bicycle',
+                'scooter', 'kaykay', 'skateboard', 'top', 'ball', 'forma', 'jersey',
+                'decathlon', 'dambil', 'dumbbell', 'halter', 'barbell',
+                'kosu-bandi', 'treadmill', 'yoga-mati', 'yoga-mat',
+            ],
+            'kitap_hobi': [
+                'kitap', 'book', 'roman', 'novel', 'dergi', 'magazine', 'hobi',
+                'hobby', 'puzzle', 'yapboz', 'kutu-oyunu', 'board-game',
+                'muzik', 'music', 'enstruman', 'instrument', 'gitar', 'guitar',
+                'piyano', 'piano', 'sanat', 'art', 'boya', 'paint', 'firca', 'brush',
+            ],
+            'yapi_oto': [
+                'oto', 'auto', 'araba', 'car', 'arac', 'vehicle', 'lastik', 'tire',
+                'silecek', 'wiper', 'motor-yagi', 'oil', 'aku', 'battery',
+                'yapi-market', 'hardware', 'hiradavat', 'matkap', 'drill',
+                'tornavida', 'screwdriver', 'testere', 'saw', 'cekic', 'hammer',
+                'ampul', 'bulb', 'elektrik', 'electric', 'kablo', 'cable',
+                'bahce', 'garden', 'bahce-hortumu', 'hose', 'cim-bicme', 'mower',
+                'mangal', 'grill', 'koctas', 'bauhaus', 'praktiker',
+                'banyo', 'bathroom', 'musluk', 'faucet', 'dus', 'shower', 'lavabo',
+            ],
+            'supermarket': [
+                'market', 'supermarket', 'gida', 'food', 'yiyecek', 'icecek',
+                'kahve', 'coffee', 'cay', 'tea', 'yag', 'oil', 'zeytinyagi',
+                'un', 'flour', 'seker', 'sugar', 'tuz', 'salt', 'baharat', 'spice',
+                'makarna', 'pasta', 'pirinc', 'rice', 'bulgur', 'salca', 'paste',
+                'deterjan', 'detergent', 'temizlik', 'cleaning', 'kagit-havlu',
+                'tuvalet-kagidi', 'toilet-paper', 'sabun', 'soap', 'cop-poseti',
+                'migros', 'carrefour', 'a101', 'bim', 'sok', 'getir', 'yemeksepeti',
+                'cikolata', 'chocolate', 'biskuvi', 'biscuit', 'cips', 'chips',
+                'kedi-mamasi', 'cat-food', 'kopek-mamasi', 'dog-food', 'kedi-kumu',
+            ],
         }
         
         for category_id, keywords in category_keywords.items():
@@ -1177,84 +1422,113 @@ class TelegramDealBot:
         title_lower = title.lower() if title else ''
         combined = f"{keyword_lower} {title_lower}"
         
-        # Kategori mapping - Genişletilmiş Liste
+        # Kategori mapping - Flutter kategorileriyle senkronize (EN ÖNEMLİ)
         category_mapping = {
-            # 1. Bilgisayar & Donanım
-            'bilgisayar': 'bilgisayar', 'computer': 'bilgisayar', 'pc': 'bilgisayar', 'laptop': 'bilgisayar',
-            'notebook': 'bilgisayar', 'ekran kartı': 'bilgisayar', 'gpu': 'bilgisayar', 'işlemci': 'bilgisayar', 
-            'cpu': 'bilgisayar', 'anakart': 'bilgisayar', 'ram': 'bilgisayar', 'ssd': 'bilgisayar', 'hdd': 'bilgisayar',
-            'depolama': 'bilgisayar', 'monitör': 'bilgisayar', 'monitor': 'bilgisayar', 'klavye': 'bilgisayar', 
-            'keyboard': 'bilgisayar', 'mouse': 'bilgisayar', 'webcam': 'bilgisayar', 'yazıcı': 'bilgisayar', 'printer': 'bilgisayar',
-            'power supply': 'bilgisayar', 'psu': 'bilgisayar', # Sadece 'power' kelimesini kaldırdık, 'power supply' olarak bıraktık.
+            # 1. ELEKTRONİK (Ana Kategori - Flutter: 'elektronik')
+            'bilgisayar': 'elektronik', 'computer': 'elektronik', 'pc': 'elektronik', 'laptop': 'elektronik',
+            'notebook': 'elektronik', 'ekran kartı': 'elektronik', 'gpu': 'elektronik', 'işlemci': 'elektronik', 
+            'cpu': 'elektronik', 'anakart': 'elektronik', 'ram': 'elektronik', 'ssd': 'elektronik', 'hdd': 'elektronik',
+            'depolama': 'elektronik', 'monitör': 'elektronik', 'monitor': 'elektronik', 'klavye': 'elektronik', 
+            'keyboard': 'elektronik', 'mouse': 'elektronik', 'webcam': 'elektronik', 'yazıcı': 'elektronik', 'printer': 'elektronik',
+            'power supply': 'elektronik', 'psu': 'elektronik', 
+            # Telefon ve Tablet
+            'telefon': 'elektronik', 'phone': 'elektronik', 'smartphone': 'elektronik', 'iphone': 'elektronik',
+            'android': 'elektronik', 'samsung': 'elektronik', 'xiaomi': 'elektronik', 'tablet': 'elektronik', 
+            'ipad': 'elektronik', 'akıllı saat': 'elektronik', 'smartwatch': 'elektronik', 'bileklik': 'elektronik', 
+            'powerbank': 'elektronik', 'şarj': 'elektronik', 'kılıf': 'elektronik', 'kulaklık': 'elektronik', 
+            'airpods': 'elektronik', 'bluetooth kulaklık': 'elektronik', 'earbuds': 'elektronik',
+            # TV ve Ses
+            'televizyon': 'elektronik', 'tv': 'elektronik', 'ses sistemi': 'elektronik', 'soundbar': 'elektronik', 'hoparlör': 'elektronik',
+            # Beyaz Eşya
+            'beyaz eşya': 'elektronik', 'buzdolabı': 'elektronik', 'çamaşır makinesi': 'elektronik', 'bulaşık makinesi': 'elektronik',
+            'fırın': 'elektronik', 'mikrodalga': 'elektronik', 'klima': 'elektronik', 
+            # Küçük Ev Aletleri
+            'robot süpürge': 'elektronik', 'süpürge': 'elektronik', 'ütü': 'elektronik', 
+            'vantilatör': 'elektronik', 'airfryer': 'elektronik', 'fritöz': 'elektronik', 
+            'kahve makinesi': 'elektronik', 'çay makinesi': 'elektronik', 'blender': 'elektronik', 'mikser': 'elektronik',
+            # Kamera ve Drone
+            'kamera': 'elektronik', 'camera': 'elektronik', 'fotoğraf makinesi': 'elektronik', 'drone': 'elektronik', 'gopro': 'elektronik',
+            # Konsol ve Oyun
+            'konsol': 'elektronik', 'playstation': 'elektronik', 'ps4': 'elektronik', 'ps5': 'elektronik', 'xbox': 'elektronik', 
+            'nintendo': 'elektronik', 'switch': 'elektronik', 'gamepad': 'elektronik', 'oyun': 'elektronik', 
+            'steam': 'elektronik', 'epic games': 'elektronik', 'game pass': 'elektronik', 'ps plus': 'elektronik',
             
-            # 2. Mobil Cihazlar
-            'telefon': 'mobil_cihazlar', 'phone': 'mobil_cihazlar', 'smartphone': 'mobil_cihazlar', 'iphone': 'mobil_cihazlar',
-            'android': 'mobil_cihazlar', 'samsung': 'mobil_cihazlar', 'xiaomi': 'mobil_cihazlar', 'tablet': 'mobil_cihazlar', 
-            'ipad': 'mobil_cihazlar', 'akıllı saat': 'mobil_cihazlar', 'smartwatch': 'mobil_cihazlar', 'bileklik': 'mobil_cihazlar', 
-            'powerbank': 'mobil_cihazlar', 'şarj': 'mobil_cihazlar', 'kılıf': 'mobil_cihazlar', 'kulaklık': 'mobil_cihazlar', 
-            'airpods': 'mobil_cihazlar', 'bluetooth': 'mobil_cihazlar',
+            # 2. MODA (Flutter: 'moda')
+            'giyim': 'moda', 'moda': 'moda', 'kıyafet': 'moda', 'elbise': 'moda', 
+            'pantolon': 'moda', 'gömlek': 'moda', 'tişört': 'moda', 't-shirt': 'moda', 'tisort': 'moda',
+            'kazak': 'moda', 'mont': 'moda', 'ceket': 'moda', 'ayakkabı': 'moda', 'spor ayakkabı': 'moda',
+            'bot': 'moda', 'terlik': 'moda', 'sandalet': 'moda', 'topuklu': 'moda',
+            'çanta': 'moda', 'saat': 'moda', 'kol saati': 'moda', 'apple watch': 'moda',
+            'gözlük': 'moda', 'güneş gözlüğü': 'moda', 'aksesuar': 'moda', 'takı': 'moda', 'kolye': 'moda',
+            'nike': 'moda', 'adidas': 'moda', 'puma': 'moda', 'skechers': 'moda', 'zara': 'moda',
+            'şort': 'moda', 'etek': 'moda', 'bluz': 'moda', 'sweatshirt': 'moda', 'hoodie': 'moda',
             
-            # 3. Konsol ve Oyun
-            'konsol': 'konsol_oyun', 'playstation': 'konsol_oyun', 'ps5': 'konsol_oyun', 'xbox': 'konsol_oyun', 
-            'nintendo': 'konsol_oyun', 'switch': 'konsol_oyun', 'gamepad': 'konsol_oyun', 'oyun': 'konsol_oyun', 
-            'steam': 'konsol_oyun', 'epic games': 'konsol_oyun', 'game pass': 'konsol_oyun', 'ps plus': 'konsol_oyun',
+            # 3. EV & YAŞAM (Flutter: 'ev_yasam')
+            'mobilya': 'ev_yasam', 'kanepe': 'ev_yasam', 'koltuk': 'ev_yasam', 'masa': 'ev_yasam', 'sandalye': 'ev_yasam',
+            'yatak': 'ev_yasam', 'dolap': 'ev_yasam', 'sehpa': 'ev_yasam', 'raf': 'ev_yasam',
+            'ev tekstili': 'ev_yasam', 'çarşaf': 'ev_yasam', 'yorgan': 'ev_yasam', 'battaniye': 'ev_yasam', 
+            'yastık': 'ev_yasam', 'perde': 'ev_yasam', 'halı': 'ev_yasam', 'havlu': 'ev_yasam',
+            'mutfak': 'ev_yasam', 'tava': 'ev_yasam', 'tencere': 'ev_yasam', 'bıçak': 'ev_yasam', 'tabak': 'ev_yasam',
+            'bardak': 'ev_yasam', 'fincan': 'ev_yasam', 'çatal': 'ev_yasam', 'kaşık': 'ev_yasam',
+            'aydınlatma': 'ev_yasam', 'lamba': 'ev_yasam', 'avize': 'ev_yasam', 'led': 'ev_yasam',
+            'dekorasyon': 'ev_yasam', 'vazo': 'ev_yasam', 'tablo': 'ev_yasam', 'mum': 'ev_yasam', 'ayna': 'ev_yasam',
+            'kırtasiye': 'ev_yasam', 'kalem': 'ev_yasam', 'defter': 'ev_yasam', 'ajanda': 'ev_yasam',
             
-            # 4. Ev Elektroniği ve Yaşam
-            'televizyon': 'ev_elektronigi_yasam', 'tv': 'ev_elektronigi_yasam', 'robot süpürge': 'ev_elektronigi_yasam', 
-            'süpürge': 'ev_elektronigi_yasam', 'ütü': 'ev_elektronigi_yasam', 'klima': 'ev_elektronigi_yasam', 
-            'vantilatör': 'ev_elektronigi_yasam', 'airfryer': 'ev_elektronigi_yasam', 'fritöz': 'ev_elektronigi_yasam', 
-            'kahve makinesi': 'ev_elektronigi_yasam', 'çay makinesi': 'ev_elektronigi_yasam', 'blender': 'ev_elektronigi_yasam',
-            'beyaz eşya': 'ev_elektronigi_yasam', 'buzdolabı': 'ev_elektronigi_yasam', 'çamaşır makinesi': 'ev_elektronigi_yasam',
-            
-            # 5. Giyim ve Moda (YENİ)
-            'giyim': 'giyim_moda', 'moda': 'giyim_moda', 'kıyafet': 'giyim_moda', 'elbise': 'giyim_moda', 
-            'pantolon': 'giyim_moda', 'gömlek': 'giyim_moda', 'tişört': 'giyim_moda', 't-shirt': 'giyim_moda', 
-            'kazak': 'giyim_moda', 'mont': 'giyim_moda', 'ceket': 'giyim_moda', 'ayakkabı': 'giyim_moda', 
-            'bot': 'giyim_moda', 'terlik': 'giyim_moda', 'çanta': 'giyim_moda', 'saat': 'giyim_moda', 
-            'gözlük': 'giyim_moda', 'aksesuar': 'giyim_moda', 'takı': 'giyim_moda', 'nike': 'giyim_moda', 
-            'adidas': 'giyim_moda', 'puma': 'giyim_moda', 'skechers': 'giyim_moda', 'zara': 'giyim_moda',
-            
-            # 6. Süpermarket & Gıda (YENİ)
-            'market': 'supermarket', 'gıda': 'supermarket', 'yiyecek': 'supermarket', 'içecek': 'supermarket', 
-            'kahve': 'supermarket', 'çay': 'supermarket', 'yağ': 'supermarket', 'un': 'supermarket', 
-            'şeker': 'supermarket', 'deterjan': 'supermarket', 'temizlik': 'supermarket', 'kağıt havlu': 'supermarket', 
-            'tuvalet kağıdı': 'supermarket', 'şampuan': 'supermarket', 'diş macunu': 'supermarket', 'sabun': 'supermarket', 
-            'migros': 'supermarket', 'carrefour': 'supermarket', 'a101': 'supermarket', 'bim': 'supermarket', 
-            'şok': 'supermarket', 'getir': 'supermarket', 'yemeksepeti': 'supermarket', 'omo': 'supermarket', 
-            'ariel': 'supermarket', 'persil': 'supermarket', 'fairy': 'supermarket', 'yumoş': 'supermarket',
-            
-            # 7. Kozmetik & Kişisel Bakım (YENİ)
-            'kozmetik': 'kozmetik_bakim', 'bakım': 'kozmetik_bakim', 'makyaj': 'kozmetik_bakim', 'parfüm': 'kozmetik_bakim', 
-            'ruj': 'kozmetik_bakim', 'krem': 'kozmetik_bakim', 'cilt bakımı': 'kozmetik_bakim', 'saç bakımı': 'kozmetik_bakim', 
-            'tıraş': 'kozmetik_bakim', 'jilet': 'kozmetik_bakim', 'epilasyon': 'kozmetik_bakim', 'fön': 'kozmetik_bakim', 
-            'düzleştirici': 'kozmetik_bakim', 'gratis': 'kozmetik_bakim', 'watsons': 'kozmetik_bakim',
-            
-            # 8. Oto & Yapı Market (YENİ)
-            'oto': 'oto_yapi_market', 'araba': 'oto_yapi_market', 'araç': 'oto_yapi_market', 'lastik': 'oto_yapi_market', 
-            'silecek': 'oto_yapi_market', 'motor yağı': 'oto_yapi_market', 'yapı market': 'oto_yapi_market', 
-            'matkap': 'oto_yapi_market', 'tornavida': 'oto_yapi_market', 'boya': 'oto_yapi_market', 'ampul': 'oto_yapi_market', 
-            'bahçe': 'oto_yapi_market', 'mangal': 'oto_yapi_market', 'koçtaş': 'oto_yapi_market', 'bauhaus': 'oto_yapi_market',
-            
-            # 9. Anne & Bebek (YENİ)
+            # 4. ANNE & BEBEK (Flutter: 'anne_bebek')
             'bebek': 'anne_bebek', 'anne': 'anne_bebek', 'çocuk': 'anne_bebek', 'bebek bezi': 'anne_bebek', 
             'mama': 'anne_bebek', 'biberon': 'anne_bebek', 'emzik': 'anne_bebek', 'bebek arabası': 'anne_bebek', 
             'oto koltuğu': 'anne_bebek', 'oyuncak': 'anne_bebek', 'lego': 'anne_bebek', 'barbie': 'anne_bebek', 
-            'hot wheels': 'anne_bebek', 'prima': 'anne_bebek', 'sleepy': 'anne_bebek',
+            'hot wheels': 'anne_bebek', 'prima': 'anne_bebek', 'sleepy': 'anne_bebek', 'molfix': 'anne_bebek',
+            'islak mendil': 'anne_bebek', 'bebek banyosu': 'anne_bebek', 'bebek şampuanı': 'anne_bebek',
             
-            # 10. Spor & Outdoor (YENİ)
-            'spor': 'spor_outdoor', 'kamp': 'spor_outdoor', 'çadır': 'spor_outdoor', 'uyku tulumu': 'spor_outdoor', 
+            # 5. KOZMETİK (Flutter: 'kozmetik')
+            'kozmetik': 'kozmetik', 'bakım': 'kozmetik', 'makyaj': 'kozmetik', 'parfüm': 'kozmetik', 
+            'ruj': 'kozmetik', 'krem': 'kozmetik', 'nemlendirici': 'kozmetik', 'güneş kremi': 'kozmetik',
+            'cilt bakımı': 'kozmetik', 'saç bakımı': 'kozmetik', 'şampuan': 'kozmetik', 'saç kremi': 'kozmetik',
+            'tıraş': 'kozmetik', 'jilet': 'kozmetik', 'epilasyon': 'kozmetik', 'fön': 'kozmetik', 
+            'düzleştirici': 'kozmetik', 'saç maşası': 'kozmetik', 'diş fırçası': 'kozmetik', 'diş macunu': 'kozmetik',
+            'gratis': 'kozmetik', 'watsons': 'kozmetik', 'rossmann': 'kozmetik',
+            'deodorant': 'kozmetik', 'roll-on': 'kozmetik', 'fondöten': 'kozmetik', 'maskara': 'kozmetik',
+            
+            # 6. SPOR & OUTDOOR (Flutter: 'spor_outdoor')
+            'spor': 'spor_outdoor', 'fitness': 'spor_outdoor', 'koşu': 'spor_outdoor', 'yoga': 'spor_outdoor',
+            'kamp': 'spor_outdoor', 'çadır': 'spor_outdoor', 'uyku tulumu': 'spor_outdoor', 
             'termos': 'spor_outdoor', 'matara': 'spor_outdoor', 'bisiklet': 'spor_outdoor', 'scooter': 'spor_outdoor', 
             'kaykay': 'spor_outdoor', 'top': 'spor_outdoor', 'forma': 'spor_outdoor', 'decathlon': 'spor_outdoor',
+            'dambıl': 'spor_outdoor', 'halter': 'spor_outdoor', 'koşu bandı': 'spor_outdoor', 'direnç bandı': 'spor_outdoor',
+            'yoga matı': 'spor_outdoor', 'spor çantası': 'spor_outdoor', 'spor çorabı': 'spor_outdoor',
             
-            # 11. Kitap, Hobi & Kırtasiye (YENİ)
+            # 7. KİTAP & HOBİ (Flutter: 'kitap_hobi')
             'kitap': 'kitap_hobi', 'roman': 'kitap_hobi', 'dergi': 'kitap_hobi', 'hobi': 'kitap_hobi', 
-            'puzzle': 'kitap_hobi', 'kutu oyunu': 'kitap_hobi', 'kırtasiye': 'kitap_hobi', 'kalem': 'kitap_hobi', 
-            'defter': 'kitap_hobi', 'okul': 'kitap_hobi',
+            'puzzle': 'kitap_hobi', 'yapboz': 'kitap_hobi', 'kutu oyunu': 'kitap_hobi', 
+            'müzik': 'kitap_hobi', 'enstrüman': 'kitap_hobi', 'gitar': 'kitap_hobi', 'piyano': 'kitap_hobi',
+            'sanat malzemesi': 'kitap_hobi', 'boya': 'kitap_hobi', 'fırça': 'kitap_hobi', 'tuval': 'kitap_hobi',
             
-            # 12. Ağ & Yazılım
-            'modem': 'ag_yazilim', 'router': 'ag_yazilim', 'mesh': 'ag_yazilim', 'yazılım': 'ag_yazilim', 
-            'antivirus': 'ag_yazilim', 'vpn': 'ag_yazilim', 'lisans': 'ag_yazilim', 'windows': 'ag_yazilim', 
-            'office': 'ag_yazilim',
+            # 8. YAPI & OTO (Flutter: 'yapi_oto')
+            'oto': 'yapi_oto', 'araba': 'yapi_oto', 'araç': 'yapi_oto', 'lastik': 'yapi_oto', 
+            'silecek': 'yapi_oto', 'motor yağı': 'yapi_oto', 'akü': 'yapi_oto', 'fren balata': 'yapi_oto',
+            'yapı market': 'yapi_oto', 'yapı': 'yapi_oto', 'hırdavat': 'yapi_oto',
+            'matkap': 'yapi_oto', 'tornavida': 'yapi_oto', 'testere': 'yapi_oto', 'çekiç': 'yapi_oto',
+            'ampul': 'yapi_oto', 'elektrik': 'yapi_oto', 'kablo': 'yapi_oto', 'priz': 'yapi_oto',
+            'bahçe': 'yapi_oto', 'bahçe hortumu': 'yapi_oto', 'çim biçme': 'yapi_oto', 'mangal': 'yapi_oto',
+            'koçtaş': 'yapi_oto', 'bauhaus': 'yapi_oto', 'praktiker': 'yapi_oto',
+            'banyo': 'yapi_oto', 'musluk': 'yapi_oto', 'duş': 'yapi_oto', 'lavabo': 'yapi_oto',
+            
+            # 9. SÜPERMARKET (Flutter: 'supermarket')
+            'market': 'supermarket', 'gıda': 'supermarket', 'yiyecek': 'supermarket', 'içecek': 'supermarket', 
+            'kahve': 'supermarket', 'çay': 'supermarket', 'yağ': 'supermarket', 'zeytinyağı': 'supermarket',
+            'un': 'supermarket', 'şeker': 'supermarket', 'tuz': 'supermarket', 'baharat': 'supermarket',
+            'makarna': 'supermarket', 'pirinç': 'supermarket', 'bulgur': 'supermarket', 'salça': 'supermarket',
+            'süt': 'supermarket', 'yoğurt': 'supermarket', 'peynir': 'supermarket', 'tereyağı': 'supermarket',
+            'deterjan': 'supermarket', 'çamaşır deterjanı': 'supermarket', 'bulaşık deterjanı': 'supermarket',
+            'temizlik': 'supermarket', 'kağıt havlu': 'supermarket', 'tuvalet kağıdı': 'supermarket', 
+            'sabun': 'supermarket', 'çöp poşeti': 'supermarket',
+            'migros': 'supermarket', 'carrefour': 'supermarket', 'a101': 'supermarket', 'bim': 'supermarket', 
+            'şok': 'supermarket', 'getir': 'supermarket', 'yemeksepeti': 'supermarket', 
+            'omo': 'supermarket', 'ariel': 'supermarket', 'persil': 'supermarket', 'fairy': 'supermarket', 
+            'yumoş': 'supermarket', 'finish': 'supermarket', 'domestos': 'supermarket',
+            'çikolata': 'supermarket', 'bisküvi': 'supermarket', 'cips': 'supermarket', 'kola': 'supermarket',
+            'kedi maması': 'supermarket', 'köpek maması': 'supermarket', 'kedi kumu': 'supermarket',
         }
         
         # Direkt eşleşme

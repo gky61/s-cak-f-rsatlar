@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:ui';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
@@ -14,6 +15,9 @@ import 'deal_detail_screen.dart';
 import 'submit_deal_screen.dart';
 import 'admin_screen.dart';
 import 'profile_screen.dart';
+import 'favorites_screen.dart';
+
+// ViewMode artık DealCard içinde CardViewMode olarak tanımlı
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -37,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isGeneralNotificationsEnabled = true;
   final ScrollController _scrollController = ScrollController();
   bool _showScrollToTop = false;
+  late CardViewMode _viewMode;
   
   // Pagination için state
   List<Deal> _allDeals = [];
@@ -48,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _viewMode = _themeService.viewMode;
     _checkAdminStatus();
     _notificationService.requestPermission();
     _notificationService.setupNotificationListeners();
@@ -114,7 +120,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onThemeChanged() {
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _viewMode = _themeService.viewMode;
+      });
     }
   }
 
@@ -234,7 +242,10 @@ class _HomeScreenState extends State<HomeScreen> {
   // Expired deal'leri temizle (gün bittiğinde sil)
   Future<void> _cleanupExpiredDeals() async {
     try {
+      // Süresi dolan deal'ları temizle
       await _firestoreService.cleanupExpiredDeals();
+      // 24 saatten eski deal'ları sil
+      await _firestoreService.deleteOldDeals();
     } catch (e) {
       // Sessizce hata yok say, kullanıcıyı rahatsız etme
       print('Temizleme hatası: $e');
@@ -249,205 +260,180 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
-      appBar: AppBar(
-        systemOverlayStyle: SystemUiOverlayStyle.dark,
-        title: InkWell(
-          onTap: () {
-            setState(() {
-              _isCategoryMenuExpanded = !_isCategoryMenuExpanded;
-            });
-          },
-          child: Row(
-            children: [
-              const Text(
-                'FIRSATKOLİK 🔥',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(width: 8),
-              AnimatedRotation(
-                turns: _isCategoryMenuExpanded ? 0.5 : 0,
-                duration: const Duration(milliseconds: 200),
-                child: const Icon(Icons.arrow_drop_down, size: 24),
-              ),
-            ],
-          ),
-        ),
-        centerTitle: false,
-        actions: [
-          // Karanlık Mod Toggle - Şık animasyonlu
-          _buildThemeToggleButton(),
-          if (_isAdmin)
-            IconButton(
-              icon: const Icon(Icons.admin_panel_settings_rounded, color: AppTheme.error),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AdminScreen()),
+      backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(125),
+        child: Container(
+          decoration: BoxDecoration(
+            color: (isDark ? AppTheme.darkBackground : Colors.white).withOpacity(0.95),
+            border: Border(
+              bottom: BorderSide(
+                color: Colors.black.withOpacity(isDark ? 0.05 : 0.05),
+                width: 2,
               ),
             ),
-          IconButton(
-            icon: const Icon(Icons.person_rounded),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            ),
           ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-          // Ana Kategoriler (Yatay Kaydırmalı Chip'ler)
-          Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: Category.categories.length,
-              cacheExtent: 200, // Kategori listesi için cache
-              addAutomaticKeepAlives: false,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final category = Category.categories[index];
-                final isSelected = _selectedCategory == category.id && _selectedSubCategory == null;
-                
-                return FilterChip(
-                  label: Text(
-                    '${category.icon} ${category.name}',
-                    style: TextStyle(
-                      color: isSelected 
-                          ? Colors.white 
-                          : (isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary),
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                  ),
-                  selected: isSelected,
-                  onSelected: (_) => setState(() {
-                    _selectedCategory = category.id;
-                    _selectedSubCategory = null;
-                  }),
-                  backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-                  selectedColor: AppTheme.primary,
-                  side: BorderSide(
-                    color: isDark 
-                        ? (isSelected ? AppTheme.primary : AppTheme.darkBorder)
-                        : Colors.transparent,
-                    width: isSelected ? 1.5 : 1,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  elevation: isSelected ? 2 : 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                );
-              },
-            ),
-          ),
-
-          // Açılır Kategori Menüsü
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200), // Daha hızlı animasyon
-            curve: Curves.easeOut, // Daha hızlı curve
-            height: _isCategoryMenuExpanded ? null : 0,
-            child: _isCategoryMenuExpanded
-                ? Container(
-                    constraints: const BoxConstraints(maxHeight: 400),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppTheme.darkSurface : Colors.white,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
+          child: Container(
+            color: (isDark ? AppTheme.darkBackground : Colors.white).withOpacity(0.95),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  // Header - FIRSAT KOLİK başlığı ve butonlar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'FIRSAT KOLİK',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : AppTheme.textPrimary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        // Görünüm modu toggle
+                        Container(
+                          height: 40,
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildViewModeButton(
+                                icon: Icons.grid_view,
+                                isSelected: _viewMode == CardViewMode.vertical,
+                                onTap: () => _themeService.setViewMode(CardViewMode.vertical),
+                                isDark: isDark,
+                              ),
+                              _buildViewModeButton(
+                                icon: Icons.view_agenda,
+                                isSelected: _viewMode == CardViewMode.horizontal,
+                                onTap: () => _themeService.setViewMode(CardViewMode.horizontal),
+                                isDark: isDark,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Dikey ayırıcı
+                        Container(
                           width: 1,
+                          height: 24,
+                          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
                         ),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isDark 
-                              ? Colors.black.withOpacity(0.3)
-                              : Colors.black.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
+                        const SizedBox(width: 12),
+                        // Search butonu
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(999),
+                              onTap: () {
+                                // TODO: Search özelliği ekle
+                              },
+                              child: Icon(
+                                Icons.search,
+                                color: isDark ? Colors.white : AppTheme.textPrimary,
+                                size: 22,
+                              ),
+                            ),
+                          ),
                         ),
+                        // Admin panel butonu (sadece admin kullanıcılar için)
+                        if (_isAdmin) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: Colors.transparent,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(999),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const AdminScreen()),
+                                ),
+                                child: Icon(
+                                  Icons.admin_panel_settings_rounded,
+                                  color: primaryColor,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          // Tümü seçeneği
-                          _buildCategoryItem(
-                            Category.categories[0],
-                            null,
-                            isSelected: _selectedCategory == 'tumu' && _selectedSubCategory == null,
-                            showNotification: true,
-                          ),
-                          Divider(
-                            height: 1,
-                            color: isDark ? AppTheme.darkDivider : Colors.grey[200],
-                          ),
-                          // Ana kategoriler
-                          ...Category.categories
-                              .where((cat) => cat.id != 'tumu')
-                              .map((category) => _buildExpandableCategory(category))
-                              .toList(),
-                        ],
-                      ),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-
-          // Seçili kategori gösterimi (menü kapalıyken)
-          if (!_isCategoryMenuExpanded && (_selectedCategory != 'tumu' || _selectedSubCategory != null))
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isDark 
-                    ? AppTheme.primary.withOpacity(0.15) 
-                    : AppTheme.primary.withOpacity(0.1),
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
-                    width: 1,
                   ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.filter_alt, 
-                    size: 16, 
-                    color: AppTheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _getSelectedCategoryText(),
-                      style: TextStyle(
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
+                  // Kategori Chip'leri (Horizontal Scroll)
+                  SizedBox(
+                    height: 36,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: Category.categories.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final category = Category.categories[index];
+                        final isSelected = _selectedCategory == category.id && _selectedSubCategory == null;
+                        
+                        return FilterChip(
+                          label: Text(category.name),
+                          selected: isSelected,
+                          onSelected: (_) => setState(() {
+                            _selectedCategory = category.id;
+                            _selectedSubCategory = null;
+                          }),
+                          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+                          selectedColor: isDark ? Colors.grey[800] : const Color(0xFF2D3142),
+                          labelStyle: TextStyle(
+                            color: isSelected 
+                                ? Colors.white
+                                : (isDark ? Colors.white : AppTheme.textPrimary),
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                          side: BorderSide(
+                            color: isDark 
+                                ? (isSelected ? Colors.grey[700]! : AppTheme.darkBorder)
+                                : Colors.black.withOpacity(0.05),
+                            width: isSelected ? 0 : 2,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(999), // rounded-full
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        );
+                      },
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    color: AppTheme.primary,
-                    onPressed: () {
-                      setState(() {
-                        _selectedCategory = 'tumu';
-                        _selectedSubCategory = null;
-                      });
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
-
+          ),
+        ),
+      ),
+      body: Column(
+        children: [
           // Liste
           Expanded(
             child: StreamBuilder<List<Deal>>(
@@ -479,14 +465,34 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Yükleniyor durumu - Skeleton Loading
                 if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                  return ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.only(bottom: 80, top: 8),
-                    itemCount: 8, // 8 adet skeleton kart göster
-                    itemBuilder: (context, index) {
-                      return const DealCardSkeleton();
-                    },
-                  );
+                  if (_viewMode == CardViewMode.vertical) {
+                    return GridView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 0.68,
+                      ),
+                      itemCount: 6,
+                      itemBuilder: (context, index) {
+                        return DealCardSkeleton(viewMode: _viewMode);
+                      },
+                    );
+                  } else {
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: 6,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: DealCardSkeleton(viewMode: _viewMode),
+                        );
+                      },
+                    );
+                  }
                 }
 
                 // Veri yoksa boş liste kullan
@@ -558,76 +564,251 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   color: AppTheme.primary,
                   strokeWidth: 3.0,
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    key: ValueKey('deal_list_$_selectedCategory'), // Kategori değişince listeyi yeniden oluştur
-                    padding: const EdgeInsets.only(bottom: 80, top: 8),
-                    itemCount: dealsToShow.length + (_hasMore && _isLoadingMore ? 1 : 0),
-                    cacheExtent: 1000, // Daha fazla cache için artırıldı
-                    addAutomaticKeepAlives: false, // Görünmeyen widget'ları dispose et
-                    addRepaintBoundaries: true, // RepaintBoundary ekle
-                    itemBuilder: (context, index) {
-                      // Loading indicator göster
-                      if (index == dealsToShow.length) {
-                        return const Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                      }
-                      
-                      final deal = dealsToShow[index];
-                      return RepaintBoundary(
-                        key: ValueKey('deal_card_${deal.id}'),
-                        child: DealCard(
-                          key: ValueKey('deal_card_${deal.id}'), // Her kart için unique key
-                          deal: deal,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DealDetailScreen(dealId: deal.id),
-                            ),
-                          ),
+                  child: _viewMode == CardViewMode.vertical 
+                    ? GridView.builder(
+                        controller: _scrollController,
+                        key: ValueKey('deal_grid_$_selectedCategory'),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 0.68,
                         ),
-                      );
-                    },
-                  ),
+                        cacheExtent: 1000,
+                        itemCount: dealsToShow.length + (_hasMore && _isLoadingMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == dealsToShow.length) {
+                            return Center(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(3, (dotIndex) {
+                                  return Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                                    width: 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: primaryColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  );
+                                }),
+                              ),
+                            );
+                          }
+                          final deal = dealsToShow[index];
+                          return RepaintBoundary(
+                            key: ValueKey('deal_card_${deal.id}'),
+                            child: DealCard(
+                              key: ValueKey('deal_card_${deal.id}'),
+                              deal: deal,
+                              viewMode: CardViewMode.vertical,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DealDetailScreen(dealId: deal.id),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        key: ValueKey('deal_list_$_selectedCategory'),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: dealsToShow.length + (_hasMore && _isLoadingMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == dealsToShow.length) {
+                            return Center(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(3, (dotIndex) {
+                                  return Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                                    width: 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: primaryColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  );
+                                }),
+                              ),
+                            );
+                          }
+                          final deal = dealsToShow[index];
+                          return RepaintBoundary(
+                            key: ValueKey('deal_card_list_${deal.id}'),
+                            child: DealCard(
+                              key: ValueKey('deal_card_list_${deal.id}'),
+                              deal: deal,
+                              viewMode: CardViewMode.horizontal,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DealDetailScreen(dealId: deal.id),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                 );
               },
             ),
           ),
-            ],
-          ),
-          // Yukarı Çık Butonu - Sağ alt köşede, FAB'ın üstünde
-          Positioned(
-            right: 16,
-            bottom: 120, // FAB'ın üstünde, daha fazla mesafe ile
-            child: AnimatedOpacity(
-              opacity: _showScrollToTop ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200), // Daha hızlı animasyon
-              child: IgnorePointer(
-                ignoring: !_showScrollToTop,
-                child: FloatingActionButton(
-                  heroTag: 'scroll_to_top_button', // Benzersiz Hero tag
-                  mini: true,
-                  onPressed: _scrollToTop,
-                  backgroundColor: AppTheme.primary,
-                  child: const Icon(Icons.keyboard_arrow_up, color: Colors.white),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'add_deal_fab', // Benzersiz Hero tag
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SubmitDealScreen()),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkSurface : Colors.white,
+          border: Border(
+            top: BorderSide(
+              color: Colors.black.withOpacity(isDark ? 0.1 : 0.05),
+              width: 2,
+            ),
+          ),
         ),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Fırsat Ekle'),
+        padding: const EdgeInsets.only(bottom: 8, top: 4),
+        child: SafeArea(
+          top: false,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              // Ana Sayfa
+              _buildBottomNavItem(
+                icon: Icons.home,
+                label: 'Ana Sayfa',
+                isSelected: true,
+                onTap: () {},
+              ),
+              // Beğenilenler
+              _buildBottomNavItem(
+                icon: Icons.favorite,
+                label: 'Beğenilenler',
+                isSelected: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FavoritesScreen()),
+                  );
+                },
+              ),
+              // Profil
+              _buildBottomNavItem(
+                icon: Icons.person,
+                label: 'Profil',
+                isSelected: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: _showScrollToTop
+          ? FloatingActionButton(
+              heroTag: 'scroll_to_top',
+              mini: true,
+              onPressed: _scrollToTop,
+              backgroundColor: primaryColor,
+              child: const Icon(Icons.keyboard_arrow_up, color: Colors.black),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  Widget _buildBottomNavItem({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 24,
+              decoration: BoxDecoration(
+                color: isSelected 
+                    ? primaryColor.withValues(alpha: isDark ? 0.1 : 0.2)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Icon(
+                icon,
+                color: isSelected 
+                    ? (isDark ? primaryColor : Colors.black)
+                    : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+                size: 18,
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected 
+                    ? (isDark ? primaryColor : Colors.black)
+                    : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildViewModeButton({
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: isSelected 
+                ? (isDark ? AppTheme.darkSurface : Colors.white)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: isSelected ? [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ] : null,
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: isSelected 
+                ? (isDark ? Colors.white : AppTheme.textPrimary)
+                : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+          ),
+        ),
       ),
     );
   }
@@ -651,6 +832,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Builder(
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final primaryColor = Theme.of(context).colorScheme.primary;
         return InkWell(
           onTap: () {
             setState(() {
@@ -667,7 +849,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: isSelected 
-                ? AppTheme.primary.withOpacity(isDark ? 0.2 : 0.1) 
+                              ? primaryColor.withValues(alpha: isDark ? 0.2 : 0.1) 
                 : Colors.transparent,
             child: Row(
               children: [
@@ -693,7 +875,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontSize: subCategory != null ? 14 : 16,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                       color: isSelected 
-                          ? AppTheme.primary 
+                          ? primaryColor 
                           : (isDark ? AppTheme.darkTextPrimary : Colors.black87),
                     ),
                   ),
@@ -704,7 +886,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: Icon(
                       isNotificationEnabled ? Icons.notifications_active : Icons.notifications_off_outlined,
                       color: isNotificationEnabled 
-                          ? AppTheme.primary 
+                          ? primaryColor 
                           : (isDark ? AppTheme.darkTextSecondary : Colors.grey),
                       size: 20,
                     ),
@@ -723,7 +905,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
                 if (showNotification) const SizedBox(width: 8),
                 if (isSelected)
-                  Icon(Icons.check, color: AppTheme.primary, size: 20),
+                  Icon(Icons.check, color: primaryColor, size: 20),
               ],
             ),
           ),
@@ -740,6 +922,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Builder(
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final primaryColor = Theme.of(context).colorScheme.primary;
         return Column(
           children: [
             InkWell(
@@ -765,7 +948,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 color: isMainCategorySelected
-                    ? AppTheme.primary.withOpacity(isDark ? 0.2 : 0.1)
+                    ? primaryColor.withValues(alpha: isDark ? 0.2 : 0.1)
                     : Colors.transparent,
                 child: Row(
                   children: [
@@ -781,7 +964,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontSize: 16,
                           fontWeight: isMainCategorySelected ? FontWeight.bold : FontWeight.w500,
                           color: isMainCategorySelected 
-                              ? AppTheme.primary 
+                              ? primaryColor 
                               : (isDark ? AppTheme.darkTextPrimary : Colors.black87),
                         ),
                       ),
@@ -791,7 +974,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icon(
                         isNotificationEnabled ? Icons.notifications_active : Icons.notifications_off_outlined,
                         color: isNotificationEnabled 
-                            ? AppTheme.primary 
+                            ? primaryColor 
                             : (isDark ? AppTheme.darkTextSecondary : Colors.grey),
                         size: 20,
                       ),
@@ -813,7 +996,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (isMainCategorySelected)
                       const SizedBox(width: 8),
                     if (isMainCategorySelected)
-                      Icon(Icons.check, color: AppTheme.primary, size: 20),
+                      Icon(Icons.check, color: primaryColor, size: 20),
                   ],
                 ),
               ),

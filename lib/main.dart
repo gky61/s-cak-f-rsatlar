@@ -27,17 +27,17 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
     // Background message handler'ı sadece web dışı platformlarda kaydet
     if (!kIsWeb) {
-      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     }
-    
-    print('🔥 FIRSATKOLİK uygulaması başlatılıyor...');
-    print('📱 Build zamanı: ${DateTime.now()}');
+  
+  print('🔥 FIRSATKOLİK uygulaması başlatılıyor...');
+  print('📱 Build zamanı: ${DateTime.now()}');
     print('🌐 Platform: ${kIsWeb ? "Web" : "Mobile"}');
   } catch (e, stackTrace) {
     print('❌ Firebase başlatma hatası: $e');
@@ -79,20 +79,21 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    final lightTheme = AppTheme.getLightTheme();
+    final darkTheme = AppTheme.getDarkTheme();
+    
     return AnimatedTheme(
-      duration: const Duration(milliseconds: 200), // Daha hızlı animasyon
-      curve: Curves.easeOut, // Daha hızlı curve
-      data: _themeService.themeMode == ThemeMode.dark 
-          ? AppTheme.darkTheme 
-          : AppTheme.lightTheme,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      data: _themeService.themeMode == ThemeMode.dark ? darkTheme : lightTheme,
       child: MaterialApp(
         title: 'FIRSATKOLİK',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: _themeService.themeMode,
-        navigatorKey: navigatorKey,
-        home: const AuthWrapper(),
+      debugShowCheckedModeBanner: false,
+        theme: lightTheme,
+        darkTheme: darkTheme,
+      themeMode: _themeService.themeMode,
+      navigatorKey: navigatorKey,
+      home: const AuthWrapper(),
       ),
     );
   }

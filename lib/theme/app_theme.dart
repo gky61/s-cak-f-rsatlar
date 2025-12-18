@@ -3,18 +3,17 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
-  // Sıcak Fırsatlar - Canlı Turuncu Renk Paleti
-  static const Color primary = Color(0xFFFF6B35); // Ana Turuncu
-  static const Color secondary = Color(0xFFFF9F1C); // İkincil Turuncu
+  // FIRSAT KOLİK - Renk Paleti
+  static const Color primary = Color(0xFFF9F506); // Varsayılan: Sarı
   static const Color accent = Color(0xFF2D3142); // Koyu Gri / Siyahımsı
-  static const Color background = Color(0xFFF2F4F7); // Açık Gri Zemin
-  static const Color surface = Colors.white; // Kart Zemini
-  static const Color textPrimary = Color(0xFF1F2937); // Ana Metin
-  static const Color textSecondary = Color(0xFF6B7280); // İkincil Metin
+  static const Color background = Color(0xFFF8F8F5); // Açık Zemin (#f8f8f5)
+  static const Color surface = Colors.white; // Kart Zemini (#ffffff)
+  static const Color textPrimary = Color(0xFF181811); // Ana Metin (#181811)
+  static const Color textSecondary = Color(0xFF8C8B5F); // İkincil Metin (#8c8b5f)
   static const Color success = Color(0xFF10B981); // Başarılı (Yeşil)
   static const Color error = Color(0xFFEF4444); // Hata (Kırmızı)
 
-  static ThemeData get lightTheme {
+  static ThemeData getLightTheme() {
     final baseColorScheme = ColorScheme.fromSeed(
       seedColor: primary,
       brightness: Brightness.light,
@@ -83,8 +82,8 @@ class AppTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
+          borderRadius: BorderRadius.circular(24), // rounded-2xl (24px)
+          side: BorderSide(color: Colors.black.withOpacity(0.05), width: 2), // ring-2 ring-black/5
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -142,22 +141,25 @@ class AppTheme {
         elevation: 8,
         showSelectedLabels: true,
         showUnselectedLabels: true,
-        selectedLabelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
       ),
     );
   }
 
-  // Dark Theme Renkleri - İyileştirilmiş kontrast ve görünürlük
-  static const Color darkBackground = Color(0xFF0D0D0D); // Daha koyu zemin (daha iyi kontrast)
-  static const Color darkSurface = Color(0xFF1A1A1A); // Koyu Kart Zemini (daha belirgin)
-  static const Color darkSurfaceElevated = Color(0xFF242424); // Yükseltilmiş yüzeyler için
-  static const Color darkTextPrimary = Color(0xFFF5F5F5); // Daha açık metin (daha iyi okunabilirlik)
-  static const Color darkTextSecondary = Color(0xFFB8B8B8); // İkincil Metin (daha belirgin)
+  // Backward compatibility
+  static ThemeData get lightTheme => getLightTheme();
+
+  // Dark Theme Renkleri - HTML tasarımından
+  static const Color darkBackground = Color(0xFF23220F); // Koyu zemin (#23220f)
+  static const Color darkSurface = Color(0xFF23231A); // Koyu Kart Zemini (#23231a)
+  static const Color darkSurfaceElevated = Color(0xFF2C2C1E); // Yükseltilmiş yüzeyler için
+  static const Color darkTextPrimary = Colors.white; // Daha açık metin
+  static const Color darkTextSecondary = Color(0xFF8C8B5F); // İkincil Metin
   static const Color darkBorder = Color(0xFF333333); // Daha belirgin border
   static const Color darkDivider = Color(0xFF2A2A2A); // Divider rengi
 
-  static ThemeData get darkTheme {
+  static ThemeData getDarkTheme() {
     final baseColorScheme = ColorScheme.fromSeed(
       seedColor: primary,
       brightness: Brightness.dark,
@@ -227,7 +229,7 @@ class AppTheme {
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: darkBorder, width: 1.5), // Daha belirgin border
+          side: const BorderSide(color: darkBorder, width: 2), // Daha belirgin border
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -285,8 +287,8 @@ class AppTheme {
         elevation: 8,
         showSelectedLabels: true,
         showUnselectedLabels: true,
-        selectedLabelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
       ),
       dividerColor: darkDivider,
       inputDecorationTheme: InputDecorationTheme(
@@ -315,9 +317,12 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: darkBorder, width: 1),
+          side: const BorderSide(color: darkBorder, width: 2),
         ),
       ),
     );
   }
+  
+  // Backward compatibility
+  static ThemeData get darkTheme => getDarkTheme();
 }

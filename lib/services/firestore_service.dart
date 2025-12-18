@@ -638,5 +638,75 @@ class FirestoreService {
       return false;
     }
   }
+
+  // Kullanıcının favori deal'lerini getir
+  Stream<List<Deal>> getFavoriteDeals(String userId) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('favorites')
+        .orderBy('addedAt', descending: true)
+        .snapshots()
+        .asyncMap((snapshot) async {
+      List<Deal> deals = [];
+      for (var doc in snapshot.docs) {
+        try {
+          final dealId = doc.id;
+          final dealDoc = await _firestore.collection('deals').doc(dealId).get();
+          if (dealDoc.exists) {
+            deals.add(Deal.fromFirestore(dealDoc));
+          }
+        } catch (e) {
+          print('Favori deal getirme hatası: $e');
+        }
+      }
+      return deals;
+    });
+  }
+
+  // En çok beğenilen deal'leri getir (25+ beğeni)
+  Stream<List<Deal>> getMostLikedDeals({int minLikes = 25}) {
+    // Basitleştirilmiş sorgu - client-side filtreleme ile index gerektirmez
+    return _firestore
+        .collection('deals')
+        .where('isApproved', isEqualTo: true)
+        .orderBy('hotVotes', descending: true)
+        .limit(100) // Daha fazla çek, client-side filtreleyeceğiz
+        .snapshots()
+        .map((snapshot) {
+      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
+      // Client-side'da filtrele
+      return deals.where((deal) => 
+        !deal.isExpired && 
+        deal.hotVotes >= minLikes
+      ).take(50).toList();
+    });
+  }
+
+  // 24 saatten eski onaylanmış deal'ları otomatik sil
+  Future<void> deleteOldDeals() async {
+    try {
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(hours: 24));
+      
+      // 24 saatten eski onaylanmış deal'ları bul
+      final snapshot = await _firestore
+          .collection('deals')
+          .where('isApproved', isEqualTo: true)
+          .where('createdAt', isLessThan: Timestamp.fromDate(cutoffTime))
+          .get();
+
+      // Her birini sil
+      final batch = _firestore.batch();
+      for (var doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      await batch.commit();
+      print('✅ ${snapshot.docs.length} eski deal silindi');
+    } catch (e) {
+      print('❌ Eski deal\'lar silinirken hata: $e');
+    }
+  }
 }
 

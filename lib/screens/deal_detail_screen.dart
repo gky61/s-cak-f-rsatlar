@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:ui';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -311,672 +312,839 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   }
 
   Widget _buildDealDetail(BuildContext context, Deal deal) {
-    final theme = Theme.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
     final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
+    final categoryId = Category.getIdByName(deal.category);
+    final category = categoryId != null ? Category.getById(categoryId) : Category.categories.first;
 
-    return Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (bool didPop) {
+        if (didPop) {
+          return;
+        }
+      },
+      child: Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
-      body: SafeArea(
-        child: Column(
+        body: Stack(
           children: [
-            // Üst bar - Geri ve Paylaş butonları
-            Padding(
+          // Main Content
+          Column(
+            children: [
+              // Fixed Header
+              Container(
+                padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+                child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: (isDark ? AppTheme.darkBackground : AppTheme.background).withValues(alpha: 0.85),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+                        width: 1,
+                      ),
+                    ),
+                  ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildGlassButton(
-                    context: context,
-                    icon: Icons.arrow_back_rounded,
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  Row(
-                    children: [
-                      if (_isAdmin) ...[
-                        _buildGlassButton(
-                          context: context,
-                          icon: Icons.edit_note_rounded,
-                          onPressed: () => _showAdminEditSheet(deal),
+                      // Geri butonu
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: isDark 
+                              ? Colors.black.withValues(alpha: 0.2) 
+                              : Colors.white.withValues(alpha: 0.5),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+                            width: 0.5,
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                      ],
-                      _buildGlassButton(
-                        context: context,
-                        icon: _isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                        onPressed: _isLoadingFavorite ? null : _toggleFavorite,
-                        color: _isFavorite ? Colors.red : null,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () => Navigator.of(context).pop(),
+                            child: Icon(
+                              Icons.arrow_back,
+                              size: 20,
+                              color: isDark ? Colors.white : AppTheme.textPrimary,
+                            ),
+                          ),
+                        ),
                       ),
+                      // Başlık (merkezde)
+                      Expanded(
+                        child: Text(
+                          'ÜRÜN DETAYI',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white : AppTheme.textPrimary,
+                            letterSpacing: 4,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        ),
+                      // Paylaş butonu
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: isDark 
+                              ? Colors.black.withValues(alpha: 0.2) 
+                              : Colors.white.withValues(alpha: 0.5),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () => _showShareOptions(context, deal),
+                            child: Icon(
+                              Icons.share,
+                              size: 20,
+                              color: isDark ? Colors.white : AppTheme.textPrimary,
+                      ),
+                          ),
+                        ),
+                  ),
+                      // Admin düzenle butonu
                       if (_isAdmin) ...[
                         const SizedBox(width: 8),
-                        _buildGlassButton(
-                          context: context,
-                          icon: Icons.delete_outline_rounded,
-                          onPressed: () => _showDeleteDialog(context, deal),
-                          color: Colors.red,
-                        ),
-                      ],
-                      const SizedBox(width: 8),
-                      _buildGlassButton(
-                        context: context,
-                        icon: Icons.share_rounded,
-                        onPressed: () => _showShareOptions(context, deal),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            
-            // Ana içerik - Büyük, şık ve minimal tasarım
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.zero, // Görsel tam genişlik için padding kaldırıldı
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Görsel - Kompakt ve şık
-                    SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.4, // %40 yükseklik
-                      width: double.infinity,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          GestureDetector(
-                            onTap: () => _showFullScreenImage(context, deal),
-                            child: Hero(
-                              tag: 'deal_${deal.id}_image',
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  _buildDetailImage(deal),
-                                  // Gradient overlay - minimal (tıklamayı engellemesin)
-                                  IgnorePointer(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [
-                                            Colors.transparent,
-                                            Colors.black.withValues(alpha: 0.2),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: primaryColor.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: primaryColor.withValues(alpha: 0.3),
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: () => _showAdminEditDialog(deal),
+                              child: Icon(
+                                Icons.edit,
+                                size: 20,
+                                color: primaryColor,
                               ),
                             ),
                           ),
-                          // İndirim rozeti - Sağ üstte
+                        ),
+                      ],
+                ],
+              ),
+            ),
+              ),
+              // Scrollable Content
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                      // Hero Image (4/3 aspect ratio)
+                      AspectRatio(
+                        aspectRatio: 4 / 3,
+                      child: Stack(
+                        children: [
+                            // Image
+                          GestureDetector(
+                            onTap: () {
+                              // Görsel URL'ini belirle
+                              String? imageUrl;
+                              if (!_originalImageFailed && deal.imageUrl.isNotEmpty) {
+                                imageUrl = deal.imageUrl;
+                              } else if (_fetchedImageUrl != null && _fetchedImageUrl!.isNotEmpty) {
+                                imageUrl = _fetchedImageUrl;
+                              }
+                              // Görsel varsa göster
+                              if (imageUrl != null && imageUrl.isNotEmpty) {
+                                _showFullScreenImage(imageUrl);
+                              }
+                            },
+                              child: Container(
+                                width: double.infinity,
+                                color: isDark ? Colors.grey[900] : Colors.white,
+                                child: _buildDetailImage(deal),
+                              ),
+                            ),
+                            // Gradient overlay
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black.withValues(alpha: 0.2),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Discount Badge (sağ altta)
                           if (deal.discountRate != null && deal.discountRate! > 0)
                             Positioned(
-                              top: 12,
-                              right: 12,
+                                bottom: 40,
+                                right: 20,
+                                child: Transform.rotate(
+                                  angle: 0.21, // ~12 degrees
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    width: 64,
+                                    height: 64,
                                 decoration: BoxDecoration(
-                                  color: Colors.redAccent,
-                                  borderRadius: BorderRadius.circular(12),
+                                      color: primaryColor,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isDark ? AppTheme.darkSurface : Colors.white,
+                                        width: 2,
+                                      ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.redAccent.withOpacity(0.5),
+                                          color: primaryColor.withValues(alpha: 0.3),
                                       blurRadius: 12,
                                       offset: const Offset(0, 4),
                                     ),
                                   ],
                                 ),
-                                child: Text(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
                                   '%${deal.discountRate}',
                                   style: const TextStyle(
-                                    color: Colors.white,
                                     fontSize: 18,
                                     fontWeight: FontWeight.w900,
-                                    letterSpacing: -0.3,
+                                            color: Colors.black,
+                                            height: 1,
+                                  ),
+                                ),
+                                        const Text(
+                                          'İNDİRİM',
+                                          style: TextStyle(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.black,
+                                            height: 1,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          // Editör seçimi badge - İndirim rozetinin altında veya sol üstte
-                          if (deal.isEditorPick)
-                            Positioned(
-                              top: deal.discountRate != null && deal.discountRate! > 0 ? 70 : 12,
-                              right: 12,
+                          ],
+                        ),
+                      ),
+                      // Content Sheet (rounded-t-3xl, -mt-6)
+                      Transform.translate(
+                        offset: const Offset(0, -24),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [AppTheme.primary, AppTheme.secondary],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
+                            color: isDark ? AppTheme.darkSurface : Colors.white,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.2),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 3),
+                                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
+                                blurRadius: 40,
+                                offset: const Offset(0, -10),
                                     ),
                                   ],
+                            border: Border(
+                              top: BorderSide(
+                                color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+                                width: 1,
+                              ),
+                            ),
                                 ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
+                          child: Column(
                                   children: [
-                                    Icon(Icons.star_rounded, color: Colors.white, size: 16),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Editörün Seçimi',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    
-                    // İçerik alanı - Kompakt padding
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Başlık - Kompakt ama okunabilir
-                          Text(
-                            deal.title,
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 22,
-                              height: 1.3,
-                              letterSpacing: -0.3,
-                            ),
-                            maxLines: null,
-                            overflow: TextOverflow.visible,
-                            textAlign: TextAlign.left,
-                          ),
-                          
-                          const SizedBox(height: 12),
-                          
-                          // Açıklama - Kompakt
-                          if (deal.description.isNotEmpty) ...[
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: isDark ? AppTheme.darkSurface : Colors.grey[50],
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
-                                  width: 1,
-                                ),
-                              ),
-                              child: Text(
-                                deal.description,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: isDark ? AppTheme.darkTextPrimary : Colors.grey[800],
-                                  fontSize: 15,
-                                  height: 1.5,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                                maxLines: null,
-                                overflow: TextOverflow.visible,
-                                textAlign: TextAlign.left,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                          ],
-                          
-                          // Fiyat ve Mağaza - Kompakt
-                          Row(
-                            children: [
-                              // Fiyat - Admin için tıklanabilir inline editing
-                              GestureDetector(
-                                onTap: _isAdmin ? () {
-                                  setState(() {
-                                    _isEditingPrice = true;
-                                    _priceEditController.text = deal.price.toStringAsFixed(0);
-                                  });
-                                } : null,
+                              // Handle indicator
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12, bottom: 8),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  width: 48,
+                                  height: 4,
                                   decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [AppTheme.primary, AppTheme.secondary],
+                                    color: Colors.black.withValues(alpha: isDark ? 0.1 : 0.1),
+                                    borderRadius: BorderRadius.circular(2),
                                     ),
-                                    borderRadius: BorderRadius.circular(14),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppTheme.primary.withValues(alpha: 0.3),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                    border: _isAdmin && !_isEditingPrice
-                                        ? Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1)
-                                        : null,
-                                  ),
-                                  child: _isEditingPrice && _isAdmin
-                                      ? Row(
-                                          mainAxisSize: MainAxisSize.min,
+                                ),
+                              ),
+                    Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                      child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Store + Category
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
                                           children: [
-                                            SizedBox(
-                                              width: 80,
-                                              child: TextField(
-                                                controller: _priceEditController,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 20,
-                                                  fontWeight: FontWeight.w900,
-                                                ),
-                                                keyboardType: TextInputType.number,
-                                                autofocus: true,
-                                                decoration: const InputDecoration(
-                                                  border: InputBorder.none,
-                                                  hintText: '0',
-                                                  hintStyle: TextStyle(color: Colors.white70),
-                                                ),
-                                                onSubmitted: (value) => _savePrice(deal.id),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            IconButton(
-                                              icon: const Icon(Icons.check, color: Colors.white, size: 20),
-                                              onPressed: () => _savePrice(deal.id),
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.close, color: Colors.white, size: 18),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _isEditingPrice = false;
-                                                });
-                                              },
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(),
-                                            ),
-                                          ],
-                                        )
-                                      : Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            if (deal.originalPrice != null && deal.originalPrice! > deal.price)
-                                              Text(
-                                                currencyFormat.format(deal.originalPrice),
-                                                style: const TextStyle(
-                                                  color: Colors.white70,
-                                                  fontSize: 12,
-                                                  decoration: TextDecoration.lineThrough,
-                                                  decorationColor: Colors.white70,
-                                                  fontWeight: FontWeight.w500,
+                                            Container(
+                                              width: 40,
+                                              height: 40,
+                                              decoration: BoxDecoration(
+                                                color: isDark 
+                                                    ? Colors.white.withValues(alpha: 0.05) 
+                                                    : Colors.white,
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+                                                  width: 0.5,
                                                 ),
                                               ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
+                                              child: Icon(
+                                                Icons.storefront,
+                                                size: 20,
+                                                color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                                                  'Satıcı',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                                    letterSpacing: 1.2,
+                            ),
+                                                ),
+                                                const SizedBox(height: 2),
                                                 Text(
-                                                  currencyFormat.format(deal.price),
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 20,
-                                                    fontWeight: FontWeight.w900,
-                                                    letterSpacing: -0.3,
+                                                  deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: isDark ? Colors.white : AppTheme.textPrimary,
+                                                    height: 1,
                                                   ),
                                                 ),
-                                                if (_isAdmin && !_isEditingPrice) ...[
-                                                  const SizedBox(width: 6),
-                                                  const Icon(
-                                                    Icons.edit,
-                                                    color: Colors.white70,
-                                                    size: 16,
-                                                  ),
-                                                ],
                                               ],
                                             ),
                                           ],
                                         ),
+                            InkWell(
+                              onTap: _isAdmin ? () => _showCategoryEditDialog(deal) : null,
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: primaryColor.withValues(alpha: _isAdmin ? 0.5 : 0.2),
+                                    width: _isAdmin ? 1.5 : 0.5,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      category.name.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark ? primaryColor : Colors.black,
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
+                                    if (_isAdmin) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.edit,
+                                        size: 12,
+                                        color: primaryColor,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              // İndirim Oranı (Varsa)
-                              if (deal.discountRate != null && deal.discountRate! > 0)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: Colors.red.withValues(alpha: 0.2), width: 1),
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
+                            ),
+                                      ],
+                            ),
+                                    const SizedBox(height: 24),
+                                    // Editör Seçimi Badge
+                                    if (deal.isEditorPick)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 12),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: [Colors.orange[700]!, Colors.orange[500]!],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                borderRadius: BorderRadius.circular(8),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.orange.withValues(alpha: 0.3),
+                                                    blurRadius: 4,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: const Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.star,
+                                                    color: Colors.white,
+                                                    size: 14,
+                                                  ),
+                                                  SizedBox(width: 4),
+                                                  Text(
+                                                    'Editörün Seçimi',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w700,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    // Title
+                                    Text(
+                                      deal.title,
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark ? Colors.white : AppTheme.textPrimary,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    // Price Card
+                                    InkWell(
+                                      onTap: _isAdmin ? () => _showPriceEditDialog(deal) : null,
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: isDark ? AppTheme.darkBackground : AppTheme.background,
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: _isAdmin 
+                                                ? primaryColor.withValues(alpha: 0.3)
+                                                : Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+                                            width: _isAdmin ? 1.5 : 0.5,
+                                          ),
+                                        ),
+                                      child: Stack(
+                                        children: [
+                                          // Background icon (opacity 0.05)
+                                          Positioned(
+                                            top: 0,
+                                            right: 0,
+                                            child: Opacity(
+                                              opacity: 0.05,
+                                              child: Icon(
+                                                Icons.sell,
+                                                size: 64,
+                                                color: isDark ? Colors.white : Colors.black,
+                                              ),
+                                            ),
+                                            ),
+                                          // Prices
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              if (deal.originalPrice != null && deal.originalPrice! > deal.price)
+                                                Text(
+                                                  currencyFormat.format(deal.originalPrice),
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+                                                    decoration: TextDecoration.lineThrough,
+                                                    decorationThickness: 1,
+                                                  ),
+                                                ),
+                                              Text(
+                                                currencyFormat.format(deal.price),
+                                                style: TextStyle(
+                                                  fontSize: 36,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: isDark ? Colors.white : Colors.black,
+                                                  height: 1,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    // Stats Grid (3 columns)
+                                    Row(
                                     children: [
-                                      const Icon(Icons.trending_down_rounded, color: Colors.red, size: 16),
-                                      Text(
-                                        '%${deal.discountRate}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w900,
+                                        Expanded(
+                                          child: _buildStatButton(
+                                            icon: Icons.favorite,
+                                            count: _hotVotes > 0 ? _hotVotes : deal.hotVotes,
+                                            label: 'Beğeni',
                                           color: Colors.red,
+                                            onTap: () => _handleVote(true),
+                                            isSelected: _hasVotedHot,
+                                            isDark: isDark,
+                                  ),
+                                ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: _buildStatButton(
+                                            icon: Icons.chat_bubble_outline,
+                                            count: deal.commentCount,
+                                            label: 'Yorum',
+                                            color: Colors.blue,
+                                            onTap: () => _showCommentsBottomSheet(context, deal),
+                                            isDark: isDark,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                              Expanded(
+                                child: Container(
+                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                  decoration: BoxDecoration(
+                                              color: isDark 
+                                                  ? Colors.white.withValues(alpha: 0.05) 
+                                                  : AppTheme.background,
+                                              borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                                color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+                                                width: 0.5,
+                                    ),
+                                  ),
+                                            child: Column(
+                                    children: [
+                                      Icon(
+                                                  Icons.visibility,
+                                                  size: 24,
+                                                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                      ),
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  '1.2k', // TODO: Gerçek görünüm sayısı
+                                          style: TextStyle(
+                                                    fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                                    color: isDark ? Colors.white : AppTheme.textPrimary,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  'Görünüm',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              if (deal.discountRate != null && deal.discountRate! > 0)
-                              const SizedBox(width: 10),
-                              // Mağaza
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? Colors.grey[800] : Colors.grey[100],
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.store_rounded,
-                                        size: 18,
-                                        color: isDark ? Colors.grey[300] : Colors.grey[700],
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          deal.store,
+                              ),
+                            ],
+                          ),
+                                    const SizedBox(height: 32),
+                                    // Description
+                          Row(
+                            children: [
+                          Container(
+                                          width: 6,
+                                          height: 6,
+                            decoration: BoxDecoration(
+                                            color: primaryColor,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'ÜRÜN DETAYLARI',
                                           style: TextStyle(
                                             fontSize: 14,
                                             fontWeight: FontWeight.w700,
-                                            color: isDark ? AppTheme.darkTextPrimary : Colors.grey[800],
+                                            color: isDark ? Colors.white : AppTheme.textPrimary,
+                                            letterSpacing: 2,
                                           ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
+                                ),
+                              ],
+                            ),
+                                    const SizedBox(height: 16),
+                                    if (deal.description.isNotEmpty) ...[
+                                      Text(
+                                        deal.description,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                                          height: 1.6,
+                                    ),
+                                  ),
+                                      const SizedBox(height: 12),
                                     ],
-                                  ),
+                                    // Read more button
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        // TODO: Tam açıklama göster
+                                      },
+                                      icon: Icon(
+                                        Icons.arrow_forward,
+                                        size: 16,
+                                        color: isDark ? primaryColor : Colors.black,
+                                      ),
+                                      label: Text(
+                                        'Tamamını oku',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark ? primaryColor : Colors.black,
                                 ),
-                              ),
-                            ],
-                          ),
-                          
-                          const SizedBox(height: 14),
-                          
-                          // Kategori ve Zaman - Kompakt
-                          Row(
-                            children: [
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: _isAdmin ? () => _showCategorySelector(deal) : null,
-                                  child: _buildCompactInfoChip(
-                                    icon: Icons.local_offer_outlined,
-                                    label: _getCategoryDisplayTextForDeal(deal),
-                                    color: AppTheme.primary,
-                                    showEditIcon: _isAdmin,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _buildCompactInfoChip(
-                                  icon: Icons.schedule_rounded,
-                                  label: _formatRelativeTime(deal.createdAt),
-                                  color: Colors.grey[600]!,
-                                ),
-                              ),
-                            ],
-                          ),
-                          
-                          const SizedBox(height: 14),
-                          
-                          // İstatistikler - Çok kompakt
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppTheme.darkSurface : Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: isDark
-                                      ? Colors.black.withValues(alpha: 0.3)
-                                      : Colors.black.withValues(alpha: 0.04),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => _handleVote(true),
-                                    child: _buildCompactStat(
-                                      icon: Icons.whatshot_rounded,
-                                      count: _hotVotes > 0 ? _hotVotes : deal.hotVotes,
-                                      label: 'Sıcak',
-                                      color: Colors.orange,
-                                      isSelected: _hasVotedHot,
-                                      isLoading: _isHotVoting,
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  height: 30,
-                                  color: isDark ? AppTheme.darkBorder : Colors.grey[200],
-                                ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => _handleVote(false),
-                                    child: _buildCompactStat(
-                                      icon: Icons.ac_unit_rounded,
-                                      count: _coldVotes > 0 ? _coldVotes : deal.coldVotes,
-                                      label: 'Soğuk',
-                                      color: Colors.blue,
-                                      isSelected: _hasVotedCold,
-                                      isLoading: _isColdVoting,
-                                    ),
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  height: 30,
-                                  color: isDark ? AppTheme.darkBorder : Colors.grey[200],
-                                ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => _showCommentsBottomSheet(context, deal),
-                                    child: _buildCompactStat(
-                                      icon: Icons.chat_bubble_outline_rounded,
-                                      count: deal.commentCount,
-                                      label: 'Yorum',
-                                      color: Colors.grey[600]!,
-                                    ),
+                                    const SizedBox(height: 80), // Bottom nav için padding
+                                  ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          
-                          const SizedBox(height: 14),
-                          
-                          // Yorumlar butonu - Kompakt
-                          SizedBox(
-                            width: double.infinity,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Sticky Bottom Nav
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: MediaQuery.of(context).padding.bottom + 16,
+              ),
+              decoration: BoxDecoration(
+                color: isDark ? AppTheme.darkSurface : Colors.white,
+                border: Border(
+                  top: BorderSide(
+                    color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+                    width: 1,
+                                  ),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
+                    blurRadius: 30,
+                    offset: const Offset(0, -5),
+                                        ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Fırsat Fiyatı',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            currencyFormat.format(deal.price),
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : Colors.black,
+                              height: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _openLink(context, deal.link),
+                          icon: const Icon(Icons.open_in_new, size: 20),
+                          label: const Text(
+                            'Mağazaya Git',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isDark ? Colors.grey[800] : const Color(0xFF2D3142),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 0,
+                            shadowColor: Colors.black.withValues(alpha: 0.25),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Admin için onay/red butonları (onaylanmamış deal'ler için)
+                  if (_isAdmin && !deal.isApproved)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: () => _showCommentsBottomSheet(context, deal),
-                              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-                              label: Text(
-                                'Yorumlar (${deal.commentCount})',
-                                style: const TextStyle(
-                                  fontSize: 15,
+                              onPressed: () => _rejectDeal(deal.id),
+                              icon: const Icon(Icons.close, size: 20),
+                              label: const Text(
+                                'Reddet',
+                                style: TextStyle(
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: AppTheme.primary,
-                                side: const BorderSide(color: AppTheme.primary, width: 2),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                foregroundColor: Colors.red,
+                                side: const BorderSide(color: Colors.red, width: 2),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
                             ),
                           ),
-                          
-                          if (!deal.isExpired) const SizedBox(height: 12),
-                          
-                          // Fırsat Bitti butonu - Sadece onaylanmış ve bitmemiş fırsatlar için göster
-                          if (!deal.isExpired && deal.isApproved)
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton(
-                                onPressed: _isExpiredVoting || _hasVotedExpired
-                                    ? null
-                                    : () => _markDealAsExpired(context, deal),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                  side: BorderSide(
-                                    color: _hasVotedExpired
-                                        ? Colors.green
-                                        : Colors.red,
-                                    width: 2,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: _isExpiredVoting
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                                        ),
-                                      )
-                                    : Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            _hasVotedExpired
-                                                ? Icons.check_circle
-                                                : Icons.close_rounded,
-                                            size: 18,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            _hasVotedExpired
-                                                ? 'Fırsat Bitti (Oy Verildi)'
-                                                : 'Fırsat Bitti',
-                                            style: const TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          // Sayaç
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: _hasVotedExpired
-                                                  ? Colors.green.withValues(alpha: 0.1)
-                                                  : Colors.red.withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              _getVoteCountText(deal),
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: _hasVotedExpired
-                                                    ? Colors.green[700]
-                                                    : Colors.red[700],
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                              ),
-                            ),
-                          
-                          if (!deal.isExpired) const SizedBox(height: 12),
-                          
-                          // Admin onayla/yayınla butonu - Sadece onaylanmamış fırsatlar için
-                          if (_isAdmin && !deal.isApproved) ...[
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () => _showApproveOptions(deal.id),
-                                icon: const Icon(Icons.check_circle_rounded, size: 20),
-                                label: const Text(
-                                  'Onayla / Yayınla',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  elevation: 4,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                          
-                          // Link butonu - Kompakt ve öne çıkan
-                          SizedBox(
-                            width: double.infinity,
+                          const SizedBox(width: 12),
+                          Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: () {
-                                _openLink(context, deal.link);
-                              },
-                              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                              onPressed: () => _confirmApproval(deal.id),
+                              icon: const Icon(Icons.check, size: 20),
                               label: const Text(
-                                'Fırsatı Görüntüle',
+                                'Onayla',
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primary,
+                                backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                elevation: 4,
+                                elevation: 0,
                               ),
                             ),
                           ),
-                          const SizedBox(height: 16), // Alt padding
                         ],
                       ),
                     ),
-                  ],
-                ),
+                ],
+              ),
+            ),
+          ),
+                          ],
+      ),
+      ),
+    );
+  }
+
+  Widget _buildStatButton({
+    required IconData icon,
+    required int count,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+    required bool isDark,
+    bool isSelected = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isDark 
+                ? Colors.white.withValues(alpha: 0.05) 
+                : AppTheme.background,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected 
+                  ? color.withValues(alpha: 0.3) 
+                  : Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+              width: 0.5,
+                              ),
+                            ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 24,
+                color: color,
+                          ),
+              const SizedBox(height: 6),
+              Text(
+                count.toString(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : AppTheme.textPrimary,
+                      ),
+                    ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -1090,7 +1258,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 20,
                       offset: const Offset(0, -4),
                     ),
@@ -1314,6 +1482,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     TextInputType keyboardType = TextInputType.text,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -1351,7 +1520,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
-                  color: AppTheme.primary,
+                  color: primaryColor,
                   width: 2,
                 ),
               ),
@@ -1506,7 +1675,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
-  Widget _buildEditorTag() {
+  Widget _buildEditorTag(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
@@ -1520,14 +1690,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           ),
         ],
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star_rounded, color: AppTheme.primary, size: 20),
-          SizedBox(width: 6),
+          Icon(Icons.star_rounded, color: primaryColor, size: 20),
+          const SizedBox(width: 6),
           Text(
             'Editörün Seçimi',
-            style: TextStyle(
+            style: const TextStyle(
               fontWeight: FontWeight.w700,
               color: AppTheme.accent,
             ),
@@ -1589,14 +1759,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
-  Widget _buildStatsSection(Deal deal) {
+  Widget _buildStatsSection(Deal deal, Color primaryColor) {
     return Row(
       children: [
         Expanded(
           child: _buildStatCard(
             title: 'Sıcak Oylar',
             icon: Icons.local_fire_department_rounded,
-            color: AppTheme.primary,
+            color: primaryColor,
             count: deal.hotVotes,
           ),
         ),
@@ -1675,6 +1845,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   }
 
   Widget _buildLinkCard(BuildContext context, Deal deal) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1691,10 +1862,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.link_rounded, color: AppTheme.primary),
-              SizedBox(width: 10),
+              Icon(Icons.link_rounded, color: primaryColor),
+              const SizedBox(width: 10),
               Text(
                 'Fırsat Bağlantısı',
                 style: TextStyle(
@@ -1726,7 +1897,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   icon: const Icon(Icons.copy_rounded),
                   label: const Text('Bağlantıyı Kopyala'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
+                    backgroundColor: primaryColor,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -1743,6 +1914,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   }
 
   Widget _buildReminderCard(ThemeData theme) {
+    final primaryColor = theme.colorScheme.primary;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1761,12 +1933,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.12),
+              color: primaryColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.notifications_active_rounded,
-              color: AppTheme.primary,
+              color: primaryColor,
             ),
           ),
           const SizedBox(width: 16),
@@ -1840,18 +2012,22 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
+  Future<void> _confirmApproval(String id) async {
+    await _showApproveOptions(id);
+  }
+
   Future<void> _showApproveOptions(String id) async {
     final option = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
+        context: context,
+        builder: (context) => AlertDialog(
         title: const Text('Onaylama Seçeneği'),
         content: const Text('Bu fırsatı nasıl onaylamak istersiniz?'),
-        actions: [
-          TextButton(
+          actions: [
+            TextButton(
             onPressed: () => Navigator.pop(context, 'normal'),
             child: const Text('Normal Onayla'),
-          ),
-          TextButton(
+            ),
+            TextButton(
             onPressed: () => Navigator.pop(context, 'editor'),
             style: TextButton.styleFrom(
               foregroundColor: Colors.orange[700],
@@ -1864,10 +2040,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                 Text('Editörün Seçimi'),
               ],
             ),
-          ),
-        ],
-      ),
-    );
+            ),
+          ],
+        ),
+      );
 
     if (option == null) return;
 
@@ -1988,25 +2164,25 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         'subCategory': subCategory,
       });
 
-      if (mounted) {
-        if (success) {
+        if (mounted) {
+          if (success) {
           await _loadDeal();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
               content: Text('Kategori güncellendi ✅'),
               backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
               content: Text('Kategori güncellenirken hata oluştu'),
-              backgroundColor: Colors.red,
-            ),
-          );
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
       }
-    }
   }
 
   Future<void> _savePrice(String dealId) async {
@@ -2021,7 +2197,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     // Fiyatı parse et
     final cleaned = priceText.replaceAll(RegExp('[^0-9,\\.]'), '').replaceAll(',', '.');
     final price = double.tryParse(cleaned);
-
+      
     if (price == null || price <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2031,8 +2207,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           ),
         );
       }
-      return;
-    }
+        return;
+      }
 
     setState(() {
       _isEditingPrice = false;
@@ -2065,28 +2241,28 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
   Future<void> _rejectDeal(String id) async {
     final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
+        context: context,
+        builder: (context) => AlertDialog(
         title: const Text('Fırsatı Reddet'),
         content: const Text('Bu fırsatı reddetmek istediğinize emin misiniz?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('İptal'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Evet, Reddet'),
-          ),
-        ],
-      ),
-    );
+            ),
+          ],
+        ),
+      );
 
     if (confirm != true) return;
 
     await _firestoreService.updateDeal(id, {'isExpired': true});
-    if (mounted) {
+        if (mounted) {
       await _loadDeal();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fırsat Reddedildi ❌'), backgroundColor: Colors.red),
@@ -2097,12 +2273,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   Future<void> _markDealAsExpired(BuildContext context, Deal deal) async {
     final user = _authService.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
           content: Text('Oy vermek için giriş yapmalısınız'),
           backgroundColor: Colors.orange,
-        ),
-      );
+              ),
+            );
       return;
     }
 
@@ -2134,8 +2310,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         _isExpiredVoting = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
           content: Text('Oy gönderilirken bir hata oluştu. Lütfen tekrar deneyin.'),
           backgroundColor: Colors.redAccent,
         ),
@@ -2157,10 +2333,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Fırsat bitmiş olarak işaretlendi ✅'),
-            backgroundColor: Colors.red,
+                backgroundColor: Colors.red,
             duration: Duration(seconds: 3),
-          ),
-        );
+              ),
+            );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2440,9 +2616,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     if (difference.inMinutes < 1) {
       return 'Az önce';
     } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} dk önce';
+      return '${difference.inMinutes} dakika önce';
     } else if (difference.inHours < 24) {
-      return '${difference.inHours} sa önce';
+      return '${difference.inHours} saat önce';
+    } else if (difference.inDays == 1) {
+      return 'Dün';
     } else if (difference.inDays < 7) {
       return '${difference.inDays} gün önce';
     }
@@ -2568,59 +2746,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
-  void _showFullScreenImage(BuildContext context, Deal deal) {
-    // Görsel URL'ini belirle
-    String? imageUrl;
-    if (!_originalImageFailed && deal.imageUrl.isNotEmpty) {
-      imageUrl = deal.imageUrl;
-    } else if (_fetchedImageUrl != null && _fetchedImageUrl!.isNotEmpty) {
-      imageUrl = _fetchedImageUrl;
-    }
-
-    // Görsel yoksa işlem yapma
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return;
-    }
-
-    // imageUrl artık null değil, non-nullable olarak kullan
-    final finalImageUrl = imageUrl;
-
-    // Full screen image viewer göster
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          backgroundColor: Colors.black,
-      appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.close, color: Colors.white),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
-          body: PhotoView(
-            imageProvider: CachedNetworkImageProvider(finalImageUrl),
-            minScale: PhotoViewComputedScale.contained,
-            maxScale: PhotoViewComputedScale.covered * 2,
-            initialScale: PhotoViewComputedScale.contained,
-            heroAttributes: PhotoViewHeroAttributes(tag: 'deal_${deal.id}_image'),
-            loadingBuilder: (context, event) => const Center(
-              child: CircularProgressIndicator(
-                color: Colors.white,
-              ),
-            ),
-            errorBuilder: (context, error, stackTrace) => const Center(
-              child: Icon(
-                Icons.error_outline,
-                color: Colors.white,
-                size: 60,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   void _showCommentsBottomSheet(BuildContext context, Deal deal) {
     showModalBottomSheet(
@@ -2628,6 +2753,491 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => _CommentsBottomSheet(deal: deal),
+    );
+  }
+
+  Future<void> _showAdminEditDialog(Deal deal) async {
+    final titleController = TextEditingController(text: deal.title);
+    final descriptionController = TextEditingController(text: deal.description);
+    final priceController = TextEditingController(text: deal.price.toStringAsFixed(2));
+    final originalPriceController = TextEditingController(
+      text: deal.originalPrice?.toStringAsFixed(2) ?? '',
+    );
+
+    String? selectedCategoryId = Category.getIdByName(deal.category);
+    // "tumu" kategorisi dropdown'da olmadığı için null yap
+    if (selectedCategoryId == 'tumu') {
+      selectedCategoryId = null;
+    }
+    String? selectedSubCategory = deal.subCategory;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Ürün Bilgilerini Düzenle'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Başlık',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Açıklama',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 4,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: priceController,
+                          decoration: const InputDecoration(
+                            labelText: 'Fiyat (₺)',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: originalPriceController,
+                          decoration: const InputDecoration(
+                            labelText: 'Eski Fiyat (₺)',
+                            border: OutlineInputBorder(),
+                            hintText: 'Opsiyonel',
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedCategoryId,
+                    decoration: const InputDecoration(
+                      labelText: 'Kategori',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: Category.categories
+                        .where((cat) => cat.id != 'tumu')
+                        .map((category) => DropdownMenuItem(
+                              value: category.id,
+                              child: Text('${category.icon} ${category.name}'),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        selectedCategoryId = value;
+                        selectedSubCategory = null;
+                      });
+                    },
+                  ),
+                  if (selectedCategoryId != null) ...[
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String?>(
+                      value: selectedSubCategory,
+                      decoration: const InputDecoration(
+                        labelText: 'Alt Kategori',
+                        border: OutlineInputBorder(),
+                        hintText: 'Opsiyonel',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Alt kategori seçiniz (opsiyonel)'),
+                        ),
+                        ...Category.categories
+                            .firstWhere((cat) => cat.id == selectedCategoryId)
+                            .subcategories
+                            .map((sub) => DropdownMenuItem(
+                                  value: sub,
+                                  child: Text(sub),
+                                )),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedSubCategory = value;
+                        });
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Başlık boş olamaz')),
+                  );
+                  return;
+                }
+
+                final price = double.tryParse(priceController.text.replaceAll(',', '.'));
+                if (price == null || price <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Geçerli bir fiyat giriniz')),
+                  );
+                  return;
+                }
+
+                if (selectedCategoryId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Kategori seçiniz')),
+                  );
+                  return;
+                }
+
+                final updates = <String, dynamic>{
+                  'title': titleController.text.trim(),
+                  'description': descriptionController.text.trim(),
+                  'price': price,
+                  'category': Category.getById(selectedCategoryId!).name,
+                };
+
+                final originalPrice = originalPriceController.text.trim();
+                if (originalPrice.isNotEmpty) {
+                  final origPrice = double.tryParse(originalPrice.replaceAll(',', '.'));
+                  if (origPrice != null && origPrice > price) {
+                    updates['originalPrice'] = origPrice;
+                    final discountRate = ((origPrice - price) / origPrice * 100).round();
+                    updates['discountRate'] = discountRate;
+                  } else {
+                    updates['originalPrice'] = null;
+                    updates['discountRate'] = null;
+                  }
+                } else {
+                  updates['originalPrice'] = null;
+                  updates['discountRate'] = null;
+                }
+
+                if (selectedSubCategory != null && selectedSubCategory!.isNotEmpty) {
+                  updates['subCategory'] = selectedSubCategory;
+                } else {
+                  updates['subCategory'] = null;
+                }
+
+                final success = await _firestoreService.updateDeal(widget.dealId, updates);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  if (success) {
+                    await _loadDeal();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Ürün bilgileri güncellendi ✅'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Güncelleme sırasında bir hata oluştu ❌'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Kaydet'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPriceEditDialog(Deal deal) async {
+    final priceController = TextEditingController(text: deal.price.toStringAsFixed(2));
+    final originalPriceController = TextEditingController(
+      text: deal.originalPrice?.toStringAsFixed(2) ?? '',
+    );
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fiyat Düzenle'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: priceController,
+              decoration: const InputDecoration(
+                labelText: 'Güncel Fiyat (₺)',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: originalPriceController,
+              decoration: const InputDecoration(
+                labelText: 'Eski Fiyat (₺)',
+                border: OutlineInputBorder(),
+                hintText: 'Opsiyonel',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final price = double.tryParse(priceController.text.replaceAll(',', '.'));
+              if (price == null || price <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Geçerli bir fiyat giriniz')),
+                );
+                return;
+              }
+
+              final updates = <String, dynamic>{'price': price};
+
+              final originalPrice = originalPriceController.text.trim();
+              if (originalPrice.isNotEmpty) {
+                final origPrice = double.tryParse(originalPrice.replaceAll(',', '.'));
+                if (origPrice != null && origPrice > price) {
+                  updates['originalPrice'] = origPrice;
+                  final discountRate = ((origPrice - price) / origPrice * 100).round();
+                  updates['discountRate'] = discountRate;
+                } else {
+                  updates['originalPrice'] = null;
+                  updates['discountRate'] = null;
+                }
+              } else {
+                updates['originalPrice'] = null;
+                updates['discountRate'] = null;
+              }
+
+              final success = await _firestoreService.updateDeal(widget.dealId, updates);
+              if (context.mounted) {
+                Navigator.pop(context);
+                if (success) {
+                  await _loadDeal();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Fiyat güncellendi ✅'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Güncelleme sırasında bir hata oluştu ❌'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Kaydet'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCategoryEditDialog(Deal deal) async {
+    String? selectedCategoryId = Category.getIdByName(deal.category);
+    // "tumu" kategorisi dropdown'da olmadığı için null yap
+    if (selectedCategoryId == 'tumu') {
+      selectedCategoryId = null;
+    }
+    String? selectedSubCategory = deal.subCategory;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Kategori Düzenle'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: selectedCategoryId,
+                decoration: const InputDecoration(
+                  labelText: 'Kategori',
+                  border: OutlineInputBorder(),
+                ),
+                items: Category.categories
+                    .where((cat) => cat.id != 'tumu')
+                    .map((category) => DropdownMenuItem(
+                          value: category.id,
+                          child: Text('${category.icon} ${category.name}'),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    selectedCategoryId = value;
+                    selectedSubCategory = null;
+                  });
+                },
+              ),
+              if (selectedCategoryId != null) ...[
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String?>(
+                  value: selectedSubCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'Alt Kategori',
+                    border: OutlineInputBorder(),
+                    hintText: 'Opsiyonel',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Alt kategori seçiniz (opsiyonel)'),
+                    ),
+                    ...Category.categories
+                        .firstWhere((cat) => cat.id == selectedCategoryId)
+                        .subcategories
+                        .map((sub) => DropdownMenuItem(
+                              value: sub,
+                              child: Text(sub),
+                            )),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      selectedSubCategory = value;
+                    });
+                  },
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (selectedCategoryId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Kategori seçiniz')),
+                  );
+                  return;
+                }
+
+                final updates = <String, dynamic>{
+                  'category': Category.getById(selectedCategoryId!).name,
+                };
+
+                if (selectedSubCategory != null && selectedSubCategory!.isNotEmpty) {
+                  updates['subCategory'] = selectedSubCategory;
+                } else {
+                  updates['subCategory'] = null;
+                }
+
+                final success = await _firestoreService.updateDeal(widget.dealId, updates);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  if (success) {
+                    await _loadDeal();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Kategori güncellendi ✅'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Güncelleme sırasında bir hata oluştu ❌'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Kaydet'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullScreenImage(String imageUrl) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.9),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            // Görsel - Pinch to zoom özelliği ile
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  fit: BoxFit.contain,
+                  placeholder: (context, url) => const Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: Colors.white,
+                    ),
+                  ),
+                  errorWidget: (context, url, error) => const Center(
+                    child: Icon(
+                      Icons.error_outline,
+                      color: Colors.white,
+                      size: 64,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Kapat butonu
+            Positioned(
+              top: 40,
+              right: 16,
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -2760,6 +3370,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
       maxChildSize: 0.95,
       builder: (context, scrollController) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final primaryColor = Theme.of(context).colorScheme.primary;
         return Container(
           decoration: BoxDecoration(
             color: isDark ? AppTheme.darkBackground : AppTheme.background,
@@ -2922,8 +3533,8 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(20),
-                              borderSide: const BorderSide(
-                                color: AppTheme.primary,
+                              borderSide: BorderSide(
+                                color: primaryColor,
                                 width: 2,
                               ),
                             ),
@@ -2963,9 +3574,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                       const SizedBox(width: 12),
                       Container(
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [AppTheme.primary, AppTheme.secondary],
-                          ),
+                          color: primaryColor,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: IconButton(
@@ -2997,6 +3606,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
 
   Widget _buildCommentItem(Comment comment, bool isAdmin, List<Comment> allComments, ScrollController scrollController) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
     final isReply = comment.parentCommentId != null;
     return Container(
       margin: EdgeInsets.only(
@@ -3045,7 +3655,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
               comment.userProfileImageUrl.isNotEmpty
                   ? CircleAvatar(
                       radius: isReply ? 10 : 14,
-                      backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                      backgroundColor: primaryColor.withValues(alpha: 0.1),
                       backgroundImage: comment.userProfileImageUrl.startsWith('assets/')
                           ? AssetImage(comment.userProfileImageUrl) as ImageProvider
                           : CachedNetworkImageProvider(comment.userProfileImageUrl),
@@ -3058,18 +3668,18 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                     )
                   : CircleAvatar(
                       radius: isReply ? 10 : 14,
-                      backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                      child: Text(
-                        comment.userName.isNotEmpty
-                            ? comment.userName[0].toUpperCase()
-                            : 'U',
-                        style: TextStyle(
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: isReply ? 11 : 13,
-                        ),
-                      ),
-                    ),
+                      backgroundColor: primaryColor.withValues(alpha: 0.1),
+                child: Text(
+                  comment.userName.isNotEmpty
+                      ? comment.userName[0].toUpperCase()
+                      : 'U',
+                  style: TextStyle(
+                          color: primaryColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: isReply ? 11 : 13,
+                  ),
+                ),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -3099,7 +3709,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                               comment.replyToUserName!,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: AppTheme.primary,
+                                color: primaryColor,
                                 fontWeight: FontWeight.w700,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -3190,10 +3800,10 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                   }
                 });
               },
-              icon: const Icon(Icons.reply_rounded, size: 13, color: AppTheme.primary),
-              label: const Text(
+              icon: Icon(Icons.reply_rounded, size: 13, color: primaryColor),
+              label: Text(
                 'Cevap Ver',
-                style: TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.w600),
+                style: TextStyle(color: primaryColor, fontSize: 11, fontWeight: FontWeight.w600),
               ),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -3279,9 +3889,11 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
     if (difference.inMinutes < 1) {
       return 'Az önce';
     } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} dk önce';
+      return '${difference.inMinutes} dakika önce';
     } else if (difference.inHours < 24) {
-      return '${difference.inHours} sa önce';
+      return '${difference.inHours} saat önce';
+    } else if (difference.inDays == 1) {
+      return 'Dün';
     } else if (difference.inDays < 7) {
       return '${difference.inDays} gün önce';
     }
@@ -3289,3 +3901,4 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
     return DateFormat('d MMM yyyy').format(date);
   }
 }
+

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/deal.dart';
+import '../models/category.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'deal_detail_screen.dart';
@@ -27,13 +28,14 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Yönetici Paneli'),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: AppTheme.primary,
-          labelColor: AppTheme.primary,
+          indicatorColor: primaryColor,
+          labelColor: primaryColor,
           unselectedLabelColor: Colors.grey,
           labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           tabs: const [
@@ -62,6 +64,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         _AdminListType.expired => _firestoreService.getExpiredDealsStream(),
       },
       builder: (context, snapshot) {
+        final primaryColor = Theme.of(context).colorScheme.primary;
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -106,6 +109,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final bool isPending = type == _AdminListType.pending;
     final bool isExpiredCard = type == _AdminListType.expired;
     final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -166,9 +170,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 const SizedBox(height: 4),
                 Text(
                   currencyFormat.format(deal.price),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.primary,
+                    color: primaryColor,
                   ),
                 ),
               ],
@@ -194,17 +198,17 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 Container(width: 1, height: 30, color: Colors.grey[200]),
                 Expanded(
                   child: TextButton.icon(
-                    onPressed: () => _showApproveOptions(deal.id),
-                    icon: const Icon(Icons.check, color: Colors.green),
-                    label: const Text('Onayla', style: TextStyle(color: Colors.green)),
+                    onPressed: () => _showEditDialog(deal),
+                    icon: const Icon(Icons.edit, color: Colors.blue),
+                    label: const Text('Düzenle', style: TextStyle(color: Colors.blue)),
                   ),
                 ),
                 Container(width: 1, height: 30, color: Colors.grey[200]),
                 Expanded(
                   child: TextButton.icon(
-                    onPressed: () => _deleteDeal(deal.id),
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    label: const Text('Sil', style: TextStyle(color: Colors.red)),
+                    onPressed: () => _showApproveOptions(deal.id),
+                    icon: const Icon(Icons.check, color: Colors.green),
+                    label: const Text('Onayla', style: TextStyle(color: Colors.green)),
                   ),
                 ),
               ],
@@ -228,40 +232,21 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _reactivateDeal(deal.id),
-                          icon: const Icon(Icons.restore, size: 20),
-                          label: const Text('Tekrar Yayına Al'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _reactivateDeal(deal.id),
+                      icon: const Icon(Icons.restore, size: 20),
+                      label: const Text('Tekrar Yayına Al'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _deleteDeal(deal.id),
-                          icon: const Icon(Icons.delete_outline, size: 20),
-                          label: const Text('Sil'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -372,45 +357,215 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
-  Future<void> _deleteDeal(String id) async {
-    // Önce deal bilgisini al (başlık göstermek için)
-    final deal = await _firestoreService.getDeal(id);
-    final dealTitle = deal?.title ?? 'Bu fırsat';
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Fırsatı Sil'),
-        content: Text('Bu fırsatı kalıcı olarak silmek istediğinize emin misiniz?\n\n"$dealTitle"\n\nBu işlem geri alınamaz.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            child: const Text('Evet, Sil'),
-          ),
-        ],
-      ),
+  Future<void> _showEditDialog(Deal deal) async {
+    final titleController = TextEditingController(text: deal.title);
+    final descriptionController = TextEditingController(text: deal.description);
+    final priceController = TextEditingController(text: deal.price.toStringAsFixed(2));
+    final originalPriceController = TextEditingController(
+      text: deal.originalPrice?.toStringAsFixed(2) ?? '',
     );
 
-    if (confirm != true) return;
+    String? selectedCategoryId = deal.category;
+    String? selectedSubCategory = deal.subCategory;
 
-    final success = await _firestoreService.deleteDeal(id);
-    if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fırsat silindi 🗑️'), backgroundColor: Colors.red),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Silme işlemi başarısız ❌'), backgroundColor: Colors.red),
-        );
-      }
-    }
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Ürün Bilgilerini Düzenle'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Başlık',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Açıklama',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 4,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: priceController,
+                          decoration: const InputDecoration(
+                            labelText: 'Fiyat (₺)',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: originalPriceController,
+                          decoration: const InputDecoration(
+                            labelText: 'Eski Fiyat (₺)',
+                            border: OutlineInputBorder(),
+                            hintText: 'Opsiyonel',
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedCategoryId,
+                    decoration: const InputDecoration(
+                      labelText: 'Kategori',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: Category.categories
+                        .where((cat) => cat.id != 'tumu')
+                        .map((category) => DropdownMenuItem(
+                              value: category.id,
+                              child: Text('${category.icon} ${category.name}'),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        selectedCategoryId = value;
+                        selectedSubCategory = null; // Kategori değişince alt kategoriyi sıfırla
+                      });
+                    },
+                  ),
+                  if (selectedCategoryId != null) ...[
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String?>(
+                      value: selectedSubCategory,
+                      decoration: const InputDecoration(
+                        labelText: 'Alt Kategori',
+                        border: OutlineInputBorder(),
+                        hintText: 'Opsiyonel',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Alt kategori seçiniz (opsiyonel)'),
+                        ),
+                        ...Category.categories
+                            .firstWhere((cat) => cat.id == selectedCategoryId)
+                            .subcategories
+                            .map((sub) => DropdownMenuItem(
+                                  value: sub,
+                                  child: Text(sub),
+                                )),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedSubCategory = value;
+                        });
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                // Validasyon
+                if (titleController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Başlık boş olamaz')),
+                  );
+                  return;
+                }
+
+                final price = double.tryParse(priceController.text.replaceAll(',', '.'));
+                if (price == null || price <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Geçerli bir fiyat giriniz')),
+                  );
+                  return;
+                }
+
+                if (selectedCategoryId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Kategori seçiniz')),
+                  );
+                  return;
+                }
+
+                // Güncelleme verilerini hazırla
+                final updates = <String, dynamic>{
+                  'title': titleController.text.trim(),
+                  'description': descriptionController.text.trim(),
+                  'price': price,
+                  'category': selectedCategoryId,
+                };
+
+                // Eski fiyat varsa ekle
+                final originalPrice = originalPriceController.text.trim();
+                if (originalPrice.isNotEmpty) {
+                  final origPrice = double.tryParse(originalPrice.replaceAll(',', '.'));
+                  if (origPrice != null && origPrice > price) {
+                    updates['originalPrice'] = origPrice;
+                    // İndirim oranını hesapla
+                    final discountRate = ((origPrice - price) / origPrice * 100).round();
+                    updates['discountRate'] = discountRate;
+                  } else {
+                    updates['originalPrice'] = null;
+                    updates['discountRate'] = null;
+                  }
+                } else {
+                  updates['originalPrice'] = null;
+                  updates['discountRate'] = null;
+                }
+
+                // Alt kategori varsa ekle
+                if (selectedSubCategory != null && selectedSubCategory!.isNotEmpty) {
+                  updates['subCategory'] = selectedSubCategory;
+                } else {
+                  updates['subCategory'] = null;
+                }
+
+                // Firestore'a güncelle
+                final success = await _firestoreService.updateDeal(deal.id, updates);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Ürün bilgileri güncellendi ✅'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Güncelleme sırasında bir hata oluştu ❌'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Kaydet'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
