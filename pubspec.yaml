@@ -32,6 +32,7 @@ dependencies:
   
   # Link ve URL işlemleri
   url_launcher: ^6.2.4
+  http: ^1.2.0
   
   # HTML parsing ve metadata
   html: ^0.15.4

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/category_detection_service.dart';
+import '../services/ai_service.dart';
 import '../models/category.dart';
 import '../widgets/category_selector_widget.dart';
 
@@ -35,6 +36,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     // Başlık veya açıklama değiştiğinde kategori tespit et
     _titleController.addListener(_onTextChanged);
     _descriptionController.addListener(_onTextChanged);
+    // URL değiştiğinde AI analizi yap
+    _urlController.addListener(_onUrlChanged);
   }
 
   void _onTextChanged() {
@@ -48,6 +51,83 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       if (!mounted || _isAutoDetecting) return;
       _detectCategory();
     });
+  }
+
+  void _onUrlChanged() {
+    final url = _urlController.text.trim();
+    
+    if (url.isEmpty || !url.startsWith('http')) return;
+    
+    // URL girildiğinde AI analizi yap
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (!mounted || _isAutoDetecting) return;
+      _analyzeProductWithAI();
+    });
+  }
+
+  Future<void> _analyzeProductWithAI() async {
+    final url = _urlController.text.trim();
+    if (url.isEmpty) return;
+
+    setState(() {
+      _isAutoDetecting = true;
+    });
+
+    try {
+      final result = await AIService.analyzeProduct(
+        url: url,
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+      );
+
+      if (result['success'] == true && mounted) {
+        // Başlık boşsa AI'dan geleni kullan
+        if (_titleController.text.trim().isEmpty && result['title'] != null) {
+          _titleController.text = result['title'];
+        }
+
+        // Fiyat boşsa AI'dan geleni kullan
+        if (_priceController.text.trim().isEmpty && result['price'] != null && result['price'] > 0) {
+          _priceController.text = result['price'].toString();
+        }
+
+        // Mağaza boşsa AI'dan geleni kullan
+        if (_storeController.text.trim().isEmpty && result['store'] != null) {
+          _storeController.text = result['store'];
+        }
+
+        // Kategoriyi ayarla
+        if (result['category'] != null) {
+          setState(() {
+            _selectedCategory = result['category'];
+          });
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.auto_awesome, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text('🤖 AI ile otomatik tespit: ${result['category']} kategorisi'),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('AI analiz hatası: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAutoDetecting = false;
+        });
+      }
+    }
   }
 
   void _detectCategory() {
