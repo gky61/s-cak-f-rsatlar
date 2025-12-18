@@ -2408,7 +2408,7 @@ class TelegramDealBot:
                 else:
                     entity = channel
 
-                # Entity'nin geçerli olup olmadığını kontrol et
+                # Entity'nin geçerli olup olmadığını kontrol et (Son kontrol)
                 try:
                     await self.client.get_input_entity(entity)
                     resolved_chats.append(entity)
