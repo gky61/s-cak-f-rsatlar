@@ -3,7 +3,7 @@ import json
 import re
 import asyncio
 import logging
-from typing import List, Dict, Optional, Any, Union
+from typing import List, Dict
 from urllib.parse import urlparse
 from datetime import datetime, timedelta
 
@@ -40,18 +40,22 @@ class TelegramDealBot:
     def __init__(self):
         self.api_id = os.getenv("TELEGRAM_API_ID")
         self.api_hash = os.getenv("TELEGRAM_API_HASH")
-        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        self.phone = os.getenv("TELEGRAM_PHONE")  # Telefon numarası
         raw_channels = os.getenv("SOURCE_CHANNELS") or os.getenv("TELEGRAM_CHANNELS") or ""
         self.channels = [c.strip() for c in raw_channels.split(',') if c.strip()]
-        self.client = TelegramClient('bot_session', self.api_id, self.api_hash)
+        
+        # Session dosyası - bu sayede her seferinde SMS kodu istemez
+        self.client = TelegramClient('user_session', self.api_id, self.api_hash)
 
     async def initialize(self):
-        if not self.api_id or not self.api_hash or not self.bot_token:
-            logger.error("❌ Yapılandırma eksik!")
+        if not self.api_id or not self.api_hash or not self.phone:
+            logger.error("❌ .env dosyasında eksik bilgiler var! (API_ID, API_HASH veya PHONE)")
             return False
-        await self.client.start(bot_token=self.bot_token)
+        
+        # Telefon numarası ile giriş yap
+        await self.client.start(phone=self.phone)
         me = await self.client.get_me()
-        logger.info(f"✅ Bot bağlandı! Kullanıcı Adı: @{me.username} | ID: {me.id}")
+        logger.info(f"✅ Kullanıcı olarak bağlandı! İsim: {me.first_name} | Telefon: {me.phone} | ID: {me.id}")
         return True
 
     async def analyze_deal_with_ai(self, text: str, link: str = "") -> Dict:
@@ -70,7 +74,7 @@ class TelegramDealBot:
             logger.info("ℹ️ Link bulunmadı, işlem iptal.")
             return
 
-        # AI ve Veri Çekme Simülasyonu (Hızlı test için)
+        # AI ve Veri Çekme (Gerçek implementasyon için genişletilebilir)
         ai_data = await self.analyze_deal_with_ai(text, urls[0])
         title = ai_data.get('title', text[:50])
         logger.info(f"✅ BAŞARI: Ürün Yakalandı -> {title}")
@@ -89,10 +93,6 @@ class TelegramDealBot:
             # KRİTİK DEBUG: Botun duyduğu her şeyi yaz
             logger.info(f"📩 DUYULAN MESAJ: [ID: {chat_id}] - İçerik: {text[:30]}...")
 
-            # Eğer kullanıcı bota özelden bir şey yazarsa ID'sini söyle
-            if event.is_private:
-                await event.reply(f"Selam! Bu sohbetin ID'si: `{chat_id}`\nBunu .env dosyasına ekleyebilirsin.")
-
             # Kanal/Grup Filtreleme
             is_target = False
             if str(chat_id) in self.channels or (hasattr(chat, 'username') and f"@{chat.username}" in self.channels):
@@ -102,7 +102,7 @@ class TelegramDealBot:
                 name = getattr(chat, 'username', getattr(chat, 'title', str(chat_id)))
                 await self.process_message(text, chat_id, name)
 
-        logger.info("🚀 Bot şu an her şeyi dinliyor! Lütfen mesaj atın...")
+        logger.info("🚀 Bot kullanıcı hesabıyla çalışıyor! Mesajları dinliyor...")
         await self.client.run_until_disconnected()
 
 if __name__ == '__main__':
