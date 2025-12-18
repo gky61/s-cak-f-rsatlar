@@ -2409,17 +2409,16 @@ class TelegramDealBot:
                     entity = channel
 
                 # Entity'nin geçerli olup olmadığını kontrol et
-                # get_input_entity önbellekten veya sunucudan kontrol eder
-                        try:
+                try:
                     await self.client.get_input_entity(entity)
                     resolved_chats.append(entity)
                     logger.info(f"✅ Kanal takibe alındı: {channel}")
                 except ValueError:
                     logger.warning(f"⚠️ Kanal bulunamadı veya erişilemiyor (Atlanıyor): {channel}")
-                    # Yine de listeye eklemeyi deneyelim, belki sonradan bulunur (ama event listener patlayabilir)
-                    # resolved_chats.append(entity) 
-                        except Exception as e:
-                logger.error(f"❌ Kanal çözümlenirken hata ({channel}): {e}")
+                except Exception as e:
+                    logger.error(f"❌ Kanal çözümlenirken hata ({channel}): {e}")
+            except Exception as e:
+                logger.error(f"❌ Kanal ID işlenirken hata ({channel}): {e}")
 
         if not resolved_chats:
             logger.error("❌ Hiçbir kanal çözümlenemedi! Lütfen kanal ID'lerini kontrol edin.")
@@ -2432,17 +2431,11 @@ class TelegramDealBot:
             await self.message_handler(event)
 
         try:
-            # Başlangıçta son mesajları bir kez kontrol etmek isterseniz burayı açabilirsiniz:
-            # logger.info("🔄 Başlangıç kontrolü yapılıyor...")
-            # for channel in target_channels:
-            #     await self.fetch_channel_messages(channel)
-            
             logger.info("✅ Bot aktif ve dinliyor... (Durdurmak için CTRL+C)")
             await self.client.run_until_disconnected()
-                
-            except KeyboardInterrupt:
+        except KeyboardInterrupt:
             logger.info("🛑 Bot kullanıcı tarafından durduruldu")
-            except Exception as e:
+        except Exception as e:
             logger.error(f"❌ Bot kritik hata ile durdu: {e}", exc_info=True)
 
 
