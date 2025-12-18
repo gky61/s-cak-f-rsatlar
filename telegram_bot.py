@@ -54,14 +54,11 @@ class TelegramDealBot:
         return True
 
     def _parse_price(self, price_str: str) -> float:
-        """Fiyat metnini sayıya çevir - Gelişmiş Pattern"""
+        """Fiyat metnini sayıya çevir"""
         if not price_str: return 0.0
         try:
-            # Para birimlerini ve gereksiz metinleri at
             price_str = price_str.split('TL')[0].split('₺')[0].strip()
             price_str = re.sub(r'[^\d,\.]', '', price_str)
-            
-            # Format düzeltme (1.250,50 -> 1250.50)
             if ',' in price_str and '.' in price_str:
                 if price_str.find('.') < price_str.find(','):
                     price_str = price_str.replace('.', '').replace(',', '.')
@@ -71,19 +68,13 @@ class TelegramDealBot:
                 parts = price_str.split(',')
                 if len(parts[-1]) <= 2: price_str = price_str.replace(',', '.')
                 else: price_str = price_str.replace(',', '')
-            
             return float(price_str)
         except: return 0.0
 
     async def fetch_link_data(self, url: str) -> Dict:
         """Linkten HTML içeriğini çek"""
         try:
-            response = curl_requests.get(
-                url, 
-                impersonate="chrome110",
-                timeout=30,
-                allow_redirects=True
-            )
+            response = curl_requests.get(url, impersonate="chrome110", timeout=30, allow_redirects=True)
             if response.status_code == 200:
                 return {'html': response.text, 'final_url': response.url}
             return {}
@@ -92,30 +83,16 @@ class TelegramDealBot:
             return {}
 
     def extract_html_data(self, html: str, base_url: str) -> dict:
-        """HTML'den fiyat ve diğer bilgileri çek - Gelişmiş Site Bazlı Mantık"""
+        """Sitelerden özel fiyat çekme mantığı"""
         data = {'price': 0.0, 'original_price': 0.0}
         if not html: return data
-
         try:
             soup = BeautifulSoup(html, 'lxml')
             parsed_url = urlparse(base_url)
             hostname = parsed_url.hostname.lower() if parsed_url.hostname else ''
 
-            # --- SİTE BAZLI ÖZEL SELECTORLAR ---
-            
-            # 1. Amazon
-            if 'amazon' in hostname:
-                selectors = ['#corePriceDisplay_desktop_feature_div .a-price.priceToPay .a-offscreen', '.priceToPay span.a-offscreen', '.a-price-whole']
-                for s in selectors:
-                    elem = soup.select_one(s)
-                    if elem:
-                        p = self._parse_price(elem.get_text())
-                        if p >= 5: data['price'] = p; break
-                return data
-
-            # 2. Marketler (Migros, A101, Şok)
             if any(x in hostname for x in ['migros', 'a101', 'sokmarket']):
-                selectors = ['.product-price', '.current-price', 'span[data-price]', 'span[itemprop="price"]']
+                selectors = ['.product-price', '.current-price', 'span[data-price]']
                 for s in selectors:
                     elem = soup.select_one(s)
                     if elem:
@@ -123,17 +100,6 @@ class TelegramDealBot:
                         p = self._parse_price(price_text)
                         if p >= 1: data['price'] = p; return data
 
-            # 3. Trendyol & Hepsiburada & N11
-            if any(x in hostname for x in ['trendyol', 'hepsiburada', 'n11.com']):
-                selectors = ['span.prc-dsc', 'div[data-bind*="currentPrice"]', '.newPrice ins', '.product-new-price']
-                for s in selectors:
-                    elem = soup.select_one(s)
-                    if elem:
-                        p = self._parse_price(elem.get_text())
-                        if p >= 5: data['price'] = p; break
-                if data['price'] > 0: return data
-
-            # --- GENEL MANTIK (JSON-LD) ---
             for script in soup.find_all('script', type='application/ld+json'):
                 try:
                     js = json.loads(script.string)
@@ -150,71 +116,39 @@ class TelegramDealBot:
                     p = find_p(js)
                     if p and p >= 5: data['price'] = p; return data
                 except: continue
-
-            # --- GENEL MANTIK (Meta Tags) ---
-            meta_selectors = [{'property': 'product:price:amount'}, {'property': 'og:price:amount'}, {'name': 'price'}]
-            for selector in meta_selectors:
-                meta = soup.find('meta', selector)
-                if meta and meta.get('content'):
-                    p = self._parse_price(meta.get('content'))
-                    if p >= 5: data['price'] = p; return data
-
         except Exception as e:
             logger.error(f"HTML analiz hatası: {e}")
-        
         return data
 
     async def analyze_deal_with_ai(self, text: str, link: str = "") -> Dict:
-        """Gemini AI ile mesajı profesyonelce analiz et"""
+        """Gemini AI ile mesajı analiz et"""
         if not model: return {}
         try:
-            prompt = f"""
-            Sen dünyanın en iyi e-ticaret veri analiz uzmanısın. Aşağıdaki mesajı analiz et ve SADECE JSON döndür.
-            
-            GÖREVLERİN:
-            1. Ürün adını temizle (reklam, kanal adı ve emojileri at).
-            2. 'price' en düşük indirimli fiyat olsun. (Örn: "Sepette 100 TL" diyorsa fiyat 100'dür).
-            3. Mağazayı belirle (Amazon, Trendyol, Hepsiburada vb.).
-            4. Kategoriyi şu listeden seç: ['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 'spor_outdoor', 'kitap_hobi', 'yapi_oto', 'supermarket']
-            
-            GİRDİLER:
-            Mesaj: {text}
-            Link: {link}
-            
-            İSTENEN JSON FORMATI:
-            {{
-                "title": "Temizlenmiş Ürün Adı",
-                "price": 123.45,
-                "original_price": 0.0,
-                "store": "Mağaza Adı",
-                "category": "kategori_adi",
-                "confidence": "high"
-            }}
-            """
-            response = await model.generate_content_async(
-                prompt,
-                generation_config=genai.types.GenerationConfig(temperature=0.1)
-            )
-            json_text = response.text.replace('```json', '').replace('```', '').strip()
-            return json.loads(json_text)
+            prompt = f"Sen bir e-ticaret uzmanısın. Şu mesajı analiz et ve SADECE JSON döndür:\n{text}\nLink: {link}\n\nİstenen JSON: {{\"title\": \"...\", \"price\": 0.0, \"category\": \"...\"}}"
+            response = await model.generate_content_async(prompt, generation_config=genai.types.GenerationConfig(temperature=0.1))
+            return json.loads(response.text.replace('```json', '').replace('```', '').strip())
         except Exception as e:
-            logger.error(f"❌ AI Analiz Hatası: {e}")
+            logger.error(f"❌ AI hatası: {e}")
             return {}
 
     async def process_message(self, message, channel_name):
         """Mesajı işle ve fırsatı kaydet"""
         text = message.message or ""
+        logger.info(f"📩 YENİ MESAJ GELDİ (Kanal: {channel_name}) -> İçerik: {text[:50]}...")
+        
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
-        if not urls: return
+        if not urls:
+            logger.warning("⚠️ Mesajda link bulunamadı, atlanıyor.")
+            return
 
         link = urls[0]
-        logger.info(f"🔗 İşleniyor: {link} (Kanal: {channel_name})")
+        logger.info(f"🔗 Link algılandı: {link}")
         
-        # 1. AI ile mesajı anla
         ai_data = await self.analyze_deal_with_ai(text, link)
-        if not ai_data: return
+        if not ai_data:
+            logger.error("❌ AI analizi başarısız oldu.")
+            return
 
-        # 2. HTML'den gerçek fiyatı doğrula
         html_res = await self.fetch_link_data(link)
         if html_res:
             html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
@@ -222,11 +156,9 @@ class TelegramDealBot:
                 ai_data['price'] = html_data['price']
                 logger.info(f"💰 Fiyat HTML'den güncellendi: {ai_data['price']} TL")
 
-        logger.info(f"✅ FIRSAT YAKALANDI: {ai_data.get('title')} | {ai_data.get('price')} TL | Kat: {ai_data.get('category')}")
-        # Burada Firestore'a kayıt işlemi eklenebilir.
+        logger.info(f"✅ FIRSAT İŞLENDİ: {ai_data.get('title')} | {ai_data.get('price')} TL")
 
     async def run(self):
-        """Bot'u çalıştır"""
         if not await self.initialize(): return
         
         target_channels = [c.strip() for c in self.channels if c.strip()]
@@ -237,28 +169,24 @@ class TelegramDealBot:
                 if channel.startswith('-'):
                     try: entity = int(channel)
                     except: pass
-                
                 await self.client.get_input_entity(entity)
                 resolved_chats.append(entity)
                 logger.info(f"✅ Takipte: {channel}")
             except Exception as e:
                 logger.error(f"❌ Kanal hatası ({channel}): {e}")
 
-        if not resolved_chats:
-            logger.error("❌ Hiçbir kanal takip edilemedi! .env dosyasını kontrol edin.")
-            return
+        if not resolved_chats: return
 
         @self.client.on(events.NewMessage(chats=resolved_chats))
         async def handler(event):
             chat = await event.get_chat()
-            channel_name = getattr(chat, 'username', getattr(chat, 'title', str(chat.id)))
-            await self.process_message(event.message, channel_name)
+            name = getattr(chat, 'username', getattr(chat, 'title', str(chat.id)))
+            await self.process_message(event.message, name)
 
         logger.info("✅ Bot aktif ve dinliyor... (Durdurmak için CTRL+C)")
         await self.client.run_until_disconnected()
 
 async def main():
-    # Logs klasörünü oluştur
     os.makedirs('logs', exist_ok=True)
     bot = TelegramDealBot()
     await bot.run()
