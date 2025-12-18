@@ -1160,10 +1160,6 @@ class TelegramDealBot:
             logger.error(f"❌ AI Analiz Hatası: {e}")
             return {}
 
-        except Exception as e:
-            logger.error(f"❌ AI Analiz Hatası: {e}")
-            return {}
-
     def extract_category_from_html(self, html: str, base_url: str, title: str = '') -> Optional[str]:
         """HTML'den kategori çıkar"""
         soup = BeautifulSoup(html, 'html.parser')
