@@ -63,8 +63,16 @@ class TelegramDealBot:
 
     async def initialize(self):
         """Bot'u başlat"""
-        await self.client.start(bot_token=self.bot_token)
-        logger.info("✅ Bot başarıyla başlatıldı!")
+        if not self.api_id or not self.api_hash or not self.bot_token:
+            logger.error("❌ HATA: .env dosyasında TELEGRAM_API_ID, TELEGRAM_API_HASH veya TELEGRAM_BOT_TOKEN eksik!")
+            raise ValueError("Eksik Telegram yapılandırması!")
+            
+        try:
+            await self.client.start(bot_token=self.bot_token)
+            logger.info("✅ Bot başarıyla başlatıldı!")
+        except Exception as e:
+            logger.error(f"❌ Bot başlatılırken hata oluştu: {e}")
+            raise e
 
     def _parse_price(self, price_str: str) -> float:
         """Fiyat metnini sayıya çevir"""
