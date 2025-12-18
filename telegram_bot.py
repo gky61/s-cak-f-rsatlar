@@ -974,9 +974,9 @@ class TelegramDealBot:
 
             # --- GENEL MANTIK (Diğer Siteler) ---
             # 1. JSON-LD Schema (EN ÖNCELİKLİ)
-        json_ld_scripts = soup.find_all('script', type='application/ld+json')
-        for script in json_ld_scripts:
-            try:
+            json_ld_scripts = soup.find_all('script', type='application/ld+json')
+            for script in json_ld_scripts:
+                try:
                     if not script.string: continue
                     js_data = json.loads(script.string)
                     
@@ -985,7 +985,7 @@ class TelegramDealBot:
                             # Price field'ı
                             if 'price' in obj and (isinstance(obj['price'], (int, float, str))):
                                 price = self._parse_price(str(obj['price']))
-                                if price >= 10:
+                                if price >= 5:
                                     return price
                             # Offers içinde price
                             if 'offers' in obj:
@@ -995,13 +995,8 @@ class TelegramDealBot:
                             # lowPrice (en düşük fiyat)
                             if 'lowPrice' in obj:
                                 price = self._parse_price(str(obj['lowPrice']))
-                                if price >= 10:
+                                if price >= 5:
                                     return price
-                            # highPrice varsa eski fiyat olabilir
-                            if 'highPrice' in obj and data['price'] > 0:
-                                high = self._parse_price(str(obj['highPrice']))
-                                if high > data['price']:
-                                    data['original_price'] = high
                         elif isinstance(obj, list):
                             for item in obj:
                                 res = find_price_recursive(item)
@@ -1009,29 +1004,29 @@ class TelegramDealBot:
                         return None
 
                     price = find_price_recursive(js_data)
-                if price and price >= 10:
+                    if price and price >= 5:
                         data['price'] = price
-                    logger.info(f"✅ Fiyat bulundu (JSON-LD): {price} TL")
+                        logger.info(f"✅ Fiyat bulundu (JSON-LD): {price} TL")
                         return data
                 except Exception as e:
                     logger.debug(f"JSON-LD parse hatası: {e}")
                     continue
 
             # 2. Meta tags
-        meta_selectors = [
-            {'property': 'product:price:amount'},
-            {'property': 'og:price:amount'},
-            {'name': 'price'},
-            {'itemprop': 'price'},
-            {'property': 'product:sale_price:amount'},
-        ]
-        for selector in meta_selectors:
-            price_meta = soup.find('meta', selector)
-            if price_meta and price_meta.get('content'):
-                price = self._parse_price(price_meta.get('content'))
-                if price >= 10:
+            meta_selectors = [
+                {'property': 'product:price:amount'},
+                {'property': 'og:price:amount'},
+                {'name': 'price'},
+                {'itemprop': 'price'},
+                {'property': 'product:sale_price:amount'},
+            ]
+            for selector in meta_selectors:
+                price_meta = soup.find('meta', selector)
+                if price_meta and price_meta.get('content'):
+                    price = self._parse_price(price_meta.get('content'))
+                    if price >= 5:
                         data['price'] = price
-                    logger.info(f"✅ Fiyat bulundu (Meta {selector}): {price} TL")
+                        logger.info(f"✅ Fiyat bulundu (Meta {selector}): {price} TL")
                         return data
 
             # 3. Genel HTML Selectors (Geniş Kapsam)
