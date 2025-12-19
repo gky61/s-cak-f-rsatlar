@@ -237,15 +237,32 @@ class TelegramDealBot:
             logger.error(f"❌ HTML analiz hatası: {e}", exc_info=True)
         return data
 
-    async def analyze_deal_with_ai(self, text: str, link: str = "") -> Dict:
+    async def analyze_deal_with_ai(self, text: str, link: str = "", image_bytes: bytes = None, html_text: str = "") -> Dict:
         if not model: 
             logger.warning("⚠️ AI modeli yok, analiz yapılamıyor")
             return {}
         try:
-            prompt = f"""Sen bir e-ticaret uzmanısın. Aşağıdaki Telegram mesajını analiz et ve SADECE JSON döndür.
+            # Fiyat bulmak için tüm kaynakları kullan
+            analysis_text = f"""Telegram Mesajı:
+{text}
 
-Mesaj: {text}
-Link: {link}
+Link: {link}"""
+
+            if html_text:
+                analysis_text += f"""
+
+HTML İçeriği (ürün sayfasından):
+{html_text[:2000]}"""  # HTML'den önemli kısımları al (fiyat, başlık vb.)
+
+            prompt = f"""Sen bir e-ticaret uzmanısın. Aşağıdaki bilgileri analiz et ve fiyatı bul.
+
+{analysis_text}
+
+GÖREV:
+1. Görselde (eğer varsa) fiyat yazıyorsa onu oku
+2. Mesaj metninde fiyat ara
+3. HTML içeriğinde fiyat ara
+4. Tüm kaynaklardan en doğru fiyatı bul
 
 MUTLAKA şu JSON formatını döndür (başka hiçbir şey yazma):
 {{
@@ -257,19 +274,43 @@ MUTLAKA şu JSON formatını döndür (başka hiçbir şey yazma):
 
 KURALLAR:
 1. Kategori MUTLAKA şunlardan biri olmalı: elektronik, moda, ev_yasam, anne_bebek, kozmetik, spor_outdoor, supermarket, yapi_oto, kitap_hobi, diğer
-2. Fiyat MUTLAKA sayı olmalı (TL, ₺, lira gibi kelimeleri çıkar, sadece sayıyı al). Örnek: "5999 TL" -> 5999.0, "1.299,99 ₺" -> 1299.99
-3. Title kısa ve net olsun (maksimum 100 karakter)
-4. Store adını mesajdan veya link'ten çıkar
-5. SADECE JSON döndür, başka hiçbir açıklama yazma
+2. Fiyat ÇOK ÖNEMLİ - Görselde, mesajda veya HTML'de fiyat varsa MUTLAKA bulmalısın. TL, ₺, lira, fiyat gibi kelimelerin yanındaki sayıları bul. Örnekler: "5999 TL" -> 5999.0, "1.299,99 ₺" -> 1299.99, "2.500 lira" -> 2500.0
+3. Görselde fiyat yazıyorsa (örneğin ürün etiketi, fiyat etiketi) onu oku
+4. Title kısa ve net olsun (maksimum 100 karakter)
+5. Store adını mesajdan veya link'ten çıkar
+6. SADECE JSON döndür, başka hiçbir açıklama yazma
 
 Örnek çıktı:
 {{"title": "iPhone 15 Pro Max", "price": 59999.0, "category": "elektronik", "store": "Apple Store"}}"""
             
-            logger.info("🤖 AI analizi başlatılıyor...")
-            response = await model.generate_content_async(
-                prompt, 
-                generation_config=genai.types.GenerationConfig(temperature=0.1)
-            )
+            logger.info("🤖 AI analizi başlatılıyor (görsel ve metin analizi)...")
+            
+            # Eğer görsel varsa, görseli de gönder
+            if image_bytes:
+                try:
+                    from PIL import Image
+                    import io
+                    # Bytes'tan Image oluştur
+                    image = Image.open(io.BytesIO(image_bytes))
+                    logger.info("📸 Görsel AI'ye gönderiliyor (OCR ile fiyat okuma)...")
+                    # Hem görsel hem metin gönder
+                    response = await model.generate_content_async(
+                        [image, prompt],
+                        generation_config=genai.types.GenerationConfig(temperature=0.1)
+                    )
+                except Exception as img_error:
+                    logger.warning(f"⚠️ Görsel işleme hatası, sadece metin analizi yapılıyor: {img_error}")
+                    # Görsel işlenemezse sadece metin gönder
+                    response = await model.generate_content_async(
+                        prompt, 
+                        generation_config=genai.types.GenerationConfig(temperature=0.1)
+                    )
+            else:
+                # Sadece metin gönder
+                response = await model.generate_content_async(
+                    prompt, 
+                    generation_config=genai.types.GenerationConfig(temperature=0.1)
+                )
             
             # Response'tan JSON çıkar
             response_text = response.text.strip()
@@ -325,6 +366,7 @@ KURALLAR:
         
         # Telegram'dan görsel varsa öncelik ver - direkt download_media kullan
         telegram_image_url = None
+        telegram_image_bytes = None  # AI analizi için görsel bytes'ı sakla
         if event and event.message and hasattr(event.message, 'photo') and event.message.photo:
             try:
                 logger.info("📸 Telegram mesajında fotoğraf bulundu, indiriliyor...")
@@ -332,11 +374,9 @@ KURALLAR:
                 photo_bytes = await event.client.download_media(event.message.photo, file=bytes)
                 if photo_bytes:
                     logger.info(f"✅ Telegram fotoğrafı indirildi ({len(photo_bytes)} bytes)")
-                    # Fotoğrafı imgbb API'ye upload et (ücretsiz, API key gerekli)
-                    # Alternatif: Base64 encode edip data URI kullan (ama Firestore'da sorun olabilir)
-                    # Şimdilik: imgbb kullanacağız, API key yoksa HTML scraping kullanılacak
+                    telegram_image_bytes = photo_bytes  # AI analizi için sakla
                     
-                    # imgbb API kullanarak upload et
+                    # Fotoğrafı imgbb API'ye upload et (Firestore'a kaydetmek için)
                     imgbb_api_key = os.getenv("IMGBB_API_KEY", "")
                     if imgbb_api_key:
                         try:
@@ -357,12 +397,36 @@ KURALLAR:
                         except Exception as e2:
                             logger.warning(f"⚠️ imgbb upload hatası: {e2}")
                     else:
-                        logger.info("ℹ️ IMGBB_API_KEY yok, Telegram fotoğrafı kullanılamıyor")
+                        logger.info("ℹ️ IMGBB_API_KEY yok, Telegram fotoğrafı imgbb'ye yüklenemedi ama AI analizi için kullanılacak")
             except Exception as e:
                 logger.error(f"❌ Telegram fotoğraf indirme hatası: {e}")
         
-        # AI ile analiz et
-        ai_data = await self.analyze_deal_with_ai(text, link)
+        # HTML'den veri çek (AI'ye de göndereceğiz)
+        logger.info(f"🌐 HTML scraping başlatılıyor: {link}")
+        html_res = await self.fetch_link_data(link)
+        html_data = {}
+        html_text_for_ai = ""  # AI'ye göndermek için HTML metni
+        if html_res:
+            logger.info("✅ HTML içeriği alındı, veri çıkarılıyor...")
+            html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
+            link = html_res['final_url']
+            logger.info(f"📊 HTML'den çıkarılan: Fiyat={html_data.get('price', 0.0)}, Görsel={'Var' if html_data.get('image') else 'Yok'}, Başlık={'Var' if html_data.get('title') else 'Yok'}")
+            
+            # HTML'den önemli metni çıkar (fiyat, başlık vb. için AI'ye göndermek üzere)
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(html_res['html'], 'html.parser')
+                # Script ve style tag'lerini kaldır
+                for script in soup(["script", "style"]):
+                    script.decompose()
+                html_text_for_ai = soup.get_text()[:2000]  # İlk 2000 karakter
+            except:
+                html_text_for_ai = ""
+        else:
+            logger.warning("⚠️ HTML içeriği alınamadı")
+        
+        # AI ile analiz et - görseli ve HTML'i de gönder
+        ai_data = await self.analyze_deal_with_ai(text, link, telegram_image_bytes, html_text_for_ai)
         if not ai_data:
             logger.warning("⚠️ AI analizi başarısız, temel veri kullanılıyor")
             ai_data = {
@@ -371,18 +435,6 @@ KURALLAR:
                 'category': 'diğer',
                 'store': 'Bilinmeyen'
             }
-        
-        # HTML'den veri çek
-        logger.info(f"🌐 HTML scraping başlatılıyor: {link}")
-        html_res = await self.fetch_link_data(link)
-        html_data = {}
-        if html_res:
-            logger.info("✅ HTML içeriği alındı, veri çıkarılıyor...")
-            html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
-            link = html_res['final_url']
-            logger.info(f"📊 HTML'den çıkarılan: Fiyat={html_data.get('price', 0.0)}, Görsel={'Var' if html_data.get('image') else 'Yok'}, Başlık={'Var' if html_data.get('title') else 'Yok'}")
-        else:
-            logger.warning("⚠️ HTML içeriği alınamadı")
         
         # Verileri birleştir - Öncelik sırası:
         # Görsel: Telegram fotoğrafı > HTML scraping > Boş
