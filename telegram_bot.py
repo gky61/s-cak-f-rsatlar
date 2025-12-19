@@ -70,6 +70,8 @@ class TelegramDealBot:
         raw_channels = os.getenv("SOURCE_CHANNELS") or os.getenv("TELEGRAM_CHANNELS") or ""
         self.channels = [c.strip() for c in raw_channels.split(',') if c.strip()]
         self.client = TelegramClient('user_session', self.api_id, self.api_hash)
+        self.last_message_time = {}  # Rate limiting için
+        self.min_delay_seconds = 2  # Mesajlar arası minimum bekleme süresi (saniye)
 
     async def initialize(self):
         if not self.api_id or not self.api_hash or not self.phone:
@@ -365,6 +367,8 @@ KURALLAR:
 
     async def process_message(self, text, chat_id, name, event=None):
         logger.info(f"📥 Mesaj İşleniyor... Kanal: {name}")
+        # Telegram spam algılamasından kaçınmak için küçük bir delay
+        await asyncio.sleep(0.5)  # 500ms bekle
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
         
         if not urls:
@@ -520,6 +524,16 @@ KURALLAR:
                     logger.debug(f"⏭️ Hedef kanal değil, atlanıyor: {chat_id_str}")
                 
                 if is_target:
+                    # Rate limiting - aynı kanaldan çok hızlı mesaj gelirse bekle
+                    now = datetime.now()
+                    if chat_id_str in self.last_message_time:
+                        time_diff = (now - self.last_message_time[chat_id_str]).total_seconds()
+                        if time_diff < self.min_delay_seconds:
+                            wait_time = self.min_delay_seconds - time_diff
+                            logger.debug(f"⏳ Rate limiting: {wait_time:.1f} saniye bekleniyor...")
+                            await asyncio.sleep(wait_time)
+                    self.last_message_time[chat_id_str] = datetime.now()
+                    
                     name = getattr(chat, 'username', getattr(chat, 'title', str(chat_id)))
                     await self.process_message(text, chat_id, name, event)
             except Exception as e:
