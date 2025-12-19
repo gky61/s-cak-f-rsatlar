@@ -367,8 +367,10 @@ KURALLAR:
 
     async def process_message(self, text, chat_id, name, event=None):
         logger.info(f"📥 Mesaj İşleniyor... Kanal: {name}")
-        # Telegram spam algılamasından kaçınmak için küçük bir delay
-        await asyncio.sleep(0.5)  # 500ms bekle
+        # Telegram spam algılamasından kaçınmak için random delay (1-3 saniye arası)
+        import random
+        delay = random.uniform(1.0, 3.0)
+        await asyncio.sleep(delay)
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
         
         if not urls:
