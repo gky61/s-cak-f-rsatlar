@@ -9,3 +9,4 @@ google-generativeai==0.8.3
 brotli
 requests
 curl_cffi==0.7.4
+Pillow>=10.0.0
