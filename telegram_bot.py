@@ -30,15 +30,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger("TelegramDealBot")
 
-# Firebase Admin başlat
+# Firebase Admin başlat (Opsiyonel - dosya yoksa çalışmaya devam eder)
+db = None
 try:
-    if not firebase_admin._apps:
-        cred = credentials.Certificate('serviceAccountKey.json')
-        firebase_admin.initialize_app(cred)
-    db = firestore.client()
-    logger.info("✅ Firebase bağlantısı kuruldu")
+    import os as os_check
+    service_account_path = 'serviceAccountKey.json'
+    if os_check.path.exists(service_account_path):
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(service_account_path)
+            firebase_admin.initialize_app(cred)
+        db = firestore.client()
+        logger.info("✅ Firebase bağlantısı kuruldu")
+    else:
+        logger.warning("⚠️ serviceAccountKey.json bulunamadı - Firestore kayıtları yapılmayacak")
+        logger.warning("⚠️ Bot çalışıyor ama veriler uygulamaya gelmeyecek!")
 except Exception as e:
-    logger.error(f"❌ Firebase başlatılamadı: {e}")
+    logger.warning(f"⚠️ Firebase başlatılamadı: {e} - Bot çalışmaya devam ediyor")
     db = None
 
 # Gemini AI Yapılandırması
