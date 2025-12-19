@@ -347,9 +347,9 @@ KURALLAR:
             return False
         try:
             deal_data['createdAt'] = datetime.now()
-            # Otomatik onayla (uygulamada görünmesi için)
-            deal_data['isApproved'] = True
-            deal_data['isExpired'] = False
+            # Admin onayı bekliyor - admin sayfasında görünecek
+            deal_data['isApproved'] = False
+            deal_data['isExpired'] = False  # Admin sayfasında görünmesi için gerekli
             deal_data['hotVotes'] = 0
             deal_data['coldVotes'] = 0
             deal_data['expiredVotes'] = 0
