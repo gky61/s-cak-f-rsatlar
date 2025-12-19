@@ -118,7 +118,7 @@ class TelegramDealBot:
                             data['image'] = img[0] if isinstance(img, list) else img
                 except:
                     continue
-            
+
             # Görseli çek
             if not data['image']:
                 img_tag = soup.find('meta', property='og:image') or soup.find('meta', attrs={'name': 'twitter:image'})
@@ -130,7 +130,7 @@ class TelegramDealBot:
                 title_tag = soup.find('meta', property='og:title') or soup.find('title')
                 if title_tag:
                     data['title'] = title_tag.get('content') if title_tag.get('content') else title_tag.get_text()
-                    
+
         except Exception as e:
             logger.error(f"❌ HTML analiz hatası: {e}")
         return data
@@ -191,7 +191,7 @@ Kurallar:
         if not urls:
             logger.info("ℹ️ Link yok, atlanıyor.")
             return
-
+            
         link = urls[0]
         logger.info(f"🔗 Link: {link}")
         
