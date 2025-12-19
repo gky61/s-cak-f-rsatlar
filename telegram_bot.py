@@ -51,18 +51,16 @@ except Exception as e:
 # Gemini AI Yapılandırması
 try:
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    # Model adını düzelt - gemini-1.5-flash-latest veya gemini-pro kullan
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
-    logger.info("✅ Gemini AI modeli yüklendi: gemini-1.5-flash-latest")
+    # Doğru model adı: gemini-1.5-flash veya gemini-pro
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        logger.info("✅ Gemini AI modeli yüklendi: gemini-1.5-flash")
+    except:
+        model = genai.GenerativeModel('gemini-pro')
+        logger.info("✅ Gemini AI modeli yüklendi: gemini-pro")
 except Exception as e:
     logger.error(f"❌ Gemini AI başlatılamadı: {e}")
-    try:
-        # Alternatif model deneyelim
-        model = genai.GenerativeModel('gemini-pro')
-        logger.info("✅ Gemini AI modeli yüklendi: gemini-pro (fallback)")
-    except Exception as e2:
-        logger.error(f"❌ Alternatif model de başarısız: {e2}")
-        model = None
+    model = None
 
 class TelegramDealBot:
     def __init__(self):
@@ -195,21 +193,43 @@ class TelegramDealBot:
                         if isinstance(js, list) and js:
                             js = js[0]
                         if isinstance(js, dict):
-                            offers = js.get('offers', {})
-                            if isinstance(offers, dict):
-                                price = offers.get('price') or offers.get('lowPrice', 0)
-                                if price:
-                                    parsed = self._parse_price(str(price))
-                                    if parsed > 0:
-                                        data['price'] = parsed
-                                        logger.info(f"✅ Fiyat bulundu (JSON-LD): {data['price']} TL")
-                                        break
-                    except:
+                            # Product tipini kontrol et
+                            if js.get('@type') == 'Product' or 'Product' in str(js.get('@type', [])):
+                                offers = js.get('offers', {})
+                                if isinstance(offers, dict):
+                                    price = offers.get('price') or offers.get('lowPrice') or offers.get('highPrice', 0)
+                                    if price:
+                                        parsed = self._parse_price(str(price))
+                                        if parsed > 0:
+                                            data['price'] = parsed
+                                            logger.info(f"✅ Fiyat bulundu (JSON-LD Product): {data['price']} TL")
+                                            break
+                                elif isinstance(offers, list) and offers:
+                                    price = offers[0].get('price', 0) if isinstance(offers[0], dict) else 0
+                                    if price:
+                                        parsed = self._parse_price(str(price))
+                                        if parsed > 0:
+                                            data['price'] = parsed
+                                            logger.info(f"✅ Fiyat bulundu (JSON-LD Product list): {data['price']} TL")
+                                            break
+                            else:
+                                # Genel offers kontrolü
+                                offers = js.get('offers', {})
+                                if isinstance(offers, dict):
+                                    price = offers.get('price') or offers.get('lowPrice', 0)
+                                    if price:
+                                        parsed = self._parse_price(str(price))
+                                        if parsed > 0:
+                                            data['price'] = parsed
+                                            logger.info(f"✅ Fiyat bulundu (JSON-LD): {data['price']} TL")
+                                            break
+                    except Exception as e:
+                        logger.debug(f"JSON-LD price parse hatası: {e}")
                         continue
             
             # Fiyat bulunamadıysa log
             if not data['price']:
-                logger.warning("⚠️ Fiyat bulunamadı")
+                logger.warning("⚠️ HTML'den fiyat bulunamadı, AI'den gelecek")
             if not data['image']:
                 logger.warning("⚠️ Görsel bulunamadı")
 
@@ -218,33 +238,55 @@ class TelegramDealBot:
         return data
 
     async def analyze_deal_with_ai(self, text: str, link: str = "") -> Dict:
-        if not model: return {}
+        if not model: 
+            logger.warning("⚠️ AI modeli yok, analiz yapılamıyor")
+            return {}
         try:
-            prompt = f"""Sen bir e-ticaret uzmanısın. Aşağıdaki mesajı analiz et ve SADECE JSON döndür:
+            prompt = f"""Sen bir e-ticaret uzmanısın. Aşağıdaki Telegram mesajını analiz et ve SADECE JSON döndür.
 
 Mesaj: {text}
 Link: {link}
 
-Döndürülecek JSON formatı:
+MUTLAKA şu JSON formatını döndür (başka hiçbir şey yazma):
 {{
-  "title": "Ürün başlığı (kısa ve net)",
-  "price": 0.0,
-  "category": "mobil-cihazlar | bilgisayar | ev-yasam | konsol-oyun | diğer",
-  "store": "Mağaza adı"
+  "title": "ürün başlığı",
+  "price": 1234.50,
+  "category": "elektronik|moda|ev_yasam|anne_bebek|kozmetik|spor_outdoor|supermarket|yapi_oto|kitap_hobi|diğer",
+  "store": "mağaza adı"
 }}
 
-Kurallar:
-- Kategori mutlaka yukarıdaki 5 seçenekten biri olmalı
-- Fiyat sayısal olmalı (0.0 formatında)
-- Başka açıklama ekleme, sadece JSON döndür"""
+KURALLAR:
+1. Kategori MUTLAKA şunlardan biri olmalı: elektronik, moda, ev_yasam, anne_bebek, kozmetik, spor_outdoor, supermarket, yapi_oto, kitap_hobi, diğer
+2. Fiyat MUTLAKA sayı olmalı (TL, ₺, lira gibi kelimeleri çıkar, sadece sayıyı al). Örnek: "5999 TL" -> 5999.0, "1.299,99 ₺" -> 1299.99
+3. Title kısa ve net olsun (maksimum 100 karakter)
+4. Store adını mesajdan veya link'ten çıkar
+5. SADECE JSON döndür, başka hiçbir açıklama yazma
+
+Örnek çıktı:
+{{"title": "iPhone 15 Pro Max", "price": 59999.0, "category": "elektronik", "store": "Apple Store"}}"""
             
+            logger.info("🤖 AI analizi başlatılıyor...")
             response = await model.generate_content_async(
                 prompt, 
                 generation_config=genai.types.GenerationConfig(temperature=0.1)
             )
-            return json.loads(response.text.replace('```json', '').replace('```', '').strip())
+            
+            # Response'tan JSON çıkar
+            response_text = response.text.strip()
+            # Markdown code block'ları temizle
+            if '```json' in response_text:
+                response_text = response_text.split('```json')[1].split('```')[0].strip()
+            elif '```' in response_text:
+                response_text = response_text.split('```')[1].split('```')[0].strip()
+            
+            ai_result = json.loads(response_text)
+            logger.info(f"✅ AI analizi tamamlandı: {ai_result}")
+            return ai_result
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ AI JSON parse hatası: {e} | Response: {response.text[:200] if 'response' in locals() else 'N/A'}")
+            return {}
         except Exception as e:
-            logger.error(f"❌ AI hatası: {e}")
+            logger.error(f"❌ AI hatası: {e}", exc_info=True)
             return {}
 
     async def save_to_firestore(self, deal_data: dict):
@@ -342,21 +384,37 @@ Kurallar:
         else:
             logger.warning("⚠️ HTML içeriği alınamadı")
         
-        # Verileri birleştir - Telegram fotoğrafı > HTML > AI fallback
-        # Görsel önceliği: Telegram fotoğrafı > HTML scraping > Boş
+        # Verileri birleştir - Öncelik sırası:
+        # Görsel: Telegram fotoğrafı > HTML scraping > Boş
+        # Başlık: HTML > AI > Mesaj (ilk 100 karakter)
+        # Fiyat: HTML > AI > 0.0
+        # Kategori: AI (mutlaka olmalı)
+        # Store: AI > 'Bilinmeyen'
+        
         image_url = telegram_image_url or html_data.get('image', '') or ''
+        title = html_data.get('title') or ai_data.get('title') or text[:100]
+        price = html_data.get('price', 0.0) if html_data.get('price', 0.0) > 0 else (ai_data.get('price', 0.0) or 0.0)
+        category = ai_data.get('category', 'diğer')
+        store = ai_data.get('store', 'Bilinmeyen')
+        
+        # Kategori validasyonu - eğer AI yanlış kategori verirse 'diğer' kullan
+        valid_categories = ['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 
+                           'spor_outdoor', 'supermarket', 'yapi_oto', 'kitap_hobi', 'diğer']
+        if category not in valid_categories:
+            logger.warning(f"⚠️ Geçersiz kategori '{category}', 'diğer' kullanılıyor")
+            category = 'diğer'
         
         final_data = {
-            'title': html_data.get('title') or ai_data.get('title', text[:100]),
-            'price': html_data.get('price', 0.0) if html_data.get('price', 0.0) > 0 else ai_data.get('price', 0.0),
+            'title': title,
+            'price': price,
             'imageUrl': image_url,
             'link': link,  # Deal modelinde 'link' field'i var
-            'category': ai_data.get('category', 'diğer'),
-            'store': ai_data.get('store', 'Bilinmeyen'),
+            'category': category,
+            'store': store,
             'description': text[:500],
         }
         
-        logger.info(f"💾 Kaydediliyor: {final_data['title']} | Fiyat: {final_data['price']} TL | Görsel: {'Var' if final_data['imageUrl'] else 'Yok'} | Kategori: {final_data['category']}")
+        logger.info(f"💾 Kaydediliyor: {final_data['title']} | Fiyat: {final_data['price']} TL | Görsel: {'Var' if final_data['imageUrl'] else 'Yok'} | Kategori: {final_data['category']} | Mağaza: {final_data['store']}")
         
         # Firestore'a kaydet
         await self.save_to_firestore(final_data)
