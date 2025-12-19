@@ -288,34 +288,35 @@ Link: {link}"""
 HTML İçeriği (ürün sayfasından):
 {html_text[:2000]}"""  # HTML'den önemli kısımları al (fiyat, başlık vb.)
 
-            prompt = f"""Sen bir Türk e-ticaret uzmanısın. Aşağıdaki Telegram mesajını ve ürün sayfasını analiz et.
+            # Görsel varsa özel prompt, yoksa normal prompt
+            if image_bytes:
+                prompt = f"""GÖRSEL ANALİZ GÖREVİ:
 
+Sen bir görsel okuma (OCR) ve e-ticaret uzmanısın. Aşağıdaki görseli DİKKATLE incele ve:
+1. GÖRSELDEKİ TÜM YAZILARI OKU (OCR)
+2. FİYATI BUL: Görselde "TL", "₺", "fiyat", "price" kelimelerinin yanındaki sayıları oku
+3. ÜRÜN ADINI BUL: Görseldeki ürün başlığını/yazısını oku
+4. KATEGORİYİ BELİRLE: Görseldeki ürünü görerek kategori seç
+
+EĞER GÖRSEL VARSA (şu an görsel gönderiliyor):
+- ÖNCE GÖRSELDEKİ YAZILARI OKU
+- Fiyat görseldeyse onu kullan
+- Ürün adı görseldeyse onu kullan
+- Kategoriyi görseldeki ürüne göre belirle
+
+Ek Bilgiler:
 {analysis_text}
 
-GÖREVİN:
-1. ÜRÜN FİYATINI BUL: Mesajda, görselde veya HTML'de fiyat ara. "950 TL", "1.234,56 ₺", "2.500 lira" gibi formatları oku.
-2. KATEGORİ BELİRLE: Ürünün hangi kategoriye ait olduğunu belirle
-3. MAĞAZA ADINI BUL: Link'ten veya mesajdan mağaza adını çıkar
+FİYAT FORMAT ÖRNEKLERİ:
+- Görselde "950 TL" yazıyorsa -> price: 950.0
+- Görselde "1.234,56 ₺" yazıyorsa -> price: 1234.56
+- Görselde "2.500" yazıyorsa (TL belirtilmemişse) -> price: 2500.0
+- Sadece sayıyı döndür, TL/₺ sembollerini sayıya dahil etme
 
-ÖNEMLİ FORMAT KURALLARI:
-- Fiyat MUTLAKA sayı olmalı (nokta veya virgül ondalık için kullanılabilir)
-- "950 TL" -> 950.0
-- "1.234,56 ₺" -> 1234.56
-- "2.500 lira" -> 2500.0
-- Sadece sayıyı döndür, TL/₺ gibi sembolleri çıkarma
-
-MUTLAKA şu JSON formatını döndür (başka hiçbir şey yazma):
-{{
-  "title": "ürün başlığı",
-  "price": 1234.50,
-  "category": "elektronik|moda|ev_yasam|anne_bebek|kozmetik|spor_outdoor|supermarket|yapi_oto|kitap_hobi|diğer",
-  "store": "mağaza adı"
-}}
-
-KATEGORİ SEÇENEKLERİ (MUTLAKA bunlardan biri olmalı):
-- elektronik: Telefon, bilgisayar, TV, elektronik cihazlar
-- moda: Giyim, ayakkabı, saat, çanta
-- ev_yasam: Mobilya, ev tekstili, mutfak gereçleri, dekorasyon
+KATEGORİ SEÇENEKLERİ (görseldeki ürüne göre seç):
+- elektronik: Telefon, bilgisayar, TV, elektronik cihazlar, teknoloji
+- moda: Giyim, ayakkabı, saat, çanta, kıyafet
+- ev_yasam: Mobilya, ev tekstili, mutfak gereçleri, dekorasyon, zeytinyağı, gıda
 - anne_bebek: Bebek ürünleri, bebek bezi, oyuncak
 - kozmetik: Parfüm, makyaj, cilt bakımı, saç bakımı
 - spor_outdoor: Spor giyim, fitness, kamp malzemeleri
@@ -324,10 +325,49 @@ KATEGORİ SEÇENEKLERİ (MUTLAKA bunlardan biri olmalı):
 - kitap_hobi: Kitap, müzik enstrümanı, oyun konsolu
 - diğer: Yukarıdakilerden hiçbiri değilse
 
-ÖRNEK ÇIKTI:
-{{"title": "iPhone 15 Pro Max", "price": 59999.0, "category": "elektronik", "store": "Apple Store"}}
+MUTLAKA şu JSON formatını döndür:
+{{
+  "title": "görseldeki ürün adı",
+  "price": 1234.50,
+  "category": "elektronik|moda|ev_yasam|anne_bebek|kozmetik|spor_outdoor|supermarket|yapi_oto|kitap_hobi|diğer",
+  "store": "mağaza adı (mesajdan veya link'ten)"
+}}
 
-SADECE JSON döndür, başka açıklama yapma!"""
+ÖRNEK: Görselde "Komili Riviera Zeytinyağı 5 Lt - 950 TL" yazıyorsa:
+{{"title": "Komili Riviera Zeytinyağı 5 Lt", "price": 950.0, "category": "supermarket", "store": "Amazon"}}
+
+SADECE JSON döndür, başka hiçbir şey yazma!"""
+            else:
+                prompt = f"""Sen bir Türk e-ticaret uzmanısın. Aşağıdaki Telegram mesajını analiz et.
+
+{analysis_text}
+
+GÖREVİN:
+1. ÜRÜN FİYATINI BUL: Mesajda veya HTML'de fiyat ara. "950 TL", "1.234,56 ₺" gibi formatları oku.
+2. KATEGORİ BELİRLE: Ürünün hangi kategoriye ait olduğunu belirle
+3. MAĞAZA ADINI BUL: Link'ten veya mesajdan mağaza adını çıkar
+
+MUTLAKA şu JSON formatını döndür:
+{{
+  "title": "ürün başlığı",
+  "price": 1234.50,
+  "category": "elektronik|moda|ev_yasam|anne_bebek|kozmetik|spor_outdoor|supermarket|yapi_oto|kitap_hobi|diğer",
+  "store": "mağaza adı"
+}}
+
+KATEGORİ SEÇENEKLERİ:
+- elektronik: Telefon, bilgisayar, TV, elektronik
+- moda: Giyim, ayakkabı, saat, çanta
+- ev_yasam: Mobilya, ev tekstili, mutfak, zeytinyağı, gıda
+- anne_bebek: Bebek ürünleri
+- kozmetik: Parfüm, makyaj, bakım
+- spor_outdoor: Spor giyim, fitness
+- supermarket: Gıda, temizlik, kağıt
+- yapi_oto: Hırdavat, oto, bahçe
+- kitap_hobi: Kitap, müzik, oyun
+- diğer: Diğer
+
+SADECE JSON döndür!"""
             
             logger.info("🤖 AI analizi başlatılıyor (görsel ve metin analizi)...")
             
@@ -506,19 +546,27 @@ SADECE JSON döndür, başka açıklama yapma!"""
         image_url = telegram_image_url or html_data.get('image', '') or ''
         title = html_data.get('title') or ai_data.get('title') or text[:100]
         
-        # Fiyat çıkarma önceliği: Mesajdan direkt > HTML > AI
-        price_from_text = self._extract_price_from_text(text)
-        if price_from_text > 0:
-            price = price_from_text
-            logger.info(f"💰 Fiyat mesajdan çıkarıldı: {price} TL")
+        # Fiyat çıkarma önceliği: Görsel (AI) > Mesajdan direkt > HTML > AI (mesaj)
+        # Görsel varsa AI görselden fiyat çıkarmıştır, öncelik onun
+        if telegram_image_bytes and ai_data.get('price', 0.0) > 0:
+            price = ai_data.get('price', 0.0)
+            logger.info(f"💰 Fiyat görselden (AI OCR) çıkarıldı: {price} TL")
         else:
-            price = html_data.get('price', 0.0) if html_data.get('price', 0.0) > 0 else (ai_data.get('price', 0.0) or 0.0)
-            if price > 0:
-                logger.info(f"💰 Fiyat {'HTML' if html_data.get('price', 0.0) > 0 else 'AI'}'den çıkarıldı: {price} TL")
+            price_from_text = self._extract_price_from_text(text)
+            if price_from_text > 0:
+                price = price_from_text
+                logger.info(f"💰 Fiyat mesajdan çıkarıldı: {price} TL")
             else:
-                logger.warning(f"⚠️ Fiyat bulunamadı!")
+                price = html_data.get('price', 0.0) if html_data.get('price', 0.0) > 0 else (ai_data.get('price', 0.0) or 0.0)
+                if price > 0:
+                    logger.info(f"💰 Fiyat {'HTML' if html_data.get('price', 0.0) > 0 else 'AI'}'den çıkarıldı: {price} TL")
+                else:
+                    logger.warning(f"⚠️ Fiyat bulunamadı!")
         
+        # Kategori: Görsel varsa AI görselden kategori çıkarmıştır, yoksa AI mesajdan
         category = ai_data.get('category', 'diğer')
+        if telegram_image_bytes:
+            logger.info(f"📂 Kategori görselden (AI) çıkarıldı: {category}")
         store = ai_data.get('store', 'Bilinmeyen')
         
         # Kategori validasyonu - eğer AI yanlış kategori verirse 'diğer' kullan
