@@ -114,141 +114,107 @@ class TelegramDealBot:
 
     def extract_html_data(self, html: str, base_url: str) -> dict:
         data = {'price': 0.0, 'image': '', 'title': ''}
-        if not html: return data
+        if not html: 
+            logger.warning("⚠️ HTML boş, veri çıkarılamıyor")
+            return data
         try:
-            soup = BeautifulSoup(html, 'lxml')
-            from urllib.parse import urljoin, urlparse
+            soup = BeautifulSoup(html, 'html.parser')  # lxml yerine html.parser daha güvenilir
+            from urllib.parse import urljoin
             
             def make_absolute_url(url):
-                if not url: return ''
-                if url.startswith('http'): return url
+                if not url or not url.strip():
+                    return ''
+                url = url.strip()
+                if url.startswith('http://') or url.startswith('https://'):
+                    return url
+                if url.startswith('//'):
+                    return 'https:' + url
                 return urljoin(base_url, url)
             
-            # JSON-LD verilerini çek
-            for script in soup.find_all('script', type='application/ld+json'):
-                try:
-                    js = json.loads(script.string)
-                    # List olabilir
-                    if isinstance(js, list):
-                        js = js[0] if js else {}
-                    
-                    if isinstance(js, dict):
-                        # Product tipini kontrol et
-                        if js.get('@type') == 'Product' or 'Product' in str(js.get('@type', [])):
-                            # Fiyat çek
-                            if not data['price']:
-                                if 'offers' in js:
-                                    offers = js['offers']
-                                    if isinstance(offers, dict):
-                                        price = offers.get('price') or offers.get('lowPrice') or offers.get('highPrice', 0)
-                                    elif isinstance(offers, list) and offers:
-                                        price = offers[0].get('price', 0)
-                                    else:
-                                        price = 0
-                                    if price:
-                                        parsed = self._parse_price(str(price))
-                                        if parsed > 0:
-                                            data['price'] = parsed
-                            
-                            # Görsel çek
-                            if not data['image']:
-                                img = js.get('image', '')
-                                if img:
-                                    if isinstance(img, list):
-                                        img = img[0] if img else ''
-                                    if img:
-                                        data['image'] = make_absolute_url(img)
-                            
-                            # Başlık çek
-                            if not data['title']:
-                                data['title'] = js.get('name') or js.get('title', '')
-                        else:
-                            # Genel JSON-LD (Product olmayan)
-                            if 'offers' in js and not data['price']:
-                                offers = js['offers']
-                                if isinstance(offers, dict):
-                                    price = offers.get('price') or offers.get('lowPrice', 0)
-                                    if price:
-                                        parsed = self._parse_price(str(price))
-                                        if parsed > 0:
-                                            data['price'] = parsed
-                            
-                            if 'image' in js and not data['image']:
-                                img = js['image']
-                                if isinstance(img, list):
-                                    img = img[0] if img else ''
-                                if img:
-                                    data['image'] = make_absolute_url(img)
-                            
-                            if 'name' in js and not data['title']:
-                                data['title'] = js['name']
-                except Exception as e:
-                    logger.debug(f"JSON-LD parse hatası: {e}")
-                    continue
-
-            # Görseli çek - Meta tag'ler
+            # 1. Görseli çek - Önce og:image (en yaygın)
             if not data['image']:
-                for meta_prop in ['og:image', 'twitter:image', 'image']:
-                    img_tag = soup.find('meta', property=meta_prop) or soup.find('meta', attrs={'name': meta_prop})
-                    if img_tag:
-                        img_url = img_tag.get('content', '')
-                        if img_url:
-                            data['image'] = make_absolute_url(img_url)
-                            break
-                
-                # İlk img tag'ini dene (fallback)
-                if not data['image']:
-                    img_tag = soup.find('img')
-                    if img_tag:
-                        img_url = img_tag.get('src') or img_tag.get('data-src', '')
-                        if img_url:
-                            data['image'] = make_absolute_url(img_url)
+                img_tag = soup.find('meta', property='og:image')
+                if img_tag:
+                    img_url = img_tag.get('content', '').strip()
+                    if img_url:
+                        data['image'] = make_absolute_url(img_url)
+                        logger.info(f"✅ Görsel bulundu (og:image): {data['image'][:80]}")
             
-            # Başlığı çek - Meta tag'ler
+            # 2. Twitter image fallback
+            if not data['image']:
+                img_tag = soup.find('meta', attrs={'name': 'twitter:image'})
+                if img_tag:
+                    img_url = img_tag.get('content', '').strip()
+                    if img_url:
+                        data['image'] = make_absolute_url(img_url)
+                        logger.info(f"✅ Görsel bulundu (twitter:image): {data['image'][:80]}")
+            
+            # 3. JSON-LD'den görsel çek
+            if not data['image']:
+                for script in soup.find_all('script', type='application/ld+json'):
+                    try:
+                        js = json.loads(script.string)
+                        if isinstance(js, list) and js:
+                            js = js[0]
+                        if isinstance(js, dict):
+                            img = js.get('image', '')
+                            if img:
+                                if isinstance(img, list) and img:
+                                    img = img[0]
+                                if isinstance(img, str) and img.strip():
+                                    data['image'] = make_absolute_url(img.strip())
+                                    logger.info(f"✅ Görsel bulundu (JSON-LD): {data['image'][:80]}")
+                                    break
+                    except:
+                        continue
+            
+            # 4. İlk img tag'i (son çare)
+            if not data['image']:
+                img_tag = soup.find('img', src=True)
+                if img_tag:
+                    img_url = img_tag.get('src', '').strip() or img_tag.get('data-src', '').strip()
+                    if img_url:
+                        data['image'] = make_absolute_url(img_url)
+                        logger.info(f"✅ Görsel bulundu (img tag): {data['image'][:80]}")
+            
+            # Başlık çek
             if not data['title']:
-                for meta_prop in ['og:title', 'twitter:title']:
-                    title_tag = soup.find('meta', property=meta_prop) or soup.find('meta', attrs={'name': meta_prop})
-                    if title_tag:
-                        title = title_tag.get('content', '')
-                        if title:
-                            data['title'] = title
-                            break
-                
-                # Title tag'ini dene (fallback)
+                title_tag = soup.find('meta', property='og:title')
+                if title_tag:
+                    data['title'] = title_tag.get('content', '').strip()
                 if not data['title']:
                     title_tag = soup.find('title')
                     if title_tag:
                         data['title'] = title_tag.get_text().strip()
             
-            # Fiyatı çek - Meta tag'ler ve fiyat class'ları
+            # Fiyat çek - JSON-LD'den
             if not data['price']:
-                # Meta tag'lerden fiyat ara
-                for meta_name in ['price', 'product:price:amount', 'twitter:data1']:
-                    price_tag = soup.find('meta', attrs={'name': meta_name}) or soup.find('meta', attrs={'property': meta_name})
-                    if price_tag:
-                        price_str = price_tag.get('content', '')
-                        if price_str:
-                            parsed = self._parse_price(price_str)
-                            if parsed > 0:
-                                data['price'] = parsed
-                                break
-                
-                # Fiyat içeren class/id'li elementleri ara
-                if not data['price']:
-                    for selector in ['.price', '#price', '.fiyat', '[class*="price"]', '[id*="price"]']:
-                        try:
-                            price_elem = soup.select_one(selector)
-                            if price_elem:
-                                price_text = price_elem.get_text()
-                                parsed = self._parse_price(price_text)
-                                if parsed > 0:
-                                    data['price'] = parsed
-                                    break
-                        except:
-                            continue
+                for script in soup.find_all('script', type='application/ld+json'):
+                    try:
+                        js = json.loads(script.string)
+                        if isinstance(js, list) and js:
+                            js = js[0]
+                        if isinstance(js, dict):
+                            offers = js.get('offers', {})
+                            if isinstance(offers, dict):
+                                price = offers.get('price') or offers.get('lowPrice', 0)
+                                if price:
+                                    parsed = self._parse_price(str(price))
+                                    if parsed > 0:
+                                        data['price'] = parsed
+                                        logger.info(f"✅ Fiyat bulundu (JSON-LD): {data['price']} TL")
+                                        break
+                    except:
+                        continue
+            
+            # Fiyat bulunamadıysa log
+            if not data['price']:
+                logger.warning("⚠️ Fiyat bulunamadı")
+            if not data['image']:
+                logger.warning("⚠️ Görsel bulunamadı")
 
         except Exception as e:
-            logger.error(f"❌ HTML analiz hatası: {e}")
+            logger.error(f"❌ HTML analiz hatası: {e}", exc_info=True)
         return data
 
     async def analyze_deal_with_ai(self, text: str, link: str = "") -> Dict:
@@ -333,18 +299,18 @@ Kurallar:
         else:
             logger.warning("⚠️ HTML içeriği alınamadı")
         
-        # Verileri birleştir
+        # Verileri birleştir - HTML öncelikli, AI fallback
         final_data = {
             'title': html_data.get('title') or ai_data.get('title', text[:100]),
-            'price': html_data.get('price') or ai_data.get('price', 0.0),
-            'imageUrl': html_data.get('image', ''),
+            'price': html_data.get('price', 0.0) if html_data.get('price', 0.0) > 0 else ai_data.get('price', 0.0),
+            'imageUrl': html_data.get('image', '') or '',
             'productUrl': link,
             'category': ai_data.get('category', 'diğer'),
             'store': ai_data.get('store', 'Bilinmeyen'),
             'description': text[:500],
         }
         
-        logger.info(f"💾 Kaydediliyor: {final_data['title']} | {final_data['price']} TL")
+        logger.info(f"💾 Kaydediliyor: {final_data['title']} | Fiyat: {final_data['price']} TL | Görsel: {'Var' if final_data['imageUrl'] else 'Yok'} | Kategori: {final_data['category']}")
         
         # Firestore'a kaydet
         await self.save_to_firestore(final_data)
