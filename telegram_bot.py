@@ -51,10 +51,18 @@ except Exception as e:
 # Gemini AI Yapılandırması
 try:
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Model adını düzelt - gemini-1.5-flash-latest veya gemini-pro kullan
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    logger.info("✅ Gemini AI modeli yüklendi: gemini-1.5-flash-latest")
 except Exception as e:
     logger.error(f"❌ Gemini AI başlatılamadı: {e}")
-    model = None
+    try:
+        # Alternatif model deneyelim
+        model = genai.GenerativeModel('gemini-pro')
+        logger.info("✅ Gemini AI modeli yüklendi: gemini-pro (fallback)")
+    except Exception as e2:
+        logger.error(f"❌ Alternatif model de başarısız: {e2}")
+        model = None
 
 class TelegramDealBot:
     def __init__(self):
@@ -214,11 +222,16 @@ Kurallar:
             }
         
         # HTML'den veri çek
+        logger.info(f"🌐 HTML scraping başlatılıyor: {link}")
         html_res = await self.fetch_link_data(link)
         html_data = {}
         if html_res:
+            logger.info("✅ HTML içeriği alındı, veri çıkarılıyor...")
             html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
             link = html_res['final_url']
+            logger.info(f"📊 HTML'den çıkarılan: Fiyat={html_data.get('price', 0.0)}, Görsel={'Var' if html_data.get('image') else 'Yok'}, Başlık={'Var' if html_data.get('title') else 'Yok'}")
+        else:
+            logger.warning("⚠️ HTML içeriği alınamadı")
         
         # Verileri birleştir
         final_data = {
