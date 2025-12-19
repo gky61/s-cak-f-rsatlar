@@ -249,10 +249,16 @@ Kurallar:
             
             logger.info(f"📩 MESAJ: [ID: {chat_id}] - {text[:50]}...")
 
-            # Filtrele
+            # Filtrele - hem pozitif hem negatif ID'leri kontrol et
             is_target = False
-            if str(chat_id) in self.channels or (hasattr(chat, 'username') and f"@{chat.username}" in self.channels):
+            chat_id_str = str(chat_id)
+            chat_id_neg = f"-{chat_id_str}"
+            
+            if (chat_id_str in self.channels or 
+                chat_id_neg in self.channels or 
+                (hasattr(chat, 'username') and f"@{chat.username}" in self.channels)):
                 is_target = True
+                logger.info(f"✅ Hedef kanal bulundu: {chat_id_str} / {chat_id_neg}")
             
             if is_target:
                 name = getattr(chat, 'username', getattr(chat, 'title', str(chat_id)))
