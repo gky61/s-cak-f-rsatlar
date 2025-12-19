@@ -28,7 +28,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("TelegramDealBot")
 
-# Firebase Admin başlat (Opsiyonel)
+# Firebase Admin başlat
 db = None
 try:
     import firebase_admin
@@ -42,9 +42,10 @@ try:
         db = firestore.client()
         logger.info("✅ Firebase bağlantısı kuruldu")
     else:
-        logger.warning("⚠️ serviceAccountKey.json bulunamadı - Firestore kayıtları yapılmayacak")
+        logger.error("❌ serviceAccountKey.json bulunamadı! Firebase kayıtları yapılamayacak!")
+        logger.error("❌ Lütfen serviceAccountKey.json dosyasını bot klasörüne ekleyin!")
 except Exception as e:
-    logger.warning(f"⚠️ Firebase başlatılamadı: {e} - Bot çalışmaya devam ediyor")
+    logger.error(f"❌ Firebase başlatılamadı: {e}")
     db = None
 
 # Gemini AI Yapılandırması
@@ -73,9 +74,107 @@ class TelegramDealBot:
         logger.info(f"✅ Kullanıcı olarak bağlandı! İsim: {me.first_name} | Telefon: {me.phone}")
         return True
 
+    def _parse_price(self, price_str: str) -> float:
+        if not price_str: return 0.0
+        try:
+            price_str = price_str.split('TL')[0].split('₺')[0].strip()
+            price_str = re.sub(r'[^\d,\.]', '', price_str)
+            if ',' in price_str and '.' in price_str:
+                if price_str.find('.') < price_str.find(','):
+                    price_str = price_str.replace('.', '').replace(',', '.')
+                else:
+                    price_str = price_str.replace(',', '')
+            elif ',' in price_str:
+                parts = price_str.split(',')
+                if len(parts[-1]) <= 2:
+                    price_str = price_str.replace(',', '.')
+                else:
+                    price_str = price_str.replace(',', '')
+            return float(price_str)
+        except:
+            return 0.0
+
+    async def fetch_link_data(self, url: str) -> Dict:
+        try:
+            response = curl_requests.get(url, impersonate="chrome110", timeout=30, allow_redirects=True)
+            if response.status_code == 200:
+                return {'html': response.text, 'final_url': response.url}
+            return {}
+        except Exception as e:
+            logger.error(f"❌ Link hatası: {e}")
+            return {}
+
+    def extract_html_data(self, html: str, base_url: str) -> dict:
+        data = {'price': 0.0, 'image': '', 'title': ''}
+        if not html: return data
+        try:
+            soup = BeautifulSoup(html, 'lxml')
+            
+            # JSON-LD verilerini çek
+            for script in soup.find_all('script', type='application/ld+json'):
+                try:
+                    js = json.loads(script.string)
+                    if isinstance(js, dict):
+                        if 'offers' in js:
+                            price = js['offers'].get('price') or js['offers'].get('lowPrice', 0)
+                            if price: data['price'] = self._parse_price(str(price))
+                        if 'name' in js and not data['title']:
+                            data['title'] = js['name']
+                        if 'image' in js and not data['image']:
+                            img = js['image']
+                            data['image'] = img[0] if isinstance(img, list) else img
+                except:
+                    continue
+
+            # Görseli çek
+            if not data['image']:
+                img_tag = soup.find('meta', property='og:image') or soup.find('meta', attrs={'name': 'twitter:image'})
+                if img_tag:
+                    data['image'] = img_tag.get('content', '')
+            
+            # Başlığı çek
+            if not data['title']:
+                title_tag = soup.find('meta', property='og:title') or soup.find('title')
+                if title_tag:
+                    data['title'] = title_tag.get('content') if title_tag.get('content') else title_tag.get_text()
+
+        except Exception as e:
+            logger.error(f"❌ HTML analiz hatası: {e}")
+        return data
+
+    async def analyze_deal_with_ai(self, text: str, link: str = "") -> Dict:
+        if not model: return {}
+        try:
+            prompt = f"""Sen bir e-ticaret uzmanısın. Aşağıdaki mesajı analiz et ve SADECE JSON döndür:
+
+Mesaj: {text}
+Link: {link}
+
+Döndürülecek JSON formatı:
+{{
+  "title": "Ürün başlığı (kısa ve net)",
+  "price": 0.0,
+  "category": "mobil-cihazlar | bilgisayar | ev-yasam | konsol-oyun | diğer",
+  "store": "Mağaza adı"
+}}
+
+Kurallar:
+- Kategori mutlaka yukarıdaki 5 seçenekten biri olmalı
+- Fiyat sayısal olmalı (0.0 formatında)
+- Başka açıklama ekleme, sadece JSON döndür"""
+            
+            response = await model.generate_content_async(
+                prompt, 
+                generation_config=genai.types.GenerationConfig(temperature=0.1)
+            )
+            return json.loads(response.text.replace('```json', '').replace('```', '').strip())
+        except Exception as e:
+            logger.error(f"❌ AI hatası: {e}")
+            return {}
+
     async def save_to_firestore(self, deal_data: dict):
         if not db:
-            logger.warning("⚠️ Firestore bağlantısı yok - kayıt yapılmadı")
+            logger.error("❌ Firestore bağlantısı yok! Kayıt yapılamıyor!")
             return False
         try:
             deal_data['createdAt'] = datetime.now()
@@ -101,26 +200,41 @@ class TelegramDealBot:
             return
             
         link = urls[0]
-        logger.info(f"🔗 Link bulundu: {link}")
+        logger.info(f"🔗 Link: {link}")
         
-        # Basit veri oluştur
+        # AI ile analiz et
+        ai_data = await self.analyze_deal_with_ai(text, link)
+        if not ai_data:
+            logger.warning("⚠️ AI analizi başarısız, temel veri kullanılıyor")
+            ai_data = {
+                'title': text[:100],
+                'price': 0.0,
+                'category': 'diğer',
+                'store': 'Bilinmeyen'
+            }
+        
+        # HTML'den veri çek
+        html_res = await self.fetch_link_data(link)
+        html_data = {}
+        if html_res:
+            html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
+            link = html_res['final_url']
+        
+        # Verileri birleştir
         final_data = {
-            'title': text[:100] if text else 'Ürün',
-            'price': 0.0,
-            'imageUrl': '',
+            'title': html_data.get('title') or ai_data.get('title', text[:100]),
+            'price': html_data.get('price') or ai_data.get('price', 0.0),
+            'imageUrl': html_data.get('image', ''),
             'productUrl': link,
-            'category': 'diğer',
-            'store': 'Bilinmeyen',
-            'description': text[:500] if text else '',
+            'category': ai_data.get('category', 'diğer'),
+            'store': ai_data.get('store', 'Bilinmeyen'),
+            'description': text[:500],
         }
         
-        logger.info(f"💾 İşlenen ürün: {final_data['title']}")
+        logger.info(f"💾 Kaydediliyor: {final_data['title']} | {final_data['price']} TL")
         
-        # Firestore'a kaydet (eğer bağlantı varsa)
-        if db:
-            await self.save_to_firestore(final_data)
-        else:
-            logger.info("ℹ️ Firebase olmadan çalışıyor - sadece log'a yazıldı")
+        # Firestore'a kaydet
+        await self.save_to_firestore(final_data)
 
     async def run(self):
         if not await self.initialize(): return
