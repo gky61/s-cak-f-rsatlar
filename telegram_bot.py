@@ -288,16 +288,25 @@ KURALLAR:
             # Eğer görsel varsa, görseli de gönder
             if image_bytes:
                 try:
-                    from PIL import Image
-                    import io
-                    # Bytes'tan Image oluştur
-                    image = Image.open(io.BytesIO(image_bytes))
-                    logger.info("📸 Görsel AI'ye gönderiliyor (OCR ile fiyat okuma)...")
-                    # Hem görsel hem metin gönder
-                    response = await model.generate_content_async(
-                        [image, prompt],
-                        generation_config=genai.types.GenerationConfig(temperature=0.1)
-                    )
+                    # Gemini API'ye görsel göndermek için PIL Image kullan
+                    try:
+                        from PIL import Image
+                        import io
+                        # Bytes'tan Image oluştur
+                        image = Image.open(io.BytesIO(image_bytes))
+                        logger.info("📸 Görsel AI'ye gönderiliyor (OCR ile fiyat okuma)...")
+                        # Hem görsel hem metin gönder
+                        response = await model.generate_content_async(
+                            [image, prompt],
+                            generation_config=genai.types.GenerationConfig(temperature=0.1)
+                        )
+                    except ImportError:
+                        logger.warning("⚠️ PIL (Pillow) yüklü değil, görsel analizi yapılamıyor. 'pip install Pillow' çalıştırın.")
+                        # Pillow yoksa sadece metin gönder
+                        response = await model.generate_content_async(
+                            prompt, 
+                            generation_config=genai.types.GenerationConfig(temperature=0.1)
+                        )
                 except Exception as img_error:
                     logger.warning(f"⚠️ Görsel işleme hatası, sadece metin analizi yapılıyor: {img_error}")
                     # Görsel işlenemezse sadece metin gönder
