@@ -271,7 +271,7 @@ Kurallar:
             logger.error(f"❌ Firestore kayıt hatası: {e}")
             return False
 
-    async def process_message(self, text, chat_id, name):
+    async def process_message(self, text, chat_id, name, event=None):
         logger.info(f"📥 Mesaj İşleniyor... Kanal: {name}")
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
         
@@ -280,6 +280,44 @@ Kurallar:
             
         link = urls[0]
         logger.info(f"🔗 Link: {link}")
+        
+        # Telegram'dan görsel varsa öncelik ver - direkt download_media kullan
+        telegram_image_url = None
+        if event and event.message and hasattr(event.message, 'photo') and event.message.photo:
+            try:
+                logger.info("📸 Telegram mesajında fotoğraf bulundu, indiriliyor...")
+                # Fotoğrafı bytes olarak indir
+                photo_bytes = await event.client.download_media(event.message.photo, file=bytes)
+                if photo_bytes:
+                    logger.info(f"✅ Telegram fotoğrafı indirildi ({len(photo_bytes)} bytes)")
+                    # Fotoğrafı imgbb API'ye upload et (ücretsiz, API key gerekli)
+                    # Alternatif: Base64 encode edip data URI kullan (ama Firestore'da sorun olabilir)
+                    # Şimdilik: imgbb kullanacağız, API key yoksa HTML scraping kullanılacak
+                    
+                    # imgbb API kullanarak upload et
+                    imgbb_api_key = os.getenv("IMGBB_API_KEY", "")
+                    if imgbb_api_key:
+                        try:
+                            import base64
+                            photo_b64 = base64.b64encode(photo_bytes).decode('utf-8')
+                            
+                            async with aiohttp.ClientSession() as session:
+                                data = aiohttp.FormData()
+                                data.add_field('key', imgbb_api_key)
+                                data.add_field('image', photo_b64)
+                                
+                                async with session.post('https://api.imgbb.com/1/upload', data=data) as resp:
+                                    if resp.status == 200:
+                                        result = await resp.json()
+                                        if result.get('success'):
+                                            telegram_image_url = result['data']['url']
+                                            logger.info(f"✅ Telegram fotoğrafı imgbb'ye yüklendi: {telegram_image_url[:80]}")
+                        except Exception as e2:
+                            logger.warning(f"⚠️ imgbb upload hatası: {e2}")
+                    else:
+                        logger.info("ℹ️ IMGBB_API_KEY yok, Telegram fotoğrafı kullanılamıyor")
+            except Exception as e:
+                logger.error(f"❌ Telegram fotoğraf indirme hatası: {e}")
         
         # AI ile analiz et
         ai_data = await self.analyze_deal_with_ai(text, link)
@@ -304,11 +342,14 @@ Kurallar:
         else:
             logger.warning("⚠️ HTML içeriği alınamadı")
         
-        # Verileri birleştir - HTML öncelikli, AI fallback
+        # Verileri birleştir - Telegram fotoğrafı > HTML > AI fallback
+        # Görsel önceliği: Telegram fotoğrafı > HTML scraping > Boş
+        image_url = telegram_image_url or html_data.get('image', '') or ''
+        
         final_data = {
             'title': html_data.get('title') or ai_data.get('title', text[:100]),
             'price': html_data.get('price', 0.0) if html_data.get('price', 0.0) > 0 else ai_data.get('price', 0.0),
-            'imageUrl': html_data.get('image', '') or '',
+            'imageUrl': image_url,
             'link': link,  # Deal modelinde 'link' field'i var
             'category': ai_data.get('category', 'diğer'),
             'store': ai_data.get('store', 'Bilinmeyen'),
@@ -350,7 +391,7 @@ Kurallar:
             
             if is_target:
                 name = getattr(chat, 'username', getattr(chat, 'title', str(chat_id)))
-                await self.process_message(text, chat_id, name)
+                await self.process_message(text, chat_id, name, event)
 
         logger.info("🚀 Bot kullanıcı hesabıyla çalışıyor!")
         await self.client.run_until_disconnected()
