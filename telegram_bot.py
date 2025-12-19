@@ -204,8 +204,7 @@ Kurallar:
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
         
         if not urls:
-            logger.info("ℹ️ Link yok, atlanıyor.")
-            return
+            return  # Link yoksa işleme (güvenlik kontrolü)
             
         link = urls[0]
         logger.info(f"🔗 Link: {link}")
@@ -260,8 +259,11 @@ Kurallar:
             chat_id = chat.id
             text = event.message.message or ""
             
-            logger.info(f"📩 MESAJ: [ID: {chat_id}] - {text[:50]}...")
-
+            # Önce link kontrolü yap - link yoksa hiçbir şey yapma
+            urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
+            if not urls:
+                return  # Link yoksa işleme
+            
             # Filtrele - hem pozitif hem negatif ID'leri kontrol et
             is_target = False
             chat_id_str = str(chat_id)
@@ -272,6 +274,7 @@ Kurallar:
                 (hasattr(chat, 'username') and f"@{chat.username}" in self.channels)):
                 is_target = True
                 logger.info(f"✅ Hedef kanal bulundu: {chat_id_str} / {chat_id_neg}")
+                logger.info(f"📩 MESAJ (Link içeriyor): [ID: {chat_id}] - {text[:50]}...")
             
             if is_target:
                 name = getattr(chat, 'username', getattr(chat, 'title', str(chat_id)))
