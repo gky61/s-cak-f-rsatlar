@@ -254,7 +254,12 @@ Kurallar:
         try:
             deal_data['createdAt'] = datetime.now()
             deal_data['isApproved'] = False
-            deal_data['likes'] = 0
+            deal_data['isExpired'] = False  # Admin sayfasında görünmesi için gerekli
+            deal_data['hotVotes'] = 0
+            deal_data['coldVotes'] = 0
+            deal_data['expiredVotes'] = 0
+            deal_data['commentCount'] = 0
+            deal_data['postedBy'] = 'telegram_bot'  # Bot tarafından gönderildi
             deal_data['views'] = 0
             deal_data['isEditorPick'] = False
             
@@ -304,7 +309,7 @@ Kurallar:
             'title': html_data.get('title') or ai_data.get('title', text[:100]),
             'price': html_data.get('price', 0.0) if html_data.get('price', 0.0) > 0 else ai_data.get('price', 0.0),
             'imageUrl': html_data.get('image', '') or '',
-            'productUrl': link,
+            'link': link,  # Deal modelinde 'link' field'i var
             'category': ai_data.get('category', 'diğer'),
             'store': ai_data.get('store', 'Bilinmeyen'),
             'description': text[:500],
