@@ -71,7 +71,7 @@ class TelegramDealBot:
         self.channels = [c.strip() for c in raw_channels.split(',') if c.strip()]
         self.client = TelegramClient('user_session', self.api_id, self.api_hash)
         self.last_message_time = {}  # Rate limiting için
-        self.min_delay_seconds = 2  # Mesajlar arası minimum bekleme süresi (saniye)
+        self.min_delay_seconds = 3  # Mesajlar arası minimum bekleme süresi (saniye) - Telegram yakalanmaması için artırıldı
 
     async def initialize(self):
         if not self.api_id or not self.api_hash or not self.phone:
@@ -347,8 +347,9 @@ KURALLAR:
             return False
         try:
             deal_data['createdAt'] = datetime.now()
-            deal_data['isApproved'] = False
-            deal_data['isExpired'] = False  # Admin sayfasında görünmesi için gerekli
+            # Otomatik onayla (uygulamada görünmesi için)
+            deal_data['isApproved'] = True
+            deal_data['isExpired'] = False
             deal_data['hotVotes'] = 0
             deal_data['coldVotes'] = 0
             deal_data['expiredVotes'] = 0
