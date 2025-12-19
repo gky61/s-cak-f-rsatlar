@@ -487,30 +487,43 @@ KURALLAR:
 
         @self.client.on(events.NewMessage())
         async def handler(event):
-            chat = await event.get_chat()
-            chat_id = chat.id
-            text = event.message.message or ""
-            
-            # Önce link kontrolü yap - link yoksa hiçbir şey yapma
-            urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
-            if not urls:
-                return  # Link yoksa işleme
-            
-            # Filtrele - hem pozitif hem negatif ID'leri kontrol et
-            is_target = False
-            chat_id_str = str(chat_id)
-            chat_id_neg = f"-{chat_id_str}"
-            
-            if (chat_id_str in self.channels or 
-                chat_id_neg in self.channels or 
-                (hasattr(chat, 'username') and f"@{chat.username}" in self.channels)):
-                is_target = True
-                logger.info(f"✅ Hedef kanal bulundu: {chat_id_str} / {chat_id_neg}")
-                logger.info(f"📩 MESAJ (Link içeriyor): [ID: {chat_id}] - {text[:50]}...")
-            
-            if is_target:
-                name = getattr(chat, 'username', getattr(chat, 'title', str(chat_id)))
-                await self.process_message(text, chat_id, name, event)
+            try:
+                chat = await event.get_chat()
+                chat_id = chat.id
+                text = event.message.message or ""
+                
+                # Debug: Her mesajı logla
+                logger.info(f"📩 MESAJ ALINDI: [Kanal ID: {chat_id}] - {text[:100]}...")
+                
+                # Önce link kontrolü yap - link yoksa hiçbir şey yapma
+                urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
+                if not urls:
+                    logger.debug(f"🔗 Link yok, atlanıyor: [ID: {chat_id}]")
+                    return  # Link yoksa işleme
+                
+                logger.info(f"🔗 Link bulundu: {urls[0]}")
+                
+                # Filtrele - hem pozitif hem negatif ID'leri kontrol et
+                is_target = False
+                chat_id_str = str(chat_id)
+                chat_id_neg = f"-{chat_id_str}"
+                
+                logger.debug(f"🔍 Kanal kontrolü: {chat_id_str} / {chat_id_neg} | Hedef kanallar: {self.channels}")
+                
+                if (chat_id_str in self.channels or 
+                    chat_id_neg in self.channels or 
+                    (hasattr(chat, 'username') and f"@{chat.username}" in self.channels)):
+                    is_target = True
+                    logger.info(f"✅ Hedef kanal bulundu: {chat_id_str} / {chat_id_neg}")
+                    logger.info(f"📩 MESAJ İŞLENİYOR (Link içeriyor): [ID: {chat_id}] - {text[:50]}...")
+                else:
+                    logger.debug(f"⏭️ Hedef kanal değil, atlanıyor: {chat_id_str}")
+                
+                if is_target:
+                    name = getattr(chat, 'username', getattr(chat, 'title', str(chat_id)))
+                    await self.process_message(text, chat_id, name, event)
+            except Exception as e:
+                logger.error(f"❌ Handler hatası: {e}", exc_info=True)
 
         logger.info("🚀 Bot kullanıcı hesabıyla çalışıyor!")
         await self.client.run_until_disconnected()
