@@ -51,8 +51,8 @@ except Exception as e:
 # Gemini AI Yapılandırması
 try:
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    # Model adlarını sırayla dene - önce en stabil olanı
-    model_names = ['gemini-pro', 'gemini-1.5-flash', 'gemini-1.5-pro']
+    # Model adlarını sırayla dene - görsel okuması için gemini-1.5-flash öncelikli
+    model_names = ['gemini-1.5-flash', 'gemini-1.5-flash-002', 'gemini-1.5-pro', 'gemini-pro']
     model = None
     for model_name in model_names:
         try:
