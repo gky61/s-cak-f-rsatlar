@@ -315,8 +315,22 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
     final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
-    final categoryId = Category.getIdByName(deal.category);
-    final category = categoryId != null ? Category.getById(categoryId) : Category.categories.first;
+    // Bot'tan gelen kategori ID olarak geliyor ("elektronik", "moda" vb.)
+    // Önce ID olarak kontrol et, bulunamazsa name olarak dene
+    Category category;
+    final normalizedCategory = deal.category.trim().toLowerCase();
+    try {
+      category = Category.categories.firstWhere(
+        (cat) => cat.id.toLowerCase() == normalizedCategory && cat.id != 'tumu',
+        orElse: () => Category.categories.first,
+      );
+    } catch (e) {
+      // ID bulunamazsa, name olarak dene
+      final categoryId = Category.getIdByName(deal.category);
+      category = categoryId != null && categoryId != 'tumu' 
+          ? Category.getById(categoryId) 
+          : Category.categories.first;
+    }
 
     return PopScope(
       canPop: true,
