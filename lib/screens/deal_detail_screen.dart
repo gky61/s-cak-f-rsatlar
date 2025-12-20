@@ -176,6 +176,17 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       return;
     }
 
+    // Eğer hot vote ise, favorilere de ekle
+    if (isHot && success) {
+      await _firestoreService.addToFavorites(user.uid, _currentDeal!.id);
+      // Favori durumunu güncelle
+      if (mounted) {
+        setState(() {
+          _isFavorite = true;
+        });
+      }
+    }
+
     // Deal'i yeniden yükle
     _loadDeal();
     _checkUserVote();
@@ -457,6 +468,34 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             ),
                           ),
                         ),
+                        // Yayından kaldır butonu (sadece onaylanmış fırsatlar için)
+                        if (deal.isApproved) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.orange.withValues(alpha: 0.3),
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: () => _unpublishDeal(deal.id),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 20,
+                                  color: Colors.orange[700],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                 ],
               ),
@@ -755,68 +794,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 24),
-                                    // Price Card
-                                    InkWell(
-                                      onTap: _isAdmin ? () => _showPriceEditDialog(deal) : null,
-                                      borderRadius: BorderRadius.circular(16),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: isDark ? AppTheme.darkBackground : AppTheme.background,
-                                          borderRadius: BorderRadius.circular(16),
-                                          border: Border.all(
-                                            color: _isAdmin 
-                                                ? primaryColor.withValues(alpha: 0.3)
-                                                : Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
-                                            width: _isAdmin ? 1.5 : 0.5,
-                                          ),
-                                        ),
-                                      child: Stack(
-                                        children: [
-                                          // Background icon (opacity 0.05)
-                                          Positioned(
-                                            top: 0,
-                                            right: 0,
-                                            child: Opacity(
-                                              opacity: 0.05,
-                                              child: Icon(
-                                                Icons.sell,
-                                                size: 64,
-                                                color: isDark ? Colors.white : Colors.black,
-                                              ),
-                                            ),
-                                            ),
-                                          // Prices
-                                          Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              if (deal.originalPrice != null && deal.originalPrice! > deal.price)
-                                                Text(
-                                                  currencyFormat.format(deal.originalPrice),
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                                    decoration: TextDecoration.lineThrough,
-                                                    decorationThickness: 1,
-                                                  ),
-                                                ),
-                                              Text(
-                                                currencyFormat.format(deal.price),
-                                                style: TextStyle(
-                                                  fontSize: 36,
-                                                  fontWeight: FontWeight.w900,
-                                                  color: isDark ? Colors.white : Colors.black,
-                                                  height: 1,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
                                     // Stats Grid (3 columns)
                                     Row(
                                     children: [
@@ -845,12 +822,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                         const SizedBox(width: 12),
                               Expanded(
                                 child: Container(
-                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                            padding: const EdgeInsets.symmetric(vertical: 8),
                                   decoration: BoxDecoration(
                                               color: isDark 
                                                   ? Colors.white.withValues(alpha: 0.05) 
                                                   : AppTheme.background,
-                                              borderRadius: BorderRadius.circular(16),
+                                              borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
                                                 color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
                                                 width: 0.5,
@@ -860,23 +837,23 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     children: [
                                       Icon(
                                                   Icons.visibility,
-                                                  size: 24,
+                                                  size: 18,
                                                   color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
                                       ),
-                                                const SizedBox(height: 6),
+                                                const SizedBox(height: 4),
                                                 Text(
                                                   '1.2k', // TODO: Gerçek görünüm sayısı
                                           style: TextStyle(
-                                                    fontSize: 12,
+                                                    fontSize: 11,
                                             fontWeight: FontWeight.w700,
                                                     color: isDark ? Colors.white : AppTheme.textPrimary,
                                                   ),
                                                 ),
-                                                const SizedBox(height: 2),
+                                                const SizedBox(height: 1),
                                                 Text(
                                                   'Görünüm',
                                                   style: TextStyle(
-                                                    fontSize: 10,
+                                                    fontSize: 9,
                                                     fontWeight: FontWeight.w500,
                                                     color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
                                         ),
@@ -924,25 +901,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   ),
                                       const SizedBox(height: 12),
                                     ],
-                                    // Read more button
-                                    TextButton.icon(
-                                      onPressed: () {
-                                        // TODO: Tam açıklama göster
-                                      },
-                                      icon: Icon(
-                                        Icons.arrow_forward,
-                                        size: 16,
-                                        color: isDark ? primaryColor : Colors.black,
-                                      ),
-                                      label: Text(
-                                        'Tamamını oku',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: isDark ? primaryColor : Colors.black,
-                                ),
-                                      ),
-                                    ),
                                     const SizedBox(height: 80), // Bottom nav için padding
                                   ],
                                   ),
@@ -1008,8 +966,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             currencyFormat.format(deal.price),
                             style: TextStyle(
                               fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white : Colors.black,
+                              fontWeight: FontWeight.w900,
+                              color: AppTheme.primary,
                               height: 1,
                             ),
                           ),
@@ -1028,7 +986,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: isDark ? Colors.grey[800] : const Color(0xFF2D3142),
+                            backgroundColor: AppTheme.secondary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -1081,7 +1039,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
+                                backgroundColor: AppTheme.primary,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
@@ -1117,14 +1075,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: isDark 
                 ? Colors.white.withValues(alpha: 0.05) 
                 : AppTheme.background,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isSelected 
                   ? color.withValues(alpha: 0.3) 
@@ -1136,23 +1094,23 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
             children: [
               Icon(
                 icon,
-                size: 24,
+                size: 18,
                 color: color,
                           ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 count.toString(),
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: isDark ? Colors.white : AppTheme.textPrimary,
                       ),
                     ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 1),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: FontWeight.w500,
                   color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
               ),
@@ -2079,6 +2037,40 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                 : 'Fırsat Onaylandı ✅',
           ),
           backgroundColor: isEditorPick ? Colors.orange[700] : Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _unpublishDeal(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Yayından Kaldır'),
+        content: const Text('Bu fırsatı yayından kaldırmak istediğinize emin misiniz? Fırsat ana ekrandan kaldırılacak.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('Evet, Kaldır'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    await _firestoreService.updateDeal(id, {'isApproved': false});
+    if (mounted) {
+      await _loadDeal();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fırsat yayından kaldırıldı ⚠️'),
+          backgroundColor: Colors.orange,
         ),
       );
     }

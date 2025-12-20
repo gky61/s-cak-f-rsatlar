@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
-  // FIRSAT KOLİK - Renk Paleti
-  static const Color primary = Color(0xFFF9F506); // Varsayılan: Sarı
-  static const Color accent = Color(0xFF2D3142); // Koyu Gri / Siyahımsı
-  static const Color background = Color(0xFFF8F8F5); // Açık Zemin (#f8f8f5)
-  static const Color surface = Colors.white; // Kart Zemini (#ffffff)
-  static const Color textPrimary = Color(0xFF181811); // Ana Metin (#181811)
-  static const Color textSecondary = Color(0xFF8C8B5F); // İkincil Metin (#8c8b5f)
+  // Modern & Energetic - Renk Paleti
+  static const Color primary = Color(0xFFFF6B35); // Vibrant Orange (Action/Highlight)
+  static const Color secondary = Color(0xFF004E92); // Deep Ocean Blue (Brand/Trust)
+  static const Color accent = Color(0xFF2D3436); // Dark Charcoal (Legacy support)
+  static const Color background = Color(0xFFF8F9FA); // Soft White/Light Grey
+  static const Color surface = Color(0xFFFFFFFF); // White (Card Background)
+  static const Color textPrimary = Color(0xFF2D3436); // Dark Charcoal
+  static const Color textSecondary = Color(0xFF636E72); // Grey
   static const Color success = Color(0xFF10B981); // Başarılı (Yeşil)
   static const Color error = Color(0xFFEF4444); // Hata (Kırmızı)
 
@@ -143,6 +144,17 @@ class AppTheme {
         showUnselectedLabels: true,
         selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
         unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: surface,
+        selectedColor: secondary,
+        labelStyle: const TextStyle(color: textPrimary),
+        secondaryLabelStyle: const TextStyle(color: Colors.white),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFE0E0E0), width: 1),
+        ),
       ),
     );
   }
@@ -311,9 +323,9 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: darkSurfaceElevated,
-        selectedColor: primary.withOpacity(0.2),
+        selectedColor: secondary,
         labelStyle: const TextStyle(color: darkTextPrimary),
-        secondaryLabelStyle: const TextStyle(color: darkTextPrimary),
+        secondaryLabelStyle: const TextStyle(color: Colors.white),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),

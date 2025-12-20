@@ -100,6 +100,152 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _showProfileImagePicker(BuildContext context) async {
+    // Assets klasöründeki profil resimleri
+    final List<String> profileImages = [
+      'assets/kullanıcı pp.jpg',
+      'assets/kkpp.jpg',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final primaryColor = Theme.of(context).colorScheme.primary;
+        
+        return AlertDialog(
+          title: const Text('Profil Resmi Seç'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // "Kaldır" seçeneği
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text('Profil Resmini Kaldır'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _updateProfileImage('');
+                  },
+                ),
+                const Divider(),
+                // Görselleri grid olarak göster
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.0,
+                  ),
+                  itemCount: profileImages.length,
+                  itemBuilder: (context, index) {
+                    final imagePath = profileImages[index];
+                    
+                    return InkWell(
+                      onTap: () async {
+                        Navigator.pop(context);
+                        await _updateProfileImage(imagePath);
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: _user?.profileImageUrl == imagePath
+                              ? Border.all(color: primaryColor, width: 3)
+                              : Border.all(color: Colors.grey[300]!, width: 2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.asset(
+                                imagePath,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: Colors.grey[200],
+                                    child: const Icon(Icons.person),
+                                  );
+                                },
+                              ),
+                            ),
+                            if (_user?.profileImageUrl == imagePath)
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: primaryColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _updateProfileImage(String imageUrl) async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .set({
+        'profileImageUrl': imageUrl,
+      }, SetOptions(merge: true));
+
+      await _loadUserData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profil resmi güncellendi ✅'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Profil resmi güncelleme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   Future<void> _signOut() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -213,15 +359,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ),
                           child: ClipOval(
                               child: _user?.profileImageUrl != null && _user!.profileImageUrl.isNotEmpty
-                                  ? CachedNetworkImage(
-                                        imageUrl: _user!.profileImageUrl,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) => Container(
-                                          color: Colors.grey[300],
-                                        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                        ),
-                                      errorWidget: (context, url, error) => Icon(Icons.person, size: 56, color: Colors.grey[400]),
-                                    )
+                                  ? (_user!.profileImageUrl.startsWith('assets/')
+                                      ? Image.asset(
+                                          _user!.profileImageUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return Icon(Icons.person, size: 56, color: Colors.grey[400]);
+                                          },
+                                        )
+                                      : CachedNetworkImage(
+                                          imageUrl: _user!.profileImageUrl,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) => Container(
+                                            color: Colors.grey[300],
+                                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                          ),
+                                          errorWidget: (context, url, error) => Icon(Icons.person, size: 56, color: Colors.grey[400]),
+                                        ))
                                   : Icon(Icons.person, size: 56, color: Colors.grey[400]),
                             ),
                         ),
@@ -229,11 +383,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Positioned(
                             bottom: 2,
                             right: 2,
-                          child: Container(
+                          child: GestureDetector(
+                            onTap: () => _showProfileImagePicker(context),
+                            child: Container(
                               padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
+                              decoration: BoxDecoration(
                                 color: primaryColor,
-                              shape: BoxShape.circle,
+                                shape: BoxShape.circle,
                                 border: Border.all(color: backgroundColor, width: 2),
                                 boxShadow: [
                                   BoxShadow(
@@ -246,6 +402,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               child: const Icon(Icons.edit, size: 16, color: Colors.black),
                             ),
                           ),
+                        ),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -274,9 +431,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         width: 200,
                         height: 40,
                         child: OutlinedButton.icon(
-                          onPressed: () {
-                            // TODO: Edit profile
-                          },
+                          onPressed: () => _showProfileImagePicker(context),
                           icon: const Icon(Icons.manage_accounts, size: 18),
                           label: const Text('Profili Düzenle'),
                           style: OutlinedButton.styleFrom(

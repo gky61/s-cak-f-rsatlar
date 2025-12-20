@@ -313,7 +313,7 @@ class _DealCardState extends State<DealCard> {
                               ),
                               const SizedBox(width: 2),
                               Text(
-                                '342', // TODO: Gerçek like sayısını ekle
+                                '${deal.hotVotes}',
                                 style: TextStyle(
                                   color: isDark ? Colors.white : Colors.black,
                                   fontSize: 8,
@@ -335,7 +335,7 @@ class _DealCardState extends State<DealCard> {
                               ),
                               const SizedBox(width: 2),
                               Text(
-                                '12', // TODO: Gerçek comment sayısını ekle
+                                '${deal.commentCount}',
                                 style: TextStyle(
                                   color: isDark ? Colors.white : Colors.black,
                                   fontSize: 8,
@@ -405,10 +405,10 @@ class _DealCardState extends State<DealCard> {
                             currencyFormat.format(deal.price),
                             style: TextStyle(
                               fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w900,
                               color: isExpired 
                                   ? Colors.red[700] 
-                                  : (isDark ? primaryColor : Colors.black),
+                                  : AppTheme.primary,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -602,10 +602,10 @@ class _DealCardState extends State<DealCard> {
                               ),
                             ),
                           ),
-                        // Zaman Rozeti (Sağ Alt)
+                        // Zaman Rozeti (Sol Alt)
                         Positioned(
                           bottom: 6,
-                          right: 6,
+                          left: 6,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                             decoration: BoxDecoration(
@@ -627,6 +627,74 @@ class _DealCardState extends State<DealCard> {
                                     color: Colors.white,
                                     fontSize: 9,
                                     fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Favorite ve Comment Rozeti (Sağ Üst - Glassmorphism)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isDark 
+                                  ? Colors.black.withOpacity(0.6) 
+                                  : Colors.white.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: isDark 
+                                    ? Colors.white.withOpacity(0.1) 
+                                    : Colors.grey[200]!.withOpacity(0.5),
+                                width: 0.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.favorite,
+                                  size: 9,
+                                  color: Colors.red[500],
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '${deal.hotVotes}',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : Colors.black,
+                                    fontSize: 7,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Container(
+                                  width: 0.5,
+                                  height: 7,
+                                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                                  color: isDark 
+                                      ? Colors.white.withOpacity(0.2) 
+                                      : Colors.grey[300],
+                                ),
+                                Icon(
+                                  Icons.chat_bubble_outline,
+                                  size: 9,
+                                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '${deal.commentCount}',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : Colors.black,
+                                    fontSize: 7,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ],
@@ -730,7 +798,7 @@ class _DealCardState extends State<DealCard> {
                                     fontWeight: FontWeight.w900,
                                     color: isExpired
                                         ? Colors.red[700]
-                                        : (isDark ? primaryColor : Colors.black),
+                                        : AppTheme.primary,
                                         letterSpacing: -0.5,
                                     height: 1.0,
                                       ),
@@ -741,7 +809,7 @@ class _DealCardState extends State<DealCard> {
                             ElevatedButton(
                               onPressed: widget.onTap,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: isDark ? Colors.grey[800] : const Color(0xFF2D3142),
+                                backgroundColor: AppTheme.primary,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 minimumSize: const Size(0, 32),

@@ -402,8 +402,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             _selectedCategory = category.id;
                             _selectedSubCategory = null;
                           }),
-                          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-                          selectedColor: isDark ? Colors.grey[800] : const Color(0xFF2D3142),
+                          backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.surface,
+                          selectedColor: AppTheme.secondary,
                           labelStyle: TextStyle(
                             color: isSelected 
                                 ? Colors.white
@@ -413,9 +413,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           side: BorderSide(
                             color: isDark 
-                                ? (isSelected ? Colors.grey[700]! : AppTheme.darkBorder)
-                                : Colors.black.withOpacity(0.05),
-                            width: isSelected ? 0 : 2,
+                                ? (isSelected ? AppTheme.secondary : AppTheme.darkBorder)
+                                : (isSelected ? AppTheme.secondary : const Color(0xFFE0E0E0)),
+                            width: 1,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(999), // rounded-full

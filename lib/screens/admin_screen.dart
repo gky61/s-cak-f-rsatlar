@@ -202,9 +202,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 const SizedBox(height: 4),
                 Text(
                   currencyFormat.format(deal.price),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.primary,
                   ),
                 ),
               ],
