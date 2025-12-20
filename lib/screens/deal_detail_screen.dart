@@ -1438,35 +1438,37 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   }
 
   String _getCategoryDisplayTextForDeal(Deal deal) {
-    // Kategori adını kontrol et
-    final categoryName = deal.category.trim();
+    // Kategori değerini kontrol et (bot'tan ID olarak geliyor: "elektronik", "moda" vb.)
+    final categoryValue = deal.category.trim();
     
     // Eğer kategori "Tümü" ise veya boşsa, varsayılan göster
-    if (categoryName.isEmpty || categoryName == 'Tümü' || categoryName == 'tumu') {
+    if (categoryValue.isEmpty || categoryValue == 'Tümü' || categoryValue == 'tumu') {
       return '🔥 Tümü';
     }
     
-    // Kategori ID'sini bul
-    final categoryId = Category.getIdByName(categoryName);
-    if (categoryId != null && categoryId != 'tumu') {
-      final category = Category.getById(categoryId);
-      if (deal.subCategory != null && deal.subCategory!.isNotEmpty) {
-        return '${category.icon} ${category.name} > ${deal.subCategory}';
-      }
-      return '${category.icon} ${category.name}';
-    }
-    
-    // Eğer kategori bulunamazsa, kategori adını direkt göster (icon olmadan)
-    // Ama önce bir daha normalize etmeyi dene
-    final normalizedName = categoryName.toLowerCase();
+    // Önce ID olarak kontrol et (bot'tan ID geliyor: "elektronik", "moda" vb.)
+    final normalizedValue = categoryValue.toLowerCase();
     for (final cat in Category.categories) {
-      if (cat.name.toLowerCase() == normalizedName || cat.id == normalizedName) {
+      if (cat.id.toLowerCase() == normalizedValue && cat.id != 'tumu') {
         if (deal.subCategory != null && deal.subCategory!.isNotEmpty) {
           return '${cat.icon} ${cat.name} > ${deal.subCategory}';
         }
         return '${cat.icon} ${cat.name}';
       }
     }
+    
+    // ID bulunamazsa, name olarak kontrol et (eski veriler için)
+    for (final cat in Category.categories) {
+      if (cat.name.toLowerCase() == normalizedValue && cat.id != 'tumu') {
+        if (deal.subCategory != null && deal.subCategory!.isNotEmpty) {
+          return '${cat.icon} ${cat.name} > ${deal.subCategory}';
+        }
+        return '${cat.icon} ${cat.name}';
+      }
+    }
+    
+    // Hiçbir şey bulunamazsa, varsayılan olarak "Tümü" döndür
+    return '🔥 Tümü';
     
     // Son çare: Kategori adını direkt göster
     if (deal.subCategory != null && deal.subCategory!.isNotEmpty) {
