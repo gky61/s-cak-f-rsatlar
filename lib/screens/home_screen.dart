@@ -499,10 +499,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 final deals = snapshot.data ?? [];
                 
                 // Filtreleme (İstemci tarafında)
+                // Bot'tan gelen kategori ID olarak saklanıyor ("elektronik", "moda" vb.)
                 final filteredDeals = _selectedCategory == 'tumu'
                     ? deals
                     : deals.where((d) {
-                        final categoryMatch = d.category == Category.getNameById(_selectedCategory);
+                        // Kategori ID ile karşılaştır (bot ID gönderiyor)
+                        final categoryMatch = d.category.toLowerCase() == _selectedCategory.toLowerCase();
                         if (_selectedSubCategory != null) {
                           return categoryMatch && d.subCategory == _selectedSubCategory;
                         }
