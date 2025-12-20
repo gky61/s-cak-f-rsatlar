@@ -51,13 +51,19 @@ except Exception as e:
 # Gemini AI Yapılandırması
 try:
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    # Doğru model adı: gemini-1.5-flash veya gemini-pro
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        logger.info("✅ Gemini AI modeli yüklendi: gemini-1.5-flash")
-    except:
-        model = genai.GenerativeModel('gemini-pro')
-        logger.info("✅ Gemini AI modeli yüklendi: gemini-pro")
+    # Model adlarını sırayla dene - önce en stabil olanı
+    model_names = ['gemini-pro', 'gemini-1.5-flash', 'gemini-1.5-pro']
+    model = None
+    for model_name in model_names:
+        try:
+            model = genai.GenerativeModel(model_name)
+            logger.info(f"✅ Gemini AI modeli yüklendi: {model_name}")
+            break
+        except Exception as e:
+            logger.warning(f"⚠️ Model {model_name} yüklenemedi: {e}")
+            continue
+    if not model:
+        raise Exception("Hiçbir Gemini modeli yüklenemedi!")
 except Exception as e:
     logger.error(f"❌ Gemini AI başlatılamadı: {e}")
     model = None
