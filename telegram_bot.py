@@ -133,6 +133,48 @@ class TelegramDealBot:
                     return parsed
         
         return 0.0
+    
+    def _extract_store_from_url(self, url: str) -> str:
+        """Link'ten site/mağaza adını çıkar"""
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            
+            # www. ve diğer prefix'leri kaldır
+            domain = domain.replace('www.', '').replace('m.', '')
+            
+            # Türkçe e-ticaret siteleri mapping
+            store_mapping = {
+                'amazon.com.tr': 'Amazon',
+                'amazon.tr': 'Amazon',
+                'trendyol.com': 'Trendyol',
+                'trendyol.com.tr': 'Trendyol',
+                'hepsiburada.com': 'Hepsiburada',
+                'n11.com': 'N11',
+                'gittigidiyor.com': 'GittiGidiyor',
+                'teknosa.com': 'Teknosa',
+                'mediamarkt.com.tr': 'MediaMarkt',
+                'vatanbilgisayar.com': 'Vatan Bilgisayar',
+                'ciceksepeti.com': 'ÇiçekSepeti',
+                'kitapyurdu.com': 'Kitap Yurdu',
+                'd&r.com.tr': 'D&R',
+                'migros.com.tr': 'Migros',
+                'carrefoursa.com.tr': 'CarrefourSA',
+            }
+            
+            # Mapping'de varsa döndür
+            if domain in store_mapping:
+                return store_mapping[domain]
+            
+            # Domain'in ilk kısmını al (örn: amazon.com.tr -> amazon)
+            domain_parts = domain.split('.')
+            if domain_parts:
+                store_name = domain_parts[0].capitalize()
+                return store_name
+            
+            return 'Bilinmeyen'
+        except:
+            return 'Bilinmeyen'
 
     async def fetch_link_data(self, url: str) -> Dict:
         try:
@@ -282,72 +324,83 @@ class TelegramDealBot:
 
 Link: {link}"""
 
-            if html_text:
-                analysis_text += f"""
-
-HTML İçeriği (ürün sayfasından):
-{html_text[:2000]}"""  # HTML'den önemli kısımları al (fiyat, başlık vb.)
-
             # Görsel varsa özel prompt, yoksa normal prompt
             if image_bytes:
-                prompt = f"""GÖRSEL ANALİZ GÖREVİ:
+                prompt = f"""Sen bir görsel okuma (OCR) ve Türk e-ticaret uzmanısın. 
 
-Sen bir görsel okuma (OCR) ve e-ticaret uzmanısın. Aşağıdaki görseli DİKKATLE incele ve:
-1. GÖRSELDEKİ TÜM YAZILARI OKU (OCR)
-2. FİYATI BUL: Görselde "TL", "₺", "fiyat", "price" kelimelerinin yanındaki sayıları oku
-3. ÜRÜN ADINI BUL: Görseldeki ürün başlığını/yazısını oku
-4. KATEGORİYİ BELİRLE: Görseldeki ürünü görerek kategori seç
+GÖREV:
+Aşağıdaki görseli ve Telegram mesajını DİKKATLE incele ve JSON formatında bilgileri çıkar.
 
-EĞER GÖRSEL VARSA (şu an görsel gönderiliyor):
-- ÖNCE GÖRSELDEKİ YAZILARI OKU
-- Fiyat görseldeyse onu kullan
-- Ürün adı görseldeyse onu kullan
-- Kategoriyi görseldeki ürüne göre belirle
+GÖRSEL ANALİZİ:
+1. GÖRSELDEKİ TÜM YAZILARI OKU (OCR ile): Fiyat, ürün adı, marka, mağaza adı gibi tüm metinleri oku
+2. FİYAT BULMA: Görselde "TL", "₺", "fiyat", "price", "₺" gibi kelimelerin yanındaki sayıları oku
+   - "950 TL" -> 950.0
+   - "1.234,56 ₺" -> 1234.56
+   - "2.500" (TL belirtilmemişse) -> 2500.0
+   - Sadece sayıyı döndür, TL/₺ sembollerini dahil etme
+3. ÜRÜN ADI: Görseldeki ürün başlığını, marka ve model bilgisini oku
+4. KATEGORİ: Görseldeki ürünü görerek en uygun kategoriyi seç
+5. MAĞAZA: Görseldeki mağaza logosu/yazısı varsa oku, yoksa mesajdan çıkar
 
-Ek Bilgiler:
+MESAJ BİLGİLERİ:
 {analysis_text}
 
-FİYAT FORMAT ÖRNEKLERİ:
-- Görselde "950 TL" yazıyorsa -> price: 950.0
-- Görselde "1.234,56 ₺" yazıyorsa -> price: 1234.56
-- Görselde "2.500" yazıyorsa (TL belirtilmemişse) -> price: 2500.0
-- Sadece sayıyı döndür, TL/₺ sembollerini sayıya dahil etme
+KATEGORİ SEÇENEKLERİ (mutlaka bunlardan birini seç):
+- elektronik: Telefon, bilgisayar, tablet, TV, hoparlör, kulaklık, elektronik cihazlar, teknoloji ürünleri
+- moda: Giyim, ayakkabı, saat, çanta, cüzdan, takı, aksesuar, kıyafet
+- ev_yasam: Mobilya, ev tekstili, yatak, yorgan, mutfak gereçleri, dekorasyon, zeytinyağı, gıda, ev eşyası
+- anne_bebek: Bebek ürünleri, bebek bezi, bebek giysisi, oyuncak, mama, bebek arabası
+- kozmetik: Parfüm, makyaj, ruj, fondöten, cilt bakımı, saç bakımı, temizlik ürünleri (kişisel bakım)
+- spor_outdoor: Spor giyim, ayakkabı, fitness ekipmanı, kamp malzemeleri, bisiklet, spor aksesuar
+- supermarket: Gıda, temizlik ürünleri, kağıt ürünleri, içecek, atıştırmalık, market ürünleri
+- yapi_oto: Hırdavat, oto aksesuar, boya, bahçe malzemeleri, inşaat malzemeleri
+- kitap_hobi: Kitap, dergi, müzik enstrümanı, oyun konsolu, oyun, hobi malzemeleri
+- diğer: Yukarıdaki kategorilerden hiçbiri uymuyorsa
 
-KATEGORİ SEÇENEKLERİ (görseldeki ürüne göre seç):
-- elektronik: Telefon, bilgisayar, TV, elektronik cihazlar, teknoloji
-- moda: Giyim, ayakkabı, saat, çanta, kıyafet
-- ev_yasam: Mobilya, ev tekstili, mutfak gereçleri, dekorasyon, zeytinyağı, gıda
-- anne_bebek: Bebek ürünleri, bebek bezi, oyuncak
+ÇIKTI FORMATI (MUTLAKA JSON):
+{{
+  "title": "ürün adı (görselden veya mesajdan)",
+  "price": 1234.50,
+  "category": "elektronik|moda|ev_yasam|anne_bebek|kozmetik|spor_outdoor|supermarket|yapi_oto|kitap_hobi|diğer",
+  "store": "mağaza adı (görselden, mesajdan veya link'ten)"
+}}
+
+ÖNEMLİ KURALLAR:
+- Fiyat görselde varsa mutlaka görselden oku
+- Kategoriyi görseldeki ürüne göre belirle (mesajdan değil)
+- Mağaza adını görseldeki logodan okuyabilirsin
+- SADECE JSON döndür, başka açıklama yapma!
+
+ÖRNEK: Görselde "Komili Riviera Zeytinyağı 5 Lt - 950 TL - Amazon" yazıyorsa:
+{{"title": "Komili Riviera Zeytinyağı 5 Lt", "price": 950.0, "category": "supermarket", "store": "Amazon"}}"""
+            else:
+                prompt = f"""Sen bir Türk e-ticaret uzmanısın. Aşağıdaki Telegram mesajını DİKKATLE analiz et.
+
+MESAJ:
+{analysis_text}
+
+GÖREV:
+1. ÜRÜN ADI: Mesajdaki ürün başlığını, marka ve model bilgisini çıkar
+2. FİYAT BULMA: Mesajda "950 TL", "1.234,56 ₺", "2.500 lira" gibi fiyat formatlarını ara
+   - "950 TL" -> 950.0
+   - "1.234,56 ₺" -> 1234.56
+   - Sadece sayıyı döndür, TL/₺ sembollerini dahil etme
+3. KATEGORİ: Ürün açıklamasına göre en uygun kategoriyi seç
+4. MAĞAZA: Link'teki domain adından veya mesajdan mağaza adını çıkar
+
+KATEGORİ SEÇENEKLERİ (mutlaka bunlardan birini seç):
+- elektronik: Telefon, bilgisayar, tablet, TV, hoparlör, kulaklık, elektronik cihazlar
+- moda: Giyim, ayakkabı, saat, çanta, takı, aksesuar, kıyafet
+- ev_yasam: Mobilya, ev tekstili, mutfak gereçleri, dekorasyon, zeytinyağı, gıda, ev eşyası
+- anne_bebek: Bebek ürünleri, bebek bezi, oyuncak, mama
 - kozmetik: Parfüm, makyaj, cilt bakımı, saç bakımı
 - spor_outdoor: Spor giyim, fitness, kamp malzemeleri
 - supermarket: Gıda, temizlik ürünleri, kağıt ürünleri
-- yapi_oto: Hırdavat, oto aksesuar, bahçe
+- yapi_oto: Hırdavat, oto aksesuar, bahçe malzemeleri
 - kitap_hobi: Kitap, müzik enstrümanı, oyun konsolu
 - diğer: Yukarıdakilerden hiçbiri değilse
 
-MUTLAKA şu JSON formatını döndür:
-{{
-  "title": "görseldeki ürün adı",
-  "price": 1234.50,
-  "category": "elektronik|moda|ev_yasam|anne_bebek|kozmetik|spor_outdoor|supermarket|yapi_oto|kitap_hobi|diğer",
-  "store": "mağaza adı (mesajdan veya link'ten)"
-}}
-
-ÖRNEK: Görselde "Komili Riviera Zeytinyağı 5 Lt - 950 TL" yazıyorsa:
-{{"title": "Komili Riviera Zeytinyağı 5 Lt", "price": 950.0, "category": "supermarket", "store": "Amazon"}}
-
-SADECE JSON döndür, başka hiçbir şey yazma!"""
-            else:
-                prompt = f"""Sen bir Türk e-ticaret uzmanısın. Aşağıdaki Telegram mesajını analiz et.
-
-{analysis_text}
-
-GÖREVİN:
-1. ÜRÜN FİYATINI BUL: Mesajda veya HTML'de fiyat ara. "950 TL", "1.234,56 ₺" gibi formatları oku.
-2. KATEGORİ BELİRLE: Ürünün hangi kategoriye ait olduğunu belirle
-3. MAĞAZA ADINI BUL: Link'ten veya mesajdan mağaza adını çıkar
-
-MUTLAKA şu JSON formatını döndür:
+ÇIKTI FORMATI (MUTLAKA JSON):
 {{
   "title": "ürün başlığı",
   "price": 1234.50,
@@ -355,19 +408,7 @@ MUTLAKA şu JSON formatını döndür:
   "store": "mağaza adı"
 }}
 
-KATEGORİ SEÇENEKLERİ:
-- elektronik: Telefon, bilgisayar, TV, elektronik
-- moda: Giyim, ayakkabı, saat, çanta
-- ev_yasam: Mobilya, ev tekstili, mutfak, zeytinyağı, gıda
-- anne_bebek: Bebek ürünleri
-- kozmetik: Parfüm, makyaj, bakım
-- spor_outdoor: Spor giyim, fitness
-- supermarket: Gıda, temizlik, kağıt
-- yapi_oto: Hırdavat, oto, bahçe
-- kitap_hobi: Kitap, müzik, oyun
-- diğer: Diğer
-
-SADECE JSON döndür!"""
+ÖNEMLİ: SADECE JSON döndür, başka açıklama yapma!"""
             
             logger.info("🤖 AI analizi başlatılıyor (görsel ve metin analizi)...")
             
@@ -501,32 +542,25 @@ SADECE JSON döndür!"""
             except Exception as e:
                 logger.error(f"❌ Telegram fotoğraf indirme hatası: {e}")
         
-        # HTML'den veri çek (AI'ye de göndereceğiz)
-        logger.info(f"🌐 HTML scraping başlatılıyor: {link}")
-        html_res = await self.fetch_link_data(link)
+        # HTML scraping'i minimalize et - sadece görsel için (opsiyonel)
+        # Görsel yoksa HTML scraping'i atla, AI'ya güven
         html_data = {}
-        html_text_for_ai = ""  # AI'ye göndermek için HTML metni
-        if html_res:
-            logger.info("✅ HTML içeriği alındı, veri çıkarılıyor...")
-            html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
-            link = html_res['final_url']
-            logger.info(f"📊 HTML'den çıkarılan: Fiyat={html_data.get('price', 0.0)}, Görsel={'Var' if html_data.get('image') else 'Yok'}, Başlık={'Var' if html_data.get('title') else 'Yok'}")
-            
-            # HTML'den önemli metni çıkar (fiyat, başlık vb. için AI'ye göndermek üzere)
-            try:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(html_res['html'], 'html.parser')
-                # Script ve style tag'lerini kaldır
-                for script in soup(["script", "style"]):
-                    script.decompose()
-                html_text_for_ai = soup.get_text()[:2000]  # İlk 2000 karakter
-            except:
-                html_text_for_ai = ""
+        if not telegram_image_url:
+            logger.info(f"🌐 Görsel yok, HTML scraping deneniyor (sadece görsel için): {link}")
+            html_res = await self.fetch_link_data(link)
+            if html_res:
+                logger.info("✅ HTML içeriği alındı, sadece görsel çıkarılıyor...")
+                html_data = self.extract_html_data(html_res['html'], html_res['final_url'])
+                link = html_res['final_url']
+                if html_data.get('image'):
+                    logger.info(f"✅ HTML'den görsel bulundu: {html_data.get('image')[:80]}")
+            else:
+                logger.info("⚠️ HTML içeriği alınamadı, AI'ya güveniliyor")
         else:
-            logger.warning("⚠️ HTML içeriği alınamadı")
+            logger.info("✅ Telegram görseli mevcut, HTML scraping atlanıyor")
         
-        # AI ile analiz et - görseli ve HTML'i de gönder
-        ai_data = await self.analyze_deal_with_ai(text, link, telegram_image_bytes, html_text_for_ai)
+        # AI ile analiz et - görsel varsa görseli gönder, HTML gönderme
+        ai_data = await self.analyze_deal_with_ai(text, link, telegram_image_bytes, "")
         if not ai_data:
             logger.warning("⚠️ AI analizi başarısız, temel veri kullanılıyor")
             ai_data = {
@@ -536,38 +570,46 @@ SADECE JSON döndür!"""
                 'store': 'Bilinmeyen'
             }
         
-        # Verileri birleştir - Öncelik sırası:
+        # Verileri birleştir - AI odaklı yaklaşım
         # Görsel: Telegram fotoğrafı > HTML scraping > Boş
-        # Başlık: HTML > AI > Mesaj (ilk 100 karakter)
-        # Fiyat: Mesajdan direkt çıkarılan > HTML > AI > 0.0
+        # Başlık: AI > Mesaj (ilk 100 karakter)
+        # Fiyat: Mesajdan direkt > AI > 0.0 (HTML'yi kaldırdık)
         # Kategori: AI (mutlaka olmalı)
-        # Store: AI > 'Bilinmeyen'
+        # Store: Link domain > AI > Bilinmeyen
         
         image_url = telegram_image_url or html_data.get('image', '') or ''
-        title = html_data.get('title') or ai_data.get('title') or text[:100]
+        title = ai_data.get('title') or text[:100]
         
-        # Fiyat çıkarma önceliği: Görsel (AI) > Mesajdan direkt > HTML > AI (mesaj)
-        # Görsel varsa AI görselden fiyat çıkarmıştır, öncelik onun
-        if telegram_image_bytes and ai_data.get('price', 0.0) > 0:
+        # Fiyat çıkarma önceliği: Mesajdan direkt (en güvenilir) > AI > 0.0
+        price_from_text = self._extract_price_from_text(text)
+        if price_from_text > 0:
+            price = price_from_text
+            logger.info(f"💰 Fiyat mesajdan (regex) çıkarıldı: {price} TL")
+        elif ai_data.get('price', 0.0) > 0:
             price = ai_data.get('price', 0.0)
-            logger.info(f"💰 Fiyat görselden (AI OCR) çıkarıldı: {price} TL")
+            logger.info(f"💰 Fiyat AI'dan çıkarıldı: {price} TL")
         else:
-            price_from_text = self._extract_price_from_text(text)
-            if price_from_text > 0:
-                price = price_from_text
-                logger.info(f"💰 Fiyat mesajdan çıkarıldı: {price} TL")
-            else:
-                price = html_data.get('price', 0.0) if html_data.get('price', 0.0) > 0 else (ai_data.get('price', 0.0) or 0.0)
-                if price > 0:
-                    logger.info(f"💰 Fiyat {'HTML' if html_data.get('price', 0.0) > 0 else 'AI'}'den çıkarıldı: {price} TL")
-                else:
-                    logger.warning(f"⚠️ Fiyat bulunamadı!")
+            price = 0.0
+            logger.warning(f"⚠️ Fiyat bulunamadı!")
         
-        # Kategori: Görsel varsa AI görselden kategori çıkarmıştır, yoksa AI mesajdan
+        # Kategori: Tamamen AI'ya güven
         category = ai_data.get('category', 'diğer')
         if telegram_image_bytes:
             logger.info(f"📂 Kategori görselden (AI) çıkarıldı: {category}")
-        store = ai_data.get('store', 'Bilinmeyen')
+        else:
+            logger.info(f"📂 Kategori mesajdan (AI) çıkarıldı: {category}")
+        
+        # Store: Link'ten domain çıkar > AI > Bilinmeyen
+        store_from_link = self._extract_store_from_url(link)
+        if store_from_link != 'Bilinmeyen':
+            store = store_from_link
+            logger.info(f"🏪 Mağaza link'ten çıkarıldı: {store}")
+        elif ai_data.get('store') and ai_data.get('store') != 'Bilinmeyen':
+            store = ai_data.get('store')
+            logger.info(f"🏪 Mağaza AI'dan çıkarıldı: {store}")
+        else:
+            store = 'Bilinmeyen'
+            logger.warning(f"⚠️ Mağaza bulunamadı!")
         
         # Kategori validasyonu - eğer AI yanlış kategori verirse 'diğer' kullan
         valid_categories = ['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 
