@@ -20,6 +20,25 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   final FirestoreService _firestoreService = FirestoreService();
   late TabController _tabController;
 
+  // Kategori ID'sini kategori adına çevir
+  String _getCategoryDisplayName(String categoryIdOrName) {
+    final normalizedValue = categoryIdOrName.toLowerCase().trim();
+    // Önce ID olarak kontrol et (bot'tan ID geliyor)
+    for (final cat in Category.categories) {
+      if (cat.id.toLowerCase() == normalizedValue && cat.id != 'tumu') {
+        return cat.name;
+      }
+    }
+    // ID bulunamazsa, name olarak kontrol et
+    for (final cat in Category.categories) {
+      if (cat.name.toLowerCase() == normalizedValue && cat.id != 'tumu') {
+        return cat.name;
+      }
+    }
+    // Hiçbir şey bulunamazsa, orijinal değeri döndür
+    return categoryIdOrName;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -164,7 +183,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               children: [
                 const SizedBox(height: 4),
                 Text(
-                  '${deal.store} • ${deal.category}',
+                  '${deal.store} • ${_getCategoryDisplayName(deal.category)}',
                   style: const TextStyle(fontSize: 12),
                 ),
                 const SizedBox(height: 4),
