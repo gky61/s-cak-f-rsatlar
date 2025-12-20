@@ -116,12 +116,16 @@ class TelegramDealBot:
         if not text:
             return 0.0
         
-        # Fiyat desenleri: "950 TL", "1.234,56 ₺", "2.500 lira" vb.
+        # Fiyat desenleri: "950 TL", "1.234,56 ₺", "2.500 lira", "₺950", "950,00 TL" vb.
         patterns = [
-            r'(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*(?:TL|₺|lira|fiyat)',
-            r'(?:TL|₺|lira|fiyat):?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)',
+            r'(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*(?:TL|₺|lira|fiyat|Fiyat)',
+            r'(?:TL|₺|lira|fiyat|Fiyat):?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)',
+            r'₺\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)',
             r'(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*TL',
             r'(\d+(?:,\d{2})?)\s*(?:TL|₺)',
+            r'fiyat[:\s]+(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)',
+            r'(\d{1,3}(?:\.\d{3})*)\s*(?:TL|₺)',
+            r'(\d+)\s*(?:TL|₺)',
         ]
         
         for pattern in patterns:
@@ -130,6 +134,7 @@ class TelegramDealBot:
                 price_str = matches[0]
                 parsed = self._parse_price(price_str)
                 if parsed > 0:
+                    logger.info(f"💰 Regex ile fiyat bulundu: {price_str} -> {parsed} TL")
                     return parsed
         
         return 0.0
@@ -357,19 +362,20 @@ KATEGORİ SEÇENEKLERİ (mutlaka bunlardan birini seç):
 - kitap_hobi: Kitap, dergi, müzik enstrümanı, oyun konsolu, oyun, hobi malzemeleri
 - diğer: Yukarıdaki kategorilerden hiçbiri uymuyorsa
 
-ÇIKTI FORMATI (MUTLAKA JSON):
+ÇIKTI FORMATI (MUTLAKA SADECE JSON, BAŞKA HİÇBİR ŞEY YAZMA):
 {{
   "title": "ürün adı (görselden veya mesajdan)",
   "price": 1234.50,
-  "category": "elektronik|moda|ev_yasam|anne_bebek|kozmetik|spor_outdoor|supermarket|yapi_oto|kitap_hobi|diğer",
+  "category": "elektronik",
   "store": "mağaza adı (görselden, mesajdan veya link'ten)"
 }}
 
 ÖNEMLİ KURALLAR:
-- Fiyat görselde varsa mutlaka görselden oku
-- Kategoriyi görseldeki ürüne göre belirle (mesajdan değil)
+- Fiyat görselde varsa mutlaka görselden oku (sayı olarak döndür, örn: 950.0)
+- Kategoriyi görseldeki ürüne göre belirle (mutlaka yukarıdaki seçeneklerden birini kullan)
 - Mağaza adını görseldeki logodan okuyabilirsin
-- SADECE JSON döndür, başka açıklama yapma!
+- MUTLAKA GEÇERLİ BİR JSON döndür, başka açıklama, yorum veya markdown ekleme!
+- JSON formatında hata olursa bot çalışmayacak, dikkatli ol!
 
 ÖRNEK: Görselde "Komili Riviera Zeytinyağı 5 Lt - 950 TL - Amazon" yazıyorsa:
 {{"title": "Komili Riviera Zeytinyağı 5 Lt", "price": 950.0, "category": "supermarket", "store": "Amazon"}}"""
@@ -400,15 +406,19 @@ KATEGORİ SEÇENEKLERİ (mutlaka bunlardan birini seç):
 - kitap_hobi: Kitap, müzik enstrümanı, oyun konsolu
 - diğer: Yukarıdakilerden hiçbiri değilse
 
-ÇIKTI FORMATI (MUTLAKA JSON):
+ÇIKTI FORMATI (MUTLAKA SADECE JSON, BAŞKA HİÇBİR ŞEY YAZMA):
 {{
   "title": "ürün başlığı",
   "price": 1234.50,
-  "category": "elektronik|moda|ev_yasam|anne_bebek|kozmetik|spor_outdoor|supermarket|yapi_oto|kitap_hobi|diğer",
+  "category": "elektronik",
   "store": "mağaza adı"
 }}
 
-ÖNEMLİ: SADECE JSON döndür, başka açıklama yapma!"""
+ÖNEMLİ KURALLAR:
+- Fiyat mutlaka sayı olarak döndür (string değil, örn: 950.0)
+- Kategori mutlaka yukarıdaki seçeneklerden birini kullan (elektronik, moda, ev_yasam, vb.)
+- MUTLAKA GEÇERLİ BİR JSON döndür, başka açıklama, yorum veya markdown ekleme!
+- JSON formatında hata olursa bot çalışmayacak, dikkatli ol!"""
             
             logger.info("🤖 AI analizi başlatılıyor (görsel ve metin analizi)...")
             
@@ -450,18 +460,68 @@ KATEGORİ SEÇENEKLERİ (mutlaka bunlardan birini seç):
             
             # Response'tan JSON çıkar
             response_text = response.text.strip()
+            logger.info(f"📝 AI response (ilk 500 karakter): {response_text[:500]}")
+            
             # Markdown code block'ları temizle
             if '```json' in response_text:
                 response_text = response_text.split('```json')[1].split('```')[0].strip()
             elif '```' in response_text:
                 response_text = response_text.split('```')[1].split('```')[0].strip()
             
-            ai_result = json.loads(response_text)
-            logger.info(f"✅ AI analizi tamamlandı: {ai_result}")
-            return ai_result
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ AI JSON parse hatası: {e} | Response: {response.text[:200] if 'response' in locals() else 'N/A'}")
-            return {}
+            # JSON'u parse et
+            try:
+                ai_result = json.loads(response_text)
+                logger.info(f"✅ AI analizi tamamlandı: {ai_result}")
+                
+                # Fiyat kontrolü - eğer string ise parse et
+                if 'price' in ai_result:
+                    if isinstance(ai_result['price'], str):
+                        try:
+                            ai_result['price'] = float(ai_result['price'].replace(',', '.').replace(' TL', '').replace('₺', '').strip())
+                        except:
+                            ai_result['price'] = 0.0
+                    elif ai_result['price'] is None:
+                        ai_result['price'] = 0.0
+                
+                # Kategori kontrolü - eğer yoksa veya geçersizse 'diğer' yap
+                if 'category' not in ai_result or not ai_result['category']:
+                    ai_result['category'] = 'diğer'
+                    logger.warning("⚠️ AI kategori döndürmedi, 'diğer' kullanılıyor")
+                
+                return ai_result
+            except json.JSONDecodeError as json_err:
+                logger.error(f"❌ AI JSON parse hatası: {json_err}")
+                logger.error(f"📝 Parse edilemeyen response: {response_text[:500]}")
+                
+                # JSON parse edilemezse, response'tan manuel olarak çıkarmaya çalış
+                # Örneğin: "price": 950.0 gibi pattern'leri ara
+                fallback_result = {}
+                try:
+                    price_match = re.search(r'"price"\s*:\s*(\d+(?:\.\d+)?)', response_text)
+                    if price_match:
+                        fallback_result['price'] = float(price_match.group(1))
+                    
+                    category_match = re.search(r'"category"\s*:\s*"([^"]+)"', response_text)
+                    if category_match:
+                        fallback_result['category'] = category_match.group(1)
+                    else:
+                        fallback_result['category'] = 'diğer'
+                    
+                    title_match = re.search(r'"title"\s*:\s*"([^"]+)"', response_text)
+                    if title_match:
+                        fallback_result['title'] = title_match.group(1)
+                    
+                    store_match = re.search(r'"store"\s*:\s*"([^"]+)"', response_text)
+                    if store_match:
+                        fallback_result['store'] = store_match.group(1)
+                    
+                    if fallback_result:
+                        logger.warning(f"⚠️ JSON parse başarısız, fallback ile çıkarıldı: {fallback_result}")
+                        return fallback_result
+                except:
+                    pass
+                
+                return {}
         except Exception as e:
             logger.error(f"❌ AI hatası: {e}", exc_info=True)
             return {}
@@ -594,10 +654,15 @@ KATEGORİ SEÇENEKLERİ (mutlaka bunlardan birini seç):
         
         # Kategori: Tamamen AI'ya güven
         category = ai_data.get('category', 'diğer')
-        if telegram_image_bytes:
-            logger.info(f"📂 Kategori görselden (AI) çıkarıldı: {category}")
+        if not category or category.strip() == '':
+            category = 'diğer'
+            logger.warning("⚠️ AI kategori döndürmedi veya boş, 'diğer' kullanılıyor")
         else:
-            logger.info(f"📂 Kategori mesajdan (AI) çıkarıldı: {category}")
+            category = category.strip().lower()
+            if telegram_image_bytes:
+                logger.info(f"📂 Kategori görselden (AI) çıkarıldı: {category}")
+            else:
+                logger.info(f"📂 Kategori mesajdan (AI) çıkarıldı: {category}")
         
         # Store: Link'ten domain çıkar > AI > Bilinmeyen
         store_from_link = self._extract_store_from_url(link)
