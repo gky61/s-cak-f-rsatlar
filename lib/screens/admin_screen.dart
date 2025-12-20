@@ -14,7 +14,7 @@ class AdminScreen extends StatefulWidget {
   State<AdminScreen> createState() => _AdminScreenState();
 }
 
-enum _AdminListType { pending, expired }
+enum _AdminListType { pending, published, expired }
 
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
@@ -42,7 +42,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -59,6 +59,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           tabs: const [
             Tab(text: 'Onay Bekleyen'),
+            Tab(text: 'Yayında'),
             Tab(text: 'Süresi Biten'),
           ],
         ),
@@ -67,6 +68,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         controller: _tabController,
         children: [
           _buildDealList(_AdminListType.pending),
+          _buildDealList(_AdminListType.published),
           _buildDealList(_AdminListType.expired),
         ],
       ),
@@ -75,11 +77,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
   Widget _buildDealList(_AdminListType type) {
     final bool isPending = type == _AdminListType.pending;
+    final bool isPublished = type == _AdminListType.published;
     final bool isExpiredList = type == _AdminListType.expired;
 
     return StreamBuilder<List<Deal>>(
       stream: switch (type) {
         _AdminListType.pending => _firestoreService.getPendingDealsStream(),
+        _AdminListType.published => _firestoreService.getApprovedDealsStream(),
         _AdminListType.expired => _firestoreService.getExpiredDealsStream(),
       },
       builder: (context, snapshot) {
@@ -96,13 +100,21 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  isPending ? Icons.check_circle_outline : Icons.hourglass_disabled_outlined,
+                  isPending 
+                      ? Icons.check_circle_outline 
+                      : isPublished
+                          ? Icons.published_with_changes
+                          : Icons.hourglass_disabled_outlined,
                   size: 64,
                   color: Colors.grey[300],
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  isPending ? 'Onay bekleyen yok' : 'Süresi biten ilan yok',
+                  isPending 
+                      ? 'Onay bekleyen yok' 
+                      : isPublished
+                          ? 'Yayında fırsat yok'
+                          : 'Süresi biten ilan yok',
                   style: const TextStyle(color: Colors.grey),
                 ),
               ],
@@ -126,6 +138,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
   Widget _buildAdminCard(Deal deal, _AdminListType type) {
     final bool isPending = type == _AdminListType.pending;
+    final bool isPublished = type == _AdminListType.published;
     final bool isExpiredCard = type == _AdminListType.expired;
     final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
     final primaryColor = Theme.of(context).colorScheme.primary;
@@ -233,6 +246,28 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               ],
             ),
           ],
+          if (isPublished) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _unpublishDeal(deal.id),
+                  icon: const Icon(Icons.visibility_off, size: 20),
+                  label: const Text('Yayından Kaldır'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           if (isExpiredCard)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -337,6 +372,39 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fırsat Reddedildi ❌'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _unpublishDeal(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Yayından Kaldır'),
+        content: const Text('Bu fırsatı yayından kaldırmak istediğinize emin misiniz? Fırsat ana ekrandan kaldırılacak.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('Evet, Kaldır'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    await _firestoreService.updateDeal(id, {'isApproved': false});
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fırsat yayından kaldırıldı ⚠️'),
+          backgroundColor: Colors.orange,
+        ),
       );
     }
   }

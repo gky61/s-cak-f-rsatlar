@@ -117,6 +117,21 @@ class FirestoreService {
     });
   }
 
+  // Yayınlanmış (onaylanmış) deal'leri dinleme (admin için)
+  Stream<List<Deal>> getApprovedDealsStream() {
+    return _firestore
+        .collection('deals')
+        .where('isApproved', isEqualTo: true)
+        .where('isExpired', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) {
+      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
+      // Client-side'da tarihe göre sırala (index gerektirmez)
+      deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return deals;
+    });
+  }
+
   // Tek bir deal getirme
   Future<Deal?> getDeal(String dealId) async {
     try {
