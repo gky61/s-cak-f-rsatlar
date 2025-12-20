@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/deal.dart';
+import '../models/category.dart';
 import '../services/link_preview_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
@@ -29,6 +30,21 @@ class _DealCardState extends State<DealCard> {
   bool _imageLoadAttempted = false;
 
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
+
+  // Kategori ID'sini kategori adına çevir
+  String _getCategoryDisplayName(String categoryIdOrName) {
+    // Önce ID olarak kontrol et
+    try {
+      final category = Category.categories.firstWhere(
+        (cat) => cat.id.toLowerCase() == categoryIdOrName.toLowerCase(),
+        orElse: () => Category.categories.first, // Bulunamazsa "Tümü" döndür
+      );
+      return category.name;
+    } catch (e) {
+      // ID olarak bulunamazsa, zaten name olabilir, direkt döndür
+      return categoryIdOrName;
+    }
+  }
 
   @override
   void initState() {
@@ -639,7 +655,7 @@ class _DealCardState extends State<DealCard> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  deal.category,
+                                  _getCategoryDisplayName(deal.category),
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w500,
