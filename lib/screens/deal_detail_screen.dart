@@ -1469,12 +1469,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     
     // Hiçbir şey bulunamazsa, varsayılan olarak "Tümü" döndür
     return '🔥 Tümü';
-    
-    // Son çare: Kategori adını direkt göster
-    if (deal.subCategory != null && deal.subCategory!.isNotEmpty) {
-      return '$categoryName > ${deal.subCategory}';
-    }
-    return categoryName;
   }
 
   Widget _buildAdminTextField(
