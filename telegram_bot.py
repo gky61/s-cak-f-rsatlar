@@ -331,20 +331,36 @@ Link: {link}"""
 
             # Görsel varsa özel prompt, yoksa normal prompt
             if image_bytes:
-                prompt = f"""Sen bir görsel okuma (OCR) ve Türk e-ticaret uzmanısın. 
+                prompt = f"""Sen bir görsel okuma (OCR) uzmanısın. Görseldeki TÜM YAZILARI okumanda çok başarılısın.
 
 GÖREV:
-Aşağıdaki görseli ve Telegram mesajını DİKKATLE incele ve JSON formatında bilgileri çıkar.
+Aşağıdaki görseli DİKKATLE incele ve tüm yazıları oku. Özellikle FİYAT'a çok dikkat et!
 
-GÖRSEL ANALİZİ:
-1. GÖRSELDEKİ TÜM YAZILARI OKU (OCR ile): Fiyat, ürün adı, marka, mağaza adı gibi tüm metinleri oku
-2. FİYAT BULMA: Görselde "TL", "₺", "fiyat", "price", "₺" gibi kelimelerin yanındaki sayıları oku
-   - "950 TL" -> 950.0
-   - "1.234,56 ₺" -> 1234.56
-   - "2.500" (TL belirtilmemişse) -> 2500.0
-   - Sadece sayıyı döndür, TL/₺ sembollerini dahil etme
-3. ÜRÜN ADI: Görseldeki ürün başlığını, marka ve model bilgisini oku
-4. KATEGORİ: Görseldeki ürünü görerek en uygun kategoriyi seç
+GÖRSEL ANALİZİ - ADIM ADIM:
+1. ÖNCE TÜM YAZILARI OKU: Görseldeki her yazıyı, her sayıyı oku. Büyük, küçük, renkli, siyah-beyaz fark etmez - HEPSİNİ OKU.
+
+2. FİYAT BULMA (ÇOK ÖNEMLİ):
+   - Görselde en BÜYÜK, EN BELİRGİN sayıları ara - bunlar genellikle fiyattır
+   - "TL", "₺" sembolleri yanındaki sayıları oku
+   - Türk formatında fiyatlar: "15.499 TL" veya "1.234,56 ₺" gibi
+   - Örnekler:
+     * "15.499 TL" -> price: 15499.0 (nokta binlik ayırıcıdır, virgül atılır)
+     * "1.234,56 ₺" -> price: 1234.56 (nokta binlik, virgül ondalık)
+     * "950 TL" -> price: 950.0
+     * Görseldeki EN BÜYÜK sayı genellikle fiyattır - onu kullan!
+   - Fiyatı MUTLAKA sayı olarak döndür (string değil!)
+
+3. ÜRÜN ADI: Görseldeki ürün başlığını, marka ve model bilgisini oku (büyük yazılar genellikle başlıktır)
+
+4. KATEGORİ BELİRLEME:
+   - Görseldeki ürünü GÖR ve kategori seç
+   - Monitör, TV, telefon, bilgisayar -> "elektronik"
+   - Gaming monitör, oyuncu monitörü -> "elektronik"
+   - Giyim, ayakkabı -> "moda"
+   - Mobilya, ev eşyası -> "ev_yasam"
+   - Gıda, market ürünü -> "supermarket"
+   - vb.
+
 5. MAĞAZA: Görseldeki mağaza logosu/yazısı varsa oku, yoksa mesajdan çıkar
 
 MESAJ BİLGİLERİ:
@@ -371,13 +387,16 @@ KATEGORİ SEÇENEKLERİ (mutlaka bunlardan birini seç):
 }}
 
 ÖNEMLİ KURALLAR:
-- Fiyat görselde varsa mutlaka görselden oku (sayı olarak döndür, örn: 950.0)
-- Kategoriyi görseldeki ürüne göre belirle (mutlaka yukarıdaki seçeneklerden birini kullan)
-- Mağaza adını görseldeki logodan okuyabilirsin
-- MUTLAKA GEÇERLİ BİR JSON döndür, başka açıklama, yorum veya markdown ekleme!
-- JSON formatında hata olursa bot çalışmayacak, dikkatli ol!
+- FİYAT: Görselde fiyat varsa MUTLAKA görselden oku! En büyük, en belirgin sayıyı bul!
+- Fiyat formatı: "15.499 TL" -> 15499.0 (nokta binlik ayırıcı, virgül atılır)
+- Kategori: Görseldeki ürünü GÖR ve kategori seç (mutlaka yukarıdaki seçeneklerden birini kullan)
+- Mağaza: Görseldeki logodan oku veya mesajdan çıkar
+- MUTLAKA GEÇERLİ BİR JSON döndür, başka açıklama yazma!
 
-ÖRNEK: Görselde "Komili Riviera Zeytinyağı 5 Lt - 950 TL - Amazon" yazıyorsa:
+ÖRNEK 1: Görselde "GIGABYTE M27UP Gaming Monitör - 15.499 TL" yazıyorsa:
+{{"title": "GIGABYTE M27UP Gaming Monitör", "price": 15499.0, "category": "elektronik", "store": "Bilinmeyen"}}
+
+ÖRNEK 2: Görselde "Komili Riviera Zeytinyağı 5 Lt - 950 TL" yazıyorsa:
 {{"title": "Komili Riviera Zeytinyağı 5 Lt", "price": 950.0, "category": "supermarket", "store": "Amazon"}}"""
             else:
                 prompt = f"""Sen bir Türk e-ticaret uzmanısın. Aşağıdaki Telegram mesajını DİKKATLE analiz et.
