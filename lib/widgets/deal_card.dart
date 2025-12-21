@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/deal.dart';
 import '../models/category.dart';
@@ -221,34 +222,6 @@ class _DealCardState extends State<DealCard> {
                           ),
                         ),
                       ),
-                      // İndirim Rozeti (Sol Alt)
-                      if (deal.discountRate != null && deal.discountRate! > 0)
-                        Positioned(
-                          bottom: 8,
-                          left: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: primaryColor,
-                              borderRadius: BorderRadius.circular(4),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 2,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              '%${deal.discountRate}',
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
                       // Editör Seçimi Rozeti (Sağ Alt)
                       if (deal.isEditorPick)
                         Positioned(
@@ -399,38 +372,70 @@ class _DealCardState extends State<DealCard> {
                     const SizedBox(height: 6),
                     // Fiyat
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Flexible(
-                          child: Text(
-                            currencyFormat.format(deal.price),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
-                              color: isExpired 
-                                  ? Colors.red[700] 
-                                  : AppTheme.primary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  currencyFormat.format(deal.price),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                    color: isExpired 
+                                        ? Colors.red[700] 
+                                        : AppTheme.primary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    currencyFormat.format(deal.originalPrice),
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w400,
+                                      color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+                                      decoration: TextDecoration.lineThrough,
+                                      decorationThickness: 1,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                        if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                          const SizedBox(width: 4),
-                          Flexible(
+                        // İndirim Yüzdesi (Fiyatın sağında)
+                        if (deal.discountRate != null && deal.discountRate! > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: primaryColor,
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
                             child: Text(
-                              currencyFormat.format(deal.originalPrice),
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w400,
-                                color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                decoration: TextDecoration.lineThrough,
-                                decorationThickness: 1,
+                              '%${deal.discountRate}',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        ],
                       ],
                     ),
                     ],
@@ -454,6 +459,66 @@ class _DealCardState extends State<DealCard> {
     if (difference.inDays == 1) return 'Dün';
     if (difference.inDays < 7) return '${difference.inDays} gün önce';
     return DateFormat('d MMM').format(date);
+  }
+
+  Future<void> _openProductLink(String url) async {
+    if (url.isEmpty) return;
+    
+    try {
+      // URL'yi düzelt - http:// veya https:// yoksa ekle
+      String cleanUrl = url.trim();
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        cleanUrl = 'https://$cleanUrl';
+      }
+      
+      final uri = Uri.parse(cleanUrl);
+      
+      // canLaunchUrl kontrolü yapmadan direkt dene - daha güvenilir
+      try {
+        // Önce external application ile dene
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) return;
+      } catch (e) {
+        // External başarısız, devam et
+      }
+      
+      // External başarısız olduysa platform default dene
+      try {
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.platformDefault,
+        );
+        if (launched) return;
+      } catch (e) {
+        // Platform default da başarısız
+      }
+      
+      // Son çare: inAppWebView (eğer destekleniyorsa)
+      try {
+        await launchUrl(
+          uri,
+          mode: LaunchMode.inAppWebView,
+        );
+      } catch (e) {
+        // Tüm yöntemler başarısız oldu
+        throw Exception('Bağlantı açılamadı');
+      }
+    } catch (e) {
+      print('❌ URL açma hatası: $e');
+      print('❌ URL: $url');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bağlantı açılamadı: ${e.toString()}'),
+            duration: const Duration(seconds: 4),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   // Horizontal kart layout'u (HTML'deki yeni tasarım)
@@ -534,45 +599,6 @@ class _DealCardState extends State<DealCard> {
                                               size: 32,
                               ),
                             ),
-                            // İndirim Rozeti (Sol Üst)
-                            if (deal.discountRate != null && deal.discountRate! > 0)
-                              Positioned(
-                            top: 6,
-                            left: 6,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: primaryColor.withValues(alpha: 0.9),
-                                borderRadius: BorderRadius.circular(999),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: primaryColor.withValues(alpha: 0.3),
-                                    blurRadius: 2,
-                                    offset: const Offset(0, 1),
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.trending_down,
-                                    size: 10,
-                                    color: Colors.black,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '%${deal.discountRate}',
-                                    style: const TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                        ),
-                          ),
                         // Editör Seçimi Rozeti (Sağ Üst)
                         if (deal.isEditorPick)
                           Positioned(
@@ -631,8 +657,8 @@ class _DealCardState extends State<DealCard> {
                                 ),
                               ],
                             ),
+                            ),
                           ),
-                        ),
                         // Favorite ve Comment Rozeti (Sağ Üst - Glassmorphism)
                         Positioned(
                           top: 6,
@@ -776,38 +802,83 @@ class _DealCardState extends State<DealCard> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                            // Fiyat
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (deal.originalPrice != null && deal.originalPrice! > deal.price)
+                            // Fiyat ve İndirim
+                            Expanded(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  // Fiyat
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (deal.originalPrice != null && deal.originalPrice! > deal.price)
+                                        Text(
+                                          currencyFormat.format(deal.originalPrice),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+                                            decoration: TextDecoration.lineThrough,
+                                          ),
+                                        ),
                                       Text(
-                                        currencyFormat.format(deal.originalPrice),
+                                        currencyFormat.format(deal.price),
                                         style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                      color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                          decoration: TextDecoration.lineThrough,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w900,
+                                          color: isExpired
+                                              ? Colors.red[700]
+                                              : AppTheme.primary,
+                                          letterSpacing: -0.5,
+                                          height: 1.0,
                                         ),
                                       ),
-                                    Text(
-                                      currencyFormat.format(deal.price),
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                    fontWeight: FontWeight.w900,
-                                    color: isExpired
-                                        ? Colors.red[700]
-                                        : AppTheme.primary,
-                                        letterSpacing: -0.5,
-                                    height: 1.0,
+                                    ],
+                                  ),
+                                  // İndirim Yüzdesi (Fiyatın sağında)
+                                  if (deal.discountRate != null && deal.discountRate! > 0)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: primaryColor.withValues(alpha: 0.9),
+                                        borderRadius: BorderRadius.circular(999),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: primaryColor.withValues(alpha: 0.3),
+                                            blurRadius: 2,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.trending_down,
+                                            size: 10,
+                                            color: Colors.black,
+                                          ),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            '%${deal.discountRate}',
+                                            style: const TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  ],
-                                ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
                             // İncele Butonu
                             ElevatedButton(
-                              onPressed: widget.onTap,
+                              onPressed: () => _openProductLink(deal.link),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.primary,
                                 foregroundColor: Colors.white,

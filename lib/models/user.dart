@@ -9,6 +9,7 @@ class AppUser {
   final int points;
   final int dealCount;
   final int totalLikes;
+  final List<String> badges; // Rozet listesi (örn: ['gold', 'top_reviewer', 'helpful'])
 
   AppUser({
     required this.uid,
@@ -19,6 +20,7 @@ class AppUser {
     this.points = 0,
     this.dealCount = 0,
     this.totalLikes = 0,
+    this.badges = const [],
   });
 
   // displayName getter (nickname varsa nickname, yoksa username)
@@ -54,6 +56,7 @@ class AppUser {
     int? points,
     int? dealCount,
     int? totalLikes,
+    List<String>? badges,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -64,6 +67,7 @@ class AppUser {
       points: points ?? this.points,
       dealCount: dealCount ?? this.dealCount,
       totalLikes: totalLikes ?? this.totalLikes,
+      badges: badges ?? this.badges,
     );
   }
 
@@ -79,6 +83,7 @@ class AppUser {
       points: data['points'] ?? 0,
       dealCount: data['dealCount'] ?? 0,
       totalLikes: data['totalLikes'] ?? 0,
+      badges: List<String>.from(data['badges'] ?? []),
     );
   }
 
@@ -93,6 +98,7 @@ class AppUser {
       'points': points,
       'dealCount': dealCount,
       'totalLikes': totalLikes,
+      'badges': badges,
     };
   }
 }

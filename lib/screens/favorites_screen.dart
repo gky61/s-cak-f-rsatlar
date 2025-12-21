@@ -24,7 +24,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    // İlk açılışta "En Çok Beğenilenler" sekmesini göster
+    _tabController = TabController(length: 3, vsync: this, initialIndex: 1);
   }
 
   @override
@@ -77,15 +78,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               unselectedLabelColor: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
               labelStyle: const TextStyle(
                 fontWeight: FontWeight.w700,
-                fontSize: 14,
+                fontSize: 11,
               ),
               unselectedLabelStyle: const TextStyle(
                 fontWeight: FontWeight.w500,
-                fontSize: 14,
+                fontSize: 11,
               ),
+              isScrollable: false,
               tabs: const [
                 Tab(text: 'Beğendiklerim'),
                 Tab(text: 'En Çok Beğenilenler'),
+                Tab(text: 'Favori Kategorilerim'),
               ],
             ),
           ),
@@ -98,6 +101,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           _buildMyFavorites(currentUser, isDark),
           // En Çok Beğenilenler (25+)
           _buildMostLiked(isDark),
+          // Favori Kategorilerim
+          _buildFollowedCategories(currentUser, isDark),
         ],
       ),
     );
@@ -311,6 +316,111 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     );
   }
 
+  Widget _buildFollowedCategories(User? currentUser, bool isDark) {
+    if (currentUser == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.category_outlined,
+              size: 64,
+              color: isDark ? Colors.grey[600] : Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Giriş yapmalısınız',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Takip ettiğiniz kategorilerin fırsatlarını\ngörmek için giriş yapın',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return StreamBuilder<List<Deal>>(
+      stream: _firestoreService.getFollowedCategoriesDeals(currentUser.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingGrid(isDark);
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Bir hata oluştu',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final deals = snapshot.data ?? [];
+
+        if (deals.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.category_outlined,
+                  size: 64,
+                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Henüz takip ettiğiniz kategori yok',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Kategori bildirimlerini açtığınız\nkategorilerin fırsatları burada görünecek',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return _buildDealGrid(deals, isDark);
+      },
+    );
+  }
+
   Widget _buildLoadingGrid(bool isDark) {
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -327,5 +437,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     );
   }
 }
+
 
 

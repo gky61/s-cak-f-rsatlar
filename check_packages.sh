@@ -17,3 +17,4 @@ pip3 list | grep -i "pillow" || echo "❌ Pillow YÜKLÜ DEĞİL!"
 echo ""
 echo "✅ Kontrol tamamlandı!"
 
+

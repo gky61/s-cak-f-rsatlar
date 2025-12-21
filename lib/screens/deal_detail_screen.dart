@@ -12,8 +12,10 @@ import '../models/category.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/link_preview_service.dart';
+import '../utils/badge_helper.dart';
 import '../theme/app_theme.dart';
 import '../widgets/category_selector_widget.dart';
+import 'profile_screen.dart';
 
 class DealDetailScreen extends StatefulWidget {
   final String dealId;
@@ -107,8 +109,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
     if (_currentDeal == null) return;
 
-    // Eğer zaten aynı oya basılmışsa, işlem yapma
-    if ((isHot && _hasVotedHot) || (!isHot && _hasVotedCold)) {
+    // Eğer zaten hot vote verilmişse ve tekrar hot'a basılırsa, geri al
+    if (isHot && _hasVotedHot) {
+      await _removeHotVote();
+      return;
+    }
+    
+    // Eğer zaten cold vote verilmişse, işlem yapma
+    if (!isHot && _hasVotedCold) {
       return;
     }
 
@@ -199,6 +207,62 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       } else {
         _isColdVoting = false;
       }
+    });
+  }
+
+  Future<void> _removeHotVote() async {
+    final user = _authService.currentUser;
+    if (user == null || _currentDeal == null) return;
+
+    // Loading state
+    setState(() {
+      _isHotVoting = true;
+    });
+
+    // Önceki durumu kaydet
+    final previousHotVote = _hasVotedHot;
+    final previousHotVotes = _hotVotes;
+
+    // Optimistic UI update
+    setState(() {
+      _hasVotedHot = false;
+      _hotVotes = _hotVotes > 0 ? _hotVotes - 1 : 0;
+      _isFavorite = false; // Favorilerden de çıkar
+    });
+
+    // Firestore'dan geri al
+    final success = await _firestoreService.removeHotVote(_currentDeal!.id, user.uid);
+
+    if (!success && mounted) {
+      // Hata durumunda önceki duruma geri dön
+      setState(() {
+        _hasVotedHot = previousHotVote;
+        _hotVotes = previousHotVotes;
+        _isHotVoting = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Beğeni geri alınırken bir hata oluştu. Lütfen tekrar deneyin.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    // Favorilerden çıkar
+    if (success) {
+      await _firestoreService.removeFromFavorites(user.uid, _currentDeal!.id);
+    }
+
+    // Deal'i yeniden yükle
+    _loadDeal();
+    _checkUserVote();
+
+    if (!mounted) return;
+
+    setState(() {
+      _isHotVoting = false;
     });
   }
 
@@ -889,16 +953,49 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               ],
                             ),
                                     const SizedBox(height: 16),
-                                    if (deal.description.isNotEmpty) ...[
-                                      Text(
-                                        deal.description,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                          color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                                          height: 1.6,
-                                    ),
-                                  ),
+                                    if (deal.description.isNotEmpty || _isAdmin) ...[
+                                      GestureDetector(
+                                        onTap: _isAdmin ? () => _showEditDescriptionDialog(deal) : null,
+                                        child: Container(
+                                          width: double.infinity,
+                                          padding: _isAdmin ? const EdgeInsets.all(12) : EdgeInsets.zero,
+                                          decoration: _isAdmin ? BoxDecoration(
+                                            color: isDark ? Colors.grey[800]!.withValues(alpha: 0.3) : Colors.grey[100],
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: primaryColor.withValues(alpha: 0.3),
+                                              width: 1,
+                                            ),
+                                          ) : null,
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  deal.description.isNotEmpty ? deal.description : 'Açıklama eklemek için tıklayın',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: deal.description.isNotEmpty 
+                                                        ? (isDark ? Colors.grey[300] : AppTheme.textSecondary)
+                                                        : (isDark ? Colors.grey[500] : Colors.grey[400]),
+                                                    height: 1.6,
+                                                    fontStyle: deal.description.isEmpty ? FontStyle.italic : FontStyle.normal,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (_isAdmin) ...[
+                                                const SizedBox(width: 8),
+                                                Icon(
+                                                  Icons.edit,
+                                                  size: 16,
+                                                  color: primaryColor,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                       const SizedBox(height: 12),
                                     ],
                                     const SizedBox(height: 80), // Bottom nav için padding
@@ -2363,32 +2460,55 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
     try {
       // URL'yi düzelt - http:// veya https:// yoksa ekle
-      String url = link.trim();
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        url = 'https://$url';
+      String cleanUrl = link.trim();
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        cleanUrl = 'https://$cleanUrl';
       }
       
-      final uri = Uri.parse(url);
+      final uri = Uri.parse(cleanUrl);
       
-      // canLaunchUrl kontrolü yapmadan direkt açmayı dene
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      // canLaunchUrl kontrolü yapmadan direkt dene - daha güvenilir
+      try {
+        // Önce external application ile dene
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) return;
+      } catch (e) {
+        // External başarısız, devam et
+      }
       
-      if (!launched && context.mounted) {
-        // Eğer açılamadıysa, platform varsayılan modunu dene
-        await launchUrl(
+      // External başarısız olduysa platform default dene
+      try {
+        final launched = await launchUrl(
           uri,
           mode: LaunchMode.platformDefault,
         );
+        if (launched) return;
+      } catch (e) {
+        // Platform default da başarısız
+      }
+      
+      // Son çare: inAppWebView (eğer destekleniyorsa)
+      try {
+        await launchUrl(
+          uri,
+          mode: LaunchMode.inAppWebView,
+        );
+      } catch (e) {
+        // Tüm yöntemler başarısız oldu
+        throw Exception('Bağlantı açılamadı');
       }
     } catch (e) {
+      print('❌ URL açma hatası: $e');
+      print('❌ URL: $link');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Bağlantı açılamadı: ${e.toString()}'),
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 4),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -3064,6 +3184,113 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
+  Future<void> _showEditDescriptionDialog(Deal deal) async {
+    if (!_isAdmin) return;
+    
+    final descriptionController = TextEditingController(text: deal.description);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        title: Text(
+          'Açıklama Düzenle',
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: TextField(
+          controller: descriptionController,
+          autofocus: true,
+          maxLines: 6,
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Ürün açıklamasını girin',
+            hintStyle: TextStyle(
+              color: isDark ? Colors.grey[500] : Colors.grey[400],
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
+            ),
+            filled: true,
+            fillColor: isDark ? Colors.grey[800]!.withValues(alpha: 0.3) : Colors.grey[50],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'İptal',
+              style: TextStyle(
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newDescription = descriptionController.text.trim();
+              
+              final success = await _firestoreService.updateDeal(
+                widget.dealId,
+                {'description': newDescription},
+              );
+              
+              if (context.mounted) {
+                Navigator.pop(context);
+                if (success) {
+                  await _loadDeal();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Açıklama güncellendi ✅'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Güncelleme sırasında bir hata oluştu ❌'),
+                      backgroundColor: Colors.red,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.black,
+            ),
+            child: const Text(
+              'Kaydet',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showCategoryEditDialog(Deal deal) async {
     String? selectedCategoryId = Category.getIdByName(deal.category);
     // "tumu" kategorisi dropdown'da olmadığı için null yap
@@ -3314,14 +3541,17 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
       _isSubmitting = true;
     });
 
-    // Kullanıcının nickname'ini ve profil resmini al
+    // Kullanıcının username'ini, profil resmini ve rozetlerini al
     String displayName = user.displayName ?? 'Kullanıcı';
     String profileImageUrl = '';
+    List<String> userBadges = [];
     try {
       final userData = await _authService.getUserData(user.uid);
       if (userData != null) {
-        displayName = userData.displayName;
+        // Firestore'daki username'i kullan (güncel kullanıcı adı)
+        displayName = userData.username.isNotEmpty ? userData.username : userData.displayName;
         profileImageUrl = userData.profileImageUrl;
+        userBadges = userData.badges;
       }
     } catch (e) {
       print('Kullanıcı bilgisi alınamadı: $e');
@@ -3336,6 +3566,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
       parentCommentId: _replyingTo?.id,
       replyToUserName: _replyingTo?.userName,
       userProfileImageUrl: profileImageUrl,
+      userBadges: userBadges,
     );
 
     setState(() {
@@ -3492,64 +3723,72 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                 ),
               ),
 
-              // Yorum ekleme formu
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? AppTheme.darkSurface : Colors.white,
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
+              // Yorum ekleme formu - Klavye açıldığında görünür olması için padding eklendi
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkSurface : Colors.white,
+                    border: Border(
+                      top: BorderSide(
+                        color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
+                      ),
                     ),
                   ),
-                ),
-                child: SafeArea(
-                  child: Row(
-                    children: [
-                      Expanded(
+                  child: SafeArea(
+                    top: false,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
                           child: TextField(
-                          controller: _commentController,
-                          style: TextStyle(
-                            color: isDark ? AppTheme.darkTextPrimary : Colors.black,
+                            controller: _commentController,
+                            style: TextStyle(
+                              color: isDark ? AppTheme.darkTextPrimary : Colors.black,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: _replyingTo != null 
+                                  ? '@${_replyingTo!.userName} kullanıcısına cevap verin...' 
+                                  : 'Yorumunuzu yazın...',
+                              hintStyle: TextStyle(
+                                color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
+                              ),
+                              filled: true,
+                              fillColor: isDark ? AppTheme.darkBackground : Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide(
+                                  color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide(
+                                  color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide(
+                                  color: primaryColor,
+                                  width: 2,
+                                ),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            maxLines: null,
+                            minLines: 1,
+                            textInputAction: TextInputAction.newline,
+                            keyboardType: TextInputType.multiline,
+                            onSubmitted: (_) => _submitComment(),
                           ),
-                          decoration: InputDecoration(
-                            hintText: _replyingTo != null 
-                                ? '@${_replyingTo!.userName} kullanıcısına cevap verin...' 
-                                : 'Yorumunuzu yazın...',
-                            hintStyle: TextStyle(
-                              color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
-                            ),
-                            filled: true,
-                            fillColor: isDark ? AppTheme.darkBackground : Colors.white,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide(
-                                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide(
-                                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide(
-                                color: primaryColor,
-                                width: 2,
-                              ),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          maxLines: null,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: (_) => _submitComment(),
                         ),
-                      ),
                       if (_replyingTo != null) ...[
                         const SizedBox(width: 8),
                         GestureDetector(
@@ -3597,6 +3836,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                       ),
                     ],
                   ),
+                ),
                 ),
               ),
             ],
@@ -3690,18 +3930,51 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                     Row(
                       children: [
                         Flexible(
-                          child: Text(
-                            comment.userName.isNotEmpty
-                                ? comment.userName
-                                : 'Kullanıcı',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: isReply ? 12 : 13,
-                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ProfileScreen(userId: comment.userId),
+                                ),
+                              );
+                            },
+                            child: Text(
+                              comment.userName.isNotEmpty
+                                  ? comment.userName
+                                  : 'Kullanıcı',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: isReply ? 12 : 13,
+                                color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                          // Rozetler
+                          if (comment.userBadges.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            ...BadgeHelper.getBadgeInfos(comment.userBadges).take(3).map(
+                              (badge) => Padding(
+                                padding: const EdgeInsets.only(left: 3),
+                                child: Tooltip(
+                                  message: badge.name,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      color: badge.color.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      badge.icon,
+                                      style: TextStyle(fontSize: isReply ? 10 : 12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         if (isReply && comment.replyToUserName != null) ...[
                           const SizedBox(width: 3),
                           Icon(Icons.arrow_forward_rounded, size: 11, color: Colors.grey[500]),
@@ -3731,44 +4004,54 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                   ],
                 ),
               ),
-              // Admin butonları
-              if (isAdmin)
-                PopupMenuButton<String>(
-                  icon: Icon(
-                    Icons.more_vert_rounded,
-                    color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
-                    size: 16,
-                  ),
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      _deleteComment(comment);
-                    } else if (value == 'block') {
-                      _blockUser(comment.userId, comment.userName);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                          SizedBox(width: 8),
-                          Text('Yorumu Sil'),
-                        ],
+              // Admin butonları veya kullanıcının kendi yorumu
+              Builder(
+                builder: (context) {
+                  final currentUser = _authService.currentUser;
+                  final isOwnComment = currentUser != null && comment.userId == currentUser.uid;
+                  
+                  if (isAdmin || isOwnComment) {
+                    return PopupMenuButton<String>(
+                      icon: Icon(
+                        Icons.more_vert_rounded,
+                        color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
+                        size: 16,
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'block',
-                      child: Row(
-                        children: [
-                          Icon(Icons.block_rounded, color: Colors.orange, size: 20),
-                          SizedBox(width: 8),
-                          Text('Kullanıcıyı Engelle'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                      onSelected: (value) {
+                        if (value == 'delete') {
+                          _deleteComment(comment);
+                        } else if (value == 'block' && isAdmin) {
+                          _blockUser(comment.userId, comment.userName);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                              SizedBox(width: 8),
+                              Text('Yorumu Sil'),
+                            ],
+                          ),
+                        ),
+                        if (isAdmin)
+                          const PopupMenuItem(
+                            value: 'block',
+                            child: Row(
+                              children: [
+                                Icon(Icons.block_rounded, color: Colors.orange, size: 20),
+                                SizedBox(width: 8),
+                                Text('Kullanıcıyı Engelle'),
+                              ],
+                            ),
+                          ),
+                      ],
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -3903,6 +4186,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
     return DateFormat('d MMM yyyy').format(date);
   }
 }
+
 
 
 

@@ -21,3 +21,4 @@ nohup python3 telegram_bot.py > logs/bot.log 2>&1 &
 echo "✅ Bot güncellendi ve başlatıldı!"
 echo "📋 Logları görmek için: tail -f ~/sicak_firsatlar_bot/logs/bot.log"
 
+

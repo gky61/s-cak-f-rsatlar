@@ -64,8 +64,8 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/logo.jpg"
+  image_path: "assets/Gemini_Generated_Image_55xiw755xiw755xi.png"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/logo.jpg"
+  adaptive_icon_foreground: "assets/Gemini_Generated_Image_55xiw755xiw755xi.png"
   remove_alpha_ios: true
 

@@ -11,6 +11,7 @@ class Comment {
   final DateTime createdAt;
   final String? parentCommentId; // Ana yorum ID'si (cevap ise)
   final String? replyToUserName; // Cevap verilen kullanıcı adı
+  final List<String> userBadges; // Kullanıcının rozetleri (yorum anındaki)
 
   Comment({
     required this.id,
@@ -23,6 +24,7 @@ class Comment {
     required this.createdAt,
     this.parentCommentId,
     this.replyToUserName,
+    this.userBadges = const [],
   });
 
   // Firestore'dan Comment oluşturma
@@ -39,6 +41,7 @@ class Comment {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       parentCommentId: data['parentCommentId'],
       replyToUserName: data['replyToUserName'],
+      userBadges: List<String>.from(data['userBadges'] ?? []),
     );
   }
 
@@ -52,6 +55,7 @@ class Comment {
       'userProfileImageUrl': userProfileImageUrl,
       'text': text,
       'createdAt': Timestamp.fromDate(createdAt),
+      'userBadges': userBadges,
     };
     if (parentCommentId != null) {
       map['parentCommentId'] = parentCommentId!;

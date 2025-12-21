@@ -5,13 +5,17 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/user.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/badge_helper.dart';
 import 'notification_settings_screen.dart';
 import 'package:flutter/services.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final String? userId; // Belirli bir kullanıcının profilini görüntülemek için
+  
+  const ProfileScreen({super.key, this.userId});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -20,44 +24,74 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirestoreService _firestoreService = FirestoreService();
   final ThemeService _themeService = ThemeService();
   
   AppUser? _user;
   bool _isLoading = false;
   bool _notificationsEnabled = true;
+  bool _isAdmin = false;
+  bool _isOwnProfile = true;
 
   @override
   void initState() {
     super.initState();
+    _checkIfOwnProfile();
+    _checkAdminStatus();
     _loadUserData();
-    _loadNotificationSettings();
+    if (_isOwnProfile) {
+      _loadNotificationSettings();
+    }
+  }
+
+  void _checkIfOwnProfile() {
+    final currentUserId = _authService.currentUser?.uid;
+    _isOwnProfile = widget.userId == null || widget.userId == currentUserId;
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final isAdmin = await _authService.isAdmin();
+    if (mounted) {
+      setState(() {
+        _isAdmin = isAdmin;
+      });
+    }
   }
 
   Future<void> _loadUserData() async {
-    final user = _authService.currentUser;
-    if (user == null) return;
+    final targetUserId = widget.userId ?? _authService.currentUser?.uid;
+    if (targetUserId == null) return;
+
+    setState(() => _isLoading = true);
 
     setState(() => _isLoading = true);
     
     try {
-      final doc = await _firestore.collection('users').doc(user.uid).get();
+      final doc = await _firestore.collection('users').doc(targetUserId).get();
       if (doc.exists) {
         setState(() {
           _user = AppUser.fromFirestore(doc);
         });
       } else {
-        final newUser = AppUser(
-          uid: user.uid,
-          username: user.displayName ?? user.email?.split('@')[0] ?? 'Kullanıcı',
-          profileImageUrl: user.photoURL ?? '',
-          points: 0,
-          dealCount: 0,
-          totalLikes: 0,
-        );
-        await _firestore.collection('users').doc(user.uid).set(newUser.toFirestore());
-          setState(() {
-          _user = newUser;
-          });
+        // Eğer kendi profilimizse yeni kullanıcı oluştur, değilse sadece göster
+        if (_isOwnProfile) {
+          final currentUser = _authService.currentUser;
+          if (currentUser != null) {
+            final newUser = AppUser(
+              uid: currentUser.uid,
+              username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
+              profileImageUrl: currentUser.photoURL ?? '',
+              points: 0,
+              dealCount: 0,
+              totalLikes: 0,
+              badges: [],
+            );
+            await _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore());
+            setState(() {
+              _user = newUser;
+            });
+          }
+        }
       }
     } catch (e) {
       print('Kullanıcı bilgisi yükleme hatası: $e');
@@ -246,6 +280,143 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _showEditUsernameDialog(BuildContext context) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final textController = TextEditingController(text: _user?.username ?? '');
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+          title: Text(
+            'Kullanıcı Adını Düzenle',
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: TextField(
+            controller: textController,
+            autofocus: true,
+            maxLength: 30,
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Kullanıcı adınızı girin',
+              hintStyle: TextStyle(
+                color: isDark ? Colors.grey[500] : Colors.grey[400],
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: primaryColor,
+                  width: 2,
+                ),
+              ),
+              counterStyle: TextStyle(
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'İptal',
+                style: TextStyle(
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                final newUsername = textController.text.trim();
+                if (newUsername.isNotEmpty && newUsername != _user?.username) {
+                  Navigator.pop(context, newUsername);
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: primaryColor,
+              ),
+              child: const Text(
+                'Kaydet',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null && result.isNotEmpty) {
+      await _updateUsername(result);
+    }
+  }
+
+  Future<void> _updateUsername(String newUsername) async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Firestore'daki username'i güncelle
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .set({
+        'username': newUsername,
+      }, SetOptions(merge: true));
+
+      // Firebase Auth'daki displayName'i de güncelle (yorumlarda görünmesi için)
+      await user.updateDisplayName(newUsername);
+      await user.reload();
+
+      await _loadUserData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kullanıcı adı güncellendi ✅'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Kullanıcı adı güncelleme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   Future<void> _signOut() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -407,48 +578,164 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 16),
                       // Name & Email
-                      Text(
-                        _user?.username ?? 'Kullanıcı',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: textMain,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _authService.currentUser?.email ?? '',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: textSub,
-                        ),
-                            ),
-                      const SizedBox(height: 20),
-                      // Edit Profile Button
-                      SizedBox(
-                        width: 200,
-                        height: 40,
-                        child: OutlinedButton.icon(
-                          onPressed: () => _showProfileImagePicker(context),
-                          icon: const Icon(Icons.manage_accounts, size: 18),
-                          label: const Text('Profili Düzenle'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: textMain,
-                            backgroundColor: surfaceColor,
-                            side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[200]!),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                            ),
-                                                  ),
+                      Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              GestureDetector(
+                                onTap: _isOwnProfile ? () => _showEditUsernameDialog(context) : null,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _user?.username ?? 'Kullanıcı',
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w700,
+                                        color: textMain,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                    if (_isOwnProfile) ...[
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        Icons.edit,
+                                        size: 18,
+                                        color: textSub,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              // Admin rozet verme butonu
+                              if (_isAdmin && !_isOwnProfile) ...[
+                                const SizedBox(width: 12),
+                                IconButton(
+                                  icon: Icon(Icons.workspace_premium, color: primaryColor),
+                                  onPressed: () => _showBadgeDialog(_user!),
+                                  tooltip: 'Rozet Ver',
+                                ),
+                              ],
+                            ],
+                          ),
+                          // Rozetler (kullanıcı adının altında)
+                          if (_user?.badges != null && _user!.badges.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              alignment: WrapAlignment.center,
+                              children: BadgeHelper.getBadgeInfos(_user!.badges)
+                                  .map((badge) => Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: badge.color.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: badge.color.withValues(alpha: 0.4),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              badge.icon,
+                                              style: const TextStyle(fontSize: 14),
                                             ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              badge.name,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: badge.color,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ))
+                                  .toList(),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          // Puan gösterimi
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  primaryColor.withValues(alpha: 0.2),
+                                  Colors.orange.shade300.withValues(alpha: 0.2),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: primaryColor.withValues(alpha: 0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.stars_rounded,
+                                  size: 16,
+                                  color: primaryColor,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${_user?.points ?? 0} Puan',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_isOwnProfile) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _authService.currentUser?.email ?? '',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: textSub,
+                          ),
+                        ),
+                      ],
+                      if (_isOwnProfile) ...[
+                        const SizedBox(height: 20),
+                        // Edit Profile Button
+                        SizedBox(
+                          width: 200,
+                          height: 40,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showProfileImagePicker(context),
+                            icon: const Icon(Icons.manage_accounts, size: 18),
+                            label: const Text('Profili Düzenle'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: textMain,
+                              backgroundColor: surfaceColor,
+                              side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[200]!),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                      ],
                                           ],
                                         ),
                                       ),
 
-                // Settings Section
-                _buildSectionHeader('AYARLAR', textSub!),
+                // Settings Section (sadece kendi profilinde)
+                if (_isOwnProfile) ...[
+                  _buildSectionHeader('AYARLAR', textSub!),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
@@ -548,10 +835,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                                   ),
                 ),
+                ], // Ayarlar bölümü sonu
 
-                // Support Section
-                const SizedBox(height: 24),
-                _buildSectionHeader('DESTEK', textSub),
+                // Support Section (sadece kendi profilinde)
+                if (_isOwnProfile) ...[
+                  const SizedBox(height: 24),
+                  _buildSectionHeader('DESTEK', textSub!),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
@@ -611,42 +900,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                 ),
+                ], // DESTEK bölümü sonu
 
-                // Logout Button
-                                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: TextButton.icon(
-                          onPressed: _signOut,
-                          icon: const Icon(Icons.logout),
-                          label: const Text('Çıkış Yap'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            backgroundColor: Colors.red.withValues(alpha: 0.05),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(color: Colors.red.withValues(alpha: 0.1)),
+                // Logout Button (sadece kendi profilinde)
+                if (_isOwnProfile) ...[
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: TextButton.icon(
+                            onPressed: _signOut,
+                            icon: const Icon(Icons.logout),
+                            label: const Text('Çıkış Yap'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              backgroundColor: Colors.red.withValues(alpha: 0.05),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(color: Colors.red.withValues(alpha: 0.1)),
+                              ),
+                              textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                             ),
-                            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                           ),
-                                        ),
-                                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'v1.2.4 (Build 302)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          color: Colors.grey[400],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'v1.2.4 (Build 302)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 100), // Bottom nav padding
               ],
             ),
@@ -671,7 +963,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     Expanded(
                       child: Text(
-                        'Profilim',
+                        _isOwnProfile ? 'Profilim' : (_user?.username ?? 'Profil'),
                         textAlign: TextAlign.center,
                           style: TextStyle(
                           fontSize: 18,
@@ -680,7 +972,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                     ),
                   ),
-                    const SizedBox(width: 48), // Balancing spacer
+                    // Admin menü butonu (sadece admin ve başka kullanıcı profili görüntülenirken)
+                    if (_isAdmin && !_isOwnProfile && _user != null)
+                      PopupMenuButton<String>(
+                        icon: Icon(Icons.more_vert, color: textMain),
+                        onSelected: (value) {
+                          if (value == 'badge') {
+                            _showBadgeDialog(_user!);
+                          } else if (value == 'block') {
+                            _blockUser(_user!);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'badge',
+                            child: Row(
+                              children: [
+                                Icon(Icons.workspace_premium, color: Colors.amber, size: 20),
+                                SizedBox(width: 8),
+                                Text('Rozet Yönet'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'block',
+                            child: Row(
+                              children: [
+                                Icon(Icons.block, color: Colors.red, size: 20),
+                                SizedBox(width: 8),
+                                Text('Kullanıcıyı Engelle'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (!(_isAdmin && !_isOwnProfile && _user != null))
+                      const SizedBox(width: 48), // Balancing spacer
                   ],
                 ),
               ),
@@ -871,5 +1198,206 @@ class _ProfileScreenState extends State<ProfileScreen> {
       indent: 64,
       color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
     );
+  }
+
+  Future<void> _showBadgeDialog(AppUser user) async {
+    if (!_isAdmin) return;
+    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        title: Text(
+          '${user.username} - Rozet Yönetimi',
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Mevcut Rozetler:',
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: user.badges.map((badgeId) {
+                  final badge = BadgeHelper.getBadgeInfo(badgeId);
+                  if (badge == null) return const SizedBox.shrink();
+                  return Chip(
+                    avatar: Text(badge.icon),
+                    label: Text(badge.name),
+                    backgroundColor: badge.color.withValues(alpha: 0.2),
+                    deleteIcon: Icon(Icons.close, size: 16, color: badge.color),
+                    onDeleted: () => _removeBadge(user.uid, badgeId),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Rozet Ekle:',
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: BadgeHelper.getAllBadgeIds()
+                    .where((badgeId) => !user.badges.contains(badgeId))
+                    .map((badgeId) {
+                  final badge = BadgeHelper.getBadgeInfo(badgeId)!;
+                  return ActionChip(
+                    avatar: Text(badge.icon),
+                    label: Text(badge.name),
+                    backgroundColor: badge.color.withValues(alpha: 0.1),
+                    onPressed: () => _addBadge(user.uid, badgeId),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Kapat',
+              style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addBadge(String userId, String badgeId) async {
+    try {
+      final userRef = _firestore.collection('users').doc(userId);
+      final userDoc = await userRef.get();
+      
+      if (userDoc.exists) {
+        final currentBadges = List<String>.from(userDoc.data()?['badges'] ?? []);
+        if (!currentBadges.contains(badgeId)) {
+          currentBadges.add(badgeId);
+          await userRef.update({'badges': currentBadges});
+          
+          // Kullanıcı verilerini yeniden yükle
+          await _loadUserData();
+          
+          if (mounted) {
+            Navigator.pop(context); // Dialog'u kapat
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Rozet eklendi ✅'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Rozet ekleme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeBadge(String userId, String badgeId) async {
+    try {
+      final userRef = _firestore.collection('users').doc(userId);
+      final userDoc = await userRef.get();
+      
+      if (userDoc.exists) {
+        final currentBadges = List<String>.from(userDoc.data()?['badges'] ?? []);
+        currentBadges.remove(badgeId);
+        await userRef.update({'badges': currentBadges});
+        
+        // Kullanıcı verilerini yeniden yükle
+        await _loadUserData();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Rozet kaldırıldı ✅'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Rozet kaldırma hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _blockUser(AppUser user) async {
+    if (!_isAdmin) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Kullanıcıyı Engelle'),
+        content: Text('${user.username} kullanıcısını engellemek istediğinize emin misiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Engelle'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final success = await _firestoreService.blockUser(user.uid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Kullanıcı engellendi' : 'Kullanıcı engellenirken hata oluştu'),
+            backgroundColor: success ? Colors.orange : Colors.red,
+          ),
+        );
+        if (success) {
+          Navigator.pop(context); // Profil sayfasından çık
+        }
+      }
+    }
   }
 }

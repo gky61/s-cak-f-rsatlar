@@ -40,8 +40,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Set<String> _followedSubCategories = {};
   bool _isGeneralNotificationsEnabled = true;
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _categoryScrollController = ScrollController();
   bool _showScrollToTop = false;
   late CardViewMode _viewMode;
+  
+  // Çift tıklama için timer
+  DateTime? _lastHomeButtonTap;
+  static const _doubleTapTimeLimit = Duration(milliseconds: 400);
   
   // Pagination için state
   List<Deal> _allDeals = [];
@@ -131,6 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _themeService.removeListener(_onThemeChanged);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _categoryScrollController.dispose();
     super.dispose();
   }
 
@@ -387,6 +393,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(
                     height: 36,
                     child: ListView.separated(
+                      controller: _categoryScrollController,
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: Category.categories.length,
@@ -468,7 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_viewMode == CardViewMode.vertical) {
                     return GridView.builder(
                       controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         crossAxisSpacing: 12,
@@ -483,7 +490,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   } else {
                     return ListView.builder(
                       controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
                       itemCount: 6,
                       itemBuilder: (context, index) {
                         return Padding(
@@ -570,7 +577,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? GridView.builder(
                         controller: _scrollController,
                         key: ValueKey('deal_grid_$_selectedCategory'),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
@@ -618,7 +625,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     : ListView.builder(
                         controller: _scrollController,
                         key: ValueKey('deal_list_$_selectedCategory'),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
                         itemCount: dealsToShow.length + (_hasMore && _isLoadingMore ? 1 : 0),
                         itemBuilder: (context, index) {
                           if (index == dealsToShow.length) {
@@ -678,12 +685,34 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // Ana Sayfa
+              // Ana Sayfa - Çift tıklama ile "Tümü" kategorisine geç
               _buildBottomNavItem(
                 icon: Icons.home,
                 label: 'Ana Sayfa',
                 isSelected: true,
-                onTap: () {},
+                onTap: () {
+                  final now = DateTime.now();
+                  if (_lastHomeButtonTap != null &&
+                      now.difference(_lastHomeButtonTap!) < _doubleTapTimeLimit) {
+                    // Çift tıklama algılandı - "Tümü" kategorisine geç
+                    setState(() {
+                      _selectedCategory = 'tumu';
+                      _selectedSubCategory = null;
+                    });
+                    // Kategori barını başa kaydır
+                    if (_categoryScrollController.hasClients) {
+                      _categoryScrollController.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                    _lastHomeButtonTap = null;
+                  } else {
+                    // İlk tıklama
+                    _lastHomeButtonTap = now;
+                  }
+                },
               ),
               // Beğenilenler
               _buildBottomNavItem(
@@ -694,6 +723,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const FavoritesScreen()),
+                  );
+                },
+              ),
+              // Fırsat Paylaş
+              _buildBottomNavItem(
+                icon: Icons.add_circle_outline,
+                label: 'Fırsat Paylaş',
+                isSelected: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SubmitDealScreen()),
                   );
                 },
               ),

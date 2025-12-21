@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/category.dart';
+import '../services/notification_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -9,16 +11,41 @@ class NotificationSettingsScreen extends StatefulWidget {
 }
 
 class _NotificationSettingsScreenState extends State<NotificationSettingsScreen> {
+  final NotificationService _notificationService = NotificationService();
   bool _generalNotifications = true;
   final Map<String, bool> _categoryNotifications = {};
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize all categories as enabled
-    for (var category in Category.categories) {
-      if (category.id != 'tumu') {
-        _categoryNotifications[category.id] = true;
+    _loadNotificationSettings();
+  }
+
+  Future<void> _loadNotificationSettings() async {
+    setState(() => _isLoading = true);
+    try {
+      // Genel bildirim durumunu yükle
+      _generalNotifications = await _notificationService.getGeneralNotificationsEnabled();
+      
+      // Kategori bildirim durumlarını yükle
+      final followedCategories = await _notificationService.getFollowedCategories();
+      for (var category in Category.categories) {
+        if (category.id != 'tumu') {
+          _categoryNotifications[category.id] = followedCategories.contains(category.id);
+        }
+      }
+    } catch (e) {
+      print('Bildirim ayarları yükleme hatası: $e');
+      // Varsayılan değerler
+      for (var category in Category.categories) {
+        if (category.id != 'tumu') {
+          _categoryNotifications[category.id] = true;
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -26,20 +53,14 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   void _toggleGeneralNotifications(bool value) {
     setState(() {
       _generalNotifications = value;
-      // If turning off general, turn off all categories
-      if (!value) {
-        _categoryNotifications.updateAll((key, _) => false);
-      }
+      // Tüm bildirimler kapatılırken kategorileri kapatma - kullanıcı istediği kategoriyi açabilir
     });
   }
 
   void _toggleCategoryNotification(String categoryId, bool value) {
     setState(() {
       _categoryNotifications[categoryId] = value;
-      // If any category is on, general must be on
-      if (value) {
-        _generalNotifications = true;
-      }
+      // Kategori bildirimleri genel bildirimlerden bağımsız çalışabilir
     });
   }
 
@@ -264,10 +285,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         ),
                         // Switch
                         Switch(
-                          value: _generalNotifications && isEnabled,
-                          onChanged: _generalNotifications 
-                              ? (value) => _toggleCategoryNotification(category.id, value)
-                              : null,
+                          value: isEnabled,
+                          onChanged: (value) => _toggleCategoryNotification(category.id, value),
                           activeColor: primaryColor,
                           activeTrackColor: primaryColor.withValues(alpha: 0.5),
                         ),
@@ -279,25 +298,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
             ),
             const SizedBox(height: 24),
 
-            // Save Button (Optional - for future use)
+            // Save Button
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: () {
-                  // TODO: Save notification preferences to backend
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Bildirim ayarları kaydedildi'),
-                      backgroundColor: Colors.green,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  );
-                  Navigator.pop(context);
-                },
+                onPressed: _isLoading ? null : _saveNotificationSettings,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.black,
@@ -310,7 +316,13 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                child: const Text('Kaydet'),
+                child: _isLoading 
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                      )
+                    : const Text('Kaydet'),
               ),
             ),
             const SizedBox(height: 16),
@@ -318,6 +330,58 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _saveNotificationSettings() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      // Genel bildirimleri kaydet
+      await _notificationService.setGeneralNotifications(_generalNotifications);
+      
+      // Kategori bildirimlerini kaydet
+      for (var entry in _categoryNotifications.entries) {
+        final categoryId = entry.key;
+        final isEnabled = entry.value;
+        
+        if (isEnabled) {
+          await _notificationService.subscribeToCategory(categoryId);
+        } else {
+          await _notificationService.unsubscribeFromCategory(categoryId);
+        }
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bildirim ayarları kaydedildi ✅'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(10)),
+            ),
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(10)),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Color _getCategoryColor(String categoryId) {
@@ -345,6 +409,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     }
   }
 }
+
 
 
 

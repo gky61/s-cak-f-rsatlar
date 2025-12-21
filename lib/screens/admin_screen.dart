@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/deal.dart';
 import '../models/category.dart';
+import '../models/user.dart';
 import '../services/firestore_service.dart';
+import '../utils/badge_helper.dart';
 import '../theme/app_theme.dart';
 import 'deal_detail_screen.dart';
+import 'profile_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -59,8 +63,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           tabs: const [
             Tab(text: 'Onay Bekleyen'),
-            Tab(text: 'Yayında'),
             Tab(text: 'Süresi Biten'),
+            Tab(text: 'Kullanıcılar'),
           ],
         ),
       ),
@@ -68,8 +72,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         controller: _tabController,
         children: [
           _buildDealList(_AdminListType.pending),
-          _buildDealList(_AdminListType.published),
           _buildDealList(_AdminListType.expired),
+          _buildUsersList(),
         ],
       ),
     );
@@ -122,15 +126,63 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: deals.length,
-          itemBuilder: (context, index) {
-            return _buildAdminCard(
-              deals[index],
-              type,
-            );
-          },
+        return Column(
+          children: [
+            // Tümünü Reddet butonu (sadece onay bekleyenler için)
+            if (isPending && deals.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _rejectAllPendingDeals(deals),
+                    icon: const Icon(Icons.close, size: 20),
+                    label: Text('Tümünü Reddet (${deals.length})'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            // Tümünü Sil butonu (sadece süresi bitenler için)
+            if (isExpiredList && deals.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _deleteAllExpiredDeals(deals),
+                    icon: const Icon(Icons.delete_forever, size: 20),
+                    label: Text('Tümünü Sil (${deals.length})'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red[700],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: deals.length,
+                itemBuilder: (context, index) {
+                  return _buildAdminCard(
+                    deals[index],
+                    type,
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -155,13 +207,22 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 color: Colors.red.withOpacity(0.08),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
               ),
-              child: const Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.warning_amber_outlined, color: Colors.red, size: 16),
-                  SizedBox(width: 6),
-                  Text(
-                    'Bu fırsat süresi dolduğu için pasife alınmış.',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                  Row(
+                    children: [
+                      const Icon(Icons.warning_amber_outlined, color: Colors.red, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          deal.isApproved 
+                              ? 'Bu fırsat onaylanmış ve yayınlanmıştı, süresi dolduğu için pasife alınmış.'
+                              : 'Bu fırsat onaylanmamış ve süresi dolduğu için pasife alınmış.',
+                          style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -376,6 +437,65 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
+  Future<void> _rejectAllPendingDeals(List<Deal> deals) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tümünü Reddet'),
+        content: Text(
+          'Onay bekleyen ${deals.length} fırsatın tümünü reddetmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Evet, Tümünü Reddet'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Tüm bekleyen fırsatları reddet
+    int successCount = 0;
+    int failCount = 0;
+
+    for (final deal in deals) {
+      try {
+        await _firestoreService.updateDeal(deal.id, {'isExpired': true});
+        successCount++;
+      } catch (e) {
+        print('Fırsat reddetme hatası (${deal.id}): $e');
+        failCount++;
+      }
+    }
+
+    if (mounted) {
+      if (failCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$successCount fırsat reddedildi ❌'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$successCount fırsat reddedildi, $failCount fırsat için hata oluştu ⚠️'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _unpublishDeal(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -444,6 +564,65 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
+  Future<void> _deleteAllExpiredDeals(List<Deal> deals) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tümünü Sil'),
+        content: Text(
+          'Süresi biten ${deals.length} fırsatın tümünü kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve tüm fırsatlar veritabanından tamamen kaldırılacak.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Evet, Tümünü Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Tüm süresi biten fırsatları sil
+    int successCount = 0;
+    int failCount = 0;
+
+    for (final deal in deals) {
+      try {
+        await _firestoreService.deleteDeal(deal.id);
+        successCount++;
+      } catch (e) {
+        print('Fırsat silme hatası (${deal.id}): $e');
+        failCount++;
+      }
+    }
+
+    if (mounted) {
+      if (failCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$successCount fırsat kalıcı olarak silindi 🗑️'),
+            backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$successCount fırsat silindi, $failCount fırsat için hata oluştu ⚠️'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _showEditDialog(Deal deal) async {
     final titleController = TextEditingController(text: deal.title);
     final descriptionController = TextEditingController(text: deal.description);
@@ -451,9 +630,23 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final originalPriceController = TextEditingController(
       text: deal.originalPrice?.toStringAsFixed(2) ?? '',
     );
+    final storeController = TextEditingController(text: deal.store);
+    final linkController = TextEditingController(text: deal.link);
+    final imageUrlController = TextEditingController(text: deal.imageUrl);
 
-    String? selectedCategoryId = deal.category;
+    // Kategori eşleştirmesi: Firestore'da kategori adı saklanıyor, dropdown'da ID kullanılıyor
+    String? selectedCategoryId;
     String? selectedSubCategory = deal.subCategory;
+    
+    // Kategori adından ID'yi bul
+    for (final cat in Category.categories) {
+      if (cat.name == deal.category || cat.id == deal.category) {
+        selectedCategoryId = cat.id;
+        break;
+      }
+    }
+    // Bulunamazsa varsayılan olarak 'elektronik' kullan
+    selectedCategoryId ??= 'elektronik';
 
     await showDialog(
       context: context,
@@ -509,6 +702,34 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: storeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Mağaza',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: linkController,
+                    decoration: const InputDecoration(
+                      labelText: 'Ürün URL',
+                      border: OutlineInputBorder(),
+                      hintText: 'https://...',
+                    ),
+                    keyboardType: TextInputType.url,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: imageUrlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Görsel URL',
+                      border: OutlineInputBorder(),
+                      hintText: 'https://...',
+                    ),
+                    keyboardType: TextInputType.url,
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -599,7 +820,11 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   'title': titleController.text.trim(),
                   'description': descriptionController.text.trim(),
                   'price': price,
-                  'category': selectedCategoryId,
+                  'store': storeController.text.trim(),
+                  'link': linkController.text.trim(),
+                  'imageUrl': imageUrlController.text.trim(),
+                  // Kategori ID'sinden kategori adına çevir (Firestore'da kategori adı saklanıyor)
+                  'category': Category.getNameById(selectedCategoryId!),
                 };
 
                 // Eski fiyat varsa ekle
@@ -654,5 +879,264 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         ),
       ),
     );
+  }
+
+  Widget _buildUsersList() {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return StreamBuilder<List<DocumentSnapshot>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .orderBy('points', descending: true)
+          .limit(100)
+          .snapshots()
+          .map((snapshot) => snapshot.docs),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final users = snapshot.data ?? [];
+
+        if (users.isEmpty) {
+          return const Center(
+            child: Text('Kullanıcı bulunamadı'),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: users.length,
+          itemBuilder: (context, index) {
+            final userDoc = users[index];
+            final user = AppUser.fromFirestore(userDoc);
+            
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProfileScreen(userId: user.uid),
+                    ),
+                  );
+                },
+                leading: CircleAvatar(
+                  backgroundColor: primaryColor.withValues(alpha: 0.1),
+                  backgroundImage: user.profileImageUrl.isNotEmpty
+                      ? CachedNetworkImageProvider(user.profileImageUrl)
+                      : null,
+                  child: user.profileImageUrl.isEmpty
+                      ? Text(
+                          user.username.isNotEmpty ? user.username[0].toUpperCase() : 'U',
+                          style: TextStyle(
+                            color: primaryColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        )
+                      : null,
+                ),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        user.username,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    // Rozetler
+                    ...BadgeHelper.getBadgeInfos(user.badges).map(
+                      (badge) => Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Tooltip(
+                          message: badge.name,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: badge.color.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: badge.color.withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              badge.icon,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                subtitle: Text('${user.points} Puan • ${user.totalLikes} Beğeni'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.workspace_premium),
+                  onPressed: () => _showBadgeDialog(user),
+                  tooltip: 'Rozet Ver',
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showBadgeDialog(AppUser user) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        title: Text(
+          '${user.username} - Rozet Yönetimi',
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Mevcut Rozetler:',
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: user.badges.map((badgeId) {
+                  final badge = BadgeHelper.getBadgeInfo(badgeId);
+                  if (badge == null) return const SizedBox.shrink();
+                  return Chip(
+                    avatar: Text(badge.icon),
+                    label: Text(badge.name),
+                    backgroundColor: badge.color.withValues(alpha: 0.2),
+                    deleteIcon: Icon(Icons.close, size: 16, color: badge.color),
+                    onDeleted: () => _removeBadge(user.uid, badgeId),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Rozet Ekle:',
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: BadgeHelper.getAllBadgeIds()
+                    .where((badgeId) => !user.badges.contains(badgeId))
+                    .map((badgeId) {
+                  final badge = BadgeHelper.getBadgeInfo(badgeId)!;
+                  return ActionChip(
+                    avatar: Text(badge.icon),
+                    label: Text(badge.name),
+                    backgroundColor: badge.color.withValues(alpha: 0.1),
+                    onPressed: () => _addBadge(user.uid, badgeId),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Kapat',
+              style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addBadge(String userId, String badgeId) async {
+    try {
+      final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
+      final userDoc = await userRef.get();
+      
+      if (userDoc.exists) {
+        final currentBadges = List<String>.from(userDoc.data()?['badges'] ?? []);
+        if (!currentBadges.contains(badgeId)) {
+          currentBadges.add(badgeId);
+          await userRef.update({'badges': currentBadges});
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Rozet eklendi ✅'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Rozet ekleme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeBadge(String userId, String badgeId) async {
+    try {
+      final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
+      final userDoc = await userRef.get();
+      
+      if (userDoc.exists) {
+        final currentBadges = List<String>.from(userDoc.data()?['badges'] ?? []);
+        currentBadges.remove(badgeId);
+        await userRef.update({'badges': currentBadges});
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Rozet kaldırıldı ✅'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Rozet kaldırma hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

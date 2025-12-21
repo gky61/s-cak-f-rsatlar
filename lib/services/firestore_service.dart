@@ -332,6 +332,51 @@ class FirestoreService {
     }
   }
 
+  // Hot vote geri alma (beğeniyi geri alma)
+  Future<bool> removeHotVote(String dealId, String userId) async {
+    try {
+      final batch = _firestore.batch();
+      
+      // Kullanıcının vote'unu kontrol et
+      final voteRef = _firestore
+          .collection('deals')
+          .doc(dealId)
+          .collection('votes')
+          .doc(userId);
+      
+      final voteDoc = await voteRef.get();
+      if (!voteDoc.exists) {
+        // Vote yoksa işlem yapma
+        return true;
+      }
+      
+      final currentType = voteDoc.data()?['type'] as String?;
+      if (currentType != 'hot') {
+        // Hot vote değilse işlem yapma
+        return true;
+      }
+      
+      // Hot vote'u sil ve sayıyı azalt
+      batch.delete(voteRef);
+      batch.update(_firestore.collection('deals').doc(dealId), {
+        'hotVotes': FieldValue.increment(-1),
+      });
+      
+      await batch.commit();
+      
+      // Deal sahibinin puanını azalt (beğeni geri alındı)
+      final deal = await getDeal(dealId);
+      if (deal != null) {
+        await _incrementUserPoints(deal.postedBy, points: -2, totalLikes: -1);
+      }
+      
+      return true;
+    } catch (e) {
+      print('Hot vote geri alma hatası: $e');
+      return false;
+    }
+  }
+
   // Favori kontrolü
   Future<bool> isFavorite(String userId, String dealId) async {
     try {
@@ -472,6 +517,7 @@ class FirestoreService {
     String? parentCommentId,
     String? replyToUserName,
     String? userProfileImageUrl,
+    List<String>? userBadges,
   }) async {
     try {
       final batch = _firestore.batch();
@@ -494,6 +540,7 @@ class FirestoreService {
         createdAt: DateTime.now(),
         parentCommentId: parentCommentId,
         replyToUserName: replyToUserName,
+        userBadges: userBadges ?? [],
       );
       
       batch.set(commentRef, comment.toFirestore());
@@ -681,26 +728,94 @@ class FirestoreService {
 
   // En çok beğenilen deal'leri getir (25+ beğeni)
   Stream<List<Deal>> getMostLikedDeals({int minLikes = 25}) {
-    // Basitleştirilmiş sorgu - client-side filtreleme ile index gerektirmez
+    // Client-side filtreleme ile index gerektirmez
     return _firestore
         .collection('deals')
         .where('isApproved', isEqualTo: true)
-        .orderBy('hotVotes', descending: true)
-        .limit(100) // Daha fazla çek, client-side filtreleyeceğiz
         .snapshots()
         .map((snapshot) {
-      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
-      // Client-side'da filtrele
-      return deals.where((deal) => 
-        !deal.isExpired && 
-        deal.hotVotes >= minLikes
-      ).take(50).toList();
+      try {
+        final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
+        // Client-side'da filtrele ve sırala
+        final filteredDeals = deals.where((deal) => 
+          !deal.isExpired && 
+          deal.hotVotes >= minLikes
+        ).toList();
+        
+        // hotVotes'e göre sırala (yüksekten düşüğe)
+        filteredDeals.sort((a, b) => b.hotVotes.compareTo(a.hotVotes));
+        
+        // En fazla 50 deal döndür
+        return filteredDeals.take(50).toList();
+      } catch (e) {
+        print('getMostLikedDeals hatası: $e');
+        return [];
+      }
+    });
+  }
+
+  // Kullanıcının takip ettiği kategorilerin fırsatlarını getir
+  Stream<List<Deal>> getFollowedCategoriesDeals(String userId) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .snapshots()
+        .asyncMap((userDoc) async {
+      try {
+        if (!userDoc.exists) return [];
+        
+        final userData = userDoc.data();
+        final followedCategories = List<String>.from(userData?['followedCategories'] ?? []);
+        
+        if (followedCategories.isEmpty) return [];
+        
+        // Tüm onaylanmış fırsatları getir
+        final dealsSnapshot = await _firestore
+            .collection('deals')
+            .where('isApproved', isEqualTo: true)
+            .get();
+        
+        final allDeals = dealsSnapshot.docs
+            .map((doc) => Deal.fromFirestore(doc))
+            .toList();
+        
+        // Takip edilen kategorilere ait fırsatları filtrele
+        final filteredDeals = allDeals.where((deal) {
+          if (deal.isExpired) return false;
+          // Kategori eşleşmesi (case-insensitive)
+          return followedCategories.any((categoryId) =>
+            deal.category.toLowerCase() == categoryId.toLowerCase()
+          );
+        }).toList();
+        
+        // Tarihe göre sırala (yeni önce)
+        filteredDeals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        
+        return filteredDeals;
+      } catch (e) {
+        print('getFollowedCategoriesDeals hatası: $e');
+        return [];
+      }
     });
   }
 
   // 24 saatten eski onaylanmış deal'ları otomatik sil
+  // Her gün sadece bir kez çalışması için kontrol mekanizması ile
   Future<void> deleteOldDeals() async {
     try {
+      // Son temizlik zamanını kontrol et (gereksiz çalışmaları önlemek için)
+      final lastCleanupDoc = await _firestore.collection('system').doc('lastCleanup').get();
+      final lastCleanupTime = lastCleanupDoc.data()?['timestamp'] as Timestamp?;
+      
+      // Eğer son temizlik 12 saatten daha yakın bir zamanda yapıldıysa, tekrar çalıştırma
+      if (lastCleanupTime != null) {
+        final timeSinceLastCleanup = DateTime.now().difference(lastCleanupTime.toDate());
+        if (timeSinceLastCleanup.inHours < 12) {
+          print('⚠️ Temizlik zaten son 12 saat içinde yapıldı, atlanıyor');
+          return;
+        }
+      }
+
       final now = DateTime.now();
       final cutoffTime = now.subtract(const Duration(hours: 24));
       
@@ -711,14 +826,32 @@ class FirestoreService {
           .where('createdAt', isLessThan: Timestamp.fromDate(cutoffTime))
           .get();
 
-      // Her birini sil
-      final batch = _firestore.batch();
+      // Her birini sil (batch limit 500)
+      int deletedCount = 0;
+      WriteBatch batch = _firestore.batch();
+      
       for (var doc in snapshot.docs) {
         batch.delete(doc.reference);
+        deletedCount++;
+        
+        // Batch limit (500) kontrolü
+        if (deletedCount % 500 == 0) {
+          await batch.commit();
+          batch = _firestore.batch(); // Yeni batch oluştur
+        }
       }
       
-      await batch.commit();
-      print('✅ ${snapshot.docs.length} eski deal silindi');
+      // Kalan işlemleri commit et
+      if (deletedCount % 500 != 0 && deletedCount > 0) {
+        await batch.commit();
+      }
+      
+      // Son temizlik zamanını güncelle
+      await _firestore.collection('system').doc('lastCleanup').set({
+        'timestamp': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      
+      print('✅ $deletedCount eski deal silindi');
     } catch (e) {
       print('❌ Eski deal\'lar silinirken hata: $e');
     }
