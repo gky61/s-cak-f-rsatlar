@@ -18,3 +18,4 @@ echo ""
 echo "✅ Kontrol tamamlandı!"
 
 
+

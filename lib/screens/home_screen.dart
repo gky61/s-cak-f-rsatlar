@@ -446,7 +446,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: StreamBuilder<List<Deal>>(
               stream: _firestoreService.getDealsStream(),
               builder: (context, snapshot) {
-                // StreamBuilder'ı optimize et - sadece gerekli durumlarda rebuild
+                // StreamBuilder optimizasyonu - sadece gerekli durumlarda rebuild
                 // Hata durumu
                 if (snapshot.hasError) {
                   return Center(
@@ -505,32 +505,33 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Veri yoksa boş liste kullan
                 final deals = snapshot.data ?? [];
                 
-                // Filtreleme (İstemci tarafında)
+                // Filtreleme (İstemci tarafında) - Optimize edildi
                 // Bot'tan gelen kategori ID olarak saklanıyor ("elektronik", "moda" vb.)
-                final filteredDeals = _selectedCategory == 'tumu'
-                    ? deals
-                    : deals.where((d) {
-                        // Kategori ID ile karşılaştır (bot ID gönderiyor)
-                        final categoryMatch = d.category.toLowerCase() == _selectedCategory.toLowerCase();
-                        if (_selectedSubCategory != null) {
-                          return categoryMatch && d.subCategory == _selectedSubCategory;
-                        }
-                        return categoryMatch;
-                      }).toList();
-
-                // Pagination için deal'leri güncelle
-                if (_allDeals != filteredDeals) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      setState(() {
-                        _allDeals = filteredDeals;
-                        _displayLimit = 20;
-                        _displayedDeals = filteredDeals.take(_displayLimit).toList();
-                        _hasMore = filteredDeals.length > _displayLimit;
-                        _isLoadingMore = false;
-                      });
+                List<Deal> filteredDeals;
+                if (_selectedCategory == 'tumu') {
+                  filteredDeals = deals;
+                } else {
+                  final categoryLower = _selectedCategory.toLowerCase();
+                  filteredDeals = deals.where((d) {
+                    // Kategori ID ile karşılaştır (bot ID gönderiyor)
+                    final categoryMatch = d.category.toLowerCase() == categoryLower;
+                    if (_selectedSubCategory != null) {
+                      return categoryMatch && d.subCategory == _selectedSubCategory;
                     }
-                  });
+                    return categoryMatch;
+                  }).toList();
+                }
+
+                // Pagination için deal'leri güncelle (optimize edildi)
+                if (_allDeals.length != filteredDeals.length || 
+                    (_allDeals.isNotEmpty && filteredDeals.isNotEmpty && 
+                     _allDeals.first.id != filteredDeals.first.id)) {
+                  // Sadece gerçekten değiştiyse güncelle
+                  _allDeals = filteredDeals;
+                  _displayLimit = 20;
+                  _displayedDeals = filteredDeals.take(_displayLimit).toList();
+                  _hasMore = filteredDeals.length > _displayLimit;
+                  _isLoadingMore = false;
                 }
 
                 if (filteredDeals.isEmpty) {
@@ -574,7 +575,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: AppTheme.primary,
                   strokeWidth: 3.0,
                   child: _viewMode == CardViewMode.vertical 
-                    ? GridView.builder(
+                      ? GridView.builder(
                         controller: _scrollController,
                         key: ValueKey('deal_grid_$_selectedCategory'),
                         padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
@@ -584,7 +585,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           mainAxisSpacing: 12,
                           childAspectRatio: 0.68,
                         ),
-                        cacheExtent: 1000,
+                        cacheExtent: 2000, // Daha fazla cache için artırıldı
+                        addAutomaticKeepAlives: false, // Performans için
+                        addRepaintBoundaries: true, // Repaint optimizasyonu
+                        addSemanticIndexes: false, // Performans için
                         itemCount: dealsToShow.length + (_hasMore && _isLoadingMore ? 1 : 0),
                         itemBuilder: (context, index) {
                           if (index == dealsToShow.length) {
@@ -626,6 +630,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         controller: _scrollController,
                         key: ValueKey('deal_list_$_selectedCategory'),
                         padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
+                        cacheExtent: 2000, // Daha fazla cache için artırıldı
+                        addAutomaticKeepAlives: false, // Performans için
+                        addRepaintBoundaries: true, // Repaint optimizasyonu
+                        addSemanticIndexes: false, // Performans için
                         itemCount: dealsToShow.length + (_hasMore && _isLoadingMore ? 1 : 0),
                         itemBuilder: (context, index) {
                           if (index == dealsToShow.length) {

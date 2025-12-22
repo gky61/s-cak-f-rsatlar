@@ -53,3 +53,8 @@ firebase_key.json
 .env
 functions/.runtimeconfig.json
 
+# Release signing keys (GÜVENLİK - ASLA GİT'E EKLEMEYİN!)
+android/key.properties
+android/*.jks
+android/*.keystore
+

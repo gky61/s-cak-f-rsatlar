@@ -168,8 +168,12 @@ class _DealCardState extends State<DealCard> {
                             ? CachedNetworkImage(
                                 imageUrl: _effectiveImageUrl!,
                                 fit: BoxFit.cover,
-                                memCacheWidth: 600,
-                                memCacheHeight: 600,
+                                memCacheWidth: 400, // Daha küçük cache boyutu (performans)
+                                memCacheHeight: 400,
+                                maxWidthDiskCache: 800, // Disk cache limiti
+                                maxHeightDiskCache: 800,
+                                fadeInDuration: const Duration(milliseconds: 200),
+                                fadeOutDuration: const Duration(milliseconds: 100),
                                 placeholder: (context, url) => Container(
                                   color: isDark ? Colors.grey[800] : Colors.grey[100],
                                   child: const Center(
@@ -248,6 +252,34 @@ class _DealCardState extends State<DealCard> {
                               Icons.star,
                               color: Colors.white,
                               size: 12,
+                            ),
+                          ),
+                        ),
+                      // İndirim Rozeti (Sağ Alt)
+                      if (deal.discountRate != null && deal.discountRate! > 0)
+                        Positioned(
+                          bottom: 8,
+                          right: deal.isEditorPick ? 32 : 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: primaryColor,
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              '%${deal.discountRate}',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
@@ -372,70 +404,38 @@ class _DealCardState extends State<DealCard> {
                     const SizedBox(height: 6),
                     // Fiyat
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  currencyFormat.format(deal.price),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w900,
-                                    color: isExpired 
-                                        ? Colors.red[700] 
-                                        : AppTheme.primary,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    currencyFormat.format(deal.originalPrice),
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w400,
-                                      color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                      decoration: TextDecoration.lineThrough,
-                                      decorationThickness: 1,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ],
+                        Flexible(
+                          child: Text(
+                            currencyFormat.format(deal.price),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                              color: isExpired 
+                                  ? Colors.red[700] 
+                                  : AppTheme.primary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        // İndirim Yüzdesi (Fiyatın sağında)
-                        if (deal.discountRate != null && deal.discountRate! > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: primaryColor,
-                              borderRadius: BorderRadius.circular(4),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 2,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
+                        if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                          const SizedBox(width: 4),
+                          Flexible(
                             child: Text(
-                              '%${deal.discountRate}',
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
+                              currencyFormat.format(deal.originalPrice),
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w400,
+                                color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+                                decoration: TextDecoration.lineThrough,
+                                decorationThickness: 1,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                        ],
                       ],
                     ),
                     ],
@@ -574,8 +574,12 @@ class _DealCardState extends State<DealCard> {
                                 width: 112,
                                 height: 112,
                                 fit: BoxFit.cover,
-                                memCacheWidth: 224,
-                                memCacheHeight: 224,
+                                memCacheWidth: 150, // Daha küçük cache boyutu (performans)
+                                memCacheHeight: 150,
+                                maxWidthDiskCache: 300,
+                                maxHeightDiskCache: 300,
+                                fadeInDuration: const Duration(milliseconds: 200),
+                                fadeOutDuration: const Duration(milliseconds: 100),
                                             placeholder: (context, url) => Container(
                                               color: isDark ? Colors.grey[800] : Colors.grey[100],
                                               child: const Center(
@@ -802,14 +806,9 @@ class _DealCardState extends State<DealCard> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                            // Fiyat ve İndirim
-                            Expanded(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  // Fiyat
-                                  Column(
+                            // Fiyat
+                                Expanded(
+                                  child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -823,59 +822,49 @@ class _DealCardState extends State<DealCard> {
                                             decoration: TextDecoration.lineThrough,
                                           ),
                                         ),
-                                      Text(
-                                        currencyFormat.format(deal.price),
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w900,
-                                          color: isExpired
-                                              ? Colors.red[700]
-                                              : AppTheme.primary,
-                                          letterSpacing: -0.5,
-                                          height: 1.0,
-                                        ),
+                                      Row(
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              currencyFormat.format(deal.price),
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.w900,
+                                                color: isExpired
+                                                    ? Colors.red[700]
+                                                    : AppTheme.primary,
+                                                letterSpacing: -0.5,
+                                                height: 1.0,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (deal.discountRate != null && deal.discountRate! > 0) ...[
+                                            const SizedBox(width: 12),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: primaryColor,
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                '%${deal.discountRate}',
+                                                style: const TextStyle(
+                                                  color: Colors.black,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                     ],
                                   ),
-                                  // İndirim Yüzdesi (Fiyatın sağında)
-                                  if (deal.discountRate != null && deal.discountRate! > 0)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: primaryColor.withValues(alpha: 0.9),
-                                        borderRadius: BorderRadius.circular(999),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: primaryColor.withValues(alpha: 0.3),
-                                            blurRadius: 2,
-                                            offset: const Offset(0, 1),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(
-                                            Icons.trending_down,
-                                            size: 10,
-                                            color: Colors.black,
-                                          ),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            '%${deal.discountRate}',
-                                            style: const TextStyle(
-                                              color: Colors.black,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
+                                ),
                             // İncele Butonu
                             ElevatedButton(
                               onPressed: () => _openProductLink(deal.link),

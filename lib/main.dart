@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:async';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
@@ -10,6 +11,7 @@ import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/deal_detail_screen.dart';
+import 'services/firestore_service.dart';
 import 'theme/app_theme.dart';
 
 // Global navigator key for navigation from anywhere
@@ -109,7 +111,27 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
+  final FirestoreService _firestoreService = FirestoreService();
   String? _lastUserId;
+  Timer? _cleanupTimer;
+  
+  @override
+  void initState() {
+    super.initState();
+    // Uygulama başladığında 24 saatten eski onay bekleyen deal'leri temizle
+    _firestoreService.deleteUnapprovedDealsAfter24Hours();
+    
+    // Her 6 saatte bir kontrol et
+    _cleanupTimer = Timer.periodic(const Duration(hours: 6), (timer) {
+      _firestoreService.deleteUnapprovedDealsAfter24Hours();
+    });
+  }
+
+  @override
+  void dispose() {
+    _cleanupTimer?.cancel();
+    super.dispose();
+  }
 
   // Bildirim servisini başlat
   void _initializeNotificationService(String userId) async {

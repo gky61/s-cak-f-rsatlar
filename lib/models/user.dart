@@ -73,18 +73,101 @@ class AppUser {
 
   // Firestore'dan AppUser oluşturma
   factory AppUser.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-    return AppUser(
-      uid: doc.id,
-      username: data['username'] ?? '',
-      profileImageUrl: data['profileImageUrl'] ?? '',
-      followedCategories: List<String>.from(data['followedCategories'] ?? []),
-      nickname: data['nickname'],
-      points: data['points'] ?? 0,
-      dealCount: data['dealCount'] ?? 0,
-      totalLikes: data['totalLikes'] ?? 0,
-      badges: List<String>.from(data['badges'] ?? []),
-    );
+    try {
+      final data = doc.data();
+      if (data == null || data is! Map<String, dynamic>) {
+        throw Exception('Firestore data is null or not a Map');
+      }
+      
+      // badges alanını güvenli bir şekilde parse et
+      List<String> badges = [];
+      try {
+        final badgesData = data['badges'];
+        if (badgesData != null) {
+          if (badgesData is List) {
+            // List<Object?> veya List<dynamic> olabilir, güvenli şekilde String'e çevir
+            badges = badgesData
+                .where((e) => e != null)
+                .map((e) => e.toString())
+                .where((s) => s.isNotEmpty)
+                .toList();
+          } else if (badgesData is String) {
+            // Eğer string olarak saklanmışsa (eski veri)
+            badges = [];
+          }
+        }
+      } catch (e) {
+        print('Badges parse hatası: $e');
+        badges = [];
+      }
+      
+      // followedCategories alanını güvenli bir şekilde parse et
+      List<String> followedCategories = [];
+      try {
+        final categoriesData = data['followedCategories'];
+        if (categoriesData != null) {
+          if (categoriesData is List) {
+            // List<Object?> veya List<dynamic> olabilir, güvenli şekilde String'e çevir
+            followedCategories = categoriesData
+                .where((e) => e != null)
+                .map((e) => e.toString())
+                .where((s) => s.isNotEmpty)
+                .toList();
+          } else if (categoriesData is String) {
+            // Eğer string olarak saklanmışsa (eski veri)
+            followedCategories = [];
+          }
+        }
+      } catch (e) {
+        print('FollowedCategories parse hatası: $e');
+        followedCategories = [];
+      }
+      
+      // Sayısal alanları güvenli bir şekilde parse et
+      int parseInt(dynamic value, {int defaultValue = 0}) {
+        if (value == null) return defaultValue;
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        if (value is String) {
+          final parsed = int.tryParse(value);
+          return parsed ?? defaultValue;
+        }
+        return defaultValue;
+      }
+      
+      return AppUser(
+        uid: doc.id,
+        username: data['username']?.toString() ?? '',
+        profileImageUrl: data['profileImageUrl']?.toString() ?? '',
+        followedCategories: followedCategories,
+        nickname: data['nickname']?.toString(),
+        points: parseInt(data['points']),
+        dealCount: parseInt(data['dealCount']),
+        totalLikes: parseInt(data['totalLikes']),
+        badges: badges,
+      );
+    } catch (e, stackTrace) {
+      print('❌ AppUser.fromFirestore hatası: $e');
+      print('Stack trace: $stackTrace');
+      print('Document ID: ${doc.id}');
+      print('Document data: ${doc.data()}');
+      
+      // Hata durumunda minimum bilgilerle kullanıcı oluştur
+      final data = doc.data();
+      final dataMap = data is Map<String, dynamic> ? data : <String, dynamic>{};
+      
+      return AppUser(
+        uid: doc.id,
+        username: dataMap['username']?.toString() ?? 'Kullanıcı',
+        profileImageUrl: dataMap['profileImageUrl']?.toString() ?? '',
+        followedCategories: [],
+        nickname: dataMap['nickname']?.toString(),
+        points: 0,
+        dealCount: 0,
+        totalLikes: 0,
+        badges: [],
+      );
+    }
   }
 
   // AppUser'i Firestore'a yazmak için Map'e dönüştürme

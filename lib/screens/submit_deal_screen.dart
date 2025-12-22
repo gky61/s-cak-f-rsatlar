@@ -227,9 +227,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           final category = Category.getById(categoryId);
           print('✅ Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}');
           
-          Navigator.pop(context);
-          
-          // Kullanıcıya bilgi ver
+          // Kullanıcıya bilgi ver (modal widget tarafından zaten kapatılıyor)
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(

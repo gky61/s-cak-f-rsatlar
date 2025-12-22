@@ -47,7 +47,10 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
   void _confirmSelection() {
     if (_currentMainCategoryId != null) {
       widget.onCategorySelected(_currentMainCategoryId!, _selectedSubCategory);
-      Navigator.pop(context); // Seçimi onayladıktan sonra modal'ı kapat
+      // Modal'ı kapat - sadece bottom sheet'i kapat, ana ekrandan çıkma
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
     }
   }
 
@@ -164,9 +167,11 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
         return InkWell(
           onTap: () {
             if (category.subcategories.isEmpty) {
-              // Alt kategori yoksa direkt seç
+              // Alt kategori yoksa direkt seç ve modal'ı kapat
               widget.onCategorySelected(category.id, null);
-              Navigator.pop(context);
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context);
+              }
             } else {
               // Alt kategori varsa alt kategorilere geç
               _selectMainCategory(category.id);
@@ -312,7 +317,11 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                       setState(() {
                         _selectedSubCategory = null;
                       });
-                      _confirmSelection(); // Direkt onayla
+                      // Direkt onayla (alt kategori yok)
+                      widget.onCategorySelected(category.id, null);
+                      if (Navigator.canPop(context)) {
+                        Navigator.pop(context);
+                      }
                     },
                   ),
                 );
@@ -363,7 +372,11 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                       : null,
                   onTap: () {
                     _selectSubCategory(subCategory);
-                    _confirmSelection(); // Alt kategori seçildiğinde direkt onayla
+                    // Alt kategori seçildiğinde direkt onayla
+                    widget.onCategorySelected(category.id, subCategory);
+                    if (Navigator.canPop(context)) {
+                      Navigator.pop(context);
+                    }
                   },
                 ),
               );

@@ -856,5 +856,72 @@ class FirestoreService {
       print('❌ Eski deal\'lar silinirken hata: $e');
     }
   }
+
+  // 24 saat içinde onaylanmayan deal'leri otomatik sil
+  Future<void> deleteUnapprovedDealsAfter24Hours() async {
+    try {
+      // Son temizlik zamanını kontrol et (gereksiz çalışmaları önlemek için)
+      final lastCleanupDoc = await _firestore.collection('system').doc('lastPendingCleanup').get();
+      final lastCleanupTime = lastCleanupDoc.data()?['timestamp'] as Timestamp?;
+      
+      // Eğer son temizlik 1 saatten daha yakın bir zamanda yapıldıysa, tekrar çalıştırma
+      if (lastCleanupTime != null) {
+        final timeSinceLastCleanup = DateTime.now().difference(lastCleanupTime.toDate());
+        if (timeSinceLastCleanup.inHours < 1) {
+          print('⚠️ Onay bekleyen deal temizliği zaten son 1 saat içinde yapıldı, atlanıyor');
+          return;
+        }
+      }
+
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(hours: 24));
+      
+      // 24 saatten eski ve onaylanmamış deal'leri bul
+      final snapshot = await _firestore
+          .collection('deals')
+          .where('isApproved', isEqualTo: false)
+          .where('isExpired', isEqualTo: false)
+          .where('createdAt', isLessThan: Timestamp.fromDate(cutoffTime))
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        print('✅ 24 saatten eski onay bekleyen deal yok');
+        // Yine de son temizlik zamanını güncelle
+        await _firestore.collection('system').doc('lastPendingCleanup').set({
+          'timestamp': Timestamp.now(),
+        });
+        return;
+      }
+
+      // Her birini sil (batch limit 500)
+      int deletedCount = 0;
+      WriteBatch batch = _firestore.batch();
+      
+      for (var doc in snapshot.docs) {
+        batch.delete(doc.reference);
+        deletedCount++;
+        
+        // Batch limit (500) kontrolü
+        if (deletedCount % 500 == 0) {
+          await batch.commit();
+          batch = _firestore.batch(); // Yeni batch oluştur
+        }
+      }
+      
+      // Kalan işlemleri commit et
+      if (deletedCount % 500 != 0 && deletedCount > 0) {
+        await batch.commit();
+      }
+      
+      // Son temizlik zamanını güncelle
+      await _firestore.collection('system').doc('lastPendingCleanup').set({
+        'timestamp': Timestamp.now(),
+      });
+      
+      print('✅ 24 saatten eski onay bekleyen deal\'lar silindi: $deletedCount adet');
+    } catch (e) {
+      print('❌ Onay bekleyen deal\'ları temizleme hatası: $e');
+    }
+  }
 }
 

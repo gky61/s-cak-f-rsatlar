@@ -10,6 +10,8 @@ import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
 import 'notification_settings_screen.dart';
+import 'auth_screen.dart';
+import 'privacy_policy_screen.dart';
 import 'package:flutter/services.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -63,15 +65,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (targetUserId == null) return;
 
     setState(() => _isLoading = true);
-
-    setState(() => _isLoading = true);
     
     try {
       final doc = await _firestore.collection('users').doc(targetUserId).get();
       if (doc.exists) {
-        setState(() {
-          _user = AppUser.fromFirestore(doc);
-        });
+        try {
+          setState(() {
+            _user = AppUser.fromFirestore(doc);
+          });
+        } catch (parseError) {
+          print('Kullanıcı verisi parse hatası: $parseError');
+          // Parse hatası durumunda varsayılan kullanıcı oluştur
+          if (_isOwnProfile) {
+            final currentUser = _authService.currentUser;
+            if (currentUser != null) {
+              final newUser = AppUser(
+                uid: currentUser.uid,
+                username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
+                profileImageUrl: currentUser.photoURL ?? '',
+                points: 0,
+                dealCount: 0,
+                totalLikes: 0,
+                badges: [],
+              );
+              await _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore());
+              setState(() {
+                _user = newUser;
+              });
+            }
+          }
+        }
       } else {
         // Eğer kendi profilimizse yeni kullanıcı oluştur, değilse sadece göster
         if (_isOwnProfile) {
@@ -95,8 +118,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       print('Kullanıcı bilgisi yükleme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Kullanıcı bilgileri yüklenirken hata: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e}'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -386,9 +420,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }, SetOptions(merge: true));
 
       // Firebase Auth'daki displayName'i de güncelle (yorumlarda görünmesi için)
-      await user.updateDisplayName(newUsername);
-      await user.reload();
+      // Bu işlem bazen hata verebilir, bu yüzden try-catch ile sarmalıyoruz
+      try {
+        await user.updateDisplayName(newUsername);
+        await user.reload();
+      } catch (authError) {
+        // Firebase Auth güncelleme hatası olsa bile Firestore güncellemesi başarılı oldu
+        print('Firebase Auth displayName güncelleme hatası (önemli değil): $authError');
+      }
 
+      // Kullanıcı verilerini yeniden yükle
       await _loadUserData();
 
       if (mounted) {
@@ -403,10 +444,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       print('Kullanıcı adı güncelleme hatası: $e');
       if (mounted) {
+        // Hata mesajını daha kullanıcı dostu hale getir
+        String errorMessage = 'Kullanıcı adı güncellenirken bir hata oluştu';
+        if (e.toString().contains('PigeonUserInfo')) {
+          errorMessage = 'Kullanıcı adı güncellendi, ancak bazı bilgiler güncellenemedi. Lütfen uygulamayı yeniden başlatın.';
+        } else if (e.toString().length < 100) {
+          errorMessage = 'Hata: $e';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Hata: $e'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -438,7 +488,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (confirm == true) {
+      // Çıkış yap
       await _authService.signOut();
+      
+      // Tüm navigasyon stack'ini temizle ve giriş ekranına yönlendir
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const AuthScreen()),
+          (route) => false,
+        );
+      }
     }
   }
 
@@ -807,7 +866,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           iconColor: Colors.blue,
                           trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
                           onTap: () {
-                            // TODO: Privacy page
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const PrivacyPolicyScreen(),
+                              ),
+                            );
                           },
                           isDark: isDark,
                         ),
@@ -878,8 +942,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           iconBgColor: Colors.orange.withValues(alpha: 0.1),
                           iconColor: Colors.orange,
                           trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () {
-                            // TODO: Contact page
+                          onTap: () async {
+                            final email = 'kolikfirsat@gmail.com';
+                            final uri = Uri.parse('mailto:$email');
+                            try {
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri);
+                              } else {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('E-posta uygulaması açılamadı. Lütfen $email adresine manuel olarak e-posta gönderin.'),
+                                      backgroundColor: Colors.orange,
+                                      duration: const Duration(seconds: 4),
+                                    ),
+                                  );
+                                }
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('E-posta açılırken hata: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
                           },
                           isDark: isDark,
                         ),

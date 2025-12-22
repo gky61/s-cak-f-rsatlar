@@ -22,3 +22,4 @@ echo "✅ Bot güncellendi ve başlatıldı!"
 echo "📋 Logları görmek için: tail -f ~/sicak_firsatlar_bot/logs/bot.log"
 
 
+
