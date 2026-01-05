@@ -80,13 +80,20 @@ android {
                 signingConfig signingConfigs.debug
             }
             
-            // ProGuard/R8 optimizasyonları
-            // İlk build için minify'i kapat, test edildikten sonra açılabilir
+            // ProGuard/R8 KAPALI - Yazı/görüntü kaybolma sorunu için
             minifyEnabled false
             shrinkResources false
-            // minifyEnabled true
-            // shrinkResources true
             // proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            
+            // Crash raporları için debug bilgileri koru
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
+        }
+        
+        debug {
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }

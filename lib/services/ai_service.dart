@@ -1,5 +1,10 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
+
+void _log(String message) {
+  if (kDebugMode) _log(message);
+}
 
 /// Gemini AI servisi - Ürün kategori ve fiyat tespiti
 class AIService {
@@ -91,7 +96,7 @@ ${description != null ? 'Açıklama: $description' : ''}
             .trim();
         
         final result = jsonDecode(cleanText);
-        print('🤖 AI Analiz Sonucu: $result');
+        _log('🤖 AI Analiz Sonucu: $result');
         
         return {
           'success': true,
@@ -103,11 +108,11 @@ ${description != null ? 'Açıklama: $description' : ''}
           'confidence': result['confidence'] ?? 'medium',
         };
       } else {
-        print('❌ AI API Hatası: ${response.statusCode}');
+        _log('❌ AI API Hatası: ${response.statusCode}');
         return {'success': false, 'error': 'API hatası: ${response.statusCode}'};
       }
     } catch (e) {
-      print('❌ AI Analiz Hatası: $e');
+      _log('❌ AI Analiz Hatası: $e');
       return {'success': false, 'error': e.toString()};
     }
   }
@@ -156,16 +161,17 @@ Cevap (sadece kategori kodu):''';
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final category = data['candidates']?[0]?['content']?['parts']?[0]?['text']?.trim() ?? '';
-        print('🤖 AI Kategori: $category');
+        _log('🤖 AI Kategori: $category');
         return category;
       }
       return null;
     } catch (e) {
-      print('❌ Kategori tespit hatası: $e');
+      _log('❌ Kategori tespit hatası: $e');
       return null;
     }
   }
 }
+
 
 
 

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,12 +9,23 @@ import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/theme_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
+import '../models/category.dart';
 import 'notification_settings_screen.dart';
+import 'keyword_tracking_screen.dart';
 import 'auth_screen.dart';
 import 'privacy_policy_screen.dart';
+import 'faq_screen.dart';
+import 'category_preferences_screen.dart';
+import 'message_screen.dart';
+import 'messages_list_screen.dart';
 import 'package:flutter/services.dart';
+
+void _log(String message) {
+  if (kDebugMode) print(message);
+}
 
 class ProfileScreen extends StatefulWidget {
   final String? userId; // Belirli bir kullanıcının profilini görüntülemek için
@@ -34,6 +47,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _notificationsEnabled = true;
   bool _isAdmin = false;
   bool _isOwnProfile = true;
+  int _unreadMessageCount = 0;
+  bool _isFollowing = false;
+  bool _isFollowNotificationEnabled = false;
+  StreamSubscription? _messageCountSubscription;
 
   @override
   void initState() {
@@ -43,7 +60,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserData();
     if (_isOwnProfile) {
       _loadNotificationSettings();
+      _loadUnreadMessageCount();
+    } else {
+      _loadFollowStatus();
     }
+  }
+
+  Future<void> _loadFollowStatus() async {
+    final currentUserId = _authService.currentUser?.uid;
+    final targetUserId = widget.userId;
+    if (currentUserId == null || targetUserId == null) {
+      _log('⚠️ _loadFollowStatus: currentUserId veya targetUserId null');
+      return;
+    }
+
+    try {
+      _log('📋 _loadFollowStatus çağrıldı: currentUserId=$currentUserId, targetUserId=$targetUserId');
+      final isFollowing = await _firestoreService.isFollowing(currentUserId, targetUserId);
+      final isNotificationEnabled = await _firestoreService.isFollowNotificationEnabled(currentUserId, targetUserId);
+      
+      _log('📋 _loadFollowStatus sonucu: isFollowing=$isFollowing, isNotificationEnabled=$isNotificationEnabled');
+      
+      if (mounted) {
+        setState(() {
+          _isFollowing = isFollowing;
+          _isFollowNotificationEnabled = isNotificationEnabled;
+        });
+        _log('✅ UI güncellendi: _isFollowing=$_isFollowing');
+      }
+    } catch (e) {
+      _log('❌ Takip durumu yükleme hatası: $e');
+    }
+  }
+
+  Future<void> _loadUnreadMessageCount() async {
+    final currentUserId = _authService.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    final count = await _firestoreService.getUnreadMessageCount(currentUserId);
+    if (mounted) {
+      setState(() {
+        _unreadMessageCount = count;
+      });
+    }
+
+    // Stream ile sürekli güncelle (mesajlar okunduğunda otomatik güncellenir)
+    _messageCountSubscription?.cancel();
+    _messageCountSubscription = _firestoreService.getUserMessagesStream(currentUserId).listen((messages) {
+      if (mounted) {
+        final unreadCount = messages
+            .where((m) => m.receiverId == currentUserId && !m.isRead)
+            .length;
+        setState(() {
+          _unreadMessageCount = unreadCount;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _messageCountSubscription?.cancel();
+    super.dispose();
   }
 
   void _checkIfOwnProfile() {
@@ -70,11 +148,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final doc = await _firestore.collection('users').doc(targetUserId).get();
       if (doc.exists) {
         try {
-          setState(() {
-            _user = AppUser.fromFirestore(doc);
-          });
+        setState(() {
+          _user = AppUser.fromFirestore(doc);
+        });
         } catch (parseError) {
-          print('Kullanıcı verisi parse hatası: $parseError');
+          _log('Kullanıcı verisi parse hatası: $parseError');
           // Parse hatası durumunda varsayılan kullanıcı oluştur
           if (_isOwnProfile) {
             final currentUser = _authService.currentUser;
@@ -100,24 +178,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (_isOwnProfile) {
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
-            final newUser = AppUser(
+        final newUser = AppUser(
               uid: currentUser.uid,
               username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
               profileImageUrl: currentUser.photoURL ?? '',
-              points: 0,
-              dealCount: 0,
-              totalLikes: 0,
+          points: 0,
+          dealCount: 0,
+          totalLikes: 0,
               badges: [],
-            );
+        );
             await _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore());
-            setState(() {
-              _user = newUser;
-            });
+          setState(() {
+          _user = newUser;
+          });
           }
         }
       }
     } catch (e) {
-      print('Kullanıcı bilgisi yükleme hatası: $e');
+      _log('Kullanıcı bilgisi yükleme hatası: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -129,46 +207,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
       }
     }
   }
 
   Future<void> _loadNotificationSettings() async {
     try {
+      // NotificationService ile aynı alanı kullan (allNotificationsEnabled)
       final userDoc = await _firestore
           .collection('users')
           .doc(_authService.currentUser?.uid)
           .get();
       
       if (userDoc.exists && userDoc.data() != null) {
-      setState(() {
-          _notificationsEnabled = userDoc.data()!['generalNotificationsEnabled'] ?? true;
+        setState(() {
+          _notificationsEnabled = userDoc.data()!['allNotificationsEnabled'] ?? true;
         });
       }
     } catch (e) {
-      print('Bildirim ayarları yükleme hatası: $e');
+      _log('Bildirim ayarları yükleme hatası: $e');
     }
   }
 
   Future<void> _toggleNotifications(bool value) async {
     try {
-      await _firestore
-          .collection('users')
-          .doc(_authService.currentUser?.uid)
-          .set({
-        'generalNotificationsEnabled': value,
-      }, SetOptions(merge: true));
-
+      // NotificationService ile aynı alanı kullan (allNotificationsEnabled)
+      final notificationService = NotificationService();
+      
+      // Optimistic UI update
       setState(() {
         _notificationsEnabled = value;
       });
+      
+      // Arka planda Firestore'a kaydet
+      await notificationService.setGeneralNotifications(value);
+      
+      // Tüm kategorileri batch olarak işle (paralel)
+      final categories = Category.categories.where((c) => c.id != 'tumu').toList();
+      final futures = <Future>[];
+      
+      for (var category in categories) {
+        if (value) {
+          futures.add(notificationService.subscribeToCategory(category.id));
+        } else {
+          futures.add(notificationService.unsubscribeFromCategory(category.id));
+        }
+      }
+      
+      // Tüm işlemleri paralel olarak çalıştır (arka planda)
+      await Future.wait(futures);
     } catch (e) {
-      print('Bildirim ayarı güncelleme hatası: $e');
+      _log('Bildirim ayarı güncelleme hatası: $e');
+      // Hata durumunda mevcut durumu yeniden yükle
+      if (mounted) {
+        await _loadNotificationSettings();
+      }
     }
   }
 
   Future<void> _showProfileImagePicker(BuildContext context) async {
+    // Kullanıcı kendi profilini görüntülüyorsa veya admin ise profil fotoğrafı değiştirilebilir
+    if (!_isOwnProfile && !_isAdmin) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sadece kendi profil fotoğrafınızı değiştirebilirsiniz'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
     // Assets klasöründeki profil resimleri
     final List<String> profileImages = [
       'assets/kullanıcı pp.jpg',
@@ -276,17 +388,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = _authService.currentUser;
     if (user == null) return;
 
+    // Kullanıcı kendi profilini görüntülüyorsa veya admin ise profil fotoğrafı değiştirilebilir
+    if (!_isOwnProfile && !_isAdmin) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sadece kendi profil fotoğrafınızı değiştirebilirsiniz'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Hangi kullanıcının profil fotoğrafını güncelleyeceğiz?
+    final targetUserId = _isOwnProfile ? user.uid : widget.userId;
+    if (targetUserId == null) return;
+
     setState(() => _isLoading = true);
 
     try {
+      // 1. Firebase Auth'daki photoURL'yi güncelle (sadece kendi profilini güncellerken)
+      if (_isOwnProfile && targetUserId == user.uid) {
+        try {
+          await user.updatePhotoURL(imageUrl);
+          await user.reload();
+          _log('✅ Firebase Auth photoURL güncellendi');
+        } catch (authError) {
+          _log('⚠️ Firebase Auth photoURL güncelleme hatası: $authError');
+        }
+      }
+
+      // 2. Firestore'a kaydet (merge: true ile güvenli kayıt)
       await _firestore
           .collection('users')
-          .doc(user.uid)
+          .doc(targetUserId)
           .set({
         'profileImageUrl': imageUrl,
       }, SetOptions(merge: true));
 
-      await _loadUserData();
+      _log('✅ Profil resmi Firestore\'a kaydedildi: $imageUrl (userId: $targetUserId)');
+
+      // 3. CachedNetworkImage cache'ini temizle (eski resmi göstermesin)
+      try {
+        await CachedNetworkImage.evictFromCache(imageUrl);
+        _log('✅ Cache temizlendi');
+      } catch (e) {
+        _log('⚠️ Cache temizleme hatası: $e');
+      }
+
+      // 4. State'i direkt güncelle (Firestore'dan tekrar okumaya gerek yok)
+      if (_user != null) {
+        setState(() {
+          _user = AppUser(
+            uid: _user!.uid,
+            username: _user!.username,
+            profileImageUrl: imageUrl,
+            followedCategories: _user!.followedCategories,
+            watchKeywords: _user!.watchKeywords,
+            nickname: _user!.nickname,
+            points: _user!.points,
+            dealCount: _user!.dealCount,
+            totalLikes: _user!.totalLikes,
+            badges: _user!.badges,
+          );
+        });
+      } else {
+        // Eğer _user null ise, Firestore'dan tekrar yükle
+        await _loadUserData();
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -298,7 +469,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } catch (e) {
-      print('Profil resmi güncelleme hatası: $e');
+      _log('❌ Profil resmi güncelleme hatası: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -411,26 +582,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Firestore'daki username'i güncelle
+      // 1. Firebase Auth'daki displayName'i güncelle
+      try {
+        await user.updateDisplayName(newUsername);
+        await user.reload();
+        // Güncellenmiş kullanıcıyı yeniden al
+        final updatedUser = _authService.currentUser;
+        _log('✅ Firebase Auth displayName güncellendi: ${updatedUser?.displayName}');
+      } catch (authError) {
+        _log('⚠️ Firebase Auth displayName güncelleme hatası: $authError');
+      }
+
+      // 2. Firestore'daki username ve nickname'i güncelle
+      // Not: nickname alanı da güncellenmeli, aksi halde eski değer görünür
       await _firestore
           .collection('users')
           .doc(user.uid)
           .set({
         'username': newUsername,
+        'nickname': newUsername, // nickname'i de aynı değerle güncelle
       }, SetOptions(merge: true));
 
-      // Firebase Auth'daki displayName'i de güncelle (yorumlarda görünmesi için)
-      // Bu işlem bazen hata verebilir, bu yüzden try-catch ile sarmalıyoruz
-      try {
-        await user.updateDisplayName(newUsername);
-        await user.reload();
-      } catch (authError) {
-        // Firebase Auth güncelleme hatası olsa bile Firestore güncellemesi başarılı oldu
-        print('Firebase Auth displayName güncelleme hatası (önemli değil): $authError');
-      }
+      _log('✅ Firestore username ve nickname güncellendi: $newUsername');
 
-      // Kullanıcı verilerini yeniden yükle
+      // 3. Kullanıcı verilerini yeniden yükle
       await _loadUserData();
+
+      // 4. State'i force refresh için bir gecikme ekle
+      await Future.delayed(const Duration(milliseconds: 500));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -442,7 +621,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } catch (e) {
-      print('Kullanıcı adı güncelleme hatası: $e');
+      _log('Kullanıcı adı güncelleme hatası: $e');
       if (mounted) {
         // Hata mesajını daha kullanıcı dostu hale getir
         String errorMessage = 'Kullanıcı adı güncellenirken bir hata oluştu';
@@ -521,12 +700,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return 'Fırsat Kralı';
   }
 
-  Future<void> _openTelegramChannel() async {
-    const url = 'https://t.me/your_channel'; // TODO: Gerçek Telegram kanal URL'i
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -609,7 +782,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   : Icon(Icons.person, size: 56, color: Colors.grey[400]),
                             ),
                         ),
-                          // Edit Button
+                          // Edit Button - Kendi profili veya admin görüntülüyorsa görünür
+                        if (_isOwnProfile || _isAdmin)
                         Positioned(
                             bottom: 2,
                             right: 2,
@@ -647,15 +821,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text(
-                                      _user?.username ?? 'Kullanıcı',
-                                      style: TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w700,
-                                        color: textMain,
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
+                      Text(
+                        _user?.username ?? 'Kullanıcı',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: textMain,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
                                     if (_isOwnProfile) ...[
                                       const SizedBox(width: 8),
                                       Icon(
@@ -667,6 +841,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ],
                                 ),
                               ),
+                              // Mesaj gönderme butonu (başka kullanıcının profilinde)
+                              if (!_isOwnProfile) ...[
+                                const SizedBox(width: 12),
+                                IconButton(
+                                  icon: Icon(Icons.message, color: primaryColor),
+                                  onPressed: () => _navigateToMessageScreen(),
+                                  tooltip: 'Mesaj Gönder',
+                                ),
+                              ],
+                              // Takip et butonu (başka kullanıcının profilinde)
+                              if (!_isOwnProfile) ...[
+                                const SizedBox(width: 12),
+                                IconButton(
+                                  icon: Icon(
+                                    _isFollowing ? Icons.person_remove : Icons.person_add,
+                                    color: _isFollowing ? Colors.grey : primaryColor,
+                                  ),
+                                  onPressed: () => _toggleFollow(),
+                                  tooltip: _isFollowing ? 'Takipten Çık' : 'Takip Et',
+                                ),
+                              ],
                               // Admin rozet verme butonu
                               if (_isAdmin && !_isOwnProfile) ...[
                                 const SizedBox(width: 12),
@@ -678,6 +873,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ],
                             ],
                           ),
+                          // Takip bildirim butonu (takip ediliyorsa)
+                          if (!_isOwnProfile && _isFollowing) ...[
+                            const SizedBox(height: 8),
+                            InkWell(
+                              onTap: () => _toggleFollowNotification(),
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: _isFollowNotificationEnabled 
+                                      ? primaryColor.withValues(alpha: 0.1)
+                                      : Colors.grey[200],
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: _isFollowNotificationEnabled 
+                                        ? primaryColor 
+                                        : Colors.grey[400]!,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _isFollowNotificationEnabled 
+                                          ? Icons.notifications_active 
+                                          : Icons.notifications_off,
+                                      size: 16,
+                                      color: _isFollowNotificationEnabled 
+                                          ? primaryColor 
+                                          : Colors.grey[600],
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _isFollowNotificationEnabled 
+                                          ? 'Bildirimler Açık' 
+                                          : 'Bildirimler Kapalı',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: _isFollowNotificationEnabled 
+                                            ? primaryColor 
+                                            : Colors.grey[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                           // Rozetler (kullanıcı adının altında)
                           if (_user?.badges != null && _user!.badges.isNotEmpty) ...[
                             const SizedBox(height: 8),
@@ -719,37 +964,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ],
                           const SizedBox(height: 8),
-                          // Puan gösterimi
+                          // Puan ve paylaşım sayısı gösterimi (daha kibar tasarım)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  primaryColor.withValues(alpha: 0.2),
-                                  Colors.orange.shade300.withValues(alpha: 0.2),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(16),
+                              color: isDark 
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.04),
+                              borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: primaryColor.withValues(alpha: 0.3),
-                                width: 1,
+                                color: isDark 
+                                    ? Colors.white.withValues(alpha: 0.1)
+                                    : Colors.black.withValues(alpha: 0.08),
+                                width: 0.5,
                               ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  Icons.stars_rounded,
-                                  size: 16,
-                                  color: primaryColor,
+                                  Icons.star_rounded,
+                                  size: 14,
+                                  color: isDark ? Colors.amber[300] : Colors.amber[700],
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 4),
                                 Text(
                                   '${_user?.points ?? 0} Puan',
                                   style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: primaryColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSub,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '•',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: textSub?.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${_user?.dealCount ?? 0} Paylaşım',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSub,
+                                    letterSpacing: 0.2,
                                   ),
                                 ),
                               ],
@@ -758,35 +1021,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                       if (_isOwnProfile) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          _authService.currentUser?.email ?? '',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: textSub,
-                          ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _authService.currentUser?.email ?? '',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: textSub,
                         ),
-                      ],
-                      if (_isOwnProfile) ...[
-                        const SizedBox(height: 20),
-                        // Edit Profile Button
-                        SizedBox(
-                          width: 200,
-                          height: 40,
-                          child: OutlinedButton.icon(
-                            onPressed: () => _showProfileImagePicker(context),
-                            icon: const Icon(Icons.manage_accounts, size: 18),
-                            label: const Text('Profili Düzenle'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: textMain,
-                              backgroundColor: surfaceColor,
-                              side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[200]!),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                              textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                             ),
-                          ),
-                        ),
                       ],
                                           ],
                                         ),
@@ -794,7 +1037,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 // Settings Section (sadece kendi profilinde)
                 if (_isOwnProfile) ...[
-                  _buildSectionHeader('AYARLAR', textSub!),
+                _buildSectionHeader('AYARLAR', textSub!),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
@@ -830,11 +1073,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Icon(Icons.chevron_right, color: Colors.grey[400]),
                             ],
                           ),
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const NotificationSettingsScreen(),
+                              ),
+                            );
+                            // Bildirim ayarları ekranından dönüldüğünde ayarları yeniden yükle
+                            if (_isOwnProfile && mounted) {
+                              await _loadNotificationSettings();
+                            }
+                          },
+                          isDark: isDark,
+                        ),
+                        _buildDivider(isDark),
+                        // Mesajlar
+                        _buildSettingItem(
+                          icon: Icons.message,
+                          title: 'Mesajlar',
+                          iconBgColor: Colors.blue.withValues(alpha: 0.2),
+                          iconColor: Colors.blue,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_unreadMessageCount > 0)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    _unreadMessageCount > 99 ? '99+' : _unreadMessageCount.toString(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              Icon(Icons.chevron_right, color: Colors.grey[400]),
+                            ],
+                          ),
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const NotificationSettingsScreen(),
+                                builder: (context) => const MessagesListScreen(),
+                              ),
+                            );
+                          },
+                          isDark: isDark,
+                        ),
+                        _buildDivider(isDark),
+                        // Anahtar Kelime Takibi
+                        _buildSettingItem(
+                          icon: Icons.search,
+                          title: 'Anahtar Kelime Takibi',
+                          iconBgColor: Colors.teal.withValues(alpha: 0.2),
+                          iconColor: Colors.teal,
+                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const KeywordTrackingScreen(),
                               ),
                             );
                           },
@@ -903,7 +1208,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 // Support Section (sadece kendi profilinde)
                 if (_isOwnProfile) ...[
-                  const SizedBox(height: 24),
+                const SizedBox(height: 24),
                   _buildSectionHeader('DESTEK', textSub!),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -930,7 +1235,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           iconColor: Colors.green,
                           trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
                           onTap: () {
-                            // TODO: FAQ page
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const FAQScreen(),
+                              ),
+                            );
                           },
                           isDark: isDark,
                         ),
@@ -980,8 +1290,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           iconBgColor: primaryColor.withValues(alpha: 0.1),
                           iconColor: Colors.yellow[800]!,
                           trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () {
-                            // TODO: Rate app
+                          onTap: () async {
+                            // Play Store'a yönlendir
+                            // Not: Uygulama yayınlandığında gerçek paket adı ile değiştirilmeli
+                            const packageName = 'com.sicakfirsatlar.sicak_firsatlar';
+                            final playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=$packageName');
+                            final marketUrl = Uri.parse('market://details?id=$packageName');
+                            
+                            try {
+                              // Önce market:// protokolünü dene (Play Store uygulaması açılır)
+                              if (await canLaunchUrl(marketUrl)) {
+                                await launchUrl(marketUrl, mode: LaunchMode.externalApplication);
+                              } else if (await canLaunchUrl(playStoreUrl)) {
+                                // Play Store uygulaması yoksa web'de aç
+                                await launchUrl(playStoreUrl, mode: LaunchMode.externalApplication);
+                              } else {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Play Store açılamadı'),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              }
+                            } catch (e) {
+                              _log('Play Store açılırken hata: $e');
+                            }
                           },
                           isDark: isDark,
                                   ),
@@ -993,40 +1328,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 // Logout Button (sadece kendi profilinde)
                 if (_isOwnProfile) ...[
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: TextButton.icon(
-                            onPressed: _signOut,
-                            icon: const Icon(Icons.logout),
-                            label: const Text('Çıkış Yap'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.red,
-                              backgroundColor: Colors.red.withValues(alpha: 0.05),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.red.withValues(alpha: 0.1)),
-                              ),
-                              textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: TextButton.icon(
+                          onPressed: _signOut,
+                          icon: const Icon(Icons.logout),
+                          label: const Text('Çıkış Yap'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            backgroundColor: Colors.red.withValues(alpha: 0.05),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(color: Colors.red.withValues(alpha: 0.1)),
                             ),
+                            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'v1.2.4 (Build 302)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                            color: Colors.grey[400],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                                        ),
+                                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'v1.2.4 (Build 302)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                          color: Colors.grey[400],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                 ],
                 const SizedBox(height: 100), // Bottom nav padding
               ],
@@ -1096,7 +1431,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     if (!(_isAdmin && !_isOwnProfile && _user != null))
-                      const SizedBox(width: 48), // Balancing spacer
+                    const SizedBox(width: 48), // Balancing spacer
                   ],
                 ),
               ),
@@ -1138,8 +1473,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         label: 'Kategoriler',
                         isSelected: false,
                         onTap: () {
-                          // TODO: Kategoriler
                           Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const CategoryPreferencesScreen(),
+                            ),
+                          );
                         },
                         isDark: isDark,
                         primaryColor: primaryColor,
@@ -1173,11 +1513,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     return GestureDetector(
       onTap: onTap,
-                    child: SizedBox(
-        width: 80,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      behavior: HitTestBehavior.opaque, // Tüm alanı dokunulabilir yap
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12), // Dokunma alanını genişlet
+        child: SizedBox(
+          width: 80,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             if (isSelected)
               Container(
                 width: 32,
@@ -1212,13 +1555,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 color: isSelected 
                     ? (isDark ? primaryColor : Colors.black) 
                     : (isDark ? Colors.grey[400] : Colors.grey[600]),
-                                        ),
-                                        ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+    );
+  }
                                     
   Widget _buildSectionHeader(String title, Color color) {
     return Container(
@@ -1404,7 +1748,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (e) {
-      print('Rozet ekleme hatası: $e');
+      _log('Rozet ekleme hatası: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1440,7 +1784,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (e) {
-      print('Rozet kaldırma hatası: $e');
+      _log('Rozet kaldırma hatası: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1489,4 +1833,113 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     }
   }
+
+  // Mesaj ekranına yönlendir
+  void _navigateToMessageScreen() {
+    if (_user == null) return;
+    final currentUserId = _authService.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MessageScreen(
+          otherUserId: _user!.uid,
+          otherUserName: _user!.username,
+          otherUserImageUrl: _user!.profileImageUrl,
+        ),
+      ),
+    );
+  }
+
+  // Takip et/Takipten çık
+  Future<void> _toggleFollow() async {
+    final currentUserId = _authService.currentUser?.uid;
+    final targetUserId = widget.userId;
+    if (currentUserId == null || targetUserId == null) return;
+
+    try {
+      if (_isFollowing) {
+        // Takipten çık
+        await _firestoreService.unfollowUser(currentUserId, targetUserId);
+        if (mounted) {
+          setState(() {
+            _isFollowing = false;
+            _isFollowNotificationEnabled = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Takipten çıkıldı'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      } else {
+        // Takip et
+        await _firestoreService.followUser(currentUserId, targetUserId);
+        if (mounted) {
+          setState(() {
+            _isFollowing = true;
+            _isFollowNotificationEnabled = true; // Takip edildiğinde bildirimler aktif olarak başlar
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Takip edildi ✅ Bildirimler aktif'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      _log('Takip toggle hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  // Takip bildirimlerini aç/kapat
+  Future<void> _toggleFollowNotification() async {
+    final currentUserId = _authService.currentUser?.uid;
+    final targetUserId = widget.userId;
+    if (currentUserId == null || targetUserId == null || !_isFollowing) return;
+
+    try {
+      final newValue = !_isFollowNotificationEnabled;
+      await _firestoreService.toggleFollowNotification(currentUserId, targetUserId, newValue);
+      
+      if (mounted) {
+        setState(() {
+          _isFollowNotificationEnabled = newValue;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(newValue ? 'Bildirimler açıldı ✅' : 'Bildirimler kapatıldı'),
+            backgroundColor: newValue ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      _log('Takip bildirim toggle hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
 }

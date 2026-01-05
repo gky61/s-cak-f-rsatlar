@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/category_detection_service.dart';
 import '../services/ai_service.dart';
+import '../services/link_preview_service.dart';
 import '../models/category.dart';
 import '../widgets/category_selector_widget.dart';
+import '../theme/app_theme.dart';
+
+void _log(String message) {
+  if (kDebugMode) _log(message);
+}
 
 class SubmitDealScreen extends StatefulWidget {
   const SubmitDealScreen({super.key});
@@ -17,6 +25,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   final _formKey = GlobalKey<FormState>();
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
+  final LinkPreviewService _linkPreviewService = LinkPreviewService();
   
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -29,6 +38,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   String? _selectedSubCategory;
   bool _isLoading = false;
   bool _isAutoDetecting = false;
+  bool _isLoadingImage = false;
+  String? _previewImageUrl;
+  bool _dealSharingEnabled = true;
 
   @override
   void initState() {
@@ -38,6 +50,19 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     _descriptionController.addListener(_onTextChanged);
     // URL değiştiğinde AI analizi yap
     _urlController.addListener(_onUrlChanged);
+    // Görsel URL değiştiğinde otomatik görsel çek
+    _imageUrlController.addListener(_onImageUrlChanged);
+    // Deal paylaşım durumunu kontrol et
+    _checkDealSharingStatus();
+  }
+
+  Future<void> _checkDealSharingStatus() async {
+    final enabled = await _firestoreService.isDealSharingEnabled();
+    if (mounted) {
+      setState(() {
+        _dealSharingEnabled = enabled;
+      });
+    }
   }
 
   void _onTextChanged() {
@@ -53,16 +78,275 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     });
   }
 
-  void _onUrlChanged() {
+  Future<void> _onUrlChanged() async {
     final url = _urlController.text.trim();
     
-    if (url.isEmpty || !url.startsWith('http')) return;
+    if (url.isEmpty || !url.startsWith('http')) {
+      // URL boşsa veya geçersizse, görsel URL'sini de temizle
+      if (_imageUrlController.text.trim().isEmpty || 
+          !_isValidImageUrl(_imageUrlController.text.trim())) {
+        setState(() {
+          _previewImageUrl = null;
+          _isLoadingImage = false;
+        });
+      }
+      return;
+    }
     
-    // URL girildiğinde AI analizi yap
+    // --- AMAZON ÖZEL KONTROLÜ BAŞLANGIÇ ---
+    // Amazon linki mi? (Hem kısa hem uzun hem mobil linkleri kapsar)
+    if (url.contains("amazon") || url.contains("amzn")) {
+      setState(() {
+        _isLoadingImage = true;
+      });
+      
+      // Akıllı Amazon görsel çekme fonksiyonunu çağır
+      try {
+        final amazonImage = await _linkPreviewService.getAmazonImageSmart(url);
+        
+        if (amazonImage != null && mounted) {
+          _log('✅ Amazon görsel bulundu (ASIN yöntemi), direkt atanıyor: $amazonImage');
+          setState(() {
+            _imageUrlController.text = amazonImage; // Görseli bulduk!
+            _previewImageUrl = amazonImage;
+            _isLoadingImage = false;
+          });
+          
+          // AI analizi yap (görsel zaten bulundu, sadece AI analizi gerekli)
+          Future.delayed(const Duration(milliseconds: 1500), () {
+            if (!mounted || _isAutoDetecting) return;
+            _analyzeProductWithAI();
+          });
+          return; // Amazon görseli bulundu, scraper'a gerek yok
+        } else {
+          // ASIN bulunamazsa, normal scraper yöntemi ile devam et
+          _log('⚠️ Amazon ASIN bulunamadı, normal scraper yöntemi deneniyor...');
+          if (mounted) {
+            setState(() {
+              _isLoadingImage = false;
+            });
+          }
+        }
+      } catch (error) {
+        _log('❌ Amazon görsel çekme hatası: $error');
+        // Hata olursa normal scraper yöntemi ile devam et
+        if (mounted) {
+          setState(() {
+            _isLoadingImage = false;
+          });
+        }
+      }
+    }
+    // --- AMAZON ÖZEL KONTROLÜ BİTİŞ ---
+    
+    // URL girildiğinde otomatik görsel çek (debounce ile)
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      if (!mounted) return;
+      final currentUrl = _urlController.text.trim();
+      if (currentUrl.isEmpty || !currentUrl.startsWith('http')) return;
+      
+      // Eğer görsel URL alanı boşsa veya geçersiz bir URL ise, ürün linkinden görsel çek
+      final currentImageUrl = _imageUrlController.text.trim();
+      if (currentImageUrl.isEmpty || !_isValidImageUrl(currentImageUrl)) {
+        _fetchImageFromProductUrl(currentUrl);
+      }
+    });
+    
+    // URL girildiğinde AI analizi yap (debounce ile)
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted || _isAutoDetecting) return;
       _analyzeProductWithAI();
     });
+  }
+  
+  Future<void> _fetchImageFromProductUrl(String productUrl) async {
+    if (_isLoadingImage) return;
+    
+    setState(() {
+      _isLoadingImage = true;
+      _previewImageUrl = null;
+    });
+    
+    try {
+      _log('🔄 Ürün linkinden görsel çekiliyor: $productUrl');
+      final preview = await _linkPreviewService.fetchMetadata(productUrl)
+          .timeout(const Duration(seconds: 10), onTimeout: () {
+        _log('⏱️ Görsel çekme timeout (10 saniye)');
+        return null;
+      });
+      
+      if (mounted && preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
+        // Görsel URL'sinin geçerli olup olmadığını kontrol et
+        if (_isValidImageUrl(preview.imageUrl!)) {
+          setState(() {
+            _previewImageUrl = preview.imageUrl;
+            _imageUrlController.text = preview.imageUrl!;
+            _isLoadingImage = false;
+          });
+          _log('✅ Ürün linkinden görsel bulundu ve Resim Linki alanına yazıldı: ${preview.imageUrl}');
+          
+          // Kullanıcıya bilgi ver
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Görsel otomatik olarak bulundu ve eklendi'),
+                  ],
+                ),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          setState(() {
+            _previewImageUrl = null;
+            _isLoadingImage = false;
+          });
+          _log('⚠️ Bulunan URL geçerli bir görsel URL\'si değil: ${preview.imageUrl}');
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _previewImageUrl = null;
+            _isLoadingImage = false;
+          });
+        }
+        _log('⚠️ Ürün linkinden görsel bulunamadı');
+      }
+    } catch (e, stackTrace) {
+      _log('❌ Ürün linkinden görsel çekme hatası: $e');
+      _log('❌ Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _previewImageUrl = null;
+          _isLoadingImage = false;
+        });
+      }
+    }
+  }
+  
+  void _onImageUrlChanged() {
+    final imageUrl = _imageUrlController.text.trim();
+    
+    // Eğer boşsa veya geçerli bir görsel URL'si ise, preview'ı güncelle
+    if (imageUrl.isEmpty) {
+      setState(() {
+        _previewImageUrl = null;
+        _isLoadingImage = false;
+      });
+      return;
+    }
+    
+    // Eğer geçerli bir görsel URL'si ise, direkt kullan
+    if (_isValidImageUrl(imageUrl)) {
+      setState(() {
+        _previewImageUrl = imageUrl;
+        _isLoadingImage = false;
+      });
+      return;
+    }
+    
+    // Eğer geçersiz bir URL ise (ürün sayfası gibi), linkten görsel çek
+    if (imageUrl.startsWith('http') && !_isValidImageUrl(imageUrl)) {
+      _fetchImageFromUrl(imageUrl);
+    }
+  }
+  
+  Future<void> _fetchImageFromUrl(String url) async {
+    if (_isLoadingImage) return;
+    
+    setState(() {
+      _isLoadingImage = true;
+      _previewImageUrl = null;
+    });
+    
+    try {
+      final preview = await _linkPreviewService.fetchMetadata(url)
+          .timeout(const Duration(seconds: 10), onTimeout: () {
+        _log('⏱️ Görsel çekme timeout (10 saniye)');
+        return null;
+      });
+      
+      if (mounted && preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
+        // Görsel URL'sinin geçerli olup olmadığını kontrol et
+        if (_isValidImageUrl(preview.imageUrl!)) {
+          setState(() {
+            _previewImageUrl = preview.imageUrl;
+            _imageUrlController.text = preview.imageUrl!;
+            _isLoadingImage = false;
+          });
+          _log('✅ Görsel bulundu ve güncellendi: ${preview.imageUrl}');
+        } else {
+          setState(() {
+            _previewImageUrl = null;
+            _isLoadingImage = false;
+          });
+          _log('⚠️ Bulunan URL geçerli bir görsel URL\'si değil: ${preview.imageUrl}');
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _previewImageUrl = null;
+            _isLoadingImage = false;
+          });
+        }
+        _log('⚠️ Linkten görsel bulunamadı');
+      }
+    } catch (e, stackTrace) {
+      _log('❌ Görsel çekme hatası: $e');
+      _log('❌ Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _previewImageUrl = null;
+          _isLoadingImage = false;
+        });
+      }
+    }
+  }
+  
+  // URL'nin görsel URL'si olup olmadığını kontrol et
+  bool _isValidImageUrl(String url) {
+    if (url.isEmpty) return false;
+    final lowerUrl = url.toLowerCase();
+    
+    // Yaygın görsel uzantıları
+    final imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+    if (imageExtensions.any((ext) => lowerUrl.contains(ext))) {
+      return true;
+    }
+    
+    // Görsel CDN'leri
+    final imageCdnPatterns = [
+      'imgbb.co',
+      'imgur.com',
+      'i.ibb.co',
+      'cdn.dsmcdn.com',
+      'images.unsplash.com',
+      'i.imgur.com',
+      '/images/',
+      '/img/',
+      '/image/',
+    ];
+    if (imageCdnPatterns.any((pattern) => lowerUrl.contains(pattern))) {
+      return true;
+    }
+    
+    // HTML sayfası pattern'leri
+    final htmlPagePatterns = ['/product/', '/urun/', '/p-', '/item/', '/detail/', '?', '#'];
+    if (htmlPagePatterns.any((pattern) => lowerUrl.contains(pattern))) {
+      return false;
+    }
+    
+    // Uzun URL'ler genellikle HTML sayfasıdır
+    if (url.length > 100) {
+      return false;
+    }
+    
+    return true;
   }
 
   Future<void> _analyzeProductWithAI() async {
@@ -120,7 +404,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         }
       }
     } catch (e) {
-      print('AI analiz hatası: $e');
+      _log('AI analiz hatası: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -139,16 +423,16 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     // Başlık ve açıklamayı birleştir
     final combinedText = '$title $description';
     
-    print('🔍 Kategori tespiti yapılıyor: $combinedText');
+    _log('🔍 Kategori tespiti yapılıyor: $combinedText');
     final result = CategoryDetectionService.detectCategory(combinedText);
-    print('✅ Tespit sonucu: $result');
+    _log('✅ Tespit sonucu: $result');
     
     if (result != null && mounted) {
       final categoryId = result['categoryId'];
       final subCategory = result['subCategory'];
       
       if (categoryId != null && categoryId != _selectedCategory) {
-        print('📝 Kategori güncelleniyor: $categoryId, alt kategori: $subCategory');
+        _log('📝 Kategori güncelleniyor: $categoryId, alt kategori: $subCategory');
         _isAutoDetecting = true;
         setState(() {
           _selectedCategory = categoryId;
@@ -156,7 +440,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         });
         _isAutoDetecting = false;
         
-        print('✅ Kategori güncellendi: ${Category.getById(categoryId).name}');
+        _log('✅ Kategori güncellendi: ${Category.getById(categoryId).name}');
         
         // Kullanıcıya bildirim göster
         if (mounted) {
@@ -191,6 +475,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   void dispose() {
     _titleController.removeListener(_onTextChanged);
     _descriptionController.removeListener(_onTextChanged);
+    _imageUrlController.removeListener(_onImageUrlChanged);
     _titleController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
@@ -225,7 +510,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           
           // Seçimi doğrulama için log
           final category = Category.getById(categoryId);
-          print('✅ Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}');
+          _log('✅ Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}');
           
           // Kullanıcıya bilgi ver (modal widget tarafından zaten kapatılıyor)
           ScaffoldMessenger.of(context).showSnackBar(
@@ -243,6 +528,22 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   }
 
   Future<void> _submitDeal() async {
+    // Deal paylaşım durumunu kontrol et
+    final isEnabled = await _firestoreService.isDealSharingEnabled();
+    if (!isEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Fırsat paylaşımı şu anda geçici olarak durdurulmuştur. Lütfen daha sonra tekrar deneyin.',
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -265,9 +566,52 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       final categoryName = Category.getNameById(_selectedCategory);
       final subCategoryName = _selectedSubCategory;
       
-      print('📝 Deal kaydediliyor:');
-      print('   Ana Kategori: $categoryName (ID: $_selectedCategory)');
-      print('   Alt Kategori: ${subCategoryName ?? "Yok"}');
+      _log('📝 Deal kaydediliyor:');
+      _log('   Ana Kategori: $categoryName (ID: $_selectedCategory)');
+      _log('   Alt Kategori: ${subCategoryName ?? "Yok"}');
+      
+      // Eğer görsel URL boşsa veya geçersiz bir URL ise (ürün sayfası gibi), linkten görsel çek
+      String imageUrl = _imageUrlController.text.trim();
+      final urlControllerText = _urlController.text.trim();
+      
+      // Görsel URL'sinin geçerli olup olmadığını kontrol et
+      final isValidImageUrl = imageUrl.isNotEmpty && _isValidImageUrl(imageUrl);
+      
+      if ((imageUrl.isEmpty || !isValidImageUrl) && urlControllerText.isNotEmpty) {
+        _log('🖼️ Görsel URL boş veya geçersiz, linkten görsel çekiliyor...');
+        _log('🔗 URL: $urlControllerText');
+        _log('📸 Mevcut imageUrl: ${imageUrl.isEmpty ? "BOŞ" : imageUrl}');
+        try {
+          final preview = await _linkPreviewService.fetchMetadata(urlControllerText)
+              .timeout(const Duration(seconds: 10), onTimeout: () {
+            _log('⏱️ Görsel çekme timeout (10 saniye)');
+            return null;
+          });
+          
+          if (preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
+            imageUrl = preview.imageUrl!;
+            _log('✅ Görsel bulundu ve kaydediliyor: $imageUrl');
+            // UI'da da güncelle
+            if (mounted) {
+              _imageUrlController.text = imageUrl;
+            }
+          } else {
+            _log('⚠️ Linkten görsel bulunamadı (preview: ${preview?.imageUrl ?? "null"})');
+          }
+        } catch (e, stackTrace) {
+          _log('❌ Görsel çekme hatası: $e');
+          _log('❌ Stack trace: $stackTrace');
+          // Hata olsa bile devam et
+        }
+      } else if (imageUrl.isNotEmpty && isValidImageUrl) {
+        _log('✅ Kullanıcının girdiği görsel URL kullanılıyor: $imageUrl');
+      } else if (imageUrl.isNotEmpty && !isValidImageUrl) {
+        _log('⚠️ Kullanıcının girdiği URL geçersiz (ürün sayfası olabilir): $imageUrl');
+        // Geçersiz URL'yi temizle, linkten çekmeyi dene
+        imageUrl = '';
+      }
+      
+      _log('📸 Final imageUrl: ${imageUrl.isEmpty ? "BOŞ" : imageUrl}');
       
       await _firestoreService.createDeal(
         title: _titleController.text.trim(),
@@ -276,7 +620,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         store: _storeController.text.trim(),
         category: categoryName, // Ana kategori adı
         subCategory: subCategoryName, // Alt kategori adı (varsa)
-        imageUrl: _imageUrlController.text.trim(),
+        imageUrl: imageUrl, // Linkten çekilen veya kullanıcının girdiği görsel
         url: _urlController.text.trim(),
         userId: user.uid,
       );
@@ -309,6 +653,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -317,16 +664,48 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         ),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Başlık
-            TextFormField(
+      body: StreamBuilder<bool>(
+        stream: _firestoreService.dealSharingEnabledStream(),
+        builder: (context, snapshot) {
+          final isEnabled = snapshot.data ?? true;
+          
+          return Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Paylaşım durduruldu uyarısı
+                if (!isEnabled)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange, width: 2),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange[700]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Fırsat paylaşımı şu anda geçici olarak durdurulmuştur.',
+                            style: TextStyle(
+                              color: Colors.orange[900],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                // Başlık
+                TextFormField(
               controller: _titleController,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 labelText: 'Başlık *',
                 hintText: 'Örn: iPhone 15 Pro Max',
@@ -351,36 +730,40 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
+                  border: Border.all(
+                    color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                  ),
                   borderRadius: BorderRadius.circular(12),
+                  color: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
                 ),
                         child: Row(
                           children: [
-                    const Icon(Icons.category, color: Colors.grey),
+                    Icon(Icons.category, color: isDark ? AppTheme.darkTextSecondary : Colors.grey),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Kategori *',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey,
+                              color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
                         ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             _getCategoryDisplayText(),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
+                              color: textColor,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                    Icon(Icons.arrow_forward_ios, size: 16, color: isDark ? AppTheme.darkTextSecondary : Colors.grey),
                   ],
                 ),
               ),
@@ -390,6 +773,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             // Fiyat
             TextFormField(
               controller: _priceController,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 labelText: 'Fiyat (₺) *',
                 hintText: 'Örn: 999.99',
@@ -414,6 +798,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             // Mağaza
             TextFormField(
               controller: _storeController,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 labelText: 'Mağaza *',
                 hintText: 'Örn: Trendyol, Hepsiburada',
@@ -434,6 +819,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             // Açıklama
             TextFormField(
               controller: _descriptionController,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 labelText: 'Açıklama *',
                 hintText: 'Fırsat hakkında detaylar',
@@ -455,6 +841,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             // Ürün URL
             TextFormField(
               controller: _urlController,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 labelText: 'Ürün Linki *',
                 hintText: 'https://...',
@@ -478,6 +865,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             // Resim URL
             TextFormField(
               controller: _imageUrlController,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 labelText: 'Resim Linki',
                 hintText: 'https://...',
@@ -485,13 +873,82 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 prefixIcon: const Icon(Icons.image),
+                suffixIcon: _isLoadingImage
+                    ? const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
               ),
             ),
+            const SizedBox(height: 16),
+            
+            // Görsel Önizleme
+            if (_previewImageUrl != null || _isLoadingImage)
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: _isLoadingImage
+                      ? Container(
+                          color: isDark ? AppTheme.darkSurfaceElevated : Colors.grey[100],
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
+                      : _previewImageUrl != null
+                          ? Padding(
+                              padding: const EdgeInsets.all(24.0),
+                              child: CachedNetworkImage(
+                                imageUrl: _previewImageUrl!,
+                                fit: BoxFit.contain,
+                                placeholder: (context, url) => const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                                errorWidget: (context, url, error) {
+                                  return Container(
+                                    color: isDark ? AppTheme.darkSurfaceElevated : Colors.grey[100],
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.error_outline,
+                                            color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
+                                            size: 48,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Görsel yüklenemedi',
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            )
+                          : null,
+                ),
+              ),
             const SizedBox(height: 24),
 
             // Gönder butonu
             ElevatedButton(
-              onPressed: _isLoading ? null : _submitDeal,
+              onPressed: (_isLoading || !isEnabled) ? null : _submitDeal,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF6B35),
                 foregroundColor: Colors.white,
@@ -518,8 +975,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                       ),
                     ),
             ),
-          ],
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

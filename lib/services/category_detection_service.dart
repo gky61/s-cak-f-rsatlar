@@ -1,4 +1,9 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import '../models/category.dart';
+
+void _log(String message) {
+  if (kDebugMode) _log(message);
+}
 
 class CategoryDetectionService {
   static final CategoryDetectionService _instance = CategoryDetectionService._internal();
@@ -433,8 +438,8 @@ class CategoryDetectionService {
     final normalizedText = _normalizeText(text.toLowerCase());
     final originalText = text.toLowerCase();
 
-    print('🔍 Kategori tespiti başlatılıyor: "$text"');
-    print('📝 Normalize edilmiş metin: "$normalizedText"');
+    _log('🔍 Kategori tespiti başlatılıyor: "$text"');
+    _log('📝 Normalize edilmiş metin: "$normalizedText"');
 
     // Her kategori için skor hesapla
     final categoryScores = <String, Map<String, double>>{};
@@ -468,7 +473,7 @@ class CategoryDetectionService {
             if (word == normalizedKeyword || originalWord == originalKeyword) {
               score += 5.0; // Tek kelime için yüksek skor
               exactWordMatch = true;
-              print('   ✅ Tam kelime eşleşmesi: "$keyword" (+5.0)');
+              _log('   ✅ Tam kelime eşleşmesi: "$keyword" (+5.0)');
               break;
             }
           }
@@ -477,7 +482,7 @@ class CategoryDetectionService {
           if (!exactWordMatch) {
             if (normalizedText.contains(normalizedKeyword) || originalText.contains(originalKeyword)) {
               score += 3.0;
-              print('   ✅ Tam eşleşme: "$keyword" (+3.0)');
+              _log('   ✅ Tam eşleşme: "$keyword" (+3.0)');
             }
           }
           
@@ -500,7 +505,7 @@ class CategoryDetectionService {
 
         if (score > 0) {
           categoryScores[categoryId]![subCategory] = score;
-          print('   📊 $categoryId > $subCategory: $score puan');
+          _log('   📊 $categoryId > $subCategory: $score puan');
         }
       }
     }
@@ -524,11 +529,11 @@ class CategoryDetectionService {
     // Tek kelimeli aramalar için daha düşük eşik (örn: "saat", "tablet")
     final minScore = normalizedText.split(RegExp(r'[^\wğüşıöçĞÜŞİÖÇ]+')).length == 1 ? 1.0 : 1.5;
     if (bestScore < minScore) {
-      print('❌ Skor çok düşük: $bestScore (minimum: $minScore)');
+      _log('❌ Skor çok düşük: $bestScore (minimum: $minScore)');
       return null;
     }
 
-    print('✅ En iyi eşleşme: $bestCategoryId > $bestSubCategory (skor: $bestScore)');
+    _log('✅ En iyi eşleşme: $bestCategoryId > $bestSubCategory (skor: $bestScore)');
 
     return {
       'categoryId': bestCategoryId,

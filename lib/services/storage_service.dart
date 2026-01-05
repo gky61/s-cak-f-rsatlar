@@ -1,5 +1,9 @@
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+
+void _log(String message) {
+  if (kDebugMode) _log(message);
+}
 
 class StorageService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -11,7 +15,7 @@ class StorageService {
       final url = await ref.getDownloadURL();
       return url;
     } catch (e) {
-      print('❌ Storage: Görsel URL alınamadı: $imagePath - Hata: $e');
+      _log('❌ Storage: Görsel URL alınamadı: $imagePath - Hata: $e');
       rethrow;
     }
   }
@@ -50,7 +54,7 @@ class StorageService {
       
       return null;
     } catch (e) {
-      print('❌ Storage: URL parse hatası: $url - Hata: $e');
+      _log('❌ Storage: URL parse hatası: $url - Hata: $e');
       return null;
     }
   }
@@ -81,14 +85,14 @@ class StorageService {
 
       final path = extractPathFromUrl(url);
       if (path == null) {
-        print('⚠️ Storage: URL\'den path çıkarılamadı: $url');
+        _log('⚠️ Storage: URL\'den path çıkarılamadı: $url');
         return url;
       }
 
       // Yeni token ile URL al
       return await getImageUrl(path);
     } catch (e) {
-      print('❌ Storage: URL yenileme hatası: $url - Hata: $e');
+      _log('❌ Storage: URL yenileme hatası: $url - Hata: $e');
       // Hata olursa eski URL'yi dön
       return url;
     }
@@ -97,44 +101,45 @@ class StorageService {
   // Web için CORS-safe görsel URL'si oluştur
   Future<String> getCorsSafeImageUrl(String imageUrl) async {
     try {
-      print('🔍 Storage: URL kontrol ediliyor: $imageUrl');
+      _log('🔍 Storage: URL kontrol ediliyor: $imageUrl');
       
       // Eğer Firebase Storage URL ise, token'ı kontrol et
       if (isFirebaseStorageUrl(imageUrl)) {
-        print("📦 Storage: Firebase Storage URL tespit edildi");
+        _log("📦 Storage: Firebase Storage URL tespit edildi");
         
         // Firebase Storage URL için path'i çıkar ve yeni token ile URL al
         final path = extractPathFromUrl(imageUrl);
-        print('📂 Storage: Çıkarılan path: $path');
+        _log('📂 Storage: Çıkarılan path: $path');
         
         if (path != null) {
           try {
             // Yeni token ile URL al
             final newUrl = await getImageUrl(path);
-            print('✅ Storage: CORS-safe URL oluşturuldu: $newUrl');
+            _log('✅ Storage: CORS-safe URL oluşturuldu: $newUrl');
             return newUrl;
           } catch (e) {
-            print('⚠️ Storage: getImageUrl hatası, orijinal URL kullanılıyor: $e');
+            _log('⚠️ Storage: getImageUrl hatası, orijinal URL kullanılıyor: $e');
             // Hata olursa orijinal URL'i dön (belki zaten geçerli bir URL)
             return imageUrl;
           }
         } else {
-          print('⚠️ Storage: Path çıkarılamadı, orijinal URL kullanılıyor');
+          _log('⚠️ Storage: Path çıkarılamadı, orijinal URL kullanılıyor');
         }
       } else {
-        print('🌐 Storage: Normal URL, direkt kullanılıyor');
+        _log('🌐 Storage: Normal URL, direkt kullanılıyor');
       }
       
       // Firebase Storage URL değilse veya path çıkarılamazsa, olduğu gibi dön
       return imageUrl;
     } catch (e, stackTrace) {
-      print('❌ Storage: CORS-safe URL oluşturma hatası: $imageUrl - Hata: $e');
-      print('❌ Storage: StackTrace: $stackTrace');
+      _log('❌ Storage: CORS-safe URL oluşturma hatası: $imageUrl - Hata: $e');
+      _log('❌ Storage: StackTrace: $stackTrace');
       // Hata olursa eski URL'yi dön
       return imageUrl;
     }
   }
 }
+
 
 
 

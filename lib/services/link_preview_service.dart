@@ -1,10 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
+
+void _log(String message) {
+  if (kDebugMode) _log(message);
+}
 
 class LinkPreviewResult {
   final String? title;
@@ -31,50 +36,50 @@ class LinkPreviewService {
 
   Future<LinkPreviewResult?> fetchMetadata(String url) async {
     try {
-      print('🔍 LinkPreviewService: URL çekiliyor: $url');
+      _log('🔍 LinkPreviewService: URL çekiliyor: $url');
       
       // Timeout ile metadata_fetch dene
       Metadata? metadata;
       try {
         metadata = await MetadataFetch.extract(url)
             .timeout(const Duration(seconds: 10));
-        print('✅ Metadata fetch başarılı: ${metadata?.title ?? "başlık yok"}');
+        _log('✅ Metadata fetch başarılı: ${metadata?.title ?? "başlık yok"}');
       } catch (e) {
-        print('⚠️ Metadata fetch hatası: $e');
+        _log('⚠️ Metadata fetch hatası: $e');
       }
       
       // Eğer görsel bulunamazsa, custom headers ile tekrar dene
       if (metadata == null || metadata.image == null || metadata.image!.isEmpty) {
-        print('🔄 Custom headers ile tekrar deneniyor...');
+        _log('🔄 Custom headers ile tekrar deneniyor...');
         try {
           metadata = await _extractWithCustomHeaders(url)
               .timeout(const Duration(seconds: 10));
-          print('✅ Custom headers başarılı: ${metadata?.image ?? "görsel yok"}');
+          _log('✅ Custom headers başarılı: ${metadata?.image ?? "görsel yok"}');
         } catch (e) {
-          print('⚠️ Custom headers hatası: $e');
+          _log('⚠️ Custom headers hatası: $e');
         }
       }
 
       // Hala görsel yoksa, manuel HTML parsing yap
       String? imageUrl = metadata?.image;
       if (imageUrl == null || imageUrl.isEmpty) {
-        print('🔄 HTML parsing ile görsel aranıyor...');
+        _log('🔄 HTML parsing ile görsel aranıyor...');
         try {
           imageUrl = await _extractImageFromHtml(url)
               .timeout(const Duration(seconds: 15));
-          print('✅ HTML parsing sonucu: ${imageUrl ?? "görsel yok"}');
+          _log('✅ HTML parsing sonucu: ${imageUrl ?? "görsel yok"}');
         } catch (e) {
-          print('⚠️ HTML parsing hatası: $e');
+          _log('⚠️ HTML parsing hatası: $e');
         }
       }
 
       final resolvedImage = _resolveImageUrl(imageUrl, url);
       final provider = metadata != null ? _inferProvider(metadata, url) : _cleanHost(url);
 
-      print('✅ LinkPreviewService sonuç:');
-      print('   - Başlık: ${metadata?.title ?? "yok"}');
-      print('   - Görsel: ${resolvedImage ?? "yok"}');
-      print('   - Provider: ${provider ?? "yok"}');
+      _log('✅ LinkPreviewService sonuç:');
+      _log('   - Başlık: ${metadata?.title ?? "yok"}');
+      _log('   - Görsel: ${resolvedImage ?? "yok"}');
+      _log('   - Provider: ${provider ?? "yok"}');
 
       return LinkPreviewResult(
         title: metadata?.title,
@@ -83,8 +88,8 @@ class LinkPreviewService {
         provider: provider,
       );
     } catch (e, stackTrace) {
-      print('❌ LinkPreviewService error: $e');
-      print('❌ Stack trace: $stackTrace');
+      _log('❌ LinkPreviewService error: $e');
+      _log('❌ Stack trace: $stackTrace');
       return null;
     }
   }
@@ -144,9 +149,109 @@ class LinkPreviewService {
     }
   }
 
+  // Amazon kısa linkini (amzn.eu) uzun linke (amazon.com.tr/dp/...) çevir
+  Future<String?> getFullAmazonUrl(String shortUrl) async {
+    try {
+      // Sadece amzn.eu linklerini çevir
+      if (!shortUrl.contains('amzn.eu') && !shortUrl.contains('amzn.to')) {
+        return shortUrl; // Zaten uzun link ise direkt döndür
+      }
+
+      _log('🔗 Amazon kısa link çözülüyor: $shortUrl');
+      
+      // 1. Basit bir istek atarak linkin bizi nereye yönlendirdiğine bakıyoruz
+      final client = http.Client();
+      final request = http.Request('GET', Uri.parse(shortUrl))
+        ..followRedirects = false; // Otomatik yönlenmeyi kapatıyoruz ki header'ı okuyalım
+      
+      final response = await client.send(request).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          _log('⏱️ Amazon link çözümleme timeout');
+          throw TimeoutException('Amazon link çözümleme timeout');
+        },
+      );
+      
+      // 2. Yönlendirme adresini (Location) alıyoruz
+      // HTTP header'ları case-insensitive olabilir, hem küçük hem büyük harfle kontrol et
+      String? longUrl = response.headers['location'] ?? response.headers['Location'];
+      
+      // Eğer relative URL gelirse, absolute URL'e çevir
+      if (longUrl != null && longUrl.isNotEmpty) {
+        if (longUrl.startsWith('/')) {
+          // Relative URL ise, Amazon domain'ini ekle
+          final uri = Uri.parse(shortUrl);
+          longUrl = '${uri.scheme}://${uri.host}$longUrl';
+        } else if (!longUrl.startsWith('http')) {
+          // Protocol yoksa https ekle
+          longUrl = 'https://$longUrl';
+        }
+        
+        _log('✅ Amazon uzun link bulundu: $longUrl');
+        client.close();
+        return longUrl;
+      }
+      
+      // Eğer location boşsa, orijinal linki döndür
+      _log('⚠️ Amazon link çözümleme başarısız (Location header bulunamadı), orijinal link kullanılıyor');
+      client.close();
+      return shortUrl;
+      
+    } catch (e) {
+      _log("❌ Amazon link çözümleme hatası: $e");
+      return shortUrl; // Hata olursa orijinalini döndür
+    }
+  }
+
+  // Amazon URL'den ASIN kodunu çıkar ve görsel URL'si oluştur (eski fonksiyon, geriye uyumluluk için)
+  Future<String?> getAmazonImageFromUrl(String url) async {
+    return getAmazonImageSmart(url);
+  }
+
+  // Amazon görselini akıllıca çek (kısa linkleri de destekler)
+  Future<String?> getAmazonImageSmart(String url) async {
+    try {
+      String targetUrl = url;
+
+      // 1. Eğer link kısaltılmış Amazon linki ise (amzn.eu veya amzn.to)
+      // Bu formatlar desteklenir: amzn.eu/d/xxx, amzn.to/xxx, amzn.eu/xxx
+      if (url.contains("amzn.eu") || url.contains("amzn.to")) {
+        _log('🔄 Amazon kısa link tespit edildi ($url), uzun linke çevriliyor...');
+        final fullUrl = await getFullAmazonUrl(url);
+        if (fullUrl != null && fullUrl.isNotEmpty && fullUrl != url && !fullUrl.contains("amzn.eu") && !fullUrl.contains("amzn.to")) {
+          targetUrl = fullUrl; // Artık elimizde uzun link var!
+          _log('✅ Amazon kısa link çözüldü: $targetUrl');
+        } else {
+          _log('⚠️ Amazon kısa link çözülemedi veya hala kısa link formatında, orijinal link kullanılıyor');
+        }
+      }
+
+      // 2. Şimdi uzun linkin içinden ASIN kodunu (B0...) çekiyoruz
+      // Bu regex hem "/dp/" hem de "/gp/product/" hem de mobil linkler için çalışır
+      // Mobil linkler: amazon.com.tr/gp/product/B0... veya amazon.com.tr/product/B0...
+      // Desktop linkler: amazon.com.tr/dp/B0... veya amazon.com.tr/gp/product/B0...
+      final regExp = RegExp(r'/(?:dp|gp\/product|product|aw\/d)/([A-Z0-9]{10})');
+      final match = regExp.firstMatch(targetUrl);
+
+      if (match != null) {
+        final asin = match.group(1); // Örn: B085YBJT9R
+        
+        // Amazon görsel linkini oluştur
+        final amazonImageUrl = "https://images-na.ssl-images-amazon.com/images/P/$asin.01._SCLZZZZZZZ_.jpg";
+        _log('✅ Amazon ASIN bulundu: $asin, Görsel URL: $amazonImageUrl');
+        return amazonImageUrl;
+      } else {
+        _log('⚠️ Amazon URL\'de ASIN bulunamadı: $targetUrl');
+      }
+    } catch (e) {
+      _log("❌ Amazon görsel çekme hatası: $e");
+    }
+    return null; // Bulamazsa null döner
+  }
+
   Future<String?> _extractImageFromHtml(String url) async {
     try {
-      print('🔍 HTML parsing başlatılıyor: $url');
+      _log('🔍 HTML parsing başlatılıyor: $url');
       final response = await http.get(
         Uri.parse(url),
         headers: {
@@ -159,11 +264,11 @@ class LinkPreviewService {
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
-        print('⚠️ HTTP Status: ${response.statusCode}');
+        _log('⚠️ HTTP Status: ${response.statusCode}');
         return null;
       }
       
-      print('✅ HTML başarıyla indirildi (${response.bodyBytes.length} bytes)');
+      _log('✅ HTML başarıyla indirildi (${response.bodyBytes.length} bytes)');
 
       final htmlContent = utf8.decode(response.bodyBytes);
       final document = html_parser.parse(htmlContent);
@@ -232,6 +337,99 @@ class LinkPreviewService {
         }
       }
 
+      // Amazon özel kontrolleri
+      if (url.contains('amazon.') || url.contains('amazon.com.tr') || url.contains('amazon.com')) {
+        _log('🛒 Amazon URL tespit edildi, özel görsel çekme başlatılıyor...');
+        
+        // Amazon'un data-a-dynamic-image attribute'u (en güvenilir yöntem)
+        final amazonDynamicImages = document.querySelectorAll('[data-a-dynamic-image]');
+        for (final element in amazonDynamicImages) {
+          try {
+            final dynamicImageData = element.attributes['data-a-dynamic-image'];
+            if (dynamicImageData != null && dynamicImageData.isNotEmpty) {
+              final jsonData = jsonDecode(dynamicImageData);
+              if (jsonData is Map) {
+                // İlk görseli al (en büyük genellikle)
+                final firstKey = jsonData.keys.first;
+                if (firstKey != null && firstKey is String) {
+                  _log('✅ Amazon dynamic image bulundu: $firstKey');
+                  return firstKey;
+                }
+              }
+            }
+          } catch (e) {
+            _log('⚠️ Amazon dynamic image parse hatası: $e');
+          }
+        }
+        
+        // Amazon'un ürün görseli için özel selector'lar
+        final amazonSelectors = [
+          '#landingImage',
+          '#imgBlkFront',
+          '#main-image',
+          '#imageBlock_feature_div img',
+          '#imageBlock img',
+          '#altImages img',
+          '.a-dynamic-image',
+          '[id*="landingImage"]',
+          '[id*="main-image"]',
+        ];
+        
+        for (final selector in amazonSelectors) {
+          final images = document.querySelectorAll(selector);
+          for (final img in images) {
+            String? imageUrl = img.attributes['src'] ?? 
+                             img.attributes['data-src'] ?? 
+                             img.attributes['data-a-dynamic-image'] ??
+                             img.attributes['data-old-src'];
+            
+            if (imageUrl != null && imageUrl.isNotEmpty && !imageUrl.startsWith('data:')) {
+              // Amazon'un placeholder görsellerini atla
+              if (imageUrl.contains('pixel') || 
+                  imageUrl.contains('placeholder') ||
+                  imageUrl.contains('spinner') ||
+                  imageUrl.contains('loading')) {
+                continue;
+              }
+              
+              // Amazon CDN görsellerini tercih et
+              if (imageUrl.contains('images-na.ssl-images-amazon.com') ||
+                  imageUrl.contains('images-eu.ssl-images-amazon.com') ||
+                  imageUrl.contains('images-amazon.com')) {
+                final resolved = _resolveImageUrl(imageUrl, url);
+                if (resolved != null) {
+                  _log('✅ Amazon görsel bulundu: $resolved');
+                  return resolved;
+                }
+              }
+            }
+          }
+        }
+        
+        // Amazon JSON-LD schema'dan görsel çek
+        final amazonJsonLd = document.querySelectorAll('script[type="application/ld+json"]');
+        for (final script in amazonJsonLd) {
+          try {
+            final jsonContent = script.text;
+            if (jsonContent.contains('Product') || jsonContent.contains('image')) {
+              final jsonData = jsonDecode(jsonContent);
+              final imageUrl = _extractImageFromJson(jsonData);
+              if (imageUrl != null && imageUrl.isNotEmpty) {
+                final resolved = _resolveImageUrl(imageUrl, url);
+                if (resolved != null) {
+                  _log('✅ Amazon JSON-LD görsel bulundu: $resolved');
+                  return resolved;
+                }
+              }
+            }
+          } catch (e) {
+            // JSON parse hatası, devam et
+          }
+        }
+        
+        _log('⚠️ Amazon özel görsel çekme başarısız, genel yöntem deneniyor...');
+      }
+      
       // Hepsiburada özel kontrolleri
       if (url.contains('hepsiburada.com')) {
         // Hepsiburada kampanya görselleri genellikle bu attribute'larda
@@ -282,8 +480,27 @@ class LinkPreviewService {
             continue;
           }
           
+          // Amazon için özel filtreleme
+          if (url.contains('amazon.') || url.contains('amazon.com.tr') || url.contains('amazon.com')) {
+            // Amazon CDN görsellerini tercih et
+            if (src.contains('images-na.ssl-images-amazon.com') ||
+                src.contains('images-eu.ssl-images-amazon.com') ||
+                src.contains('images-amazon.com')) {
+              // Placeholder'ları atla
+              if (!src.contains('pixel') && 
+                  !src.contains('placeholder') &&
+                  !src.contains('spinner') &&
+                  !src.contains('loading')) {
+                final resolved = _resolveImageUrl(src, url);
+                if (resolved != null && resolved.isNotEmpty) {
+                  _log('✅ Amazon genel görsel bulundu: $resolved');
+                  return resolved;
+                }
+              }
+            }
+          }
           // Hepsiburada için özel filtreleme
-          if (url.contains('hepsiburada.com')) {
+          else if (url.contains('hepsiburada.com')) {
             // Sadece ürün/kampanya görsellerini al
             if (src.contains('product') || 
                 src.contains('campaign') || 
@@ -305,7 +522,7 @@ class LinkPreviewService {
 
       return null;
     } catch (e) {
-      print('_extractImageFromHtml error: $e');
+      _log('_extractImageFromHtml error: $e');
       return null;
     }
   }

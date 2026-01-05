@@ -54,3 +54,4 @@ Eğer hala Google Sign-In çalışmıyorsa:
 - Uygulamayı tamamen kaldırıp yeniden yükleyin
 - Firebase Console'da birkaç dakika bekleyin (değişikliklerin yayılması için)
 
+

@@ -23,3 +23,4 @@ echo "📋 Logları görmek için: tail -f ~/sicak_firsatlar_bot/logs/bot.log"
 
 
 
+

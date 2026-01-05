@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:intl/intl.dart';
@@ -9,13 +10,20 @@ import 'package:photo_view/photo_view.dart';
 import '../models/deal.dart';
 import '../models/comment.dart';
 import '../models/category.dart';
+import '../models/user.dart' as app_user;
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/link_preview_service.dart';
+import '../services/notification_service.dart';
 import '../utils/badge_helper.dart';
 import '../theme/app_theme.dart';
 import '../widgets/category_selector_widget.dart';
 import 'profile_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+void _log(String message) {
+  if (kDebugMode) print(message);
+}
 
 class DealDetailScreen extends StatefulWidget {
   final String dealId;
@@ -210,6 +218,98 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     });
   }
 
+  Future<void> _handleExpiredVote() async {
+    final user = _authService.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Oy vermek için giriş yapmalısınız'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_currentDeal == null) return;
+
+    // Eğer zaten expired vote verilmişse, işlem yapma
+    if (_hasVotedExpired) {
+      return;
+    }
+
+    // Loading state
+    setState(() {
+      _isExpiredVoting = true;
+    });
+
+    // Önceki oy durumunu kaydet
+    final previousHotVote = _hasVotedHot;
+    final previousColdVote = _hasVotedCold;
+    final previousHotVotes = _hotVotes;
+    final previousColdVotes = _coldVotes;
+    final previousExpiredVotes = _expiredVotes;
+
+    // Optimistic UI update
+    setState(() {
+      // Eğer daha önce hot veya cold vermişse, onları kaldır
+      if (_hasVotedHot) {
+        _hasVotedHot = false;
+        _hotVotes = _hotVotes > 0 ? _hotVotes - 1 : 0;
+      }
+      if (_hasVotedCold) {
+        _hasVotedCold = false;
+        _coldVotes = _coldVotes > 0 ? _coldVotes - 1 : 0;
+      }
+      _hasVotedExpired = true;
+      _expiredVotes += 1;
+    });
+
+    // Firestore'a kaydet
+    final success = await _firestoreService.addExpiredVote(_currentDeal!.id, user.uid);
+
+    if (!success && mounted) {
+      // Hata durumunda önceki duruma geri dön
+      setState(() {
+        _hasVotedHot = previousHotVote;
+        _hasVotedCold = previousColdVote;
+        _hotVotes = previousHotVotes;
+        _coldVotes = previousColdVotes;
+        _expiredVotes = previousExpiredVotes;
+        _hasVotedExpired = false;
+        _isExpiredVoting = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Oy gönderilirken bir hata oluştu. Lütfen tekrar deneyin.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    // Deal'i yeniden yükle
+    _loadDeal();
+    _checkUserVote();
+
+    if (!mounted) return;
+
+    setState(() {
+      _isExpiredVoting = false;
+    });
+
+    // 15 kişi basıldıysa bilgilendir
+    if (_expiredVotes >= 15) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fırsat bitti olarak işaretlendi'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   Future<void> _removeHotVote() async {
     final user = _authService.currentUser;
     if (user == null || _currentDeal == null) return;
@@ -326,7 +426,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         }
       }
     } catch (e) {
-      print('Deal yükleme hatası: $e');
+      _log('Deal yükleme hatası: $e');
     }
   }
 
@@ -362,7 +462,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         }
       }
     } catch (e) {
-      print('Görsel çekme hatası: $e');
+      _log('Görsel çekme hatası: $e');
       if (mounted) {
         setState(() {
           _isFetchingImage = false;
@@ -708,9 +808,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                       child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Store + Category
+                                    // Store + Category + Paylaşan
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
@@ -760,43 +861,153 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             ),
                                           ],
                                         ),
-                            InkWell(
-                              onTap: _isAdmin ? () => _showCategoryEditDialog(deal) : null,
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: primaryColor.withValues(alpha: _isAdmin ? 0.5 : 0.2),
-                                    width: _isAdmin ? 1.5 : 0.5,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      category.name.toUpperCase(),
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: isDark ? primaryColor : Colors.black,
-                                        letterSpacing: 1.2,
-                                      ),
-                                    ),
-                                    if (_isAdmin) ...[
-                                      const SizedBox(width: 4),
-                                      Icon(
-                                        Icons.edit,
-                                        size: 12,
-                                        color: primaryColor,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
+                                        // Sağ taraf: Kategori + Paylaşan
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            InkWell(
+                                              onTap: _isAdmin ? () => _showCategoryEditDialog(deal) : null,
+                                              borderRadius: BorderRadius.circular(8),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                decoration: BoxDecoration(
+                                                  color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: primaryColor.withValues(alpha: _isAdmin ? 0.5 : 0.2),
+                                                    width: _isAdmin ? 1.5 : 0.5,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      category.name.toUpperCase(),
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: isDark ? primaryColor : Colors.black,
+                                                        letterSpacing: 1.2,
+                                                      ),
+                                                    ),
+                                                    if (_isAdmin) ...[
+                                                      const SizedBox(width: 4),
+                                                      Icon(
+                                                        Icons.edit,
+                                                        size: 12,
+                                                        color: primaryColor,
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            // Paylaşan Kullanıcı (sadece kullanıcı paylaşımlarında göster)
+                                            if (deal.postedBy.isNotEmpty && deal.isUserSubmitted)
+                                              Padding(
+                                                padding: const EdgeInsets.only(top: 8),
+                                                child: StreamBuilder<DocumentSnapshot>(
+                                                  stream: FirebaseFirestore.instance
+                                                      .collection('users')
+                                                      .doc(deal.postedBy)
+                                                      .snapshots(),
+                                                  builder: (context, snapshot) {
+                                                    if (!snapshot.hasData || !snapshot.data!.exists) {
+                                                      return const SizedBox.shrink();
+                                                    }
+                                                    
+                                                    final userData = snapshot.data!.data() as Map<String, dynamic>;
+                                                    final username = userData['username']?.toString() ?? 'Kullanıcı';
+                                                    final profileImageUrl = userData['profileImageUrl']?.toString() ?? '';
+                                                    
+                                                    return InkWell(
+                                                      onTap: () {
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (_) => ProfileScreen(userId: deal.postedBy),
+                                                          ),
+                                                        );
+                                                      },
+                                                      borderRadius: BorderRadius.circular(16),
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                        decoration: BoxDecoration(
+                                                          color: isDark 
+                                                              ? Colors.white.withValues(alpha: 0.05) 
+                                                              : Colors.white,
+                                                          borderRadius: BorderRadius.circular(16),
+                                                          border: Border.all(
+                                                            color: primaryColor.withValues(alpha: 0.3),
+                                                            width: 1,
+                                                          ),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            ClipOval(
+                                                              child: profileImageUrl.isNotEmpty
+                                                                  ? CachedNetworkImage(
+                                                                      imageUrl: profileImageUrl,
+                                                                      width: 16,
+                                                                      height: 16,
+                                                                      fit: BoxFit.cover,
+                                                                      memCacheWidth: 32,
+                                                                      memCacheHeight: 32,
+                                                                      fadeInDuration: const Duration(milliseconds: 200),
+                                                                      placeholder: (context, url) => Container(
+                                                                        width: 16,
+                                                                        height: 16,
+                                                                        color: primaryColor.withOpacity(0.1),
+                                                                        child: Icon(
+                                                                          Icons.person,
+                                                                          size: 10,
+                                                                          color: primaryColor,
+                                                                        ),
+                                                                      ),
+                                                                      errorWidget: (context, url, error) => Container(
+                                                                        width: 16,
+                                                                        height: 16,
+                                                                        color: primaryColor.withOpacity(0.1),
+                                                                        child: Icon(
+                                                                          Icons.person,
+                                                                          size: 10,
+                                                                          color: primaryColor,
+                                                                        ),
+                                                                      ),
+                                                                    )
+                                                                  : Container(
+                                                                      width: 16,
+                                                                      height: 16,
+                                                                      decoration: BoxDecoration(
+                                                                        color: primaryColor.withOpacity(0.1),
+                                                                        shape: BoxShape.circle,
+                                                                      ),
+                                                                      child: Icon(
+                                                                        Icons.person,
+                                                                        size: 10,
+                                                                        color: primaryColor,
+                                                                      ),
+                                                                    ),
+                                                            ),
+                                                            const SizedBox(width: 6),
+                                                            Text(
+                                                              username,
+                                                              style: TextStyle(
+                                                                fontSize: 11,
+                                                                fontWeight: FontWeight.w600,
+                                                                color: primaryColor,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                          ],
+                                        ),
                                       ],
                             ),
                                     const SizedBox(height: 24),
@@ -857,7 +1068,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                         height: 1.2,
                                       ),
                                     ),
-                                    const SizedBox(height: 24),
+                                    const SizedBox(height: 16),
                                     // Stats Grid (3 columns)
                                     Row(
                                     children: [
@@ -872,7 +1083,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             isDark: isDark,
                                   ),
                                 ),
-                                        const SizedBox(width: 12),
+                                        const SizedBox(width: 8),
                                         Expanded(
                                           child: _buildStatButton(
                                             icon: Icons.chat_bubble_outline,
@@ -883,51 +1094,24 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             isDark: isDark,
                                           ),
                                         ),
-                                        const SizedBox(width: 12),
-                              Expanded(
-                                child: Container(
-                                            padding: const EdgeInsets.symmetric(vertical: 8),
-                                  decoration: BoxDecoration(
-                                              color: isDark 
-                                                  ? Colors.white.withValues(alpha: 0.05) 
-                                                  : AppTheme.background,
-                                              borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                                color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
-                                                width: 0.5,
-                                    ),
-                                  ),
-                                            child: Column(
-                                    children: [
-                                      Icon(
-                                                  Icons.visibility,
-                                                  size: 18,
-                                                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                      ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  '1.2k', // TODO: Gerçek görünüm sayısı
-                                          style: TextStyle(
-                                                    fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                                    color: isDark ? Colors.white : AppTheme.textPrimary,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 1),
-                                                Text(
-                                                  'Görünüm',
-                                                  style: TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: _buildStatButton(
+                                            icon: Icons.cancel_outlined,
+                                            count: _expiredVotes > 0 ? _expiredVotes : deal.expiredVotes,
+                                            label: 'Fırsat Bitti',
+                                            color: Colors.grey,
+                                            onTap: _handleExpiredVote,
+                                            isSelected: _hasVotedExpired,
+                                            isDark: isDark,
+                                            isLoading: _isExpiredVoting,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
+                                    const SizedBox(height: 16),
+                                    // 🔥 Fırsat Termometresi - Eğlenceli Oylama
+                                    _buildDealThermometer(deal, isDark, primaryColor),
                                     const SizedBox(height: 32),
                                     // Description
                           Row(
@@ -973,13 +1157,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                               Expanded(
                                                 child: Text(
                                                   deal.description.isNotEmpty ? deal.description : 'Açıklama eklemek için tıklayın',
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w500,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
                                                     color: deal.description.isNotEmpty 
                                                         ? (isDark ? Colors.grey[300] : AppTheme.textSecondary)
                                                         : (isDark ? Colors.grey[500] : Colors.grey[400]),
-                                                    height: 1.6,
+                                          height: 1.6,
                                                     fontStyle: deal.description.isEmpty ? FontStyle.italic : FontStyle.normal,
                                                   ),
                                                 ),
@@ -994,8 +1178,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                               ],
                                             ],
                                           ),
-                                        ),
-                                      ),
+                                    ),
+                                  ),
                                       const SizedBox(height: 12),
                                     ],
                                     const SizedBox(height: 80), // Bottom nav için padding
@@ -1159,6 +1343,202 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
+  /// 🔥 Fırsat Termometresi - Eğlenceli Oylama Widget'ı
+  Widget _buildDealThermometer(Deal deal, bool isDark, Color primaryColor) {
+    final hotVotes = _hotVotes > 0 ? _hotVotes : deal.hotVotes;
+    final coldVotes = _coldVotes > 0 ? _coldVotes : deal.coldVotes;
+    final totalVotes = hotVotes + coldVotes;
+    
+    // Sıcaklık yüzdesi hesapla (0-100)
+    final hotPercentage = totalVotes > 0 ? (hotVotes / totalVotes * 100).round() : 50;
+    
+    // Duruma göre eğlenceli mesaj ve emoji
+    String getMessage() {
+      if (totalVotes == 0) return 'Henüz oy yok, sen başlat! 🎯';
+      if (hotPercentage >= 80) return 'EFSANE FIRSAT! 🔥🔥🔥';
+      if (hotPercentage >= 60) return 'Kaçırma derim! 🏃💨';
+      if (hotPercentage >= 40) return 'Fena değil aslında 🤔';
+      if (hotPercentage >= 20) return 'Düşünürüm artık... 😬';
+      return 'Param cebimde kalsın 💸';
+    }
+    
+    // Sıcaklık rengini hesapla
+    Color getThermometerColor() {
+      if (hotPercentage >= 70) return Colors.red;
+      if (hotPercentage >= 50) return Colors.orange;
+      if (hotPercentage >= 30) return Colors.amber;
+      return Colors.blue;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark 
+              ? [Colors.grey[900]!, Colors.grey[850]!]
+              : [Colors.grey[50]!, Colors.white],
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          // Eğlenceli mesaj (kompakt)
+          Text(
+            getMessage(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          
+          // Termometre bar'ı
+          Row(
+            children: [
+              // Soğuk taraf
+              GestureDetector(
+                onTap: () => _handleVote(false),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _hasVotedCold 
+                        ? Colors.blue.withOpacity(0.2) 
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: _hasVotedCold ? Colors.blue : Colors.transparent,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('🥶', style: TextStyle(fontSize: 18)),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Geç',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue[400],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Termometre
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Skor gösterimi
+                      Text(
+                        totalVotes > 0 ? '$hotPercentage°' : '—',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: getThermometerColor(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      // Bar
+                      Container(
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return Stack(
+                              children: [
+                                // Doluluk
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 500),
+                                  curve: Curves.easeOutCubic,
+                                  width: constraints.maxWidth * (hotPercentage / 100),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [Colors.orange, Colors.red],
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.red.withOpacity(0.3),
+                                        blurRadius: 4,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      // Oy sayısı
+                      Text(
+                        '$totalVotes oy',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: isDark ? Colors.grey[500] : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Sıcak taraf
+              GestureDetector(
+                onTap: () => _handleVote(true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _hasVotedHot 
+                        ? Colors.red.withOpacity(0.2) 
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: _hasVotedHot ? Colors.red : Colors.transparent,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('🔥', style: TextStyle(fontSize: 18)),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Al!',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red[400],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatButton({
     required IconData icon,
     required int count,
@@ -1167,19 +1547,20 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     required VoidCallback onTap,
     required bool isDark,
     bool isSelected = false,
+    bool isLoading = false,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           decoration: BoxDecoration(
             color: isDark 
                 ? Colors.white.withValues(alpha: 0.05) 
                 : AppTheme.background,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected 
                   ? color.withValues(alpha: 0.3) 
@@ -1188,17 +1569,28 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               ),
                             ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 18,
-                color: color,
-                          ),
-              const SizedBox(height: 4),
+              if (isLoading)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                )
+              else
+                Icon(
+                  icon,
+                  size: 16,
+                  color: color,
+                            ),
+              const SizedBox(height: 3),
               Text(
                 count.toString(),
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: isDark ? Colors.white : AppTheme.textPrimary,
                       ),
@@ -1207,7 +1599,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 10,
                   fontWeight: FontWeight.w500,
                   color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
               ),
@@ -2124,6 +2516,28 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       'isApproved': true,
       'isEditorPick': isEditorPick,
     });
+    
+    // Anahtar kelime kontrolü yap - onaylanan fırsat için
+    if (_currentDeal != null) {
+      try {
+        final notificationService = NotificationService();
+        await notificationService.checkKeywordsAndNotify(
+          id,
+          _currentDeal!.title,
+          _currentDeal!.description,
+        );
+        _log('✅ Anahtar kelime kontrolü yapıldı: ${_currentDeal!.title}');
+
+        // Takip bildirimi artık Cloud Function tarafından otomatik gönderiliyor
+        // Deal onaylandığında Firestore trigger tetiklenir ve Cloud Function bildirimleri gönderir
+        if (_currentDeal!.isUserSubmitted && _currentDeal!.postedBy.isNotEmpty) {
+          _log('ℹ️ Takip bildirimi Cloud Function tarafından gönderilecek: ${_currentDeal!.postedBy}');
+        }
+      } catch (e) {
+        _log('❌ Anahtar kelime kontrolü hatası: $e');
+      }
+    }
+    
     if (mounted) {
       await _loadDeal();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2143,8 +2557,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Yayından Kaldır'),
-        content: const Text('Bu fırsatı yayından kaldırmak istediğinize emin misiniz? Fırsat ana ekrandan kaldırılacak.'),
+        title: const Text('Fırsatı Kaldır'),
+        content: const Text('Bu fırsatı kaldırmak istediğinize emin misiniz?\n\nFırsat "Süresi Bitenler" bölümüne taşınacak.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -2161,15 +2575,17 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
     if (confirm != true) return;
 
-    await _firestoreService.updateDeal(id, {'isApproved': false});
+    // Fırsatı "süresi bitmiş" olarak işaretle (onay bekleyenlere düşmez)
+    await _firestoreService.updateDeal(id, {'isExpired': true});
     if (mounted) {
-      await _loadDeal();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Fırsat yayından kaldırıldı ⚠️'),
+          content: Text('Fırsat kaldırıldı ve süresi bitenler bölümüne taşındı ⚠️'),
           backgroundColor: Colors.orange,
         ),
       );
+      // Geri dön çünkü fırsat artık görünmeyecek
+      Navigator.of(context).pop();
     }
   }
 
@@ -2501,8 +2917,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         throw Exception('Bağlantı açılamadı');
       }
     } catch (e) {
-      print('❌ URL açma hatası: $e');
-      print('❌ URL: $link');
+      _log('❌ URL açma hatası: $e');
+      _log('❌ URL: $link');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2526,7 +2942,18 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       return;
     }
 
-    final shareText = '${deal.title} - ${deal.store} - ${deal.link}';
+    // Zengin paylaşım metni
+    final priceText = deal.price > 0 ? '💰 ${deal.price.toStringAsFixed(0)} TL' : '';
+    final discountText = deal.discountRate != null && deal.discountRate! > 0 
+        ? ' (-%${deal.discountRate})' 
+        : '';
+    final shareText = '''🔥 ${deal.title}
+🏪 ${deal.store}
+$priceText$discountText
+
+👉 ${deal.link}
+
+📱 FIRSATKOLİK ile keşfet!''';
 
     await showModalBottomSheet(
       context: context,
@@ -2893,11 +3320,18 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     }
     String? selectedSubCategory = deal.subCategory;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Ürün Bilgilerini Düzenle'),
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+          title: Text(
+            'Ürün Bilgilerini Düzenle',
+            style: TextStyle(color: textColor),
+          ),
           content: SingleChildScrollView(
             child: SizedBox(
               width: double.maxFinite,
@@ -2907,17 +3341,23 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                 children: [
                   TextField(
                     controller: titleController,
-                    decoration: const InputDecoration(
+                    style: TextStyle(color: textColor),
+                    decoration: InputDecoration(
                       labelText: 'Başlık',
                       border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
                     ),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: descriptionController,
-                    decoration: const InputDecoration(
+                    style: TextStyle(color: textColor),
+                    decoration: InputDecoration(
                       labelText: 'Açıklama',
                       border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
                     ),
                     maxLines: 4,
                   ),
@@ -2927,9 +3367,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                       Expanded(
                         child: TextField(
                           controller: priceController,
-                          decoration: const InputDecoration(
+                          style: TextStyle(color: textColor),
+                          decoration: InputDecoration(
                             labelText: 'Fiyat (₺)',
                             border: OutlineInputBorder(),
+                            filled: true,
+                            fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
                           ),
                           keyboardType: TextInputType.number,
                         ),
@@ -2938,10 +3381,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                       Expanded(
                         child: TextField(
                           controller: originalPriceController,
-                          decoration: const InputDecoration(
+                          style: TextStyle(color: textColor),
+                          decoration: InputDecoration(
                             labelText: 'Eski Fiyat (₺)',
                             border: OutlineInputBorder(),
                             hintText: 'Opsiyonel',
+                            filled: true,
+                            fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
                           ),
                           keyboardType: TextInputType.number,
                         ),
@@ -3095,18 +3541,28 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       text: deal.originalPrice?.toStringAsFixed(2) ?? '',
     );
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Fiyat Düzenle'),
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        title: Text(
+          'Fiyat Düzenle',
+          style: TextStyle(color: textColor),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: priceController,
-              decoration: const InputDecoration(
+              style: TextStyle(color: textColor),
+              decoration: InputDecoration(
                 labelText: 'Güncel Fiyat (₺)',
                 border: OutlineInputBorder(),
+                filled: true,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
               ),
               keyboardType: TextInputType.number,
               autofocus: true,
@@ -3114,10 +3570,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: originalPriceController,
-              decoration: const InputDecoration(
+              style: TextStyle(color: textColor),
+              decoration: InputDecoration(
                 labelText: 'Eski Fiyat (₺)',
                 border: OutlineInputBorder(),
                 hintText: 'Opsiyonel',
+                filled: true,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
               ),
               keyboardType: TextInputType.number,
             ),
@@ -3554,7 +4013,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
         userBadges = userData.badges;
       }
     } catch (e) {
-      print('Kullanıcı bilgisi alınamadı: $e');
+      _log('Kullanıcı bilgisi alınamadı: $e');
     }
 
     final success = await _firestoreService.addComment(
@@ -3939,18 +4398,18 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                                 ),
                               );
                             },
-                            child: Text(
-                              comment.userName.isNotEmpty
-                                  ? comment.userName
-                                  : 'Kullanıcı',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: isReply ? 12 : 13,
-                                color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          child: Text(
+                            comment.userName.isNotEmpty
+                                ? comment.userName
+                                : 'Kullanıcı',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: isReply ? 12 : 13,
+                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
+                        ),
                         ),
                           // Rozetler
                           if (comment.userBadges.isNotEmpty) ...[
@@ -4012,46 +4471,46 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
                   
                   if (isAdmin || isOwnComment) {
                     return PopupMenuButton<String>(
-                      icon: Icon(
-                        Icons.more_vert_rounded,
-                        color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
-                        size: 16,
-                      ),
-                      onSelected: (value) {
-                        if (value == 'delete') {
-                          _deleteComment(comment);
+                  icon: Icon(
+                    Icons.more_vert_rounded,
+                    color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
+                    size: 16,
+                  ),
+                  onSelected: (value) {
+                    if (value == 'delete') {
+                      _deleteComment(comment);
                         } else if (value == 'block' && isAdmin) {
-                          _blockUser(comment.userId, comment.userName);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                              SizedBox(width: 8),
-                              Text('Yorumu Sil'),
-                            ],
-                          ),
-                        ),
+                      _blockUser(comment.userId, comment.userName);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                          SizedBox(width: 8),
+                          Text('Yorumu Sil'),
+                        ],
+                      ),
+                    ),
                         if (isAdmin)
-                          const PopupMenuItem(
-                            value: 'block',
-                            child: Row(
-                              children: [
-                                Icon(Icons.block_rounded, color: Colors.orange, size: 20),
-                                SizedBox(width: 8),
-                                Text('Kullanıcıyı Engelle'),
-                              ],
-                            ),
-                          ),
-                      ],
+                    const PopupMenuItem(
+                      value: 'block',
+                      child: Row(
+                        children: [
+                          Icon(Icons.block_rounded, color: Colors.orange, size: 20),
+                          SizedBox(width: 8),
+                          Text('Kullanıcıyı Engelle'),
+                        ],
+                      ),
+                    ),
+                  ],
                     );
                   }
                   return const SizedBox.shrink();
                 },
-              ),
+                ),
             ],
           ),
           const SizedBox(height: 6),
@@ -4186,6 +4645,7 @@ class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
     return DateFormat('d MMM yyyy').format(date);
   }
 }
+
 
 
 

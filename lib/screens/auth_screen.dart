@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import '../services/auth_service.dart';
+import '../theme/app_theme.dart';
 import 'home_screen.dart';
 import 'admin_screen.dart';
 
@@ -21,6 +22,22 @@ class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   
   @override
+  void initState() {
+    super.initState();
+    // Mobil platformda otomatik Google Sign-In başlat
+    if (!kIsWeb) {
+      // Kısa bir gecikme ile Google Sign-In'i başlat (ekran render olsun)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && !_isLoading) {
+            _signInWithGoogle();
+          }
+        });
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
@@ -29,33 +46,37 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _signInWithGoogleWeb() async {
+    if (_isLoading) return; // Double-tap koruması
+    
     setState(() => _isLoading = true);
     try {
       final user = await _authService.signInWithGoogle();
       if (user != null && mounted) {
-        // Admin kontrolü yap
         final isAdmin = await _authService.isAdmin();
         if (isAdmin) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const AdminScreen()),
-          );
+          _showSuccess('Admin paneline yönlendiriliyorsunuz...');
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const AdminScreen()),
+            );
+          }
         } else {
           await _authService.signOut();
-          _showError('Bu hesap admin yetkisine sahip değil. Sadece admin kullanıcılar web üzerinden giriş yapabilir.');
+          _showError('Bu hesap admin yetkisine sahip değil.');
         }
-      } else if (mounted) {
-        _showError('Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
+      }
+    } on AuthException catch (e) {
+      if (mounted && !e.message.contains('iptal')) {
+        _showError(e.message);
       }
     } catch (e) {
-      print('Auth screen error: $e');
       if (mounted) {
-        String errorMessage = 'Google ile giriş yapılamadı.';
+        String errorMessage = 'Beklenmeyen bir hata oluştu.';
         if (e.toString().contains('People API')) {
-          errorMessage = 'People API etkinleştirilmeli. Lütfen Firebase Console\'dan People API\'yi etkinleştirin veya Email/Şifre ile giriş yapın.';
+          errorMessage = 'People API etkinleştirilmeli. Email/Şifre ile giriş yapın.';
         } else if (e.toString().contains('popup')) {
-          errorMessage = 'Popup engelleyiciyi kapatıp tekrar deneyin';
-        } else if (e.toString().contains('network')) {
-          errorMessage = 'İnternet bağlantınızı kontrol edin';
+          errorMessage = 'Popup engelleyiciyi kapatıp tekrar deneyin.';
         }
         _showError(errorMessage);
       }
@@ -67,25 +88,30 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
+    if (_isLoading) return; // Double-tap koruması
+    
     setState(() => _isLoading = true);
     try {
       final user = await _authService.signInWithGoogle();
       if (user != null && mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      } else if (mounted) {
-        _showError('Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
+        // Başarılı giriş
+        _showSuccess('Hoş geldiniz, ${user.username}!');
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        }
+      }
+      // user == null ise kullanıcı iptal etti, hata gösterme
+    } on AuthException catch (e) {
+      // Kullanıcı dostu hata mesajı
+      if (mounted && !e.message.contains('iptal')) {
+        _showError(e.message);
       }
     } catch (e) {
-      print('Auth screen error: $e');
       if (mounted) {
-        final errorMessage = e.toString().contains('network')
-            ? 'İnternet bağlantınızı kontrol edin'
-            : e.toString().contains('popup')
-                ? 'Popup engelleyiciyi kapatıp tekrar deneyin'
-                : 'Bir hata oluştu: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e}';
-        _showError(errorMessage);
+        _showError('Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.');
       }
     } finally {
       if (mounted) {
@@ -95,6 +121,8 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _signInWithEmailPassword() async {
+    if (_isLoading) return; // Double-tap koruması
+    
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -110,7 +138,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
         
         if (user != null && mounted) {
-          _showError('✅ Kayıt başarılı! Firebase Console\'dan bu kullanıcıyı admin yapın, sonra giriş yapın.\nEmail: ${_emailController.text.trim()}');
+          _showSuccess('Kayıt başarılı! Şimdi admin yetkisi için bekleyin.');
           setState(() {
             _isSignUp = false;
             _usernameController.clear();
@@ -124,39 +152,32 @@ class _AuthScreenState extends State<AuthScreen> {
         );
         
         if (user != null) {
-          // Admin kontrolü yap
           final isAdmin = await _authService.isAdmin();
           if (isAdmin) {
             if (mounted) {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const AdminScreen()),
-              );
+              _showSuccess('Admin paneline yönlendiriliyorsunuz...');
+              await Future.delayed(const Duration(milliseconds: 500));
+              if (mounted) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const AdminScreen()),
+                );
+              }
             }
           } else {
             if (mounted) {
               await _authService.signOut();
-              _showError('Bu hesap admin yetkisine sahip değil. Sadece admin kullanıcılar web üzerinden giriş yapabilir.');
+              _showError('Bu hesap admin yetkisine sahip değil.');
             }
           }
-        } else if (mounted) {
-          _showError('Email veya şifre hatalı');
         }
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        _showError(e.message);
       }
     } catch (e) {
       if (mounted) {
-        String errorMsg = 'Bir hata oluştu';
-        if (e.toString().contains('user-not-found')) {
-          errorMsg = 'Kullanıcı bulunamadı';
-        } else if (e.toString().contains('wrong-password')) {
-          errorMsg = 'Şifre hatalı';
-        } else if (e.toString().contains('email-already-in-use')) {
-          errorMsg = 'Bu email zaten kullanılıyor. Giriş yapın.';
-        } else if (e.toString().contains('weak-password')) {
-          errorMsg = 'Şifre çok zayıf. En az 6 karakter olmalı.';
-        } else if (e.toString().contains('invalid-email')) {
-          errorMsg = 'Geçersiz email adresi';
-        }
-        _showError(errorMsg);
+        _showError('Beklenmeyen bir hata oluştu.');
       }
     } finally {
       if (mounted) {
@@ -166,19 +187,27 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _signInWithApple() async {
+    if (_isLoading) return; // Double-tap koruması
+    
     setState(() => _isLoading = true);
     try {
       final user = await _authService.signInWithApple();
       if (user != null && mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      } else if (mounted) {
-        _showError('Apple ile giriş yapılamadı');
+        _showSuccess('Hoş geldiniz, ${user.username}!');
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        }
+      }
+    } on AuthException catch (e) {
+      if (mounted && !e.message.contains('iptal')) {
+        _showError(e.message);
       }
     } catch (e) {
       if (mounted) {
-        _showError('Bir hata oluştu: $e');
+        _showError('Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.');
       }
     } finally {
       if (mounted) {
@@ -190,15 +219,46 @@ class _AuthScreenState extends State<AuthScreen> {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red[600],
         behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.green[600],
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -207,7 +267,7 @@ class _AuthScreenState extends State<AuthScreen> {
             end: Alignment.bottomRight,
             colors: [
               const Color(0xFFFF6B35).withValues(alpha: 0.1),
-              Colors.white,
+              isDark ? AppTheme.darkBackground : Colors.white,
             ],
           ),
         ),
@@ -304,7 +364,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _buildEmailPasswordForm(),
+                    _buildEmailPasswordForm(isDark, textColor),
                   ] else ...[
                     // Mobil için Google ile Giriş Butonu
                     _buildSocialButton(
@@ -389,7 +449,7 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _buildEmailPasswordForm() {
+  Widget _buildEmailPasswordForm(bool isDark, Color textColor) {
     return Form(
       key: _formKey,
       child: Column(
@@ -398,6 +458,7 @@ class _AuthScreenState extends State<AuthScreen> {
           if (_isSignUp) ...[
             TextFormField(
               controller: _usernameController,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 labelText: 'Kullanıcı Adı',
                 prefixIcon: const Icon(Icons.person_outlined),
@@ -405,7 +466,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   borderRadius: BorderRadius.circular(16),
                 ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
@@ -422,6 +483,7 @@ class _AuthScreenState extends State<AuthScreen> {
           TextFormField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
+            style: TextStyle(color: textColor),
             decoration: InputDecoration(
               labelText: 'Email',
               prefixIcon: const Icon(Icons.email_outlined),
@@ -429,7 +491,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
@@ -445,6 +507,7 @@ class _AuthScreenState extends State<AuthScreen> {
           TextFormField(
             controller: _passwordController,
             obscureText: true,
+            style: TextStyle(color: textColor),
             decoration: InputDecoration(
               labelText: 'Şifre',
               prefixIcon: const Icon(Icons.lock_outlined),
@@ -452,7 +515,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {

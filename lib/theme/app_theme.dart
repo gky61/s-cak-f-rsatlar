@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   AppTheme._();
@@ -23,60 +25,63 @@ class AppTheme {
       error: error,
     );
 
+    // Türkçe karakter desteği için Google Fonts'tan Roboto kullan
+    final textTheme = GoogleFonts.robotoTextTheme();
+    
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: baseColorScheme,
       scaffoldBackgroundColor: background,
-      // Sistem fontunu kullan (Türkçe karakter desteği için)
+      fontFamily: GoogleFonts.roboto().fontFamily, // Türkçe karakter desteği için
     );
 
     return base.copyWith(
-      textTheme: base.textTheme.copyWith(
-        displayMedium: const TextStyle(
+      textTheme: textTheme.copyWith(
+        displayMedium: GoogleFonts.roboto(
           fontWeight: FontWeight.w800,
           letterSpacing: -1.0,
           height: 1.1,
           color: textPrimary,
         ),
-        headlineMedium: const TextStyle(
+        headlineMedium: GoogleFonts.roboto(
           fontWeight: FontWeight.w700,
           letterSpacing: -0.5,
           height: 1.2,
           color: textPrimary,
         ),
-        titleLarge: const TextStyle(
+        titleLarge: GoogleFonts.roboto(
           fontWeight: FontWeight.w700,
           fontSize: 18,
           color: textPrimary,
         ),
-        titleMedium: const TextStyle(
+        titleMedium: GoogleFonts.roboto(
           fontWeight: FontWeight.w600,
           fontSize: 16,
           color: textPrimary,
         ),
-        bodyLarge: const TextStyle(
+        bodyLarge: GoogleFonts.roboto(
           fontWeight: FontWeight.w500,
           fontSize: 14,
           color: textPrimary,
         ),
-        bodyMedium: const TextStyle(
+        bodyMedium: GoogleFonts.roboto(
           fontWeight: FontWeight.w400,
           fontSize: 14,
           color: textSecondary,
         ),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: surface,
         foregroundColor: textPrimary,
-        titleTextStyle: TextStyle(
+        titleTextStyle: GoogleFonts.roboto(
           fontWeight: FontWeight.w800,
           fontSize: 20,
           color: textPrimary,
         ),
-        iconTheme: IconThemeData(color: textPrimary),
+        iconTheme: const IconThemeData(color: textPrimary),
       ),
       cardTheme: CardTheme(
         color: surface,
@@ -102,7 +107,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
+          textStyle: GoogleFonts.roboto(
             fontWeight: FontWeight.w700,
             fontSize: 14,
           ),
@@ -116,7 +121,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
+          textStyle: GoogleFonts.roboto(
             fontWeight: FontWeight.w700,
             fontSize: 14,
           ),
@@ -124,7 +129,7 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: accent,
-        contentTextStyle: const TextStyle(
+        contentTextStyle: GoogleFonts.roboto(
           color: Colors.white,
           fontWeight: FontWeight.w600,
         ),
@@ -134,7 +139,7 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         elevation: 4,
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: surface,
         selectedItemColor: primary,
         unselectedItemColor: textSecondary,
@@ -142,18 +147,36 @@ class AppTheme {
         elevation: 8,
         showSelectedLabels: true,
         showUnselectedLabels: true,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        selectedLabelStyle: GoogleFonts.roboto(fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelStyle: GoogleFonts.roboto(fontWeight: FontWeight.w500, fontSize: 12),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: surface,
         selectedColor: secondary,
-        labelStyle: const TextStyle(color: textPrimary),
-        secondaryLabelStyle: const TextStyle(color: Colors.white),
+        labelStyle: GoogleFonts.roboto(color: textPrimary),
+        secondaryLabelStyle: GoogleFonts.roboto(color: Colors.white),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: Color(0xFFE0E0E0), width: 1),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surface,
+        labelStyle: GoogleFonts.roboto(color: textSecondary),
+        hintStyle: GoogleFonts.roboto(color: textSecondary),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: primary, width: 2),
         ),
       ),
     );
@@ -180,60 +203,63 @@ class AppTheme {
       error: error,
     );
 
+    // Türkçe karakter desteği için Google Fonts'tan Roboto kullan
+    final textThemeDark = GoogleFonts.robotoTextTheme(ThemeData.dark().textTheme);
+    
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: baseColorScheme,
       scaffoldBackgroundColor: darkBackground,
-      // Sistem fontunu kullan
+      fontFamily: GoogleFonts.roboto().fontFamily, // Türkçe karakter desteği için
     );
 
     return base.copyWith(
-      textTheme: base.textTheme.copyWith(
-        displayMedium: const TextStyle(
+      textTheme: textThemeDark.copyWith(
+        displayMedium: GoogleFonts.roboto(
           fontWeight: FontWeight.w800,
           letterSpacing: -1.0,
           height: 1.1,
           color: darkTextPrimary,
         ),
-        headlineMedium: const TextStyle(
+        headlineMedium: GoogleFonts.roboto(
           fontWeight: FontWeight.w700,
           letterSpacing: -0.5,
           height: 1.2,
           color: darkTextPrimary,
         ),
-        titleLarge: const TextStyle(
+        titleLarge: GoogleFonts.roboto(
           fontWeight: FontWeight.w700,
           fontSize: 18,
           color: darkTextPrimary,
         ),
-        titleMedium: const TextStyle(
+        titleMedium: GoogleFonts.roboto(
           fontWeight: FontWeight.w600,
           fontSize: 16,
           color: darkTextPrimary,
         ),
-        bodyLarge: const TextStyle(
+        bodyLarge: GoogleFonts.roboto(
           fontWeight: FontWeight.w500,
           fontSize: 14,
           color: darkTextPrimary,
         ),
-        bodyMedium: const TextStyle(
+        bodyMedium: GoogleFonts.roboto(
           fontWeight: FontWeight.w400,
           fontSize: 14,
           color: darkTextSecondary,
         ),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: darkSurface,
         foregroundColor: darkTextPrimary,
-        titleTextStyle: TextStyle(
+        titleTextStyle: GoogleFonts.roboto(
           fontWeight: FontWeight.w800,
           fontSize: 20,
           color: darkTextPrimary,
         ),
-        iconTheme: IconThemeData(color: darkTextPrimary),
+        iconTheme: const IconThemeData(color: darkTextPrimary),
       ),
       cardTheme: CardTheme(
         color: darkSurface,
@@ -259,7 +285,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
+          textStyle: GoogleFonts.roboto(
             fontWeight: FontWeight.w700,
             fontSize: 14,
           ),
@@ -273,7 +299,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
+          textStyle: GoogleFonts.roboto(
             fontWeight: FontWeight.w700,
             fontSize: 14,
           ),
@@ -281,7 +307,7 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: darkSurface,
-        contentTextStyle: const TextStyle(
+        contentTextStyle: GoogleFonts.roboto(
           color: darkTextPrimary,
           fontWeight: FontWeight.w600,
         ),
@@ -291,7 +317,7 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         elevation: 4,
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: darkSurface,
         selectedItemColor: primary,
         unselectedItemColor: darkTextSecondary,
@@ -299,15 +325,15 @@ class AppTheme {
         elevation: 8,
         showSelectedLabels: true,
         showUnselectedLabels: true,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        selectedLabelStyle: GoogleFonts.roboto(fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelStyle: GoogleFonts.roboto(fontWeight: FontWeight.w500, fontSize: 12),
       ),
       dividerColor: darkDivider,
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: darkSurfaceElevated,
-        labelStyle: const TextStyle(color: darkTextSecondary),
-        hintStyle: const TextStyle(color: darkTextSecondary),
+        labelStyle: GoogleFonts.roboto(color: darkTextSecondary),
+        hintStyle: GoogleFonts.roboto(color: darkTextSecondary),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: darkBorder, width: 1.5),
@@ -324,8 +350,8 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: darkSurfaceElevated,
         selectedColor: secondary,
-        labelStyle: const TextStyle(color: darkTextPrimary),
-        secondaryLabelStyle: const TextStyle(color: Colors.white),
+        labelStyle: GoogleFonts.roboto(color: darkTextPrimary),
+        secondaryLabelStyle: GoogleFonts.roboto(color: Colors.white),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),

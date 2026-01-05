@@ -124,3 +124,4 @@ Her izin için Google Play Console'da açıklama yapılmalı.
 - [ ] Release build test et
 - [ ] Google Play Console'da store listing doldur
 
+

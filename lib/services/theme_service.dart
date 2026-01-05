@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:shared_preferences/shared_preferences.dart';
+
+void _log(String message) {
+  if (kDebugMode) _log(message);
+}
 
 enum CardViewMode {
   vertical,
@@ -52,7 +57,7 @@ class ThemeService extends ChangeNotifier {
       
       notifyListeners();
     } catch (e) {
-      print('Ayarlar yükleme hatası: $e');
+      _log('Ayarlar yükleme hatası: $e');
     }
   }
 
@@ -66,7 +71,7 @@ class ThemeService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_themeModeKey, mode.toString());
     } catch (e) {
-      print('Tema modu kaydetme hatası: $e');
+      _log('Tema modu kaydetme hatası: $e');
     }
   }
 
@@ -85,7 +90,7 @@ class ThemeService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_viewModeKey, mode.toString());
     } catch (e) {
-      print('Görünüm modu kaydetme hatası: $e');
+      _log('Görünüm modu kaydetme hatası: $e');
     }
   }
 }

@@ -1,10 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+
+void _log(String message) {
+  if (kDebugMode) _log(message);
+}
 
 class AppUser {
   final String uid;
   final String username;
   final String profileImageUrl;
   final List<String> followedCategories;
+  final List<String> watchKeywords; // Takip edilen anahtar kelimeler
+  final List<String> following; // Takip edilen kullanıcılar (user ID'leri)
+  final List<String> followersWithNotifications; // Bildirim almak isteyen takipçiler (user ID'leri)
   final String? nickname;
   final int points;
   final int dealCount;
@@ -16,6 +24,9 @@ class AppUser {
     required this.username,
     required this.profileImageUrl,
     this.followedCategories = const [],
+    this.watchKeywords = const [],
+    this.following = const [],
+    this.followersWithNotifications = const [],
     this.nickname,
     this.points = 0,
     this.dealCount = 0,
@@ -52,6 +63,9 @@ class AppUser {
     String? username,
     String? profileImageUrl,
     List<String>? followedCategories,
+    List<String>? watchKeywords,
+    List<String>? following,
+    List<String>? followersWithNotifications,
     String? nickname,
     int? points,
     int? dealCount,
@@ -63,6 +77,9 @@ class AppUser {
       username: username ?? this.username,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       followedCategories: followedCategories ?? this.followedCategories,
+      watchKeywords: watchKeywords ?? this.watchKeywords,
+      following: following ?? this.following,
+      followersWithNotifications: followersWithNotifications ?? this.followersWithNotifications,
       nickname: nickname ?? this.nickname,
       points: points ?? this.points,
       dealCount: dealCount ?? this.dealCount,
@@ -97,7 +114,7 @@ class AppUser {
           }
         }
       } catch (e) {
-        print('Badges parse hatası: $e');
+        _log('Badges parse hatası: $e');
         badges = [];
       }
       
@@ -119,8 +136,58 @@ class AppUser {
           }
         }
       } catch (e) {
-        print('FollowedCategories parse hatası: $e');
+        _log('FollowedCategories parse hatası: $e');
         followedCategories = [];
+      }
+      
+      // watchKeywords alanını güvenli bir şekilde parse et
+      List<String> watchKeywords = [];
+      try {
+        final keywordsData = data['watchKeywords'];
+        if (keywordsData != null) {
+          if (keywordsData is List) {
+            watchKeywords = keywordsData
+                .where((e) => e != null)
+                .map((e) => e.toString())
+                .where((s) => s.isNotEmpty)
+                .toList();
+          }
+        }
+      } catch (e) {
+        _log('WatchKeywords parse hatası: $e');
+        watchKeywords = [];
+      }
+
+      // following alanını güvenli bir şekilde parse et
+      List<String> following = [];
+      try {
+        final followingData = data['following'];
+        if (followingData != null && followingData is List) {
+          following = followingData
+              .where((e) => e != null)
+              .map((e) => e.toString())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      } catch (e) {
+        _log('Following parse hatası: $e');
+        following = [];
+      }
+
+      // followersWithNotifications alanını güvenli bir şekilde parse et
+      List<String> followersWithNotifications = [];
+      try {
+        final followersData = data['followersWithNotifications'];
+        if (followersData != null && followersData is List) {
+          followersWithNotifications = followersData
+              .where((e) => e != null)
+              .map((e) => e.toString())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      } catch (e) {
+        _log('FollowersWithNotifications parse hatası: $e');
+        followersWithNotifications = [];
       }
       
       // Sayısal alanları güvenli bir şekilde parse et
@@ -140,6 +207,9 @@ class AppUser {
         username: data['username']?.toString() ?? '',
         profileImageUrl: data['profileImageUrl']?.toString() ?? '',
         followedCategories: followedCategories,
+        watchKeywords: watchKeywords,
+        following: following,
+        followersWithNotifications: followersWithNotifications,
         nickname: data['nickname']?.toString(),
         points: parseInt(data['points']),
         dealCount: parseInt(data['dealCount']),
@@ -147,26 +217,29 @@ class AppUser {
         badges: badges,
       );
     } catch (e, stackTrace) {
-      print('❌ AppUser.fromFirestore hatası: $e');
-      print('Stack trace: $stackTrace');
-      print('Document ID: ${doc.id}');
-      print('Document data: ${doc.data()}');
+      _log('❌ AppUser.fromFirestore hatası: $e');
+      _log('Stack trace: $stackTrace');
+      _log('Document ID: ${doc.id}');
+      _log('Document data: ${doc.data()}');
       
       // Hata durumunda minimum bilgilerle kullanıcı oluştur
       final data = doc.data();
       final dataMap = data is Map<String, dynamic> ? data : <String, dynamic>{};
       
-      return AppUser(
-        uid: doc.id,
+    return AppUser(
+      uid: doc.id,
         username: dataMap['username']?.toString() ?? 'Kullanıcı',
         profileImageUrl: dataMap['profileImageUrl']?.toString() ?? '',
         followedCategories: [],
+        watchKeywords: [],
+        following: [],
+        followersWithNotifications: [],
         nickname: dataMap['nickname']?.toString(),
         points: 0,
         dealCount: 0,
         totalLikes: 0,
         badges: [],
-      );
+    );
     }
   }
 
@@ -177,6 +250,9 @@ class AppUser {
       'username': username,
       'profileImageUrl': profileImageUrl,
       'followedCategories': followedCategories,
+      'watchKeywords': watchKeywords,
+      'following': following,
+      'followersWithNotifications': followersWithNotifications,
       if (nickname != null) 'nickname': nickname,
       'points': points,
       'dealCount': dealCount,

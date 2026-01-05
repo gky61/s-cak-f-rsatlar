@@ -1,4 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+
+void _log(String message) {
+  if (kDebugMode) _log(message);
+}
 
 class Deal {
   final String id;
@@ -21,6 +26,7 @@ class Deal {
   final bool isEditorPick;
   final bool isApproved;
   final bool isExpired;
+  final bool isUserSubmitted; // Kullanıcı tarafından paylaşıldı mı?
 
   Deal({
     required this.id,
@@ -43,6 +49,7 @@ class Deal {
     required this.isEditorPick,
     this.isApproved = false,
     this.isExpired = false,
+    this.isUserSubmitted = false,
   });
 
   // Firestore'dan Deal oluşturma
@@ -81,7 +88,7 @@ class Deal {
               createdAt = DateTime.parse(cleaned + 'Z');
             }
           } catch (e2) {
-            print('⚠️ createdAt string parse hatası: $e2, değer: $createdAtValue');
+            _log('⚠️ createdAt string parse hatası: $e2, değer: $createdAtValue');
             createdAt = DateTime.now();
           }
         }
@@ -103,7 +110,7 @@ class Deal {
         createdAt = DateTime.now();
       }
     } catch (e) {
-      print('⚠️ createdAt parse hatası: $e, değer: ${data['createdAt']}');
+      _log('⚠️ createdAt parse hatası: $e, değer: ${data['createdAt']}');
       createdAt = DateTime.now();
     }
     
@@ -128,6 +135,7 @@ class Deal {
       isEditorPick: data['isEditorPick'] == true,
       isApproved: data['isApproved'] == true,
       isExpired: data['isExpired'] == true,
+      isUserSubmitted: data['isUserSubmitted'] == true,
     );
   }
 
@@ -153,6 +161,7 @@ class Deal {
       'isEditorPick': isEditorPick,
       'isApproved': isApproved,
       'isExpired': isExpired,
+      'isUserSubmitted': isUserSubmitted,
     };
   }
 }

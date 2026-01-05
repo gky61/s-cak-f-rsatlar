@@ -7,3 +7,4 @@ keyPassword=your_key_password_here
 keyAlias=upload
 storeFile=/path/to/your/upload-keystore.jks
 
+

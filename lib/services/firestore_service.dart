@@ -1,28 +1,43 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'dart:async';
 import '../models/deal.dart';
 import '../models/comment.dart';
+import '../models/message.dart';
+import 'notification_service.dart';
+
+void _log(String message) {
+  if (kDebugMode) print(message);
+}
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Deals koleksiyonunu createdAt'e göre sıralayarak dinleme
-  // SADECE ONAYLANMIŞ fırsatları getirir (biten fırsatlar da gösterilir, kırmızı çizgili)
+  // SADECE ONAYLANMIŞ ve BİTMEMİŞ fırsatları getirir (isExpired: false)
+  // Ayrıca 24 saatten eski deal'ları da filtreler
   Stream<List<Deal>> getDealsStream() {
     return _firestore
         .collection('deals')
         .where('isApproved', isEqualTo: true)
         .snapshots()
         .map((snapshot) {
-      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
-      // Client-side'da tarihe göre sırala (index gerektirmez)
-      // Önce bitmeyenler, sonra bitenler
-      deals.sort((a, b) {
-        // Önce bitmeyenler
-        if (!a.isExpired && b.isExpired) return -1;
-        if (a.isExpired && !b.isExpired) return 1;
-        // Aynı durumdaysa tarihe göre sırala
-        return b.createdAt.compareTo(a.createdAt);
-      });
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(hours: 24));
+      
+      // Client-side'da filtrele: sadece bitmemiş ve 24 saatten yeni deal'ları göster
+      final deals = snapshot.docs
+          .map((doc) => Deal.fromFirestore(doc))
+          .where((deal) {
+            // isExpired: false olanları filtrele
+            if (deal.isExpired) return false;
+            // 24 saatten eski deal'ları filtrele
+            if (deal.createdAt.isBefore(cutoffTime)) return false;
+            return true;
+          })
+          .toList();
+      // Tarihe göre sırala (yeni önce)
+      deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return deals;
     });
   }
@@ -55,18 +70,25 @@ class FirestoreService {
       }
 
       final snapshot = await query.get();
-      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
-
-      // Client-side'da bitmeyenleri önce göster
-      deals.sort((a, b) {
-        if (!a.isExpired && b.isExpired) return -1;
-        if (a.isExpired && !b.isExpired) return 1;
-        return 0; // Zaten Firestore'da sıralı
-      });
-
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(hours: 24));
+      
+      // Client-side'da filtrele: sadece bitmemiş ve 24 saatten yeni deal'ları göster
+      final deals = snapshot.docs
+          .map((doc) => Deal.fromFirestore(doc))
+          .where((deal) {
+            // isExpired: false olanları filtrele
+            if (deal.isExpired) return false;
+            // 24 saatten eski deal'ları filtrele
+            if (deal.createdAt.isBefore(cutoffTime)) return false;
+            return true;
+          })
+          .toList();
+      
+      // Zaten Firestore'da tarihe göre sıralı
       return deals;
     } catch (e) {
-      print('Pagination hatası: $e');
+      _log('Pagination hatası: $e');
       return [];
     }
   }
@@ -102,12 +124,33 @@ class FirestoreService {
     });
   }
 
-  // Onay bekleyen deal'leri dinleme
+  // Onay bekleyen deal'leri dinleme (sadece bot fırsatları)
+  // isUserSubmitted alanı olmayan veya false olan fırsatlar bot fırsatıdır
   Stream<List<Deal>> getPendingDealsStream() {
     return _firestore
         .collection('deals')
         .where('isApproved', isEqualTo: false)
         .where('isExpired', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) {
+      // Client-side'da filtrele: isUserSubmitted false veya yok olanlar (bot fırsatları)
+      final deals = snapshot.docs
+          .map((doc) => Deal.fromFirestore(doc))
+          .where((deal) => !deal.isUserSubmitted) // isUserSubmitted false veya yok
+          .toList();
+      // Client-side'da tarihe göre sırala (index gerektirmez)
+      deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return deals;
+    });
+  }
+
+  // Kullanıcıların paylaştığı onay bekleyen deal'leri dinleme
+  Stream<List<Deal>> getUserSubmittedPendingDealsStream() {
+    return _firestore
+        .collection('deals')
+        .where('isApproved', isEqualTo: false)
+        .where('isExpired', isEqualTo: false)
+        .where('isUserSubmitted', isEqualTo: true)
         .snapshots()
         .map((snapshot) {
       final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
@@ -141,7 +184,7 @@ class FirestoreService {
       }
       return null;
     } catch (e) {
-      print('Deal getirme hatası: $e');
+      _log('Deal getirme hatası: $e');
       return null;
     }
   }
@@ -152,7 +195,7 @@ class FirestoreService {
       final docRef = await _firestore.collection('deals').add(deal.toFirestore());
       return docRef.id;
     } catch (e) {
-      print('Deal ekleme hatası: $e');
+      _log('Deal ekleme hatası: $e');
       return null;
     }
   }
@@ -170,9 +213,18 @@ class FirestoreService {
     required String userId,
   }) async {
     try {
+      _log('📝 createDeal çağrıldı:');
+      _log('   Başlık: $title');
+      _log('   Açıklama: ${description.isEmpty ? "BOŞ" : description}');
+      _log('   Kategori: $category');
+      _log('   Alt Kategori: ${subCategory ?? "YOK"}');
+      _log('   Fiyat: $price');
+      _log('   Mağaza: $store');
+      
       final deal = Deal(
         id: '', // Firestore otomatik ID oluşturacak
         title: title,
+        description: description, // Açıklama eklendi
         price: price,
         store: store,
         category: category,
@@ -185,18 +237,43 @@ class FirestoreService {
         commentCount: 0,
         createdAt: DateTime.now(),
         isEditorPick: false,
+        isUserSubmitted: true, // Kullanıcı tarafından paylaşıldı
       );
       
-      final docRef = await _firestore.collection('deals').add(deal.toFirestore());
+      final dealData = deal.toFirestore();
+      _log('📦 Firestore\'a kaydedilecek veri:');
+      _log('   category: ${dealData['category']}');
+      _log('   subCategory: ${dealData['subCategory'] ?? "YOK"}');
+      _log('   description: ${dealData['description'] ?? "YOK"}');
+      
+      final docRef = await _firestore.collection('deals').add(dealData);
       
       // Kullanıcının puanını artır (her paylaşım 5 puan)
       await _incrementUserPoints(userId, points: 5, dealCount: 1);
       
+      // Anahtar kelime kontrolü yap ve bildirim gönder (async olarak arka planda)
+      _checkKeywordsForDeal(docRef.id, title, description);
+      
+      // NOT: Takip bildirimi sadece admin deal'i onayladıktan sonra gönderilecek
+      // Burada gönderilmiyor çünkü deal henüz onaylanmamış
+      
       return docRef.id;
     } catch (e) {
-      print('Deal oluşturma hatası: $e');
+      _log('Deal oluşturma hatası: $e');
       return null;
     }
+  }
+
+  // Anahtar kelime kontrolü (arka planda çalışır)
+  void _checkKeywordsForDeal(String dealId, String title, String description) {
+    Future.delayed(Duration.zero, () async {
+      try {
+        final notificationService = NotificationService();
+        await notificationService.checkKeywordsAndNotify(dealId, title, description);
+      } catch (e) {
+        _log('❌ Anahtar kelime kontrolü hatası: $e');
+      }
+    });
   }
 
   // Kullanıcı puanını artır
@@ -209,7 +286,7 @@ class FirestoreService {
         'totalLikes': FieldValue.increment(totalLikes),
       }, SetOptions(merge: true));
     } catch (e) {
-      print('Kullanıcı puanı güncelleme hatası: $e');
+      _log('Kullanıcı puanı güncelleme hatası: $e');
     }
   }
 
@@ -219,7 +296,7 @@ class FirestoreService {
       await _firestore.collection('deals').doc(dealId).update(updates);
       return true;
     } catch (e) {
-      print('Deal güncelleme hatası: $e');
+      _log('Deal güncelleme hatası: $e');
       return false;
     }
   }
@@ -235,11 +312,11 @@ class FirestoreService {
           .get();
       
       if (voteDoc.exists) {
-        return voteDoc.data()?['type'] as String?; // 'hot' veya 'cold'
+        return voteDoc.data()?['type'] as String?; // 'hot', 'cold' veya 'expired'
       }
       return null;
     } catch (e) {
-      print('Kullanıcı oyu getirme hatası: $e');
+      _log('Kullanıcı oyu getirme hatası: $e');
       return null;
     }
   }
@@ -287,7 +364,7 @@ class FirestoreService {
       
       return true;
     } catch (e) {
-      print('Hot vote ekleme hatası: $e');
+      _log('Hot vote ekleme hatası: $e');
       return false;
     }
   }
@@ -327,7 +404,65 @@ class FirestoreService {
       await batch.commit();
       return true;
     } catch (e) {
-      print('Cold vote ekleme hatası: $e');
+      _log('Cold vote ekleme hatası: $e');
+      return false;
+    }
+  }
+
+  // Expired vote ekleme (fırsat bitti bildirimi)
+  Future<bool> addExpiredVote(String dealId, String userId) async {
+    try {
+      final batch = _firestore.batch();
+      
+      // Önceki oyu kontrol et ve güncelle
+      final voteRef = _firestore
+          .collection('deals')
+          .doc(dealId)
+          .collection('votes')
+          .doc(userId);
+      
+      final voteDoc = await voteRef.get();
+      if (voteDoc.exists) {
+        final currentType = voteDoc.data()?['type'] as String?;
+        if (currentType == 'expired') {
+          // Zaten expired vote vermiş
+          return true;
+        }
+        // Önceki oyu temizle (hot veya cold olsun)
+        if (currentType == 'hot') {
+          batch.update(_firestore.collection('deals').doc(dealId), {
+            'hotVotes': FieldValue.increment(-1),
+          });
+        } else if (currentType == 'cold') {
+          batch.update(_firestore.collection('deals').doc(dealId), {
+            'coldVotes': FieldValue.increment(-1),
+          });
+        }
+      }
+      
+      // Expired vote ekle/güncelle
+      batch.set(voteRef, {'type': 'expired'}, SetOptions(merge: true));
+      batch.update(_firestore.collection('deals').doc(dealId), {
+        'expiredVotes': FieldValue.increment(1),
+      });
+      
+      await batch.commit();
+      
+      // ExpiredVotes sayısını kontrol et - 15'e ulaştıysa otomatik olarak isExpired: true yap
+      final dealDoc = await _firestore.collection('deals').doc(dealId).get();
+      if (dealDoc.exists) {
+        final dealData = dealDoc.data();
+        final currentExpiredVotes = (dealData?['expiredVotes'] ?? 0) as int;
+        if (currentExpiredVotes >= 15) {
+          await _firestore.collection('deals').doc(dealId).update({
+            'isExpired': true,
+          });
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      _log('Expired vote ekleme hatası: $e');
       return false;
     }
   }
@@ -372,7 +507,7 @@ class FirestoreService {
       
       return true;
     } catch (e) {
-      print('Hot vote geri alma hatası: $e');
+      _log('Hot vote geri alma hatası: $e');
       return false;
     }
   }
@@ -388,7 +523,7 @@ class FirestoreService {
           .get();
       return doc.exists;
     } catch (e) {
-      print('Favori kontrolü hatası: $e');
+      _log('Favori kontrolü hatası: $e');
       return false;
     }
   }
@@ -404,7 +539,7 @@ class FirestoreService {
           .set({'addedAt': FieldValue.serverTimestamp()});
       return true;
     } catch (e) {
-      print('Favori ekleme hatası: $e');
+      _log('Favori ekleme hatası: $e');
       return false;
     }
   }
@@ -420,65 +555,7 @@ class FirestoreService {
           .delete();
       return true;
     } catch (e) {
-      print('Favori çıkarma hatası: $e');
-      return false;
-    }
-  }
-
-  // Expired vote ekleme (Fırsat Bitti oyu)
-  Future<bool> addExpiredVote(String dealId, String userId) async {
-    try {
-      final batch = _firestore.batch();
-      
-      // Önceki oyu kontrol et
-      final voteRef = _firestore
-          .collection('deals')
-          .doc(dealId)
-          .collection('votes')
-          .doc(userId);
-      
-      final voteDoc = await voteRef.get();
-      if (voteDoc.exists) {
-        final currentType = voteDoc.data()?['type'] as String?;
-        if (currentType == 'expired') {
-          // Zaten expired vote vermiş
-          return true;
-        }
-        // Diğer oyları temizle (hot/cold)
-        if (currentType == 'hot') {
-          batch.update(_firestore.collection('deals').doc(dealId), {
-            'hotVotes': FieldValue.increment(-1),
-          });
-        } else if (currentType == 'cold') {
-          batch.update(_firestore.collection('deals').doc(dealId), {
-            'coldVotes': FieldValue.increment(-1),
-          });
-        }
-      }
-      
-      // Expired vote ekle/güncelle
-      batch.set(voteRef, {'type': 'expired'}, SetOptions(merge: true));
-      
-      // Expired votes sayısını artır
-      final dealRef = _firestore.collection('deals').doc(dealId);
-      batch.update(dealRef, {
-        'expiredVotes': FieldValue.increment(1),
-      });
-      
-      await batch.commit();
-      
-      // Oyları kontrol et, 10'a ulaştıysa otomatik olarak bitir
-      final dealDoc = await dealRef.get();
-      if (dealDoc.exists) {
-        final expiredVotes = (dealDoc.data()?['expiredVotes'] ?? 0) as int;
-        if (expiredVotes >= 10) {
-          await dealRef.update({'isExpired': true});
-        }
-      }
-      
-      return true;
-    } catch (e) {
-      print('Expired vote ekleme hatası: $e');
+      _log('Favori çıkarma hatası: $e');
       return false;
     }
   }
@@ -491,7 +568,7 @@ class FirestoreService {
       });
       return true;
     } catch (e) {
-      print('Deal bitirme hatası: $e');
+      _log('Deal bitirme hatası: $e');
       return false;
     }
   }
@@ -502,7 +579,7 @@ class FirestoreService {
       final doc = await _firestore.collection('blockedUsers').doc(userId).get();
       return doc.exists;
     } catch (e) {
-      print('Kullanıcı engel kontrolü hatası: $e');
+      _log('Kullanıcı engel kontrolü hatası: $e');
       return false;
     }
   }
@@ -553,7 +630,7 @@ class FirestoreService {
       await batch.commit();
       return true;
     } catch (e) {
-      print('Yorum ekleme hatası: $e');
+      _log('Yorum ekleme hatası: $e');
       return false;
     }
   }
@@ -593,7 +670,7 @@ class FirestoreService {
       await batch.commit();
       return true;
     } catch (e) {
-      print('Yorum silme hatası: $e');
+      _log('Yorum silme hatası: $e');
       return false;
     }
   }
@@ -606,7 +683,7 @@ class FirestoreService {
       });
       return true;
     } catch (e) {
-      print('Kullanıcı engelleme hatası: $e');
+      _log('Kullanıcı engelleme hatası: $e');
       return false;
     }
   }
@@ -619,7 +696,7 @@ class FirestoreService {
       });
       return true;
     } catch (e) {
-      print('Deal aktif etme hatası: $e');
+      _log('Deal aktif etme hatası: $e');
       return false;
     }
   }
@@ -662,10 +739,10 @@ class FirestoreService {
       }
       
       if (deletedCount > 0) {
-        print('✅ $deletedCount expired deal temizlendi');
+        _log('✅ $deletedCount expired deal temizlendi');
       }
     } catch (e) {
-      print('❌ Expired deal temizleme hatası: $e');
+      _log('❌ Expired deal temizleme hatası: $e');
     }
   }
 
@@ -696,7 +773,7 @@ class FirestoreService {
       
       return true;
     } catch (e) {
-      print('Deal silme hatası: $e');
+      _log('Deal silme hatası: $e');
       return false;
     }
   }
@@ -719,7 +796,7 @@ class FirestoreService {
             deals.add(Deal.fromFirestore(dealDoc));
           }
         } catch (e) {
-          print('Favori deal getirme hatası: $e');
+          _log('Favori deal getirme hatası: $e');
         }
       }
       return deals;
@@ -735,11 +812,11 @@ class FirestoreService {
         .snapshots()
         .map((snapshot) {
       try {
-        final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
+      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
         // Client-side'da filtrele ve sırala
         final filteredDeals = deals.where((deal) => 
-          !deal.isExpired && 
-          deal.hotVotes >= minLikes
+        !deal.isExpired && 
+        deal.hotVotes >= minLikes
         ).toList();
         
         // hotVotes'e göre sırala (yüksekten düşüğe)
@@ -748,7 +825,7 @@ class FirestoreService {
         // En fazla 50 deal döndür
         return filteredDeals.take(50).toList();
       } catch (e) {
-        print('getMostLikedDeals hatası: $e');
+        _log('getMostLikedDeals hatası: $e');
         return [];
       }
     });
@@ -793,7 +870,7 @@ class FirestoreService {
         
         return filteredDeals;
       } catch (e) {
-        print('getFollowedCategoriesDeals hatası: $e');
+        _log('getFollowedCategoriesDeals hatası: $e');
         return [];
       }
     });
@@ -811,7 +888,7 @@ class FirestoreService {
       if (lastCleanupTime != null) {
         final timeSinceLastCleanup = DateTime.now().difference(lastCleanupTime.toDate());
         if (timeSinceLastCleanup.inHours < 12) {
-          print('⚠️ Temizlik zaten son 12 saat içinde yapıldı, atlanıyor');
+          _log('⚠️ Temizlik zaten son 12 saat içinde yapıldı, atlanıyor');
           return;
         }
       }
@@ -820,11 +897,19 @@ class FirestoreService {
       final cutoffTime = now.subtract(const Duration(hours: 24));
       
       // 24 saatten eski onaylanmış deal'ları bul
+      // NOT: Composite index gerektirmemesi için sadece isApproved filtresi kullanıyoruz
+      // createdAt filtresini client-side'da yapıyoruz
       final snapshot = await _firestore
           .collection('deals')
           .where('isApproved', isEqualTo: true)
-          .where('createdAt', isLessThan: Timestamp.fromDate(cutoffTime))
           .get();
+      
+      // Client-side'da 24 saatten eski deal'ları filtrele
+      final oldDeals = snapshot.docs.where((doc) {
+        final data = doc.data();
+        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+        return createdAt != null && createdAt.isBefore(cutoffTime);
+      }).toList();
 
       // Her birini sil (batch limit 500)
       int deletedCount = 0;
@@ -843,7 +928,7 @@ class FirestoreService {
       
       // Kalan işlemleri commit et
       if (deletedCount % 500 != 0 && deletedCount > 0) {
-        await batch.commit();
+      await batch.commit();
       }
       
       // Son temizlik zamanını güncelle
@@ -851,9 +936,9 @@ class FirestoreService {
         'timestamp': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       
-      print('✅ $deletedCount eski deal silindi');
+      _log('✅ $deletedCount eski deal silindi');
     } catch (e) {
-      print('❌ Eski deal\'lar silinirken hata: $e');
+      _log('❌ Eski deal\'lar silinirken hata: $e');
     }
   }
 
@@ -868,7 +953,7 @@ class FirestoreService {
       if (lastCleanupTime != null) {
         final timeSinceLastCleanup = DateTime.now().difference(lastCleanupTime.toDate());
         if (timeSinceLastCleanup.inHours < 1) {
-          print('⚠️ Onay bekleyen deal temizliği zaten son 1 saat içinde yapıldı, atlanıyor');
+          _log('⚠️ Onay bekleyen deal temizliği zaten son 1 saat içinde yapıldı, atlanıyor');
           return;
         }
       }
@@ -877,15 +962,23 @@ class FirestoreService {
       final cutoffTime = now.subtract(const Duration(hours: 24));
       
       // 24 saatten eski ve onaylanmamış deal'leri bul
+      // NOT: Composite index gerektirmemesi için sadece isApproved ve isExpired filtreleri kullanıyoruz
+      // createdAt filtresini client-side'da yapıyoruz
       final snapshot = await _firestore
           .collection('deals')
           .where('isApproved', isEqualTo: false)
           .where('isExpired', isEqualTo: false)
-          .where('createdAt', isLessThan: Timestamp.fromDate(cutoffTime))
           .get();
+      
+      // Client-side'da 24 saatten eski deal'ları filtrele
+      final oldDeals = snapshot.docs.where((doc) {
+        final data = doc.data();
+        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+        return createdAt != null && createdAt.isBefore(cutoffTime);
+      }).toList();
 
-      if (snapshot.docs.isEmpty) {
-        print('✅ 24 saatten eski onay bekleyen deal yok');
+      if (oldDeals.isEmpty) {
+        _log('✅ 24 saatten eski onay bekleyen deal yok');
         // Yine de son temizlik zamanını güncelle
         await _firestore.collection('system').doc('lastPendingCleanup').set({
           'timestamp': Timestamp.now(),
@@ -897,7 +990,7 @@ class FirestoreService {
       int deletedCount = 0;
       WriteBatch batch = _firestore.batch();
       
-      for (var doc in snapshot.docs) {
+      for (var doc in oldDeals) {
         batch.delete(doc.reference);
         deletedCount++;
         
@@ -918,9 +1011,462 @@ class FirestoreService {
         'timestamp': Timestamp.now(),
       });
       
-      print('✅ 24 saatten eski onay bekleyen deal\'lar silindi: $deletedCount adet');
+      _log('✅ 24 saatten eski onay bekleyen deal\'lar silindi: $deletedCount adet');
     } catch (e) {
-      print('❌ Onay bekleyen deal\'ları temizleme hatası: $e');
+      _log('❌ Onay bekleyen deal\'ları temizleme hatası: $e');
+    }
+  }
+
+  // Deal paylaşım durumunu kontrol et
+  Future<bool> isDealSharingEnabled() async {
+    try {
+      final doc = await _firestore.collection('settings').doc('app').get();
+      if (doc.exists && doc.data() != null) {
+        return doc.data()!['dealSharingEnabled'] ?? true; // Default: true
+      }
+      return true; // Varsayılan olarak paylaşım açık
+    } catch (e) {
+      _log('Deal paylaşım durumu kontrol hatası: $e');
+      return true; // Hata durumunda paylaşım açık
+    }
+  }
+
+  // Deal paylaşım durumunu değiştir (admin için)
+  Future<bool> setDealSharingEnabled(bool enabled) async {
+    try {
+      await _firestore.collection('settings').doc('app').set({
+        'dealSharingEnabled': enabled,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return true;
+    } catch (e) {
+      _log('Deal paylaşım durumu güncelleme hatası: $e');
+      return false;
+    }
+  }
+
+  // Deal paylaşım durumunu dinle (Stream)
+  Stream<bool> dealSharingEnabledStream() {
+    return _firestore
+        .collection('settings')
+        .doc('app')
+        .snapshots()
+        .map((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        return snapshot.data()!['dealSharingEnabled'] ?? true;
+      }
+      return true; // Varsayılan olarak paylaşım açık
+    });
+  }
+
+  // Kullanıcının takip ettiği anahtar kelimeleri getir
+  Future<List<String>> getUserWatchKeywords(String userId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      final data = doc.data();
+      if (data == null) return [];
+      
+      final keywords = data['watchKeywords'];
+      if (keywords is List) {
+        return keywords.map((e) => e.toString()).toList();
+      }
+      return [];
+    } catch (e) {
+      _log('❌ getUserWatchKeywords hatası: $e');
+      return [];
+    }
+  }
+
+  // Kullanıcının takip ettiği anahtar kelimeleri güncelle
+  Future<void> updateUserWatchKeywords(String userId, List<String> keywords) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'watchKeywords': keywords,
+      });
+      _log('✅ Anahtar kelimeler güncellendi: $keywords');
+    } catch (e) {
+      _log('❌ updateUserWatchKeywords hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Anahtar kelime ekle
+  Future<void> addWatchKeyword(String userId, String keyword) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'watchKeywords': FieldValue.arrayUnion([keyword]),
+      });
+      _log('✅ Anahtar kelime eklendi: $keyword');
+    } catch (e) {
+      _log('❌ addWatchKeyword hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Anahtar kelime çıkar
+  Future<void> removeWatchKeyword(String userId, String keyword) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'watchKeywords': FieldValue.arrayRemove([keyword]),
+      });
+      _log('✅ Anahtar kelime çıkarıldı: $keyword');
+    } catch (e) {
+      _log('❌ removeWatchKeyword hatası: $e');
+      rethrow;
+    }
+  }
+
+  // ========== MESAJLAŞMA SİSTEMİ ==========
+
+  // Mesaj gönder
+  Future<String?> sendMessage({
+    required String senderId,
+    required String receiverId,
+    required String text,
+  }) async {
+    try {
+      // Gönderen ve alıcı bilgilerini al
+      final senderDoc = await _firestore.collection('users').doc(senderId).get();
+      final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
+      
+      if (!senderDoc.exists || !receiverDoc.exists) {
+        _log('❌ Gönderen veya alıcı bulunamadı');
+        return null;
+      }
+
+      final senderData = senderDoc.data() as Map<String, dynamic>;
+      final receiverData = receiverDoc.data() as Map<String, dynamic>;
+
+      final message = Message(
+        id: '', // Firestore otomatik ID oluşturacak
+        senderId: senderId,
+        senderName: senderData['username'] ?? 'Kullanıcı',
+        senderImageUrl: senderData['profileImageUrl'] ?? '',
+        receiverId: receiverId,
+        receiverName: receiverData['username'] ?? 'Kullanıcı',
+        receiverImageUrl: receiverData['profileImageUrl'] ?? '',
+        text: text.trim(),
+        createdAt: DateTime.now(),
+        isRead: false,
+        isReadByAdmin: false,
+      );
+
+      final docRef = await _firestore.collection('messages').add(message.toFirestore());
+      
+      // Bildirim gönder (NotificationService üzerinden)
+      try {
+        final notificationService = NotificationService();
+        await notificationService.sendMessageNotification(
+          receiverId: receiverId,
+          senderName: message.senderName,
+          messageText: text,
+          messageId: docRef.id,
+        );
+      } catch (e) {
+        _log('⚠️ Mesaj bildirimi gönderilemedi: $e');
+      }
+
+      return docRef.id;
+    } catch (e) {
+      _log('❌ Mesaj gönderme hatası: $e');
+      return null;
+    }
+  }
+
+  // Kullanıcının mesajlarını getir (gönderdiği ve aldığı)
+  Stream<List<Message>> getUserMessagesStream(String userId) {
+    // Hem gönderilen hem alınan mesajları stream olarak dinle
+    final senderStream = _firestore
+        .collection('messages')
+        .where('senderId', isEqualTo: userId)
+        .snapshots();
+    
+    final receiverStream = _firestore
+        .collection('messages')
+        .where('receiverId', isEqualTo: userId)
+        .snapshots();
+
+    // İki stream'i birleştir - her birinde değişiklik olduğunda güncelle
+    return Stream.multi((controller) {
+      List<Message>? senderMessages;
+      List<Message>? receiverMessages;
+
+      void emitIfReady() {
+        if (senderMessages != null && receiverMessages != null) {
+          final allMessages = <Message>[...senderMessages!, ...receiverMessages!];
+          // Tarihe göre sırala (yeni önce)
+          allMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          controller.add(allMessages);
+        }
+      }
+
+      final senderSub = senderStream.listen(
+        (snapshot) {
+          senderMessages = snapshot.docs.map((doc) => Message.fromFirestore(doc)).toList();
+          emitIfReady();
+        },
+        onError: controller.addError,
+      );
+
+      final receiverSub = receiverStream.listen(
+        (snapshot) {
+          receiverMessages = snapshot.docs.map((doc) => Message.fromFirestore(doc)).toList();
+          emitIfReady();
+        },
+        onError: controller.addError,
+      );
+
+      controller.onCancel = () {
+        senderSub.cancel();
+        receiverSub.cancel();
+      };
+    });
+  }
+
+  // İki kullanıcı arasındaki konuşmayı getir
+  Stream<List<Message>> getConversationStream(String userId1, String userId2) {
+    // Firestore'da whereIn + orderBy composite index gerektirdiği için
+    // orderBy olmadan sorgu yapıp client-side'da sıralama yapıyoruz
+    return _firestore
+        .collection('messages')
+        .where('senderId', whereIn: [userId1, userId2])
+        .snapshots()
+        .asyncMap((senderSnapshot) async {
+      // Alıcı tarafından da kontrol et (orderBy olmadan)
+      final receiverSnapshot = await _firestore
+          .collection('messages')
+          .where('receiverId', whereIn: [userId1, userId2])
+          .get();
+
+      final allMessages = <Message>[];
+      final messageIds = <String>{};
+      
+      // Gönderilen mesajlar (senderId kontrolü yapıldı, receiverId kontrolü client-side)
+      for (var doc in senderSnapshot.docs) {
+        final message = Message.fromFirestore(doc);
+        // Her iki kullanıcı da mesajın senderId veya receiverId'si olmalı
+        if ((message.senderId == userId1 || message.senderId == userId2) &&
+            (message.receiverId == userId1 || message.receiverId == userId2) &&
+            !messageIds.contains(message.id)) {
+          allMessages.add(message);
+          messageIds.add(message.id);
+        }
+      }
+      
+      // Alınan mesajlar (receiverId kontrolü yapıldı, senderId kontrolü client-side)
+      for (var doc in receiverSnapshot.docs) {
+        final message = Message.fromFirestore(doc);
+        // Her iki kullanıcı da mesajın senderId veya receiverId'si olmalı
+        if ((message.senderId == userId1 || message.senderId == userId2) &&
+            (message.receiverId == userId1 || message.receiverId == userId2) &&
+            !messageIds.contains(message.id)) {
+          allMessages.add(message);
+          messageIds.add(message.id);
+        }
+      }
+      
+      // Tarihe göre sırala (eski önce - chat için)
+      allMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      
+      return allMessages;
+    });
+  }
+
+  // Mesajı okundu olarak işaretle
+  Future<void> markMessageAsRead(String messageId) async {
+    try {
+      await _firestore.collection('messages').doc(messageId).update({
+        'isRead': true,
+      });
+    } catch (e) {
+      _log('❌ Mesaj okundu işaretleme hatası: $e');
+    }
+  }
+
+  // Tüm mesajları getir (admin için)
+  Stream<List<Message>> getAllMessagesStream() {
+    return _firestore
+        .collection('messages')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => Message.fromFirestore(doc))
+          .toList();
+    });
+  }
+
+  // Mesajı admin tarafından okundu olarak işaretle
+  Future<void> markMessageAsReadByAdmin(String messageId) async {
+    try {
+      await _firestore.collection('messages').doc(messageId).update({
+        'isReadByAdmin': true,
+      });
+    } catch (e) {
+      _log('❌ Mesaj admin okundu işaretleme hatası: $e');
+    }
+  }
+
+  // Okunmamış mesaj sayısını getir
+  Future<int> getUnreadMessageCount(String userId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('messages')
+          .where('receiverId', isEqualTo: userId)
+          .where('isRead', isEqualTo: false)
+          .get();
+      
+      return snapshot.docs.length;
+    } catch (e) {
+      _log('❌ Okunmamış mesaj sayısı alma hatası: $e');
+      return 0;
+    }
+  }
+
+  // ========== TAKİP SİSTEMİ ==========
+
+  // Kullanıcıyı takip et
+  Future<void> followUser(String followerId, String followingId) async {
+    try {
+      final batch = _firestore.batch();
+      
+      // Takip eden kullanıcının following listesine ekle
+      final followerRef = _firestore.collection('users').doc(followerId);
+      batch.update(followerRef, {
+        'following': FieldValue.arrayUnion([followingId]),
+      });
+      
+      // Takip edilen kullanıcının followersWithNotifications listesine ekle (bildirim aktif olarak başlar)
+      final followingRef = _firestore.collection('users').doc(followingId);
+      batch.update(followingRef, {
+        'followersWithNotifications': FieldValue.arrayUnion([followerId]),
+      });
+      
+      await batch.commit();
+      _log('✅ Kullanıcı takip edildi: $followerId -> $followingId');
+      
+      // Güncelleme sonrası kontrol et
+      final verifyDoc = await followingRef.get();
+      final verifyData = verifyDoc.data();
+      final verifyList = List<String>.from(verifyData?['followersWithNotifications'] ?? []);
+      _log('🔍 followUser SONRA: followersWithNotifications=${verifyList.length} kişi, içerik=$verifyList');
+      
+      if (!verifyList.contains(followerId)) {
+        _log('⚠️ UYARI: followersWithNotifications listesine eklenemedi!');
+      }
+    } catch (e) {
+      _log('❌ Kullanıcı takip hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Kullanıcıyı takipten çık
+  Future<void> unfollowUser(String followerId, String followingId) async {
+    try {
+      final batch = _firestore.batch();
+      
+      // Takip eden kullanıcının following listesinden çıkar
+      final followerRef = _firestore.collection('users').doc(followerId);
+      batch.update(followerRef, {
+        'following': FieldValue.arrayRemove([followingId]),
+      });
+      
+      // Takip edilen kullanıcının followersWithNotifications listesinden çıkar
+      final followingRef = _firestore.collection('users').doc(followingId);
+      batch.update(followingRef, {
+        'followersWithNotifications': FieldValue.arrayRemove([followerId]),
+      });
+      
+      await batch.commit();
+      _log('✅ Kullanıcı takipten çıkarıldı: $followerId -> $followingId');
+    } catch (e) {
+      _log('❌ Kullanıcı takipten çıkma hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Takip bildirimlerini aç/kapat
+  Future<void> toggleFollowNotification(String followerId, String followingId, bool enable) async {
+    try {
+      final followingRef = _firestore.collection('users').doc(followingId);
+      
+      // Önce mevcut durumu kontrol et
+      final beforeDoc = await followingRef.get();
+      final beforeData = beforeDoc.data();
+      final beforeList = List<String>.from(beforeData?['followersWithNotifications'] ?? []);
+      _log('🔍 toggleFollowNotification ÖNCE: followersWithNotifications=${beforeList.length} kişi, içerik=$beforeList');
+      
+      if (enable) {
+        // Bildirimleri aç
+        await followingRef.update({
+          'followersWithNotifications': FieldValue.arrayUnion([followerId]),
+        });
+        _log('✅ Takip bildirimleri açıldı: $followerId -> $followingId');
+        
+        // Güncelleme sonrası kontrol et
+        final afterDoc = await followingRef.get();
+        final afterData = afterDoc.data();
+        final afterList = List<String>.from(afterData?['followersWithNotifications'] ?? []);
+        _log('🔍 toggleFollowNotification SONRA: followersWithNotifications=${afterList.length} kişi, içerik=$afterList');
+        
+        if (!afterList.contains(followerId)) {
+          _log('⚠️ UYARI: followersWithNotifications listesine eklenemedi!');
+        }
+      } else {
+        // Bildirimleri kapat
+        await followingRef.update({
+          'followersWithNotifications': FieldValue.arrayRemove([followerId]),
+        });
+        _log('✅ Takip bildirimleri kapatıldı: $followerId -> $followingId');
+        
+        // Güncelleme sonrası kontrol et
+        final afterDoc = await followingRef.get();
+        final afterData = afterDoc.data();
+        final afterList = List<String>.from(afterData?['followersWithNotifications'] ?? []);
+        _log('🔍 toggleFollowNotification SONRA: followersWithNotifications=${afterList.length} kişi, içerik=$afterList');
+      }
+    } catch (e) {
+      _log('❌ Takip bildirim toggle hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Kullanıcının takip edip etmediğini kontrol et
+  Future<bool> isFollowing(String followerId, String followingId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(followerId).get();
+      if (!doc.exists) {
+        _log('⚠️ Kullanıcı dokümanı bulunamadı: $followerId');
+        return false;
+      }
+      
+      final data = doc.data();
+      final following = List<String>.from(data?['following'] ?? []);
+      _log('🔍 isFollowing kontrolü: followerId=$followerId, followingId=$followingId, following listesi uzunluğu=${following.length}');
+      if (following.isNotEmpty) {
+        _log('📋 Following listesi: ${following.join(", ")}');
+      }
+      final result = following.contains(followingId);
+      _log('${result ? "✅" : "❌"} Takip durumu: $result');
+      return result;
+    } catch (e) {
+      _log('❌ Takip kontrol hatası: $e');
+      return false;
+    }
+  }
+
+  // Kullanıcının takip bildirimlerinin açık olup olmadığını kontrol et
+  Future<bool> isFollowNotificationEnabled(String followerId, String followingId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(followingId).get();
+      if (!doc.exists) return false;
+      
+      final data = doc.data();
+      final followersWithNotifications = List<String>.from(data?['followersWithNotifications'] ?? []);
+      return followersWithNotifications.contains(followerId);
+    } catch (e) {
+      _log('❌ Takip bildirim kontrol hatası: $e');
+      return false;
     }
   }
 }

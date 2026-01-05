@@ -1,13 +1,15 @@
 name: sicak_firsatlar
 description: Sıcak Fırsatlar - Topluluk temelli indirim ve kampanya paylaşım uygulaması
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   
   # Firebase paketleri
@@ -22,7 +24,7 @@ dependencies:
   
   # UI ve yardımcı paketler
   cupertino_icons: ^1.0.2
-  intl: ^0.20.2
+  intl: ^0.19.0
   google_fonts: ^6.1.0
   cached_network_image: ^3.3.1
   photo_view: ^0.14.0
@@ -45,15 +47,22 @@ dependencies:
   # SharedPreferences for storing user preferences
   shared_preferences: ^2.2.2
 
+  # Connectivity - İnternet bağlantı kontrolü
+  connectivity_plus: ^6.0.3
+
   # Image picker and Firebase Storage for avatar upload
   image_picker: ^1.0.7
   firebase_storage: ^11.6.0
+  
+  # Image compression - Görsel sıkıştırma için
+  flutter_image_compress: ^2.3.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.10
 
 flutter:
   uses-material-design: true
@@ -68,4 +77,19 @@ flutter_launcher_icons:
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/Gemini_Generated_Image_55xiw755xiw755xi.png"
   remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#FF6B35"
+  image: "assets/Gemini_Generated_Image_55xiw755xiw755xi.png"
+  color_dark: "#1A1A1A"
+  image_dark: "assets/Gemini_Generated_Image_55xiw755xiw755xi.png"
+  android_12:
+    color: "#FF6B35"
+    icon_background_color: "#FFFFFF"
+    image: "assets/Gemini_Generated_Image_55xiw755xiw755xi.png"
+    color_dark: "#1A1A1A"
+    icon_background_color_dark: "#1A1A1A"
+  android: true
+  ios: true
+  web: false
 

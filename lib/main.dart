@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'dart:async';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'services/theme_service.dart';
+import 'services/connectivity_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/deal_detail_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/firestore_service.dart';
 import 'theme/app_theme.dart';
+
+void _log(String message) {
+  if (kDebugMode) print(message);
+}
 
 // Global navigator key for navigation from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -21,30 +28,28 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print('📬 Background bildirim alındı: ${message.notification?.title}');
-  print('📬 Bildirim verisi: ${message.data}');
+  // Release'de log yok
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    
     // Background message handler'ı sadece web dışı platformlarda kaydet
     if (!kIsWeb) {
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     }
-  
-  print('🔥 FIRSATKOLİK uygulaması başlatılıyor...');
-  print('📱 Build zamanı: ${DateTime.now()}');
-    print('🌐 Platform: ${kIsWeb ? "Web" : "Mobile"}');
-  } catch (e, stackTrace) {
-    print('❌ Firebase başlatma hatası: $e');
-    print('Stack trace: $stackTrace');
-    // Hata olsa bile uygulamayı başlat
+    
+    _log('🔥 FIRSATKOLİK başlatılıyor...');
+    
+    // Connectivity service'i başlat
+    await ConnectivityService().initialize();
+  } catch (e) {
+    _log('❌ Firebase başlatma hatası: $e');
   }
   
   runApp(const MyApp());
@@ -90,12 +95,25 @@ class _MyAppState extends State<MyApp> {
       data: _themeService.themeMode == ThemeMode.dark ? darkTheme : lightTheme,
       child: MaterialApp(
         title: 'FIRSATKOLİK',
-      debugShowCheckedModeBanner: false,
+        debugShowCheckedModeBanner: false,
         theme: lightTheme,
         darkTheme: darkTheme,
-      themeMode: _themeService.themeMode,
-      navigatorKey: navigatorKey,
-      home: const AuthWrapper(),
+        themeMode: _themeService.themeMode,
+        navigatorKey: navigatorKey,
+        // Türkçe locale desteği
+        locale: const Locale('tr', 'TR'),
+        supportedLocales: const [
+          Locale('tr', 'TR'), // Türkçe
+          Locale('en', 'US'), // İngilizce (fallback)
+        ],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const SplashScreen(
+          child: AuthWrapper(),
+        ),
       ),
     );
   }
@@ -118,13 +136,25 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    // Uygulama başladığında 24 saatten eski onay bekleyen deal'leri temizle
-    _firestoreService.deleteUnapprovedDealsAfter24Hours();
+    // Uygulama başladığında temizlik işlemlerini çalıştır
+    _runCleanupTasks();
     
     // Her 6 saatte bir kontrol et
     _cleanupTimer = Timer.periodic(const Duration(hours: 6), (timer) {
-      _firestoreService.deleteUnapprovedDealsAfter24Hours();
+      _runCleanupTasks();
     });
+  }
+
+  /// Tüm temizlik işlemlerini çalıştır
+  void _runCleanupTasks() {
+    // 1. 24 saatten eski onay bekleyen fırsatları sil
+    _firestoreService.deleteUnapprovedDealsAfter24Hours();
+    
+    // 2. 24 saatten eski yayındaki fırsatları sil
+    _firestoreService.deleteOldDeals();
+    
+    // 3. Süresi bitmiş (isExpired: true) ve 1 günden eski fırsatları sil
+    _firestoreService.cleanupExpiredDeals();
   }
 
   @override
@@ -135,13 +165,32 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   // Bildirim servisini başlat
   void _initializeNotificationService(String userId) async {
-    // Admin kontrolü yap
-    final isAdmin = await _authService.isAdmin();
-    print('👤 Kullanıcı Admin mi? $isAdmin');
+    try {
+      // Admin kontrolü yap - daha güvenilir hale getir
+      final isAdmin = await _authService.isAdmin();
+      _log('👤 Kullanıcı Admin mi? $isAdmin');
+      
+      if (isAdmin) {
+        _log('✅ Admin kullanıcı tespit edildi, admin bildirimleri aktifleştiriliyor...');
+      }
 
-    _notificationService.initializeForUser(isAdmin: isAdmin).catchError((e) {
-      print('Bildirim servisi başlatma hatası: $e');
-    });
+      await _notificationService.initializeForUser(isAdmin: isAdmin);
+      
+      // Admin ise, aboneliği doğrula
+      if (isAdmin) {
+        // Kısa bir gecikme sonrası admin topic'ine abone olduğundan emin ol
+        Future.delayed(const Duration(seconds: 2), () async {
+          try {
+            await _notificationService.subscribeToAdminTopic();
+            _log('✅ Admin topic aboneliği doğrulandı');
+          } catch (e) {
+            _log('⚠️ Admin topic abonelik doğrulama hatası: $e');
+          }
+        });
+      }
+    } catch (e) {
+      _log('❌ Bildirim servisi başlatma hatası: $e');
+    }
   }
 
   @override
@@ -171,7 +220,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         
         // Hata durumu
         if (snapshot.hasError) {
-          print('Auth error: ${snapshot.error}');
+          _log('Auth error: ${snapshot.error}');
           // Hata olsa bile mevcut kullanıcıyı kontrol et
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
@@ -193,7 +242,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             // Kullanıcı giriş yaptığında bildirim servisini başlat
             _initializeNotificationService(currentUserId);
           }
-          print('User logged in: ${snapshot.data!.email}');
+          _log('User logged in: ${snapshot.data!.email}');
           // Herkes normal ekrana gider, yönetici paneline geçiş butonu HomeScreen'de olacak
           return const HomeScreen();
         }
@@ -209,9 +258,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const HomeScreen();
         }
         
-        // Kullanıcı giriş yapmamış
+        // Kullanıcı giriş yapmamış (çıkış yaptı veya hiç giriş yapmadı)
+        // Eğer daha önce giriş yapmışsa (lastUserId != null), abonelikleri temizle
+        if (_lastUserId != null) {
+          _notificationService.clearAllSubscriptions();
+        }
         _lastUserId = null;
-        print('No user logged in');
+        _log('No user logged in');
         return const AuthScreen();
       },
     );
