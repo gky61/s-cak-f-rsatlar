@@ -20,17 +20,26 @@ import '../theme/app_theme.dart';
 import '../widgets/category_selector_widget.dart';
 import 'profile_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../main.dart'; // navigatorKey için
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
+import '../widgets/report_dialog.dart';
+import '../widgets/comments_bottom_sheet.dart';
+import '../widgets/deal_thermometer.dart';
+import '../widgets/link_card.dart';
 void _log(String message) {
   if (kDebugMode) print(message);
 }
 
 class DealDetailScreen extends StatefulWidget {
   final String dealId;
+  final String? scrollToCommentId; // Belirli bir yoruma scroll etmek için
 
   const DealDetailScreen({
     super.key,
     required this.dealId,
+    this.scrollToCommentId,
   });
 
   @override
@@ -424,6 +433,22 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         if (deal.imageUrl.isEmpty && deal.link.isNotEmpty && !_hasTriedFetching) {
           _fetchImageFromLink(deal.link);
         }
+        
+        // Eğer scrollToCommentId varsa, yorumlar bottom sheet'ini otomatik aç
+        if (widget.scrollToCommentId != null && mounted) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted && _currentDeal != null) {
+              final navigatorContext = navigatorKey.currentContext;
+              if (navigatorContext != null) {
+                _showCommentsBottomSheet(
+                  navigatorContext,
+                  _currentDeal!,
+                  scrollToCommentId: widget.scrollToCommentId,
+                );
+              }
+            }
+          });
+        }
       }
     } catch (e) {
       _log('Deal yükleme hatası: $e');
@@ -500,10 +525,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         orElse: () => Category.categories.first,
       );
     } catch (e) {
-      // ID bulunamazsa, name olarak dene
-      final categoryId = Category.getIdByName(deal.category);
-      category = categoryId != null && categoryId != 'tumu' 
-          ? Category.getById(categoryId) 
+      // ID bulunamazsa normalize et (bot ID veya name olabilir)
+      final categoryId = Category.normalizeCategoryId(deal.category);
+      category = categoryId != 'tumu'
+          ? Category.getById(categoryId)
           : Category.categories.first;
     }
 
@@ -605,9 +630,63 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           ),
                         ),
                   ),
+                      // Raporla / Diğer İşlemler Butonu
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: isDark 
+                              ? Colors.black.withValues(alpha: 0.2) 
+                              : Colors.white.withValues(alpha: 0.5),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: PopupMenuButton<String>(
+                          icon: Icon(
+                            Icons.more_vert,
+                            size: 20,
+                            color: isDark ? Colors.white : AppTheme.textPrimary,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          color: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
+                          onSelected: (value) {
+                            if (value == 'report') {
+                              showReportDialog(
+                                context,
+                                reportedId: deal.id,
+                                type: 'deal',
+                              );
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'report',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.flag_outlined, color: Colors.red[400], size: 20),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Fırsatı Raporla',
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white : Colors.black87,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       // Admin düzenle butonu
                       if (_isAdmin) ...[
-                        const SizedBox(width: 8),
+                      const SizedBox(width: 8),
                         Container(
                           width: 40,
                           height: 40,
@@ -633,7 +712,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           ),
                         ),
                         // Yayından kaldır butonu (sadece onaylanmış fırsatlar için)
-                        if (deal.isApproved) ...[
+                        if (deal.isApproved == true) ...[
                           const SizedBox(width: 8),
                           Container(
                             width: 40,
@@ -656,9 +735,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   size: 20,
                                   color: Colors.orange[700],
                                 ),
-                              ),
+                      ),
                             ),
-                          ),
+                  ),
                         ],
                       ],
                 ],
@@ -699,20 +778,20 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             // Gradient overlay
                             Positioned.fill(
                               child: IgnorePointer(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.transparent,
-                                        Colors.black.withValues(alpha: 0.2),
-                                      ],
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Colors.transparent,
+                                            Colors.black.withValues(alpha: 0.2),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            ),
+                          ),
                             // Discount Badge (sağ altta)
                           if (deal.discountRate != null && deal.discountRate! > 0)
                             Positioned(
@@ -740,8 +819,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ),
                                     child: Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text(
+                                  children: [
+                                    Text(
                                   '%${deal.discountRate}',
                                   style: const TextStyle(
                                     fontSize: 18,
@@ -752,22 +831,22 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ),
                                         const Text(
                                           'İNDİRİM',
-                                          style: TextStyle(
+                                      style: TextStyle(
                                             fontSize: 8,
-                                            fontWeight: FontWeight.w700,
+                                        fontWeight: FontWeight.w700,
                                             color: Colors.black,
                                             height: 1,
                                             letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
+                                  ],
+                                    ),
                                 ),
                               ),
-                          ],
-                        ),
+                            ),
+                        ],
                       ),
+                    ),
                       // Content Sheet (rounded-t-3xl, -mt-6)
                       Transform.translate(
                         offset: const Offset(0, -24),
@@ -792,7 +871,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           child: Column(
                                   children: [
                               // Handle indicator
-                              Padding(
+                    Padding(
                                 padding: const EdgeInsets.only(top: 12, bottom: 8),
                                 child: Container(
                                   width: 48,
@@ -807,7 +886,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
                       child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
+                        children: [
                                     // Store + Category + Paylaşan
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -888,7 +967,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                         fontWeight: FontWeight.w700,
                                                         color: isDark ? primaryColor : Colors.black,
                                                         letterSpacing: 1.2,
-                                                      ),
+                          ),
                                                     ),
                                                     if (_isAdmin) ...[
                                                       const SizedBox(width: 4),
@@ -932,16 +1011,16 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                       borderRadius: BorderRadius.circular(16),
                                                       child: Container(
                                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                        decoration: BoxDecoration(
+                              decoration: BoxDecoration(
                                                           color: isDark 
                                                               ? Colors.white.withValues(alpha: 0.05) 
                                                               : Colors.white,
                                                           borderRadius: BorderRadius.circular(16),
-                                                          border: Border.all(
+                                border: Border.all(
                                                             color: primaryColor.withValues(alpha: 0.3),
-                                                            width: 1,
-                                                          ),
-                                                        ),
+                                  width: 1,
+                                ),
+                              ),
                                                         child: Row(
                                                           mainAxisSize: MainAxisSize.min,
                                                           children: [
@@ -997,7 +1076,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                                 fontSize: 11,
                                                                 fontWeight: FontWeight.w600,
                                                                 color: primaryColor,
-                                                              ),
+                              ),
                                                             ),
                                                           ],
                                                         ),
@@ -1016,30 +1095,30 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       Padding(
                                         padding: const EdgeInsets.only(bottom: 12),
                                         child: Row(
-                                          children: [
-                                            Container(
+                            children: [
+                              Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                              decoration: BoxDecoration(
+                                decoration: BoxDecoration(
                                                 gradient: LinearGradient(
                                                   colors: [Colors.orange[700]!, Colors.orange[500]!],
                                                   begin: Alignment.topLeft,
                                                   end: Alignment.bottomRight,
-                                                ),
+                                  ),
                                                 borderRadius: BorderRadius.circular(8),
-                                                boxShadow: [
-                                                  BoxShadow(
+                                  boxShadow: [
+                                    BoxShadow(
                                                     color: Colors.orange.withValues(alpha: 0.3),
                                                     blurRadius: 4,
                                                     offset: const Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
+                                    ),
+                                  ],
+                                ),
                                               child: const Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   Icon(
                                                     Icons.star,
-                                                    color: Colors.white,
+                                    color: Colors.white,
                                                     size: 14,
                                                   ),
                                                   SizedBox(width: 4),
@@ -1050,7 +1129,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                       fontSize: 11,
                                                       fontWeight: FontWeight.w700,
                                                       letterSpacing: 0.5,
-                                                    ),
+                                  ),
                                                   ),
                                                 ],
                                               ),
@@ -1066,13 +1145,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                         fontWeight: FontWeight.w700,
                                         color: isDark ? Colors.white : AppTheme.textPrimary,
                                         height: 1.2,
-                                      ),
-                                    ),
+                                ),
+                              ),
                                     const SizedBox(height: 16),
                                     // Stats Grid (3 columns)
                                     Row(
                                     children: [
-                                        Expanded(
+                              Expanded(
                                           child: _buildStatButton(
                                             icon: Icons.favorite,
                                             count: _hotVotes > 0 ? _hotVotes : deal.hotVotes,
@@ -1090,7 +1169,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             count: deal.commentCount,
                                             label: 'Yorum',
                                             color: Colors.blue,
-                                            onTap: () => _showCommentsBottomSheet(context, deal),
+                                            onTap: () => _showCommentsBottomSheet(
+                                              context, 
+                                              deal,
+                                              scrollToCommentId: widget.scrollToCommentId,
+                                            ),
                                             isDark: isDark,
                                           ),
                                         ),
@@ -1110,8 +1193,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             ],
                           ),
                                     const SizedBox(height: 16),
-                                    // 🔥 Fırsat Termometresi - Eğlenceli Oylama
-                                    _buildDealThermometer(deal, isDark, primaryColor),
+                                    DealThermometer(
+                                      deal: deal,
+                                      hotVotes: _hotVotes,
+                                      coldVotes: _coldVotes,
+                                      hasVotedHot: _hasVotedHot,
+                                      hasVotedCold: _hasVotedCold,
+                                      onVote: _handleVote,
+                                    ),
                                     const SizedBox(height: 32),
                                     // Description
                           Row(
@@ -1119,7 +1208,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           Container(
                                           width: 6,
                                           height: 6,
-                            decoration: BoxDecoration(
+                                  decoration: BoxDecoration(
                                             color: primaryColor,
                                             shape: BoxShape.circle,
                                           ),
@@ -1151,14 +1240,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                               width: 1,
                                             ),
                                           ) : null,
-                                          child: Row(
+                                  child: Row(
                                             crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: Text(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
                                                   deal.description.isNotEmpty ? deal.description : 'Açıklama eklemek için tıklayın',
-                                        style: TextStyle(
-                                          fontSize: 14,
+                                          style: TextStyle(
+                                            fontSize: 14,
                                           fontWeight: FontWeight.w500,
                                                     color: deal.description.isNotEmpty 
                                                         ? (isDark ? Colors.grey[300] : AppTheme.textSecondary)
@@ -1166,8 +1255,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           height: 1.6,
                                                     fontStyle: deal.description.isEmpty ? FontStyle.italic : FontStyle.normal,
                                                   ),
-                                                ),
-                                              ),
+                                        ),
+                                      ),
                                               if (_isAdmin) ...[
                                                 const SizedBox(width: 8),
                                                 Icon(
@@ -1176,10 +1265,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                   color: primaryColor,
                                                 ),
                                               ],
-                                            ],
-                                          ),
-                                    ),
+                                    ],
                                   ),
+                                ),
+                              ),
                                       const SizedBox(height: 12),
                                     ],
                                     const SizedBox(height: 80), // Bottom nav için padding
@@ -1188,10 +1277,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ),
                               ],
                             ),
+                                ),
+                              ),
+                            ],
                           ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ],
@@ -1208,7 +1297,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                 top: 16,
                 bottom: MediaQuery.of(context).padding.bottom + 16,
               ),
-              decoration: BoxDecoration(
+                            decoration: BoxDecoration(
                 color: isDark ? AppTheme.darkSurface : Colors.white,
                 border: Border(
                   top: BorderSide(
@@ -1216,17 +1305,17 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                     width: 1,
                                   ),
                 ),
-                boxShadow: [
-                  BoxShadow(
+                              boxShadow: [
+                                BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
                     blurRadius: 30,
                     offset: const Offset(0, -5),
-                                        ),
-                ],
-              ),
+                                ),
+                              ],
+                            ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: [
+                              children: [
                   Row(
                     children: [
                       Column(
@@ -1250,12 +1339,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               fontWeight: FontWeight.w900,
                               color: AppTheme.primary,
                               height: 1,
-                            ),
-                          ),
+                                    ),
+                                  ),
                         ],
-                      ),
+                                ),
                       const SizedBox(width: 16),
-                      Expanded(
+                                Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () => _openLink(context, deal.link),
                           icon: const Icon(Icons.open_in_new, size: 20),
@@ -1264,8 +1353,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                                    ),
+                                  ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.secondary,
                             foregroundColor: Colors.white,
@@ -1275,13 +1364,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             ),
                             elevation: 0,
                             shadowColor: Colors.black.withValues(alpha: 0.25),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                   // Admin için onay/red butonları (onaylanmamış deal'ler için)
-                  if (_isAdmin && !deal.isApproved)
+                  if (_isAdmin && deal.isApproved != true)
                     Padding(
                       padding: const EdgeInsets.only(top: 16),
                       child: Row(
@@ -1343,201 +1432,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
-  /// 🔥 Fırsat Termometresi - Eğlenceli Oylama Widget'ı
-  Widget _buildDealThermometer(Deal deal, bool isDark, Color primaryColor) {
-    final hotVotes = _hotVotes > 0 ? _hotVotes : deal.hotVotes;
-    final coldVotes = _coldVotes > 0 ? _coldVotes : deal.coldVotes;
-    final totalVotes = hotVotes + coldVotes;
-    
-    // Sıcaklık yüzdesi hesapla (0-100)
-    final hotPercentage = totalVotes > 0 ? (hotVotes / totalVotes * 100).round() : 50;
-    
-    // Duruma göre eğlenceli mesaj ve emoji
-    String getMessage() {
-      if (totalVotes == 0) return 'Henüz oy yok, sen başlat! 🎯';
-      if (hotPercentage >= 80) return 'EFSANE FIRSAT! 🔥🔥🔥';
-      if (hotPercentage >= 60) return 'Kaçırma derim! 🏃💨';
-      if (hotPercentage >= 40) return 'Fena değil aslında 🤔';
-      if (hotPercentage >= 20) return 'Düşünürüm artık... 😬';
-      return 'Param cebimde kalsın 💸';
-    }
-    
-    // Sıcaklık rengini hesapla
-    Color getThermometerColor() {
-      if (hotPercentage >= 70) return Colors.red;
-      if (hotPercentage >= 50) return Colors.orange;
-      if (hotPercentage >= 30) return Colors.amber;
-      return Colors.blue;
-    }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark 
-              ? [Colors.grey[900]!, Colors.grey[850]!]
-              : [Colors.grey[50]!, Colors.white],
-        ),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
-          width: 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          // Eğlenceli mesaj (kompakt)
-          Text(
-            getMessage(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          
-          // Termometre bar'ı
-          Row(
-            children: [
-              // Soğuk taraf
-              GestureDetector(
-                onTap: () => _handleVote(false),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _hasVotedCold 
-                        ? Colors.blue.withOpacity(0.2) 
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: _hasVotedCold ? Colors.blue : Colors.transparent,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('🥶', style: TextStyle(fontSize: 18)),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Geç',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blue[400],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              
-              // Termometre
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Skor gösterimi
-                      Text(
-                        totalVotes > 0 ? '$hotPercentage°' : '—',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: getThermometerColor(),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      // Bar
-                      Container(
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Stack(
-                              children: [
-                                // Doluluk
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 500),
-                                  curve: Curves.easeOutCubic,
-                                  width: constraints.maxWidth * (hotPercentage / 100),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [Colors.orange, Colors.red],
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.red.withOpacity(0.3),
-                                        blurRadius: 4,
-                                        offset: Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      // Oy sayısı
-                      Text(
-                        '$totalVotes oy',
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: isDark ? Colors.grey[500] : Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              
-              // Sıcak taraf
-              GestureDetector(
-                onTap: () => _handleVote(true),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _hasVotedHot 
-                        ? Colors.red.withOpacity(0.2) 
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: _hasVotedHot ? Colors.red : Colors.transparent,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('🔥', style: TextStyle(fontSize: 18)),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Al!',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.red[400],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildStatButton({
     required IconData icon,
@@ -1553,7 +1448,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(12),
           child: Container(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           decoration: BoxDecoration(
@@ -1589,12 +1484,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
               const SizedBox(height: 3),
               Text(
                 count.toString(),
-                style: TextStyle(
+                                        style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                                          fontWeight: FontWeight.w700,
                   color: isDark ? Colors.white : AppTheme.textPrimary,
                       ),
-                    ),
+                                        ),
               const SizedBox(height: 1),
               Text(
                 label,
@@ -1602,12 +1497,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
                   color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-              ),
-            ),
-          ],
-          ),
-        ),
-      ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
     );
   }
 
@@ -1626,17 +1521,17 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       text: deal.discountRate != null ? deal.discountRate!.toString() : '',
     );
 
-    // Eğer kategori "Tümü" ise, varsayılan olarak "elektronik" kullan
-    String initialCategoryId = Category.getIdByName(deal.category) ?? 'elektronik';
+    // deal.category artık her zaman uygulama kategori ID'si (bot ID'leri normalize edildi)
+    String initialCategoryId = Category.normalizeCategoryId(deal.category);
     if (initialCategoryId == 'tumu') {
-      initialCategoryId = 'elektronik'; // "Tümü" seçilemez, varsayılan kategori kullan
+      initialCategoryId = 'elektronik';
     }
 
     // State değişkenleri closure içinde tutulmalı (StatefulBuilder dışında)
     String selectedCategoryId = initialCategoryId;
     String? selectedSubCategory = deal.subCategory;
     bool isEditorPick = deal.isEditorPick;
-    bool isApproved = deal.isApproved;
+    bool isApproved = deal.isApproved ?? false;
     bool isExpired = deal.isExpired;
     bool isSaving = false;
     String? errorText;
@@ -1674,7 +1569,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                 'title': titleController.text.trim(),
                 'description': descriptionController.text.trim(),
                 'store': storeController.text.trim(),
-                'category': Category.getNameById(selectedCategoryId) ?? deal.category,
+                'category': selectedCategoryId,
                 'subCategory': selectedSubCategory,
                 'link': linkController.text.trim(),
                 'price': price,
@@ -1811,7 +1706,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       Expanded(
                                         child: Text(
                                           _getCategoryDisplayText(selectedCategoryId, selectedSubCategory),
-                                          style: TextStyle(
+                                style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,
                                             color: isDark ? AppTheme.darkTextPrimary : Colors.black87,
@@ -1822,22 +1717,22 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                         Icons.arrow_forward_ios,
                                         size: 16,
                                         color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
-                                      ),
-                                    ],
-                                  ),
                                 ),
+                                    ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
+                        ],
+                      ),
+                    ),
                         _buildAdminTextField('Bağlantı', linkController),
                         Row(
                           children: [
                             Expanded(child: _buildAdminTextField('Fiyat', priceController, keyboardType: TextInputType.number)),
                             const SizedBox(width: 12),
                             Expanded(child: _buildAdminTextField('Eski Fiyat', originalPriceController, keyboardType: TextInputType.number)),
-                          ],
-                        ),
+                  ],
+                ),
                         _buildAdminTextField('İndirim Oranı (%)', discountController, keyboardType: TextInputType.number),
                         const SizedBox(height: 12),
                         SwitchListTile(
@@ -1860,8 +1755,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           Text(
                             errorText!,
                             style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
-                          ),
-                        ],
+            ),
+          ],
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
                           onPressed: isSaving ? null : handleSave,
@@ -2301,74 +2196,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
-  Widget _buildLinkCard(BuildContext context, Deal deal) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.link_rounded, color: primaryColor),
-              const SizedBox(width: 10),
-              Text(
-                'Fırsat Bağlantısı',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppTheme.accent,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            deal.link.isNotEmpty ? deal.link : 'Bağlantı yakında eklenecek',
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.black87,
-            ),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: deal.link.isNotEmpty
-                      ? () => _copyLinkToClipboard(context, deal.link)
-                      : null,
-                  icon: const Icon(Icons.copy_rounded),
-                  label: const Text('Bağlantıyı Kopyala'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildReminderCard(ThemeData theme) {
     final primaryColor = theme.colorScheme.primary;
@@ -2559,19 +2387,19 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Fırsatı Kaldır'),
         content: const Text('Bu fırsatı kaldırmak istediğinize emin misiniz?\n\nFırsat "Süresi Bitenler" bölümüne taşınacak.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('İptal'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.orange),
             child: const Text('Evet, Kaldır'),
-          ),
-        ],
-      ),
-    );
+            ),
+          ],
+        ),
+      );
 
     if (confirm != true) return;
 
@@ -2592,8 +2420,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   Future<void> _showCategorySelector(Deal deal) async {
     if (_currentDeal == null) return;
 
-    // Mevcut kategoriyi al
-    String initialCategoryId = Category.getIdByName(deal.category) ?? 'elektronik';
+    // Mevcut kategoriyi al (bot ID'leri normalize edilmiş olarak gelir)
+    String initialCategoryId = Category.normalizeCategoryId(deal.category);
     if (initialCategoryId == 'tumu') {
       initialCategoryId = 'elektronik';
     }
@@ -2886,10 +2714,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       // canLaunchUrl kontrolü yapmadan direkt dene - daha güvenilir
       try {
         // Önce external application ile dene
-        final launched = await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
         if (launched) return;
       } catch (e) {
         // External başarısız, devam et
@@ -2912,7 +2740,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           uri,
           mode: LaunchMode.inAppWebView,
         );
-      } catch (e) {
+    } catch (e) {
         // Tüm yöntemler başarısız oldu
         throw Exception('Bağlantı açılamadı');
       }
@@ -3296,13 +3124,168 @@ $priceText$discountText
   }
 
 
-  void _showCommentsBottomSheet(BuildContext context, Deal deal) {
+  void _showCommentsBottomSheet(BuildContext context, Deal deal, {String? scrollToCommentId}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _CommentsBottomSheet(deal: deal),
+      builder: (context) => CommentsBottomSheet(
+        deal: deal,
+        scrollToCommentId: scrollToCommentId,
+      ),
     );
+  }
+
+  // Affiliate Link Configuration
+  static const Map<String, Map<String, String>> _affiliateConfig = {
+    'trendyol': {
+      'boutiqueId': '', // Trendyol Boutique ID'nizi buraya ekleyin
+    },
+    'hepsiburada': {
+      'utmSource': 'linkgelir', // Hepsiburada Link Gelir için genellikle 'linkgelir' kullanılır
+    },
+    'n11': {
+      'refId': '', // N11 Referans ID'nizi buraya ekleyin
+    },
+    'amazon': {
+      'tag': '', // Amazon Associate Tag'inizi buraya ekleyin
+    },
+    'gittigidiyor': {
+      'affiliateId': '', // GittiGidiyor Affiliate ID'nizi buraya ekleyin
+    },
+  };
+
+  Future<String?> _resolveShortLink(String shortUrl) async {
+    try {
+      final functionsUrl =
+          'https://us-central1-sicak-firsatlar-e6eae.cloudfunctions.net/resolveShortLink';
+      final uri = Uri.parse('$functionsUrl?url=${Uri.encodeComponent(shortUrl)}');
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['resolvedUrl'] != null) {
+          return data['resolvedUrl'] as String;
+        }
+      }
+      return null;
+    } catch (e) {
+      _log('Kısa link çözme hatası: $e');
+      return null;
+    }
+  }
+
+  String _detectStoreFromUrl(String url) {
+    if (url.isEmpty) return 'Bilinmeyen';
+
+    try {
+      final uri = Uri.parse(url);
+      final hostname = uri.host.toLowerCase();
+
+      if (hostname.contains('trendyol.com')) return 'Trendyol';
+      if (hostname.contains('hepsiburada.com')) return 'Hepsiburada';
+      if (hostname.contains('n11.com')) return 'N11';
+      if (hostname.contains('amazon.com')) return 'Amazon';
+      if (hostname.contains('gittigidiyor.com')) return 'GittiGidiyor';
+
+      return 'Bilinmeyen';
+    } catch (e) {
+      return 'Bilinmeyen';
+    }
+  }
+
+  String _convertToAffiliateLink(String originalUrl) {
+    if (originalUrl.isEmpty) return originalUrl;
+
+    try {
+      final uri = Uri.parse(originalUrl);
+      final hostname = uri.host.toLowerCase();
+
+      // Hepsiburada kısa link kontrolü
+      if (hostname.contains('hb.biz') || hostname.contains('app.hb.biz')) {
+        _log('ℹ️ Kısa link tespit edildi: $originalUrl');
+        return originalUrl;
+      }
+
+      // Trendyol
+      if (hostname.contains('trendyol.com')) {
+        final boutiqueId = _affiliateConfig['trendyol']?['boutiqueId'];
+        if (boutiqueId != null && boutiqueId.isNotEmpty) {
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('boutiqueId');
+          newQueryParams['boutiqueId'] = boutiqueId;
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      // Hepsiburada (Link Gelir)
+      if (hostname.contains('hepsiburada.com')) {
+        final utmSource = _affiliateConfig['hepsiburada']?['utmSource'];
+        if (utmSource != null && utmSource.isNotEmpty) {
+          final existingUtmSource = uri.queryParameters['utm_source'];
+          if (existingUtmSource == utmSource) {
+            _log('ℹ️ Link zaten kendi affiliate linkiniz: $originalUrl');
+            return originalUrl;
+          }
+
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('utm_source');
+          newQueryParams.remove('utm_medium');
+          newQueryParams.remove('utm_campaign');
+          newQueryParams.remove('utm_content');
+          newQueryParams.remove('wt_inf');
+
+          newQueryParams['utm_source'] = utmSource;
+          newQueryParams['utm_medium'] = 'referral';
+          newQueryParams['utm_campaign'] = 'urun_paylasim';
+
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      // N11
+      if (hostname.contains('n11.com')) {
+        final refId = _affiliateConfig['n11']?['refId'];
+        if (refId != null && refId.isNotEmpty) {
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('ref');
+          newQueryParams['ref'] = refId;
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      // Amazon
+      if (hostname.contains('amazon.com.tr') || hostname.contains('amazon.com')) {
+        final tag = _affiliateConfig['amazon']?['tag'];
+        if (tag != null && tag.isNotEmpty) {
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('tag');
+          newQueryParams['tag'] = tag;
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      // GittiGidiyor
+      if (hostname.contains('gittigidiyor.com')) {
+        final affiliateId = _affiliateConfig['gittigidiyor']?['affiliateId'];
+        if (affiliateId != null && affiliateId.isNotEmpty) {
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('affiliateId');
+          newQueryParams['affiliateId'] = affiliateId;
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      return originalUrl;
+    } catch (e) {
+      _log('Link dönüştürme hatası: $e');
+      return originalUrl;
+    }
   }
 
   Future<void> _showAdminEditDialog(Deal deal) async {
@@ -3312,13 +3295,72 @@ $priceText$discountText
     final originalPriceController = TextEditingController(
       text: deal.originalPrice?.toStringAsFixed(2) ?? '',
     );
+    final linkController = TextEditingController(text: deal.link);
 
-    String? selectedCategoryId = Category.getIdByName(deal.category);
-    // "tumu" kategorisi dropdown'da olmadığı için null yap
-    if (selectedCategoryId == 'tumu') {
-      selectedCategoryId = null;
-    }
+    // Kategori eşleştirmesi
+    String? selectedCategoryId;
     String? selectedSubCategory = deal.subCategory;
+    
+    final normalizedDealCategory = deal.category.toLowerCase().trim();
+
+    // 1. Adım: ID ile tam eşleşme kontrolü
+    for (final cat in Category.categories) {
+      if (cat.id.toLowerCase() == normalizedDealCategory) {
+        selectedCategoryId = cat.id;
+        break;
+      }
+    }
+
+    // 2. Adım: İsim ile eşleşme kontrolü (case-insensitive)
+    if (selectedCategoryId == null) {
+      for (final cat in Category.categories) {
+        if (cat.name.toLowerCase() == normalizedDealCategory) {
+          selectedCategoryId = cat.id;
+          break;
+        }
+      }
+    }
+
+    // 3. Adım: Özel eşleştirmeler (eski veriler veya farklı formatlar için)
+    if (selectedCategoryId == null) {
+      if (normalizedDealCategory.contains('giyim') || normalizedDealCategory.contains('moda')) {
+        selectedCategoryId = 'moda';
+      } else if (normalizedDealCategory.contains('ev') || normalizedDealCategory.contains('yasam')) {
+        selectedCategoryId = 'ev_yasam';
+      } else if (normalizedDealCategory.contains('bebek') || normalizedDealCategory.contains('anne')) {
+        selectedCategoryId = 'anne_bebek';
+      } else if (normalizedDealCategory.contains('kozmetik') || normalizedDealCategory.contains('bakim')) {
+        selectedCategoryId = 'kozmetik';
+      } else if (normalizedDealCategory.contains('spor')) {
+        selectedCategoryId = 'spor_outdoor';
+      } else if (normalizedDealCategory.contains('market') && !normalizedDealCategory.contains('yapi')) {
+        selectedCategoryId = 'supermarket';
+      } else if (normalizedDealCategory.contains('yapi') || normalizedDealCategory.contains('oto')) {
+        selectedCategoryId = 'yapi_oto';
+      } else if (normalizedDealCategory.contains('kitap') || normalizedDealCategory.contains('hobi')) {
+        selectedCategoryId = 'kitap_hobi';
+      } else if (normalizedDealCategory.contains('elektronik') || normalizedDealCategory.contains('telefon') || normalizedDealCategory.contains('bilgisayar')) {
+        selectedCategoryId = 'elektronik';
+      }
+    }
+
+    // Bulunamazsa varsayılan olarak 'diger' kullan (listede varsa)
+    if (selectedCategoryId == null) {
+       // 'diger' kategorisi var mı kontrol et, yoksa 'elektronik' yap
+       final hasDiger = Category.categories.any((c) => c.id == 'diger');
+       selectedCategoryId = hasDiger ? 'diger' : 'elektronik';
+    }
+    
+    // Alt kategori kontrolü: Eğer mevcut alt kategori, seçili kategorinin subcategories listesinde yoksa null yap
+    if (selectedSubCategory != null && selectedCategoryId != null) {
+      final category = Category.categories.firstWhere(
+        (cat) => cat.id == selectedCategoryId,
+        orElse: () => Category.categories.first,
+      );
+      if (!category.subcategories.contains(selectedSubCategory)) {
+        selectedSubCategory = null; // Geçersiz alt kategori, null yap
+      }
+    }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
@@ -3393,6 +3435,172 @@ $priceText$discountText
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Link alanı ve Affiliate Link'e Dönüştür butonu
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.link, color: Theme.of(context).colorScheme.primary, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Ürün Linki',
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: linkController,
+                          style: TextStyle(color: textColor),
+                          decoration: InputDecoration(
+                            labelText: 'Ürün URL',
+                            border: OutlineInputBorder(),
+                            hintText: 'https://...',
+                            filled: true,
+                            fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
+                            prefixIcon: Icon(Icons.link, color: textColor.withValues(alpha: 0.6)),
+                            suffixIcon: linkController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(
+                                      Icons.close,
+                                      color: Colors.grey[600],
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        linkController.clear();
+                                      });
+                                    },
+                                    tooltip: 'Linki Temizle',
+                                  )
+                                : null,
+                          ),
+                          keyboardType: TextInputType.url,
+                          onChanged: (value) {
+                            setState(() {}); // Trigger rebuild to show/hide clear button
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final currentUrl = linkController.text.trim();
+                              if (currentUrl.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Lütfen önce bir URL girin'),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+      return;
+    }
+
+                              // Loading göster
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (context) => const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+
+                              try {
+                                String urlToConvert = currentUrl;
+
+                                // Kısa link kontrolü (Hepsiburada kısa linkleri)
+                                if (urlToConvert.contains('hb.biz') ||
+                                    urlToConvert.contains('app.hb.biz')) {
+                                  try {
+                                    final resolvedUrl = await _resolveShortLink(urlToConvert);
+                                    if (resolvedUrl != null && resolvedUrl.isNotEmpty) {
+                                      urlToConvert = resolvedUrl;
+                                      _log('✅ Kısa link çözüldü: $urlToConvert');
+                                    }
+                                  } catch (e) {
+                                    _log('⚠️ Kısa link çözülemedi: $e');
+                                  }
+                                }
+
+                                // Affiliate link'e dönüştür
+                                final convertedUrl = _convertToAffiliateLink(urlToConvert);
+
+                                if (context.mounted) {
+                                  Navigator.pop(context); // Loading dialog'u kapat
+
+                                  if (convertedUrl != urlToConvert) {
+                                    setState(() {
+                                      linkController.text = convertedUrl;
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('✅ Affiliate link\'e dönüştürüldü!'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  } else {
+                                    final store = _detectStoreFromUrl(urlToConvert);
+                                    if (store == 'Bilinmeyen') {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('⚠️ Bu mağaza desteklenmiyor'),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              'ℹ️ Link zaten affiliate link veya $store için affiliate ID yapılandırılmamış'),
+                                          backgroundColor: Colors.blue,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  Navigator.pop(context); // Loading dialog'u kapat
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('❌ Hata: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.swap_horiz, size: 20),
+                            label: const Text(
+                              'Affiliate Link\'e Dönüştür',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -3482,6 +3690,7 @@ $priceText$discountText
                   'description': descriptionController.text.trim(),
                   'price': price,
                   'category': Category.getById(selectedCategoryId!).name,
+                  'link': linkController.text.trim(),
                 };
 
                 final originalPrice = originalPriceController.text.trim();
@@ -3751,11 +3960,8 @@ $priceText$discountText
   }
 
   Future<void> _showCategoryEditDialog(Deal deal) async {
-    String? selectedCategoryId = Category.getIdByName(deal.category);
-    // "tumu" kategorisi dropdown'da olmadığı için null yap
-    if (selectedCategoryId == 'tumu') {
-      selectedCategoryId = null;
-    }
+    String resolvedId = Category.normalizeCategoryId(deal.category);
+    String? selectedCategoryId = resolvedId != 'tumu' ? resolvedId : null;
     String? selectedSubCategory = deal.subCategory;
 
     await showDialog(
@@ -3888,19 +4094,19 @@ $priceText$discountText
                   imageUrl: imageUrl,
                   fit: BoxFit.contain,
                   placeholder: (context, url) => const Center(
-                    child: CircularProgressIndicator(
+              child: CircularProgressIndicator(
                       strokeWidth: 3,
-                      color: Colors.white,
-                    ),
-                  ),
+                color: Colors.white,
+              ),
+            ),
                   errorWidget: (context, url, error) => const Center(
-                    child: Icon(
-                      Icons.error_outline,
-                      color: Colors.white,
+              child: Icon(
+                Icons.error_outline,
+                color: Colors.white,
                       size: 64,
-                    ),
-                  ),
-                ),
+              ),
+            ),
+          ),
               ),
             ),
             // Kapat butonu
@@ -3929,724 +4135,4 @@ $priceText$discountText
     );
   }
 }
-
-class _CommentsBottomSheet extends StatefulWidget {
-  final Deal deal;
-
-  const _CommentsBottomSheet({required this.deal});
-
-  @override
-  State<_CommentsBottomSheet> createState() => _CommentsBottomSheetState();
-}
-
-class _CommentsBottomSheetState extends State<_CommentsBottomSheet> {
-  final TextEditingController _commentController = TextEditingController();
-  final FirestoreService _firestoreService = FirestoreService();
-  final AuthService _authService = AuthService();
-  bool _isSubmitting = false;
-  bool _isAdmin = false;
-  Comment? _replyingTo; // Cevap verilen yorum
-
-  @override
-  void initState() {
-    super.initState();
-    _checkAdminStatus();
-  }
-
-  Future<void> _checkAdminStatus() async {
-    final isAdmin = await _authService.isAdmin();
-    if (mounted) {
-      setState(() {
-        _isAdmin = isAdmin;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submitComment() async {
-    if (_commentController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lütfen bir yorum yazın')),
-      );
-      return;
-    }
-
-    final user = _authService.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Yorum yapmak için giriş yapmalısınız')),
-      );
-      return;
-    }
-
-    // Engellenen kullanıcı kontrolü
-    final isBlocked = await _firestoreService.isUserBlocked(user.uid);
-    if (isBlocked) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Hesabınız engellenmiş. Yorum yapamazsınız.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-    });
-
-    // Kullanıcının username'ini, profil resmini ve rozetlerini al
-    String displayName = user.displayName ?? 'Kullanıcı';
-    String profileImageUrl = '';
-    List<String> userBadges = [];
-    try {
-      final userData = await _authService.getUserData(user.uid);
-      if (userData != null) {
-        // Firestore'daki username'i kullan (güncel kullanıcı adı)
-        displayName = userData.username.isNotEmpty ? userData.username : userData.displayName;
-        profileImageUrl = userData.profileImageUrl;
-        userBadges = userData.badges;
-      }
-    } catch (e) {
-      _log('Kullanıcı bilgisi alınamadı: $e');
-    }
-
-    final success = await _firestoreService.addComment(
-      dealId: widget.deal.id,
-      userId: user.uid,
-      userName: displayName,
-      userEmail: user.email ?? '',
-      text: _commentController.text.trim(),
-      parentCommentId: _replyingTo?.id,
-      replyToUserName: _replyingTo?.userName,
-      userProfileImageUrl: profileImageUrl,
-      userBadges: userBadges,
-    );
-
-    setState(() {
-      _isSubmitting = false;
-      _replyingTo = null; // Cevap verme durumunu sıfırla
-    });
-
-    if (success && mounted) {
-      _commentController.clear();
-      // Yorum eklendikten sonra state'i güncellemek için kısa bir bekleme
-      await Future.delayed(const Duration(milliseconds: 500));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Yorumunuz eklendi'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
-      );
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Yorum eklenirken bir hata oluştu'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final primaryColor = Theme.of(context).colorScheme.primary;
-        return Container(
-          decoration: BoxDecoration(
-            color: isDark ? AppTheme.darkBackground : AppTheme.background,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      'Yorumlar',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Yorum listesi
-              Expanded(
-                child: StreamBuilder<List<Comment>>(
-                  stream: _firestoreService.getCommentsStream(widget.deal.id),
-                  builder: (context, snapshot) {
-                    // İlk yükleme sırasında loading göster
-                    if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    // Hata durumu
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
-                            const SizedBox(height: 16),
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Text(
-                                'Hata: ${snapshot.error}',
-                                style: TextStyle(
-                                  color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ],
-                        ),
-            );
-          }
-
-                    // Yorumları al
-                    final comments = snapshot.data ?? [];
-
-                    // Yorumlar boşsa
-                    if (comments.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.comment_outlined,
-                              size: 64,
-                              color: isDark ? AppTheme.darkTextSecondary : Colors.grey[400],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Henüz yorum yok',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: isDark ? AppTheme.darkTextPrimary : Colors.grey[600],
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'İlk yorumu siz yapın!',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    // Yorum listesi
-                    return ListView.builder(
-                      controller: scrollController,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: comments.length,
-                      itemBuilder: (context, index) {
-                        final comment = comments[index];
-                        return _buildCommentItem(comment, _isAdmin, comments, scrollController);
-                      },
-                    );
-                  },
-                ),
-              ),
-
-              // Yorum ekleme formu - Klavye açıldığında görünür olması için padding eklendi
-              Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).viewInsets.bottom,
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkSurface : Colors.white,
-                    border: Border(
-                      top: BorderSide(
-                        color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
-                      ),
-                    ),
-                  ),
-                  child: SafeArea(
-                    top: false,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _commentController,
-                            style: TextStyle(
-                              color: isDark ? AppTheme.darkTextPrimary : Colors.black,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: _replyingTo != null 
-                                  ? '@${_replyingTo!.userName} kullanıcısına cevap verin...' 
-                                  : 'Yorumunuzu yazın...',
-                              hintStyle: TextStyle(
-                                color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
-                              ),
-                              filled: true,
-                              fillColor: isDark ? AppTheme.darkBackground : Colors.white,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide(
-                                  color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide(
-                                  color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide(
-                                  color: primaryColor,
-                                  width: 2,
-                                ),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                            ),
-                            maxLines: null,
-                            minLines: 1,
-                            textInputAction: TextInputAction.newline,
-                            keyboardType: TextInputType.multiline,
-                            onSubmitted: (_) => _submitComment(),
-                          ),
-                        ),
-                      if (_replyingTo != null) ...[
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _replyingTo = null;
-                              _commentController.clear();
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppTheme.darkBorder : Colors.grey[200],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.close,
-                              size: 20,
-                              color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(width: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: primaryColor,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: IconButton(
-                          icon: _isSubmitting
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : const Icon(Icons.send_rounded, color: Colors.white),
-                          onPressed: _isSubmitting ? null : _submitComment,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCommentItem(Comment comment, bool isAdmin, List<Comment> allComments, ScrollController scrollController) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).colorScheme.primary;
-    final isReply = comment.parentCommentId != null;
-    return Container(
-      margin: EdgeInsets.only(
-        bottom: 8,
-        left: isReply ? 32 : 0, // Cevaplar için sol margin
-      ),
-      padding: EdgeInsets.all(isReply ? 8 : 10),
-      decoration: BoxDecoration(
-        color: isReply
-            ? (isDark ? AppTheme.darkBackground : Colors.grey[50])
-            : (isDark ? AppTheme.darkSurface : Colors.white), // Cevaplar için farklı arka plan
-        borderRadius: BorderRadius.circular(12),
-        border: isReply
-            ? Border.all(
-                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                width: 1,
-              )
-            : null, // Cevaplar için border
-        boxShadow: isReply
-            ? null
-            : [
-                // Cevaplar için shadow yok
-                BoxShadow(
-                  color: isDark
-                      ? Colors.black.withValues(alpha: 0.3)
-                      : Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 6,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              // Cevap göstergesi
-              if (isReply) ...[
-                Icon(
-                  Icons.reply_rounded,
-                  size: 12,
-                  color: isDark ? AppTheme.darkTextSecondary : Colors.grey[400],
-                ),
-                const SizedBox(width: 6),
-              ],
-              comment.userProfileImageUrl.isNotEmpty
-                  ? CircleAvatar(
-                      radius: isReply ? 10 : 14,
-                      backgroundColor: primaryColor.withValues(alpha: 0.1),
-                      backgroundImage: comment.userProfileImageUrl.startsWith('assets/')
-                          ? AssetImage(comment.userProfileImageUrl) as ImageProvider
-                          : CachedNetworkImageProvider(comment.userProfileImageUrl),
-                      onBackgroundImageError: (exception, stackTrace) {
-                        // Hata durumunda harf göster
-                      },
-                      child: comment.userProfileImageUrl.startsWith('assets/')
-                          ? null
-                          : null, // Network image için child gerekmez
-                    )
-                  : CircleAvatar(
-                      radius: isReply ? 10 : 14,
-                      backgroundColor: primaryColor.withValues(alpha: 0.1),
-                child: Text(
-                  comment.userName.isNotEmpty
-                      ? comment.userName[0].toUpperCase()
-                      : 'U',
-                  style: TextStyle(
-                          color: primaryColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: isReply ? 11 : 13,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ProfileScreen(userId: comment.userId),
-                                ),
-                              );
-                            },
-                          child: Text(
-                            comment.userName.isNotEmpty
-                                ? comment.userName
-                                : 'Kullanıcı',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: isReply ? 12 : 13,
-                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        ),
-                          // Rozetler
-                          if (comment.userBadges.isNotEmpty) ...[
-                            const SizedBox(width: 6),
-                            ...BadgeHelper.getBadgeInfos(comment.userBadges).take(3).map(
-                              (badge) => Padding(
-                                padding: const EdgeInsets.only(left: 3),
-                                child: Tooltip(
-                                  message: badge.name,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                      color: badge.color.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      badge.icon,
-                                      style: TextStyle(fontSize: isReply ? 10 : 12),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        if (isReply && comment.replyToUserName != null) ...[
-                          const SizedBox(width: 3),
-                          Icon(Icons.arrow_forward_rounded, size: 11, color: Colors.grey[500]),
-                          const SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              comment.replyToUserName!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: primaryColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    Text(
-                      _formatCommentTime(comment.createdAt),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Admin butonları veya kullanıcının kendi yorumu
-              Builder(
-                builder: (context) {
-                  final currentUser = _authService.currentUser;
-                  final isOwnComment = currentUser != null && comment.userId == currentUser.uid;
-                  
-                  if (isAdmin || isOwnComment) {
-                    return PopupMenuButton<String>(
-                  icon: Icon(
-                    Icons.more_vert_rounded,
-                    color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
-                    size: 16,
-                  ),
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      _deleteComment(comment);
-                        } else if (value == 'block' && isAdmin) {
-                      _blockUser(comment.userId, comment.userName);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                          SizedBox(width: 8),
-                          Text('Yorumu Sil'),
-                        ],
-                      ),
-                    ),
-                        if (isAdmin)
-                    const PopupMenuItem(
-                      value: 'block',
-                      child: Row(
-                        children: [
-                          Icon(Icons.block_rounded, color: Colors.orange, size: 20),
-                          SizedBox(width: 8),
-                          Text('Kullanıcıyı Engelle'),
-                        ],
-                      ),
-                    ),
-                  ],
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            comment.text,
-            style: TextStyle(
-              fontSize: isReply ? 13 : 14,
-              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
-              fontWeight: FontWeight.w500,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 6),
-          // Cevap verme butonu (sadece ana yorumlar için)
-          if (!isReply)
-            TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _replyingTo = comment;
-                });
-                // TextField'a focus ver
-                FocusScope.of(context).requestFocus(FocusNode());
-                // Scroll'u en alta kaydır
-                Future.delayed(const Duration(milliseconds: 300), () {
-                  if (scrollController.hasClients) {
-                    scrollController.animateTo(
-                      scrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  }
-                });
-              },
-              icon: Icon(Icons.reply_rounded, size: 13, color: primaryColor),
-              label: Text(
-                'Cevap Ver',
-                style: TextStyle(color: primaryColor, fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _deleteComment(Comment comment) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Yorumu Sil'),
-        content: const Text('Bu yorumu silmek istediğinize emin misiniz?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Sil'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      final success = await _firestoreService.deleteComment(comment.id, widget.deal.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? 'Yorum silindi' : 'Yorum silinirken hata oluştu'),
-            backgroundColor: success ? Colors.green : Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _blockUser(String userId, String userName) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Kullanıcıyı Engelle'),
-        content: Text('$userName kullanıcısını engellemek istediğinize emin misiniz?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.orange),
-            child: const Text('Engelle'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      final success = await _firestoreService.blockUser(userId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? 'Kullanıcı engellendi' : 'Kullanıcı engellenirken hata oluştu'),
-            backgroundColor: success ? Colors.orange : Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  String _formatCommentTime(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inMinutes < 1) {
-      return 'Az önce';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} dakika önce';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours} saat önce';
-    } else if (difference.inDays == 1) {
-      return 'Dün';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} gün önce';
-    }
-
-    return DateFormat('d MMM yyyy').format(date);
-  }
-}
-
-
-
-
 

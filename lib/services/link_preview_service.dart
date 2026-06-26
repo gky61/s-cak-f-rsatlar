@@ -8,7 +8,7 @@ import 'package:html/dom.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
 
 void _log(String message) {
-  if (kDebugMode) _log(message);
+  if (kDebugMode) print(message);
 }
 
 class LinkPreviewResult {

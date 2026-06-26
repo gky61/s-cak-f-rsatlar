@@ -77,3 +77,8 @@ Privacy Policy'yi güncellemek için:
    ```
 3. GitHub Pages otomatik olarak güncellenecektir (birkaç dakika sürebilir)
 
+
+
+
+
+

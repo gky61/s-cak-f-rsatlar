@@ -9,3 +9,8 @@ GitHub Pages aktif edildikten sonra URL şu şekilde olacak:
 
 Örnek: `https://gokayalemdar.github.io/sicak-firsatlar/`
 
+
+
+
+
+

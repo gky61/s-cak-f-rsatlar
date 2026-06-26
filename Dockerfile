@@ -16,7 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Uygulama kodlarını kopyala
 COPY telegram_bot.py .
-COPY firebase_key.json .
+# Firebase key dosyası (varsa kopyala, yoksa hata verme)
+COPY serviceAccountKey.json* .
 COPY .env .
 
 # Logların anlık akması için

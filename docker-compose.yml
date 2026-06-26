@@ -7,7 +7,8 @@ services:
     restart: always  # Çökerse veya sunucu yeniden başlarsa otomatik başlat
     volumes:
       - ./logs:/app/logs  # Logları dışarı aktar
-      - ./telegram_session_new.session:/app/telegram_session_new.session  # Session dosyasını koru
+      - ./sessions:/app/sessions  # Session dosyalarını koru (dizin olarak)
+      - ./serviceAccountKey.json:/app/serviceAccountKey.json  # Firebase key dosyası
     environment:
       - TZ=Europe/Istanbul
       - TELEGRAM_SESSION_NAME=telegram_session_new

@@ -1,0 +1,17 @@
+# Oracle Cloud Shell'de çalıştırılacak komutlar
+
+# 1. Compartment ID'yi bul
+oci iam compartment list --all --query "data[*].{Name:name,OCID:id}" --output table
+
+# 2. Root compartment ID'yi al
+ROOT_COMP=$(oci iam compartment list --all --query "data[?name=='root'].id | [0]" --raw-output)
+echo "Root Compartment ID: $ROOT_COMP"
+
+# 3. Tüm instance'ları listele
+oci compute instance list --compartment-id $ROOT_COMP --all --query "data[*].{Name:display-name,PublicIP:\"public-ip\",State:lifecycle-state,OCID:id}" --output table
+
+# 4. Veya daha basit - tüm compartment'lerde ara
+oci compute instance list --compartment-id-in-subtree true --all --query "data[*].{Name:display-name,State:lifecycle-state}" --output table
+
+
+

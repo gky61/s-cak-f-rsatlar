@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Affiliate Link Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .link-box {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            word-break: break-all;
+            border-left: 4px solid #ff6000;
+        }
+        .original {
+            border-left-color: #999;
+        }
+        .converted {
+            border-left-color: #00a651;
+        }
+        button {
+            background: #ff6000;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #e55000;
+        }
+        .config-box {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #ffc107;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 Hepsiburada Affiliate Link Test</h1>
+        
+        <div class="config-box">
+            <h3>⚙️ Yapılandırma</h3>
+            <label>UTM Source (Link Gelir için genellikle 'linkgelir'):</label>
+            <input type="text" id="utmSource" value="linkgelir" placeholder="linkgelir">
+            <small>Hepsiburada Link Gelir programında genellikle 'linkgelir' kullanılır</small>
+        </div>
+
+        <div>
+            <h3>📝 Orijinal Link</h3>
+            <div class="link-box original">
+                <strong>Orijinal:</strong><br>
+                <input type="text" id="originalLinkInput" value="https://app.hb.biz/zvKZvfGGREU7" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; margin-top: 10px;">
+                <small style="color: #666; display: block; margin-top: 5px;">Kısa link veya normal link girebilirsiniz</small>
+            </div>
+        </div>
+
+        <button onclick="convertLink()">🔄 Affiliate Link'e Dönüştür</button>
+
+        <div id="result" style="display: none;">
+            <h3>✅ Dönüştürülmüş Link</h3>
+            <div class="link-box converted">
+                <strong>Affiliate Link:</strong><br>
+                <span id="convertedLink"></span>
+            </div>
+            <button onclick="copyLink()">📋 Linki Kopyala</button>
+            <button onclick="testLink()" style="background: #00a651; margin-left: 10px;">🔍 Linki Test Et</button>
+        </div>
+
+        <div id="info" style="margin-top: 30px; padding: 15px; background: #e7f3ff; border-radius: 5px;">
+            <h3>ℹ️ Bilgi</h3>
+            <p><strong>Bu link nasıl çalışır?</strong></p>
+            <ul>
+                <li>Orijinal linke UTM parametreleri eklenir</li>
+                <li>Kullanıcı bu linkten alışveriş yaparsa komisyon kazanırsınız</li>
+                <li>Link Gelir programında kazancınızı takip edebilirsiniz</li>
+            </ul>
+            <p><strong>Eklenen parametreler:</strong></p>
+            <ul>
+                <li><code>utm_source=linkgelir</code> - Link Gelir programı</li>
+                <li><code>utm_medium=referral</code> - Referans türü</li>
+                <li><code>utm_campaign=urun_paylasim</code> - Kampanya adı</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        async function convertLink() {
+            const originalLink = document.getElementById('originalLinkInput').value.trim();
+            const utmSource = document.getElementById('utmSource').value || 'linkgelir';
+            
+            if (!originalLink) {
+                alert('Lütfen bir link girin!');
+                return;
+            }
+            
+            try {
+                let url = new URL(originalLink);
+                let finalUrl = originalLink;
+                
+                // Eğer kısa link ise (app.hb.biz), gerçek URL'yi bulmaya çalış
+                if (url.hostname === 'app.hb.biz' || url.hostname.includes('hb.biz')) {
+                    // Kısa link zaten affiliate link olabilir, ama yine de UTM parametreleri ekleyebiliriz
+                    // Ancak kısa linkler genellikle redirect yapar, bu yüzden direkt parametre ekleyemeyiz
+                    document.getElementById('convertedLink').innerHTML = `
+                        <strong style="color: #ff6000;">⚠️ Kısa Link Tespit Edildi</strong><br><br>
+                        <strong>Orijinal Kısa Link:</strong><br>
+                        ${originalLink}<br><br>
+                        <strong>Not:</strong> Bu link zaten Hepsiburada Link Gelir kısa linkidir ve affiliate link olarak çalışır.<br>
+                        Eğer normal ürün linkine dönüştürmek istiyorsanız, kısa linki açıp gerçek URL'yi alın.<br><br>
+                        <strong>Öneri:</strong> Admin panelinde normal ürün linklerini kullanın, kısa linkler zaten affiliate linklerdir.
+                    `;
+                    document.getElementById('result').style.display = 'block';
+                    return;
+                }
+                
+                // Normal Hepsiburada linki ise
+                if (url.hostname.includes('hepsiburada.com')) {
+                    // Mevcut UTM parametrelerini kontrol et
+                    const existingUtmSource = url.searchParams.get('utm_source');
+                    
+                    // Eğer zaten affiliate parametreleri varsa, onları koru
+                    if (existingUtmSource) {
+                        document.getElementById('convertedLink').innerHTML = `
+                            <strong style="color: #00a651;">✅ Bu link zaten affiliate link!</strong><br><br>
+                            ${url.toString()}<br><br>
+                            <small>Mevcut UTM Source: ${existingUtmSource}</small>
+                        `;
+                    } else {
+                        // Yeni UTM parametreleri ekle
+                        url.searchParams.set('utm_source', utmSource);
+                        url.searchParams.set('utm_medium', 'referral');
+                        url.searchParams.set('utm_campaign', 'urun_paylasim');
+                        finalUrl = url.toString();
+                        
+                        document.getElementById('convertedLink').textContent = finalUrl;
+                    }
+                } else {
+                    alert('Bu link Hepsiburada linki değil!');
+                    return;
+                }
+                
+                document.getElementById('result').style.display = 'block';
+                
+                // Sayfayı kaydır
+                document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
+            } catch (error) {
+                alert('Link dönüştürme hatası: ' + error.message);
+            }
+        }
+
+        function copyLink() {
+            const link = document.getElementById('convertedLink').textContent;
+            navigator.clipboard.writeText(link).then(() => {
+                alert('✅ Link kopyalandı!');
+            }).catch(() => {
+                // Fallback
+                const textArea = document.createElement('textarea');
+                textArea.value = link;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('✅ Link kopyalandı!');
+            });
+        }
+
+        function testLink() {
+            const link = document.getElementById('convertedLink').textContent;
+            window.open(link, '_blank');
+        }
+
+        // Enter tuşu ile dönüştür
+        document.getElementById('originalLinkInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                convertLink();
+            }
+        });
+    </script>
+</body>
+</html>
+

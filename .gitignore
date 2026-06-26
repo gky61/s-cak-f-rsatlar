@@ -58,3 +58,26 @@ android/key.properties
 android/*.jks
 android/*.keystore
 
+# Bot configuration secrets
+cloud-run-bot/env.yaml
+cloud-run-bot/telegram_session*
+*.session
+cloud-run-bot/deploy*.sh
+cloud-run-bot/run_local.sh
+
+# Flutter Web local build/run artifacts
+web/canvaskit/
+web/assets/
+web/*.js
+web/version.json
+
+# Local caches and debug/temp files
+.firebase/
+hepsiburada_debug_page.html
+assets/ayı.jpg
+*.log
+**/node_modules/
+node_modules/
+
+
+

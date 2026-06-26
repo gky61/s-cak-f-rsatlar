@@ -184,3 +184,8 @@ Emülatörde Google Play Services'in tam olarak çalışmaması.
 1. Firestore index'i oluştur (link'e tıkla)
 2. Diğer hatalar kritik değil, uygulama çalışıyor
 
+
+
+
+
+

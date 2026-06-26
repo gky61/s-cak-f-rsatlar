@@ -32,7 +32,30 @@ class _FAQScreenState extends State<FAQScreen> {
     ),
     FAQItem(
       question: 'Puan sistemi nasıl çalışır?',
-      answer: 'Fırsat paylaştığınızda, fırsatlarınız beğenildiğinde ve toplulukta aktif olduğunuzda puan kazanırsınız. Puanlarınız arttıkça rozetler kazanabilirsiniz.',
+      answer: '''Puan sistemi, toplulukta aktif olmanızı ödüllendirir. İşte puan kazanma yolları:
+
+📤 **Fırsat Paylaşımı:** Her onaylanan fırsat paylaşımı için +5 puan kazanırsınız.
+
+👍 **Beğeni (Hot Vote):** Paylaştığınız fırsatlar beğenildiğinde her beğeni için +2 puan kazanırsınız.
+
+❌ **Beğeni Geri Alma:** Birisi beğenisini geri alırsa -2 puan kaybedersiniz.
+
+🏆 **Seviyeler ve Rozetler:**
+• 0-49 puan: Yeni Üye
+• 50-199 puan: Fırsat Avcısı
+• 200-499 puan: Fırsat Uzmanı
+• 500-999 puan: Fırsat Masterı
+• 1000+ puan: Fırsat Ustası
+
+⭐ **Güvenilirlik Yıldızları:**
+• 0-9 puan: 0 yıldız (Yeni Üye)
+• 10-29 puan: 1 yıldız (Başlangıç)
+• 30-59 puan: 2 yıldız (Aktif)
+• 60-99 puan: 3 yıldız (Güvenilir)
+• 100-199 puan: 4 yıldız (Çok Güvenilir)
+• 200+ puan: 5 yıldız (Uzman)
+
+Puanlarınız arttıkça daha fazla rozet ve unvan kazanabilirsiniz!''',
     ),
     FAQItem(
       question: 'Fırsat linki açılmıyor, ne yapmalıyım?',

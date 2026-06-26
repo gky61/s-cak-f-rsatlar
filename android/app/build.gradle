@@ -80,10 +80,12 @@ android {
                 signingConfig signingConfigs.debug
             }
             
-            // ProGuard/R8 KAPALI - Yazı/görüntü kaybolma sorunu için
-            minifyEnabled false
-            shrinkResources false
-            // proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // ProGuard/R8 AÇIK - Release build optimizasyonu için
+            // NOT: ProGuard rules dosyası güncellendi, AdMob ve Firebase kuralları eklendi
+            // NOT: Release build yapmadan önce test edin!
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             
             // Crash raporları için debug bilgileri koru
             ndk {

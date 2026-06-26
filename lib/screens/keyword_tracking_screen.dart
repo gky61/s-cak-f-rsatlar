@@ -5,7 +5,7 @@ import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 
 void _log(String message) {
-  if (kDebugMode) _log(message);
+  if (kDebugMode) print(message);
 }
 
 class KeywordTrackingScreen extends StatefulWidget {

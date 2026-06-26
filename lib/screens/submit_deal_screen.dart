@@ -11,7 +11,7 @@ import '../widgets/category_selector_widget.dart';
 import '../theme/app_theme.dart';
 
 void _log(String message) {
-  if (kDebugMode) _log(message);
+  if (kDebugMode) print(message);
 }
 
 class SubmitDealScreen extends StatefulWidget {
@@ -402,9 +402,53 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             ),
           );
         }
+      } else if (result['success'] == false && mounted) {
+        // Hata durumunda kullanıcıya bilgi ver
+        final errorMsg = result['error'] ?? 'Bilinmeyen hata';
+        _log('❌ AI Analiz Başarısız: $errorMsg');
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '⚠️ AI analizi başarısız: ${errorMsg.length > 50 ? errorMsg.substring(0, 50) + "..." : errorMsg}',
+                      maxLines: 2,
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
-    } catch (e) {
-      _log('AI analiz hatası: $e');
+    } catch (e, stackTrace) {
+      _log('❌ AI analiz hatası: $e');
+      _log('Stack trace: $stackTrace');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('❌ AI analizi sırasında hata oluştu: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e.toString()}'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -563,11 +607,14 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
     try {
       // Kategori bilgilerini doğru şekilde al
-      final categoryName = Category.getNameById(_selectedCategory);
+      // Kategori ID'sini direkt kaydet (kategori adı yerine)
+      final categoryId = _selectedCategory;
       final subCategoryName = _selectedSubCategory;
+      final categoryName = Category.getNameById(_selectedCategory);
       
       _log('📝 Deal kaydediliyor:');
-      _log('   Ana Kategori: $categoryName (ID: $_selectedCategory)');
+      _log('   Ana Kategori ID: $categoryId');
+      _log('   Ana Kategori Adı: $categoryName');
       _log('   Alt Kategori: ${subCategoryName ?? "Yok"}');
       
       // Eğer görsel URL boşsa veya geçersiz bir URL ise (ürün sayfası gibi), linkten görsel çek
@@ -613,27 +660,40 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       
       _log('📸 Final imageUrl: ${imageUrl.isEmpty ? "BOŞ" : imageUrl}');
       
-      await _firestoreService.createDeal(
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim(),
-        price: double.parse(_priceController.text.trim()),
-        store: _storeController.text.trim(),
-        category: categoryName, // Ana kategori adı
-        subCategory: subCategoryName, // Alt kategori adı (varsa)
-        imageUrl: imageUrl, // Linkten çekilen veya kullanıcının girdiği görsel
-        url: _urlController.text.trim(),
-        userId: user.uid,
-      );
-
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Fırsat başarıyla paylaşıldı!'),
-            backgroundColor: Color(0xFFFF6B35),
-            behavior: SnackBarBehavior.floating,
-          ),
+      try {
+        await _firestoreService.createDeal(
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          price: double.parse(_priceController.text.trim()),
+          store: _storeController.text.trim(),
+          category: categoryId, // Kategori ID'si kaydediliyor (kategori adı yerine)
+          subCategory: subCategoryName, // Alt kategori adı (varsa)
+          imageUrl: imageUrl, // Linkten çekilen veya kullanıcının girdiği görsel
+          url: _urlController.text.trim(),
+          userId: user.uid,
         );
+
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Fırsat başarıyla paylaşıldı!'),
+              backgroundColor: Color(0xFFFF6B35),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString().replaceAll('Exception: ', '')),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -849,7 +909,25 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 prefixIcon: const Icon(Icons.link),
+                suffixIcon: _urlController.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          color: Colors.grey[600],
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _urlController.clear();
+                          });
+                        },
+                        tooltip: 'Linki Temizle',
+                      )
+                    : null,
               ),
+              onChanged: (value) {
+                setState(() {}); // Trigger rebuild to show/hide clear button
+              },
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Ürün linki gerekli';

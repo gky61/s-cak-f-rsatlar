@@ -125,3 +125,8 @@ Her izin için Google Play Console'da açıklama yapılmalı.
 - [ ] Google Play Console'da store listing doldur
 
 
+
+
+
+
+

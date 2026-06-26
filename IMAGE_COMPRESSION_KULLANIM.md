@@ -217,3 +217,8 @@ Future<void> uploadDealImage() async {
 ### Sorun: Web'de çalışmıyor
 **Çözüm:** Web platformunda sıkıştırma desteklenmiyor, orijinal dosya kullanılıyor. Bu normal bir davranış.
 
+
+
+
+
+

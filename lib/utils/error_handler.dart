@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:firebase_auth/firebase_auth.dart';
 
 void _log(String message) {
-  if (kDebugMode) _log(message);
+  if (kDebugMode) print(message);
 }
 
 /// Global hata yönetimi ve kullanıcı dostu mesajlar

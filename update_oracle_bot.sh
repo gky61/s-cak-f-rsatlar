@@ -56,3 +56,8 @@ echo "   $SSH_CMD 'tail -f ~/SICAK_FIRSATLAR/logs/bot.log'"
 
 
 
+
+
+
+
+

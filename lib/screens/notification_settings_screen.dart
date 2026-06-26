@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
-import '../models/category.dart';
 import '../services/notification_service.dart';
 import '../services/firestore_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'category_preferences_screen.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -20,7 +20,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   final NotificationService _notificationService = NotificationService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _generalNotifications = true;
-  final Map<String, bool> _categoryNotifications = {};
+  bool _commentReplyNotifications = true;
   List<String> _watchKeywords = [];
   final TextEditingController _keywordController = TextEditingController();
   bool _isLoading = false;
@@ -37,29 +37,20 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       // Genel bildirim durumunu yükle
       _generalNotifications = await _notificationService.getGeneralNotificationsEnabled();
       
-      // Kategori bildirim durumlarını yükle
-      final followedCategories = await _notificationService.getFollowedCategories();
-      for (var category in Category.categories) {
-        if (category.id != 'tumu') {
-          _categoryNotifications[category.id] = followedCategories.contains(category.id);
-        }
-      }
-      
-      // Anahtar kelimeleri yükle
+      // Yorum bildirimleri durumunu yükle
       final userId = _auth.currentUser?.uid;
       if (userId != null) {
+        _commentReplyNotifications = await _notificationService.getCommentReplyNotificationsEnabled(userId);
+        
+        // Anahtar kelimeleri yükle
         final firestoreService = FirestoreService();
         _watchKeywords = await firestoreService.getUserWatchKeywords(userId);
       }
     } catch (e) {
       _log('Bildirim ayarları yükleme hatası: $e');
-      // Hata durumunda varsayılan değerler (genel bildirimler kapalı, kategoriler kapalı)
+      // Hata durumunda varsayılan değerler (genel bildirimler kapalı)
       _generalNotifications = false;
-      for (var category in Category.categories) {
-        if (category.id != 'tumu') {
-          _categoryNotifications[category.id] = false;
-        }
-      }
+      _commentReplyNotifications = false;
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -71,17 +62,13 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     if (_isLoading) return; // Çift tıklama koruması
     
     // Optimistic UI update - Önce UI'ı anında güncelle
-    final categories = Category.categories.where((c) => c.id != 'tumu').toList();
     setState(() {
       _generalNotifications = value;
-      // Genel bildirimler açıldığında tüm kategorileri aç
-      if (value) {
-        for (var category in categories) {
-          _categoryNotifications[category.id] = true;
-        }
+      // Genel bildirimler kapatıldığında yorum bildirimleri de kapatılır
+      // (ama kullanıcı tekrar açabilir)
+      if (!value) {
+        _commentReplyNotifications = false;
       }
-      // Genel bildirimler kapatıldığında kategori toggle'ları olduğu gibi kalır
-      // Kullanıcı istediği kategorileri açık tutabilir
     });
     
     // Arka planda Firestore'a kaydet
@@ -89,24 +76,23 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       // Genel bildirim ayarını kaydet
       await _notificationService.setGeneralNotifications(value);
       
-      // Genel bildirimler açıldığında:
-      // - Tüm kategori topic'lerinden çık (çift bildirim önlemek için)
-      // - Sadece all_deals topic'ine abone ol (Cloud Functions zaten all_deals'e gönderiyor)
-      if (value) {
-        // Önce tüm kategori topic'lerinden çık (çift bildirim önlemek için)
-        final categories = Category.categories.where((c) => c.id != 'tumu').toList();
-        final unsubscribeFutures = <Future>[];
-        for (var category in categories) {
-          unsubscribeFutures.add(_notificationService.unsubscribeFromCategory(category.id));
+      // Genel bildirimler kapatıldığında yorum bildirimlerini de kapat
+      // (ama kullanıcı tekrar açabilir)
+      final userId = _auth.currentUser?.uid;
+      if (!value && userId != null) {
+        await _notificationService.setCommentReplyNotificationsEnabled(userId, false);
+        // UI'da da güncelle
+        if (mounted) {
+          setState(() {
+            _commentReplyNotifications = false;
+          });
         }
-        await Future.wait(unsubscribeFutures);
-        _log('✅ Tüm kategori topic\'lerinden çıkıldı (genel bildirimler açık)');
-      } else {
-        // Genel bildirimler kapatıldığında:
-        // - all_deals topic'inden çık (setGeneralNotifications zaten yapıyor)
-        // - Kullanıcının seçtiği kategori topic'lerine abone ol
-        await _notificationService.resubscribeToTopics();
       }
+      
+      // Genel bildirimler açıldığında:
+      // - all_deals topic'ine abone ol (Cloud Functions zaten all_deals'e gönderiyor)
+      // Genel bildirimler kapatıldığında:
+      // - all_deals topic'inden çık (setGeneralNotifications zaten yapıyor)
       
       // Başarılı - UI zaten güncellendi
       if (mounted) {
@@ -144,31 +130,48 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     }
   }
 
-  Future<void> _toggleCategoryNotification(String categoryId, bool value) async {
-    // Kullanıcı genel bildirimler kapalıyken de istediği kategorileri açabilir
-    // Sadece o kategoriden bildirim alır
+  Future<void> _toggleCommentReplyNotifications(bool value) async {
+    if (_isLoading) return; // Çift tıklama koruması
     
     // Optimistic UI update - Önce UI'ı anında güncelle
     setState(() {
-      _categoryNotifications[categoryId] = value;
+      _commentReplyNotifications = value;
     });
     
-    // Arka planda Firestore'a kaydet (snackbar gösterme, sadece sessizce kaydet)
+    // Arka planda Firestore'a kaydet
     try {
-      if (value) {
-        await _notificationService.subscribeToCategory(categoryId);
-      } else {
-        await _notificationService.unsubscribeFromCategory(categoryId);
+      final userId = _auth.currentUser?.uid;
+      if (userId != null) {
+        await _notificationService.setCommentReplyNotificationsEnabled(userId, value);
       }
-      // Başarılı - UI zaten güncellendi, snackbar gösterme (çok fazla bildirim olur)
+      
+      // Başarılı - UI zaten güncellendi
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(value 
+                ? 'Yorum bildirimleri açıldı ✅' 
+                : 'Yorum bildirimleri kapatıldı. Profilde görünmeye devam edecek.'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(10)),
+            ),
+          ),
+        );
+      }
     } catch (e) {
-      _log('Kategori bildirim ayarı kaydetme hatası: $e');
+      _log('Yorum bildirim ayarı kaydetme hatası: $e');
       // Hata durumunda mevcut durumu yeniden yükle
       if (mounted) {
-        final followedCategories = await _notificationService.getFollowedCategories();
-        setState(() {
-          _categoryNotifications[categoryId] = followedCategories.contains(categoryId);
-        });
+        final userId = _auth.currentUser?.uid;
+        if (userId != null) {
+          final currentValue = await _notificationService.getCommentReplyNotificationsEnabled(userId);
+          setState(() {
+            _commentReplyNotifications = currentValue;
+          });
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Hata: $e'),
@@ -183,6 +186,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +216,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         ),
         centerTitle: true,
       ),
-      body: _isLoading && _categoryNotifications.isEmpty
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -324,22 +328,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
             ),
             const SizedBox(height: 24),
 
-            // Category Notifications Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              child: Text(
-                'KATEGORİLER',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: textSub,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Category Notifications List
+            // Comment Reply Notifications
             Container(
               decoration: BoxDecoration(
                 color: surfaceColor,
@@ -357,81 +346,143 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   ),
                 ],
               ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: EdgeInsets.zero,
-                itemCount: Category.categories.where((c) => c.id != 'tumu').length,
-                separatorBuilder: (context, index) => Divider(
-                  height: 1,
-                  thickness: 1,
-                  indent: 76,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.comment,
+                        color: isDark ? Colors.blue[200] : Colors.blue[700],
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Yorum Bildirimleri',
+                            style: TextStyle(
+                              color: textMain,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _generalNotifications 
+                                ? 'Yorumlarınıza gelen cevaplar için telefon bildirimi'
+                                : 'Telefon bildirimi kapalı, sadece profilde görünecek',
+                            style: TextStyle(
+                              color: textSub,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _commentReplyNotifications,
+                      onChanged: _isLoading 
+                          ? null 
+                          : (value) => _toggleCommentReplyNotifications(value),
+                      activeColor: primaryColor,
+                      activeTrackColor: primaryColor.withValues(alpha: 0.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Kategoriler Butonu
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
                   color: isDark 
                       ? Colors.white.withValues(alpha: 0.05) 
                       : Colors.black.withValues(alpha: 0.05),
                 ),
-                itemBuilder: (context, index) {
-                  final category = Category.categories.where((c) => c.id != 'tumu').toList()[index];
-                  final isEnabled = _categoryNotifications[category.id] ?? false;
-                  
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CategoryPreferencesScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        // Category Icon
                         Container(
                           width: 44,
                           height: 44,
                           decoration: BoxDecoration(
-                            color: _getCategoryColor(category.id).withValues(alpha: 0.1),
+                            color: primaryColor.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Center(
-                            child: Text(
-                              category.icon,
-                              style: const TextStyle(fontSize: 24),
-                            ),
+                          child: Icon(
+                            Icons.category,
+                            color: isDark ? Colors.purple[200] : Colors.purple[700],
+                            size: 24,
                           ),
                         ),
                         const SizedBox(width: 16),
-                        // Category Name
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                category.name,
+                                'Kategoriler',
                                 style: TextStyle(
                                   color: textMain,
-                                  fontSize: 15,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              if (!_generalNotifications && isEnabled) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Sadece bu kategoriden bildirim alınıyor',
-                                  style: TextStyle(
-                                    color: primaryColor,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Kategorileri görüntüle ve filtrele',
+                                style: TextStyle(
+                                  color: textSub,
+                                  fontSize: 13,
                                 ),
-                              ],
+                              ),
                             ],
                           ),
                         ),
-                        // Switch - Her zaman aktif (genel bildirimler kapalıyken de kategori açılabilir)
-                        Switch(
-                          value: isEnabled,
-                          onChanged: (value) => _toggleCategoryNotification(category.id, value),
-                          activeColor: primaryColor,
-                          activeTrackColor: primaryColor.withValues(alpha: 0.5),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          color: textSub,
+                          size: 16,
                         ),
                       ],
                     ),
-                  );
-                },
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -712,32 +763,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
           ),
         );
       }
-    }
-  }
-
-
-  Color _getCategoryColor(String categoryId) {
-    switch (categoryId) {
-      case 'elektronik':
-        return Colors.blue;
-      case 'moda':
-        return Colors.pink;
-      case 'ev_yasam':
-        return Colors.orange;
-      case 'anne_bebek':
-        return Colors.purple;
-      case 'kozmetik':
-        return Colors.pink[300]!;
-      case 'spor_outdoor':
-        return Colors.green;
-      case 'supermarket':
-        return Colors.red;
-      case 'yapi_oto':
-        return Colors.brown;
-      case 'kitap_hobi':
-        return Colors.teal;
-      default:
-        return Colors.grey;
     }
   }
 }

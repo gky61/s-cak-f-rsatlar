@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'home_screen.dart';
@@ -254,6 +255,27 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  Future<void> _sendEmail() async {
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: 'kolikfirsat@gmail.com',
+    );
+    
+    try {
+      if (await canLaunchUrl(emailUri)) {
+        await launchUrl(emailUri);
+      } else {
+        if (mounted) {
+          _showError('E-posta uygulaması açılamadı. Lütfen manuel olarak kolikfirsat@gmail.com adresine mail gönderin.');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('E-posta gönderilemedi. Lütfen tekrar deneyin.');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -272,12 +294,14 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+          child: Stack(
+            children: [
+              Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                   // Logo ve Başlık
                   Container(
                     padding: const EdgeInsets.all(24),
@@ -405,9 +429,24 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                ],
+                    ],
+                  ),
+                ),
               ),
-            ),
+              // E-posta butonu - Sağ alt köşe (ama çok alta değil)
+              Positioned(
+                right: 20,
+                bottom: 60, // Biraz daha aşağıda
+                child: FloatingActionButton(
+                  onPressed: _sendEmail,
+                  backgroundColor: const Color(0xFFFF6B35),
+                  child: const Icon(
+                    Icons.email_outlined,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

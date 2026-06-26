@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
+import 'category.dart';
+
 void _log(String message) {
-  if (kDebugMode) _log(message);
+  if (kDebugMode) print(message);
 }
 
 class Deal {
@@ -24,7 +26,7 @@ class Deal {
   final String postedBy;
   final DateTime createdAt;
   final bool isEditorPick;
-  final bool isApproved;
+  final bool? isApproved; // Nullable: Bot'un yazdığı verilerde olmayabilir
   final bool isExpired;
   final bool isUserSubmitted; // Kullanıcı tarafından paylaşıldı mı?
 
@@ -46,20 +48,21 @@ class Deal {
     required this.commentCount,
     required this.postedBy,
     required this.createdAt,
-    required this.isEditorPick,
-    this.isApproved = false,
-    this.isExpired = false,
-    this.isUserSubmitted = false,
+        required this.isEditorPick,
+        this.isApproved,
+        this.isExpired = false,
+        this.isUserSubmitted = false,
   });
 
   // Firestore'dan Deal oluşturma
   factory Deal.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     
-    // createdAt'i parse et (Timestamp, DateTime veya String formatını destekle)
+    // createdAt'i parse et (timestamp veya createdAt alanını kontrol et)
     DateTime createdAt;
     try {
-      final createdAtValue = data['createdAt'];
+      // Bot 'timestamp' yazıyor, eski kodlar 'createdAt' kullanıyor - her ikisini de destekle
+      final createdAtValue = data['timestamp'] ?? data['createdAt'];
       if (createdAtValue is Timestamp) {
         createdAt = createdAtValue.toDate();
       } else if (createdAtValue is DateTime) {
@@ -114,18 +117,36 @@ class Deal {
       createdAt = DateTime.now();
     }
     
+    // price alanını parse et (bot String yazıyor, double'a çevir)
+    double priceValue = 0.0;
+    try {
+      final priceData = data['price'];
+      if (priceData is String) {
+        // String'den double'a çevir (virgül, nokta, boşluk temizle)
+        final cleaned = priceData.replaceAll(',', '.').replaceAll(' ', '').replaceAll('₺', '').replaceAll('TL', '');
+        priceValue = double.tryParse(cleaned) ?? 0.0;
+      } else if (priceData is num) {
+        priceValue = priceData.toDouble();
+      } else {
+        priceValue = 0.0;
+      }
+    } catch (e) {
+      _log('⚠️ price parse hatası: $e, değer: ${data['price']}');
+      priceValue = 0.0;
+    }
+    
     return Deal(
       id: doc.id,
       title: data['title'] ?? '',
-      description: data['description'] ?? data['rawMessage'] ?? '',
-      price: (data['price'] ?? 0).toDouble(),
+      description: data['description'] ?? data['desc'] ?? data['rawMessage'] ?? '', // Bot 'desc' yazıyor
+      price: priceValue,
       originalPrice: data['originalPrice'] != null ? (data['originalPrice']).toDouble() : null,
       discountRate: data['discountRate'] != null ? (data['discountRate'] as num).toInt() : null,
       store: data['store'] ?? '',
-      category: data['category'] ?? '',
+      category: Category.normalizeCategoryId((data['category'] ?? '').toString()),
       subCategory: data['subCategory'],
-      link: data['link'] ?? '',
-      imageUrl: data['imageUrl'] ?? '',
+      link: data['link'] ?? data['url'] ?? '', // Bot 'url' de yazabilir
+      imageUrl: data['imageUrl'] ?? data['image_url'] ?? '', // Hem imageUrl hem image_url destekle
       hotVotes: (data['hotVotes'] ?? 0) is int ? (data['hotVotes'] ?? 0) : ((data['hotVotes'] ?? 0) as num).toInt(),
       coldVotes: (data['coldVotes'] ?? 0) is int ? (data['coldVotes'] ?? 0) : ((data['coldVotes'] ?? 0) as num).toInt(),
       expiredVotes: (data['expiredVotes'] ?? 0) is int ? (data['expiredVotes'] ?? 0) : ((data['expiredVotes'] ?? 0) as num).toInt(),
@@ -133,7 +154,7 @@ class Deal {
       postedBy: data['postedBy'] ?? '',
       createdAt: createdAt,
       isEditorPick: data['isEditorPick'] == true,
-      isApproved: data['isApproved'] == true,
+      isApproved: data.containsKey('isApproved') ? data['isApproved'] as bool? : null, // Alan yoksa null, varsa değerini al
       isExpired: data['isExpired'] == true,
       isUserSubmitted: data['isUserSubmitted'] == true,
     );

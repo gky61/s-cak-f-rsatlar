@@ -20,3 +20,8 @@ echo "✅ Kontrol tamamlandı!"
 
 
 
+
+
+
+
+

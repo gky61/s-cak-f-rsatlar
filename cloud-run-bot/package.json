@@ -1,0 +1,17 @@
+{
+  "name": "telegram-bot-cloud-run",
+  "version": "1.0.0",
+  "description": "Real-time Telegram bot for Cloud Run",
+  "main": "telegram_bot.js",
+  "scripts": {
+    "start": "node telegram_bot.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "firebase-admin": "^12.0.0",
+    "telegram": "^2.22.2"
+  },
+  "engines": {
+    "node": "22"
+  }
+}

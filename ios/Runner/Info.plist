@@ -47,5 +47,16 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<!-- Arka planda FCM bildirimleri almak için -->
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>remote-notification</string>
+		</array>
+		<!-- Kamera Erişimi (Profil fotoğrafı çekmek için) -->
+		<key>NSCameraUsageDescription</key>
+		<string>Profil fotoğrafınızı çekmek için kamera erişimine ihtiyacımız var.</string>
+		<!-- Fotoğraf Galerisi Erişimi (Profil fotoğrafı seçmek için) -->
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Profil fotoğrafınızı seçmek için fotoğraf galerinize erişmemiz gerekiyor.</string>
 	</dict>
 </plist>

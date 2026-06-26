@@ -215,11 +215,13 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         initDOMElements();
         initEventListeners();
+        initLightbox();
         initAuth();
     });
 } else {
     initDOMElements();
     initEventListeners();
+    initLightbox();
     initAuth();
 }
 
@@ -874,23 +876,51 @@ async function loadDeals() {
         
         // Real-time listener ekle
         console.log('👂 Setting up real-time listener for deals...');
+        // Index gerektirmemek için önce tüm deal'leri al, sonra client-side'da sırala
         dealsUnsubscribe = db.collection('deals')
-            .orderBy('createdAt', 'desc')
             .limit(500)
             .onSnapshot((snapshot) => {
                 console.log('🔄 Real-time update received! Snapshot size:', snapshot.size);
                 
                 deals = snapshot.docs.map(doc => {
                     const data = doc.data();
-                    const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date());
+                    // Bot 'timestamp' yazıyor, eski kodlar 'createdAt' kullanıyor - her ikisini de destekle
+                    const createdAtValue = data.timestamp || data.createdAt;
+                    let createdAt;
+                    if (createdAtValue?.toDate) {
+                        createdAt = createdAtValue.toDate();
+                    } else if (createdAtValue instanceof Date) {
+                        createdAt = createdAtValue;
+                    } else if (createdAtValue) {
+                        try {
+                            createdAt = new Date(createdAtValue);
+                        } catch (e) {
+                            console.warn('Invalid date for deal:', doc.id, createdAtValue);
+                            createdAt = new Date();
+                        }
+                    } else {
+                        createdAt = new Date();
+                    }
+                    
+                    // Bot 'image_url' ve 'url' yazıyor, eski kodlar 'imageUrl' ve 'link' kullanıyor - her ikisini de destekle
+                    const normalizedData = {
+                        ...data,
+                        // image_url varsa imageUrl'e de kopyala
+                        imageUrl: data.image_url || data.imageUrl || '',
+                        // url varsa link'e de kopyala
+                        link: data.url || data.link || '',
+                    };
                     
                     return {
                         id: doc.id,
-                        ...data,
+                        ...normalizedData,
                         createdAt: createdAt,
                         isApproved: data.isApproved === true
                     };
                 });
+                
+                // Client-side'da tarihe göre sırala (yeni önce)
+                deals.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
                 
                 console.log('📊 Total deals:', deals.length);
                 console.log('⏳ Pending deals:', deals.filter(d => !d.isApproved).length);
@@ -989,8 +1019,8 @@ function createDealRow(deal) {
         ? `<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-medium"><span class="material-symbols-outlined text-[14px]">person</span>${escapeHtml(deal.postedBy || 'Kullanıcı')}</div>`
         : `<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium"><span class="material-symbols-outlined text-[14px]">smart_toy</span>Bot</div>`;
     
-    // Image URL
-    let imageUrl = deal.imageUrl || '';
+    // Image URL - Bot 'image_url' yazıyor, eski kodlar 'imageUrl' kullanıyor - her ikisini de destekle
+    let imageUrl = deal.image_url || deal.imageUrl || '';
     if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim() !== '') {
         if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:') || imageUrl.trim() === '') {
             imageUrl = '';
@@ -1013,23 +1043,23 @@ function createDealRow(deal) {
     const originalPrice = deal.originalPrice || price;
     const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
     
-    // Image HTML
+    // Image HTML - Web için optimize edilmiş görsel gösterimi, daha net görünüm için object-contain
     const imageHtml = imageUrl && imageUrl.trim() !== ''
-        ? `<img alt="Product thumbnail" class="max-h-full max-w-full" src="${escapeHtml(imageUrl)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#f5f5f5; color:#999; font-size:24px;">📷</div>`
-        : `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#f5f5f5; color:#999; font-size:24px;">📷</div>`;
+        ? `<img alt="Product thumbnail" class="w-full h-full object-contain rounded transition-opacity duration-200 hover:opacity-90" src="${escapeHtml(imageUrl)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" loading="lazy" style="max-width: 100%; max-height: 100%; object-position: center;"><div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%); color:#999; font-size:18px;">📷</div>`
+        : `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%); color:#999; font-size:18px;">📷</div>`;
     
     row.innerHTML = `
         <td class="p-4 text-center">
             <input class="rounded border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-surface-dark text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
         </td>
         <td class="p-4">
-            <div class="flex gap-4 items-center">
-                <div class="size-12 shrink-0 rounded-lg bg-white p-1 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
+            <div class="flex gap-3 items-center">
+                <div class="w-20 h-20 shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                     ${imageHtml}
                 </div>
-                <div class="flex flex-col gap-0.5">
-                    <p class="text-slate-900 dark:text-white font-medium line-clamp-1">${escapeHtml(deal.title || 'Başlıksız')}</p>
-                    <p class="text-slate-500 dark:text-slate-400 text-xs">${escapeHtml(deal.category || 'Genel')} • ${escapeHtml(deal.store || 'Bilinmeyen')}</p>
+                <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+                    <p class="text-slate-900 dark:text-white font-medium line-clamp-2 leading-tight">${escapeHtml(deal.title || 'Başlıksız')}</p>
+                    <p class="text-slate-500 dark:text-slate-400 text-xs mt-0.5">${escapeHtml(deal.category || 'Genel')} • ${escapeHtml(deal.store || 'Bilinmeyen')}</p>
                 </div>
             </div>
         </td>
@@ -1107,7 +1137,36 @@ async function approveDeal(dealId) {
         }
         
         const dealData = dealDoc.data();
-        const currentUrl = dealData.url || dealData.link || '';
+        let currentUrl = dealData.url || dealData.link || '';
+        
+        // Kısa link kontrolü ve otomatik çözme
+        if (currentUrl) {
+            try {
+                const url = new URL(currentUrl);
+                const hostname = url.hostname.toLowerCase();
+                
+                if (hostname.includes('hb.biz') || hostname.includes('app.hb.biz')) {
+                    // Kısa link tespit edildi - Otomatik çöz
+                    console.log('🔄 Kısa link tespit edildi, çözülüyor...', currentUrl);
+                    try {
+                        const functionsUrl = 'https://us-central1-sicak-firsatlar-e6eae.cloudfunctions.net/resolveShortLink';
+                        const response = await fetch(`${functionsUrl}?url=${encodeURIComponent(currentUrl)}`);
+                        const data = await response.json();
+                        
+                        if (data.success && data.resolvedUrl) {
+                            currentUrl = data.resolvedUrl;
+                            console.log('✅ Kısa link çözüldü:', currentUrl);
+                        } else {
+                            console.warn('⚠️ Kısa link çözülemedi, orijinal link kullanılıyor');
+                        }
+                    } catch (error) {
+                        console.error('❌ Kısa link çözme hatası:', error);
+                    }
+                }
+            } catch (e) {
+                // URL parse hatası, devam et
+            }
+        }
         
         // Affiliate link'e dönüştür (eğer yapılandırılmışsa)
         let finalUrl = currentUrl;
@@ -1161,26 +1220,78 @@ function convertToAffiliateLink(originalUrl) {
         const url = new URL(originalUrl);
         const hostname = url.hostname.toLowerCase();
         
+        // Hepsiburada kısa link kontrolü (app.hb.biz)
+        // Başkasının kısa linkini kendi affiliate linkimize dönüştürmek için
+        // önce gerçek ürün linkini bulmamız gerekir (bu client-side'da yapılamaz)
+        // Bu yüzden kısa linkleri olduğu gibi bırakıyoruz
+        // NOT: Eğer kısa linki kendi affiliate linkinize dönüştürmek istiyorsanız,
+        // önce kısa linki tarayıcıda açıp gerçek ürün linkini alın, sonra admin panelinde kullanın
+        if (hostname.includes('hb.biz') || hostname.includes('app.hb.biz')) {
+            console.log('ℹ️ Kısa link tespit edildi:', originalUrl);
+            console.log('⚠️ Kısa linkler başkasına ait olabilir. Kendi affiliate linkinize dönüştürmek için:');
+            console.log('   1. Kısa linki tarayıcıda açın');
+            console.log('   2. Gerçek ürün linkini kopyalayın');
+            console.log('   3. Admin panelinde o linki kullanın');
+            
+            // Eğer config'de utmSource varsa, kısa linki değiştirmeye çalışabiliriz
+            // Ama kısa linkler redirect yaptığı için client-side'da gerçek URL'yi bulamayız
+            // Bu yüzden kullanıcıya uyarı gösterip linki olduğu gibi bırakıyoruz
+            if (affiliateConfig.hepsiburada.utmSource) {
+                // Kısa linki olduğu gibi bırak, ama kullanıcıya bilgi ver
+                return originalUrl;
+            }
+            return originalUrl; // Kısa link olduğu gibi kalır
+        }
+        
         // Trendyol
         if (hostname.includes('trendyol.com')) {
+            // Mevcut boutiqueId'yi temizle (başkasının affiliate linkini kendi linkimize dönüştürmek için)
+            url.searchParams.delete('boutiqueId');
+            
             if (affiliateConfig.trendyol.boutiqueId) {
+                // Kendi boutiqueId'yi ekle
                 url.searchParams.set('boutiqueId', affiliateConfig.trendyol.boutiqueId);
                 return url.toString();
             }
         }
         
-        // Hepsiburada
+        // Hepsiburada (Link Gelir) - Normal ürün linkleri
         if (hostname.includes('hepsiburada.com')) {
+            // Hepsiburada'nın "Tavsiyeni Paylaş" butonundan gelen linkler zaten affiliate linktir
+            // Eğer link zaten kendi affiliate linkimizse (utm_source bizim ID'mizle eşleşiyorsa), değiştirme
+            const existingUtmSource = url.searchParams.get('utm_source');
+            const ourUtmSource = affiliateConfig.hepsiburada.utmSource;
+            
+            // Eğer link zaten bizim affiliate linkimizse, olduğu gibi bırak
+            if (existingUtmSource && ourUtmSource && existingUtmSource === ourUtmSource) {
+                console.log('ℹ️ Link zaten kendi affiliate linkiniz:', originalUrl);
+                return originalUrl; // Kendi linkiniz, değiştirme
+            }
+            
+            // Başkasının affiliate linkini kendi affiliate linkimize dönüştür
+            // Mevcut affiliate parametrelerini temizle
+            url.searchParams.delete('utm_source');
+            url.searchParams.delete('utm_medium');
+            url.searchParams.delete('utm_campaign');
+            url.searchParams.delete('utm_content');
+            url.searchParams.delete('wt_inf');
+            
             if (affiliateConfig.hepsiburada.utmSource) {
+                // Kendi affiliate parametrelerini ekle
                 url.searchParams.set('utm_source', affiliateConfig.hepsiburada.utmSource);
-                url.searchParams.set('utm_medium', 'affiliate');
+                url.searchParams.set('utm_medium', 'referral');
+                url.searchParams.set('utm_campaign', 'urun_paylasim');
                 return url.toString();
             }
         }
         
         // N11
         if (hostname.includes('n11.com')) {
+            // Mevcut ref parametresini temizle
+            url.searchParams.delete('ref');
+            
             if (affiliateConfig.n11.refId) {
+                // Kendi ref ID'sini ekle
                 url.searchParams.set('ref', affiliateConfig.n11.refId);
                 return url.toString();
             }
@@ -1188,7 +1299,11 @@ function convertToAffiliateLink(originalUrl) {
         
         // Amazon
         if (hostname.includes('amazon.com.tr') || hostname.includes('amazon.com')) {
+            // Mevcut tag parametresini temizle
+            url.searchParams.delete('tag');
+            
             if (affiliateConfig.amazon.tag) {
+                // Kendi tag'ini ekle
                 url.searchParams.set('tag', affiliateConfig.amazon.tag);
                 return url.toString();
             }
@@ -1196,7 +1311,11 @@ function convertToAffiliateLink(originalUrl) {
         
         // GittiGidiyor
         if (hostname.includes('gittigidiyor.com')) {
+            // Mevcut affiliateId parametresini temizle
+            url.searchParams.delete('affiliateId');
+            
             if (affiliateConfig.gittigidiyor.affiliateId) {
+                // Kendi affiliateId'yi ekle
                 url.searchParams.set('affiliateId', affiliateConfig.gittigidiyor.affiliateId);
                 return url.toString();
             }
@@ -1261,19 +1380,24 @@ async function showDealModal(deal) {
         }
     }
     
-    // Görsel URL'lerini kontrol et (imageUrls array veya imageUrl string)
+    // Görsel URL'lerini kontrol et (imageUrls array veya imageUrl/image_url string)
+    // Bot 'image_url' yazıyor, eski kodlar 'imageUrl' kullanıyor - her ikisini de destekle
     let imageUrls = [];
     if (deal.imageUrls && Array.isArray(deal.imageUrls) && deal.imageUrls.length > 0) {
         imageUrls = deal.imageUrls.filter(url => url && typeof url === 'string' && url.trim() !== '' && !url.startsWith('blob:') && !url.startsWith('data:'));
-    } else if (deal.imageUrl && typeof deal.imageUrl === 'string' && deal.imageUrl.trim() !== '') {
-        let imageUrl = deal.imageUrl;
-        if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
-            imageUrl = '';
-        } else {
-            if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
-                imageUrl = 'https://' + imageUrl;
+    } else {
+        // Önce image_url'i kontrol et (bot'un yazdığı), sonra imageUrl'i (eski kodlar)
+        const imageUrlValue = deal.image_url || deal.imageUrl;
+        if (imageUrlValue && typeof imageUrlValue === 'string' && imageUrlValue.trim() !== '') {
+            let imageUrl = imageUrlValue;
+            if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
+                imageUrl = '';
+            } else {
+                if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+                    imageUrl = 'https://' + imageUrl;
+                }
+                imageUrls = [imageUrl];
             }
-            imageUrls = [imageUrl];
         }
     }
     
@@ -1293,15 +1417,15 @@ async function showDealModal(deal) {
         statusValue = 'active';
     }
     
-    // Görsel HTML
+    // Görsel HTML - Web için optimize edilmiş, daha küçük ve net, tıklanabilir
     const mainImageHtml = mainImageUrl && mainImageUrl.trim() !== ''
-        ? `<img alt="${escapeHtml(deal.title)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="${escapeHtml(mainImageUrl)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#f5f5f5; color:#999; font-size:48px;">📷</div>`
-        : `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#f5f5f5; color:#999; font-size:48px;">📷</div>`;
+        ? `<img alt="${escapeHtml(deal.title)}" class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 cursor-zoom-in" src="${escapeHtml(mainImageUrl)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" loading="lazy" style="object-position: center; max-width: 100%; max-height: 100%; pointer-events: auto;"><div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%); color:#999; font-size:32px;">📷</div>`
+        : `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%); color:#999; font-size:32px;">📷</div>`;
     
     // İkinci görsel HTML
     const secondImageHtml = secondImageUrl && secondImageUrl.trim() !== ''
-        ? `<img alt="${escapeHtml(deal.title)}" class="w-full h-full object-cover rounded-lg" src="${escapeHtml(secondImageUrl)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#f5f5f5; color:#999; font-size:24px;">📷</div>`
-        : `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#f5f5f5; color:#999; font-size:24px;">📷</div>`;
+        ? `<img alt="${escapeHtml(deal.title)}" class="w-full h-full object-contain rounded-lg transition-opacity duration-200 hover:opacity-90 cursor-zoom-in" src="${escapeHtml(secondImageUrl)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" loading="lazy" style="object-position: center; max-width: 100%; max-height: 100%; pointer-events: auto;"><div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%); color:#999; font-size:20px;">📷</div>`
+        : `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%); color:#999; font-size:20px;">📷</div>`;
     
     // Modal Body (Sol Kolon)
     const modalBodyEl = document.getElementById('modalBody');
@@ -1312,22 +1436,25 @@ async function showDealModal(deal) {
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white">Görseller</h3>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 aspect-[3/1] sm:aspect-[3/1.2]">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <!-- Main Hero Image -->
-                    <div class="sm:col-span-2 relative group rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
-                        ${mainImageHtml}
-                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <button class="p-2 bg-white/20 backdrop-blur-md rounded-full text-white hover:bg-white/40 transition-colors" type="button">
-                                <span class="material-symbols-outlined text-[20px]">edit</span>
-                            </button>
+                    <div class="sm:col-span-2 relative group rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 cursor-zoom-in" style="max-height: 400px; min-height: 300px;" data-image-url="${mainImageUrl ? escapeHtml(mainImageUrl) : ''}" id="mainImageContainer">
+                        <div class="w-full h-full pointer-events-auto">
+                            ${mainImageHtml}
                         </div>
+                        <!-- Edit butonu sağ üst köşede -->
+                        <button class="absolute top-2 right-2 p-2 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full text-white transition-all opacity-0 group-hover:opacity-100 pointer-events-auto z-20" type="button" title="Görseli Düzenle">
+                            <span class="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
                     </div>
                     <!-- Secondary Images Placeholder -->
-                    <div class="flex flex-col gap-3 h-full">
-                        <div id="secondImageContainer" class="relative group flex-1 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                            ${secondImageHtml}
+                    <div class="flex flex-col gap-3">
+                        <div id="secondImageContainer" class="relative group rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex items-center justify-center cursor-zoom-in" style="height: 190px; min-height: 190px;" data-image-url="${secondImageUrl ? escapeHtml(secondImageUrl) : ''}">
+                            <div class="w-full h-full pointer-events-auto">
+                                ${secondImageHtml}
+                            </div>
                         </div>
-                        <label for="imageUploadInput" class="flex-1 rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-primary hover:bg-primary/5 dark:hover:bg-primary/10 flex flex-col items-center justify-center cursor-pointer transition-all group">
+                        <label for="imageUploadInput" class="rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-primary hover:bg-primary/5 dark:hover:bg-primary/10 flex flex-col items-center justify-center cursor-pointer transition-all group py-4" style="height: 190px; min-height: 190px;">
                             <span class="material-symbols-outlined text-slate-400 dark:text-slate-500 group-hover:text-primary transition-colors">add_photo_alternate</span>
                             <span class="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Yükle</span>
                             <input id="imageUploadInput" class="hidden" type="file" accept="image/*"/>
@@ -1553,17 +1680,78 @@ async function showDealModal(deal) {
     const affiliateStatusEl = document.getElementById('affiliateStatus');
     
     if (convertToAffiliateBtn && editUrlEl) {
-        convertToAffiliateBtn.addEventListener('click', () => {
+        convertToAffiliateBtn.addEventListener('click', async () => {
             const currentUrl = editUrlEl.value.trim();
             if (!currentUrl) {
                 showError('Lütfen önce bir link girin!');
                 return;
             }
             
-            const convertedUrl = convertToAffiliateLink(currentUrl);
-            const store = detectStoreFromUrl(currentUrl);
+            // Kısa link kontrolü ve otomatik çözme
+            let urlToConvert = currentUrl;
+            try {
+                const url = new URL(currentUrl);
+                const hostname = url.hostname.toLowerCase();
+                
+                if (hostname.includes('hb.biz') || hostname.includes('app.hb.biz')) {
+                    // Kısa link tespit edildi - Otomatik çöz
+                    if (affiliateStatusEl) {
+                        affiliateStatusEl.innerHTML = `
+                            <div style="background: #e7f3ff; padding: 10px; border-radius: 5px; border-left: 4px solid #2196F3;">
+                                <strong>🔄 Kısa link çözülüyor...</strong><br>
+                                <small>Gerçek ürün linki bulunuyor...</small>
+                            </div>
+                        `;
+                        affiliateStatusEl.className = 'text-xs mt-1';
+                    }
+                    
+                    // Firebase Function ile kısa linki çöz
+                    try {
+                        const functionsUrl = 'https://us-central1-sicak-firsatlar-e6eae.cloudfunctions.net/resolveShortLink';
+                        const response = await fetch(`${functionsUrl}?url=${encodeURIComponent(currentUrl)}`);
+                        const data = await response.json();
+                        
+                        if (data.success && data.resolvedUrl) {
+                            urlToConvert = data.resolvedUrl;
+                            if (affiliateStatusEl) {
+                                affiliateStatusEl.innerHTML = `
+                                    <div style="background: #d4edda; padding: 10px; border-radius: 5px; border-left: 4px solid #28a745;">
+                                        <strong>✅ Kısa link çözüldü!</strong><br>
+                                        <small>Gerçek ürün linki bulundu, affiliate link'e dönüştürülüyor...</small>
+                                    </div>
+                                `;
+                                affiliateStatusEl.className = 'text-xs mt-1';
+                            }
+                        } else {
+                            throw new Error('Kısa link çözülemedi');
+                        }
+                    } catch (error) {
+                        console.error('Kısa link çözme hatası:', error);
+                        if (affiliateStatusEl) {
+                            affiliateStatusEl.innerHTML = `
+                                <div style="background: #fff3cd; padding: 10px; border-radius: 5px; border-left: 4px solid #ffc107;">
+                                    <strong>⚠️ Kısa Link Çözülemedi</strong><br>
+                                    Otomatik çözüm başarısız. Lütfen:<br>
+                                    1. Bu linki tarayıcıda açın<br>
+                                    2. Gerçek ürün linkini kopyalayın<br>
+                                    3. Buraya yapıştırın ve tekrar deneyin
+                                </div>
+                            `;
+                            affiliateStatusEl.className = 'text-xs mt-1';
+                        }
+                        showError('Kısa link otomatik çözülemedi. Lütfen gerçek ürün linkini manuel olarak alın.');
+                        return;
+                    }
+                }
+            } catch (e) {
+                // URL parse hatası, devam et
+            }
             
-            if (convertedUrl !== currentUrl) {
+            // Affiliate link'e dönüştür (başkasının affiliate linkini kendi linkimize dönüştürür)
+            const store = detectStoreFromUrl(urlToConvert);
+            const convertedUrl = convertToAffiliateLink(urlToConvert);
+            
+            if (convertedUrl !== urlToConvert) {
                 editUrlEl.value = convertedUrl;
                 if (previewLinkBtn) {
                     previewLinkBtn.href = convertedUrl;
@@ -1574,6 +1762,7 @@ async function showDealModal(deal) {
                 }
                 showSuccess(`${store} affiliate linkine dönüştürüldü!`);
             } else {
+                // Link değişmedi - affiliate ID yapılandırılmamış olabilir
                 if (affiliateStatusEl) {
                     if (store === 'Bilinmeyen') {
                         affiliateStatusEl.textContent = '⚠️ Bu site için affiliate link yapılandırması bulunamadı';
@@ -1714,7 +1903,108 @@ async function showDealModal(deal) {
             });
         }
     }, 200); // DOM'un güncellenmesi için kısa bir gecikme
+    
+    // Image lightbox event listeners - Modal açıldıktan sonra ekle
+    setTimeout(() => {
+        // Ana görsel için - container'a direkt listener ekle
+        const mainImageContainer = document.getElementById('mainImageContainer') || document.querySelector('.sm\\:col-span-2[data-image-url]');
+        if (mainImageContainer) {
+            // Önceki listener'ları temizle
+            const newContainer = mainImageContainer.cloneNode(true);
+            mainImageContainer.parentNode.replaceChild(newContainer, mainImageContainer);
+            
+            newContainer.addEventListener('click', (e) => {
+                // Edit butonuna tıklanmadıysa
+                if (!e.target.closest('button') && e.target.tagName !== 'BUTTON') {
+                    const imageUrl = newContainer.dataset.imageUrl;
+                    if (imageUrl && imageUrl.trim() !== '') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🖼️ Main image container clicked, opening lightbox:', imageUrl);
+                        openImageLightbox(imageUrl);
+                    } else {
+                        console.warn('⚠️ No image URL in dataset');
+                    }
+                }
+            });
+            console.log('✅ Main image click listener added to container');
+        } else {
+            console.warn('⚠️ Main image container not found');
+        }
+        
+        // İkinci görsel için
+        const secondImageContainer = document.getElementById('secondImageContainer');
+        if (secondImageContainer && secondImageContainer.dataset.imageUrl) {
+            // Önceki listener'ları temizle
+            const newSecondContainer = secondImageContainer.cloneNode(true);
+            secondImageContainer.parentNode.replaceChild(newSecondContainer, secondImageContainer);
+            
+            newSecondContainer.addEventListener('click', (e) => {
+                const imageUrl = newSecondContainer.dataset.imageUrl;
+                if (imageUrl && imageUrl.trim() !== '') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🖼️ Second image container clicked, opening lightbox:', imageUrl);
+                    openImageLightbox(imageUrl);
+                }
+            });
+            console.log('✅ Second image click listener added to container');
+        }
+    }, 400);
 }
+
+// Image Lightbox Functions
+function openImageLightbox(imageUrl) {
+    console.log('🔍 Opening lightbox with image:', imageUrl);
+    const lightbox = document.getElementById('imageLightbox');
+    const lightboxImage = document.getElementById('lightboxImage');
+    if (lightbox && lightboxImage && imageUrl) {
+        lightboxImage.src = imageUrl;
+        lightbox.classList.remove('hidden');
+        document.body.style.overflow = 'hidden'; // Prevent background scrolling
+        console.log('✅ Lightbox opened');
+    } else {
+        console.error('❌ Lightbox elements not found or no image URL:', { lightbox, lightboxImage, imageUrl });
+    }
+}
+
+function closeImageLightbox() {
+    const lightbox = document.getElementById('imageLightbox');
+    if (lightbox) {
+        lightbox.classList.add('hidden');
+        document.body.style.overflow = ''; // Restore scrolling
+    }
+}
+
+// Initialize lightbox event listeners
+function initLightbox() {
+    const lightbox = document.getElementById('imageLightbox');
+    const closeLightboxBtn = document.getElementById('closeLightbox');
+    
+    if (closeLightboxBtn) {
+        closeLightboxBtn.addEventListener('click', closeImageLightbox);
+    }
+    
+    // Close on background click
+    if (lightbox) {
+        lightbox.addEventListener('click', (e) => {
+            if (e.target === lightbox) {
+                closeImageLightbox();
+            }
+        });
+    }
+    
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && lightbox && !lightbox.classList.contains('hidden')) {
+            closeImageLightbox();
+        }
+    });
+}
+
+// Make functions globally available
+window.openImageLightbox = openImageLightbox;
+window.closeImageLightbox = closeImageLightbox;
 
 function closeDealModal() {
     if (dealModal) {

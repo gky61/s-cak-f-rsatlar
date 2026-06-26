@@ -246,3 +246,8 @@ Otomatik silme işlemi **depolama maliyetini** önemli ölçüde düşürür. Si
 **Otomatik silme sistemini KORU** ✅  
 Mevcut sistem mükemmel çalışıyor ve maliyet tasarrufu sağlıyor.
 
+
+
+
+
+

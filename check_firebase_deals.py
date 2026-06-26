@@ -28,10 +28,11 @@ db = firestore.client()
 def check_firebase_deals():
     """Firebase'deki deal'leri kontrol et"""
     try:
+        from datetime import timezone
         print("🔍 Firebase'deki deal'ler kontrol ediliyor...\n")
         
         # Son 24 saatte eklenen deal'leri getir
-        yesterday = datetime.utcnow() - timedelta(days=1)
+        yesterday = datetime.now(timezone.utc) - timedelta(days=1)
         
         # Tüm deal'leri getir (son 24 saat)
         print("📊 Son 24 saatte eklenen deal'ler:")
@@ -83,14 +84,16 @@ def check_firebase_deals():
             print(f"   - {deal['title']} | MessageID: {deal.get('telegramMessageId', 'N/A')} | ID: {deal['id']}")
         
         # Son 1 saatte eklenen deal'leri kontrol et
-        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
         recent_deals = []
         for deal in all_deals:
             data = deal.to_dict()
             created_at = data.get('createdAt')
             if created_at:
                 if isinstance(created_at, datetime):
-                    if created_at > one_hour_ago:
+                    # Make sure created_at is offset-aware
+                    created_at_tz = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+                    if created_at_tz > one_hour_ago:
                         recent_deals.append(deal)
                 elif hasattr(created_at, 'timestamp'):
                     if created_at.timestamp() > one_hour_ago.timestamp():

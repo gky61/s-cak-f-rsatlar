@@ -25,7 +25,11 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
   @override
   void initState() {
     super.initState();
-    _currentMainCategoryId = widget.selectedCategoryId;
+    if (widget.selectedCategoryId != null && widget.selectedCategoryId != 'tumu') {
+      _currentMainCategoryId = widget.selectedCategoryId;
+    } else {
+      _currentMainCategoryId = null;
+    }
     _selectedSubCategory = widget.selectedSubCategory;
   }
 
@@ -40,14 +44,11 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
     setState(() {
       _selectedSubCategory = subCategory;
     });
-    // Alt kategori seçildiğinde sadece state'i güncelle, modal'ı kapatma
-    // Kullanıcı "Seçimi Onayla" butonuna basana kadar beklesin
   }
 
   void _confirmSelection() {
     if (_currentMainCategoryId != null) {
       widget.onCategorySelected(_currentMainCategoryId!, _selectedSubCategory);
-      // Modal'ı kapat - sadece bottom sheet'i kapat, ana ekrandan çıkma
       if (Navigator.canPop(context)) {
         Navigator.pop(context);
       }
@@ -56,6 +57,12 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final textColor = isDark ? AppTheme.darkTextPrimary : Colors.black87;
+    final borderColor = isDark ? AppTheme.darkBorder : Colors.grey[200]!;
+    final bottomBarColor = isDark ? AppTheme.darkSurfaceElevated : Colors.grey[50];
+
     final mainCategories = Category.categories.where((cat) => cat.id != 'tumu').toList();
     final currentCategory = _currentMainCategoryId != null
         ? Category.getById(_currentMainCategoryId!)
@@ -63,41 +70,46 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         children: [
-          // Başlık ve Kapatma Butonu
+          // Başlık ve Kapatma/Geri Butonu
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               border: Border(
-                bottom: BorderSide(color: Colors.grey[200]!),
+                bottom: BorderSide(color: borderColor),
               ),
             ),
             child: Row(
               children: [
-                const Text(
-                  'Kategori Seç',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                if (_currentMainCategoryId != null && currentCategory != null)
+                if (_currentMainCategoryId != null && currentCategory != null) ...[
                   IconButton(
-                    icon: const Icon(Icons.arrow_back),
+                    icon: Icon(Icons.arrow_back, color: textColor),
                     onPressed: () => setState(() {
                       _currentMainCategoryId = null;
                       _selectedSubCategory = null;
                     }),
                     tooltip: 'Geri',
                   ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(
+                    _currentMainCategoryId == null ? 'Kategori Seç' : currentCategory?.name ?? 'Kategori Seç',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: Icon(Icons.close, color: textColor),
                   onPressed: () => Navigator.pop(context),
                 ),
               ],
@@ -117,9 +129,9 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: Colors.grey[200]!),
+                  top: BorderSide(color: borderColor),
                 ),
-                color: Colors.grey[50],
+                color: bottomBarColor,
               ),
               child: SizedBox(
                 width: double.infinity,
@@ -151,6 +163,12 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
   }
 
   Widget _buildMainCategories(List<Category> categories) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? AppTheme.darkSurfaceElevated : Colors.grey[50];
+    final textColor = isDark ? AppTheme.darkTextPrimary : Colors.black87;
+    final subTextColor = isDark ? AppTheme.darkTextSecondary : Colors.grey[600];
+    final borderColor = isDark ? AppTheme.darkBorder : Colors.grey[300]!;
+
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -162,18 +180,16 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
       itemCount: categories.length,
       itemBuilder: (context, index) {
         final category = categories[index];
-        final isSelected = _currentMainCategoryId == category.id;
+        final isSelected = widget.selectedCategoryId == category.id;
 
         return InkWell(
           onTap: () {
             if (category.subcategories.isEmpty) {
-              // Alt kategori yoksa direkt seç ve modal'ı kapat
               widget.onCategorySelected(category.id, null);
               if (Navigator.canPop(context)) {
                 Navigator.pop(context);
               }
             } else {
-              // Alt kategori varsa alt kategorilere geç
               _selectMainCategory(category.id);
             }
           },
@@ -182,10 +198,10 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
             decoration: BoxDecoration(
               color: isSelected
                   ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-                  : Colors.grey[50],
+                  : cardColor,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey[300]!,
+                color: isSelected ? Theme.of(context).colorScheme.primary : borderColor,
                 width: isSelected ? 2 : 1,
               ),
             ),
@@ -203,7 +219,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    color: isSelected ? Theme.of(context).colorScheme.primary : Colors.black87,
+                    color: isSelected ? Theme.of(context).colorScheme.primary : textColor,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -214,7 +230,7 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                     '${category.subcategories.length} alt kategori',
                     style: TextStyle(
                       fontSize: 10,
-                      color: Colors.grey[600],
+                      color: subTextColor,
                     ),
                   ),
                 ],
@@ -227,12 +243,18 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
   }
 
   Widget _buildSubCategories(Category category) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? AppTheme.darkSurfaceElevated : Colors.white;
+    final textColor = isDark ? AppTheme.darkTextPrimary : Colors.black87;
+    final subTextColor = isDark ? AppTheme.darkTextSecondary : Colors.grey[600];
+    final borderColor = isDark ? AppTheme.darkBorder : Colors.grey[300]!;
+
     return Column(
       children: [
         // Seçilen Ana Kategori Bilgisi
         Container(
           padding: const EdgeInsets.all(16),
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
           child: Row(
             children: [
               Text(
@@ -246,16 +268,17 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                   children: [
                     Text(
                       category.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
+                        color: textColor,
                       ),
                     ),
                     Text(
                       'Alt kategorilerden birini seçin',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey[600],
+                        color: subTextColor,
                       ),
                     ),
                   ],
@@ -271,7 +294,6 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
             padding: const EdgeInsets.all(16),
             itemCount: category.subcategories.length + 1, // +1 for "Tümü" option
             itemBuilder: (context, index) {
-              // İlk item "Tümü" seçeneği (sadece ana kategori)
               if (index == 0) {
                 final isSelected = _selectedSubCategory == null;
                 return Card(
@@ -279,13 +301,13 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                   elevation: 0,
                   color: isSelected
                       ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-                      : Colors.white,
+                      : cardColor,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
                       color: isSelected
                           ? Theme.of(context).colorScheme.primary
-                          : Colors.grey[300]!,
+                          : borderColor,
                       width: isSelected ? 2 : 1,
                     ),
                   ),
@@ -296,15 +318,13 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                     ),
                     leading: Icon(
                       isSelected ? Icons.check_circle : Icons.circle_outlined,
-                      color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey,
+                      color: isSelected ? Theme.of(context).colorScheme.primary : (isDark ? Colors.grey[700] : Colors.grey),
                     ),
                     title: Text(
                       'Tümü (${category.name})',
                       style: TextStyle(
-                        fontWeight: isSelected
-                            ? FontWeight.bold
-                            : FontWeight.w500,
-                        color: isSelected ? Theme.of(context).colorScheme.primary : Colors.black87,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected ? Theme.of(context).colorScheme.primary : textColor,
                       ),
                     ),
                     trailing: isSelected
@@ -317,7 +337,6 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                       setState(() {
                         _selectedSubCategory = null;
                       });
-                      // Direkt onayla (alt kategori yok)
                       widget.onCategorySelected(category.id, null);
                       if (Navigator.canPop(context)) {
                         Navigator.pop(context);
@@ -327,7 +346,6 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                 );
               }
               
-              // Diğer alt kategoriler
               final subCategory = category.subcategories[index - 1];
               final isSelected = _selectedSubCategory == subCategory;
 
@@ -336,13 +354,13 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                 elevation: 0,
                 color: isSelected
                     ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-                    : Colors.white,
+                    : cardColor,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
                     color: isSelected
                         ? Theme.of(context).colorScheme.primary
-                        : Colors.grey[300]!,
+                        : borderColor,
                     width: isSelected ? 2 : 1,
                   ),
                 ),
@@ -353,15 +371,13 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                   ),
                   leading: Icon(
                     isSelected ? Icons.check_circle : Icons.circle_outlined,
-                    color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey,
+                    color: isSelected ? Theme.of(context).colorScheme.primary : (isDark ? Colors.grey[700] : Colors.grey),
                   ),
                   title: Text(
                     subCategory,
                     style: TextStyle(
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.w500,
-                      color: isSelected ? Theme.of(context).colorScheme.primary : Colors.black87,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      color: isSelected ? Theme.of(context).colorScheme.primary : textColor,
                     ),
                   ),
                   trailing: isSelected
@@ -372,7 +388,6 @@ class _CategorySelectorWidgetState extends State<CategorySelectorWidget> {
                       : null,
                   onTap: () {
                     _selectSubCategory(subCategory);
-                    // Alt kategori seçildiğinde direkt onayla
                     widget.onCategorySelected(category.id, subCategory);
                     if (Navigator.canPop(context)) {
                       Navigator.pop(context);

@@ -117,7 +117,40 @@ class Category {
         "Hobi & Sanat Malzemeleri"
       ],
     ),
+    Category(
+      id: 'diger',
+      name: 'Diğer',
+      icon: '📦',
+      subcategories: [],
+    ),
   ];
+
+  /// Telegram botunun kullandığı kategori ID'lerini uygulama kategori ID'sine çevirir.
+  /// Bot: bilgisayar, mobil_cihazlar, konsol_oyun, ev_elektronigi_yasam, ag_yazilim, 'Bilgisayar'
+  static const Map<String, String> _botToAppCategoryId = {
+    'bilgisayar': 'elektronik',
+    'mobil_cihazlar': 'elektronik',
+    'konsol_oyun': 'kitap_hobi',
+    'ev_elektronigi_yasam': 'ev_yasam',
+    'ag_yazilim': 'elektronik',
+  };
+
+  /// Ham kategori değerini (bot ID, uygulama ID veya kategori adı) uygulama kategori ID'sine normalize eder.
+  static String normalizeCategoryId(String raw) {
+    if (raw.isEmpty) return 'diger';
+    final lower = raw.trim().toLowerCase();
+    // Zaten uygulama ID'si ise aynen döndür
+    final isAppId = categories.any((c) => c.id.toLowerCase() == lower && c.id != 'tumu');
+    if (isAppId) return lower;
+    // Bot ID'si ise eşle
+    final mapped = _botToAppCategoryId[lower];
+    if (mapped != null) return mapped;
+    if (lower == 'bilgisayar') return 'elektronik';
+    // Kategori adı olarak kaydedilmişse (örn. "Elektronik") ID'ye çevir
+    final byName = categories.where((c) => c.id != 'tumu' && c.name.toLowerCase() == lower);
+    if (byName.isNotEmpty) return byName.first.id;
+    return 'diger';
+  }
 
   static Category getById(String id) {
     return categories.firstWhere(

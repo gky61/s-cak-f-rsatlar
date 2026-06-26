@@ -16,11 +16,17 @@ import '../models/category.dart';
 import 'notification_settings_screen.dart';
 import 'keyword_tracking_screen.dart';
 import 'auth_screen.dart';
+import 'auth_screen.dart';
+// import 'edit_profile_screen.dart'; // Dosya bulunamadı, geçici olarak yorum satırı
+import 'notification_debug_screen.dart'; // Eklendi
 import 'privacy_policy_screen.dart';
 import 'faq_screen.dart';
 import 'category_preferences_screen.dart';
+import '../widgets/report_dialog.dart';
 import 'message_screen.dart';
 import 'messages_list_screen.dart';
+import 'admin_notifications_screen.dart';
+import 'following_users_screen.dart';
 import 'package:flutter/services.dart';
 
 void _log(String message) {
@@ -48,9 +54,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isAdmin = false;
   bool _isOwnProfile = true;
   int _unreadMessageCount = 0;
+  int _unreadAdminMessageCount = 0;
   bool _isFollowing = false;
   bool _isFollowNotificationEnabled = false;
   StreamSubscription? _messageCountSubscription;
+  StreamSubscription? _adminMessageCountSubscription;
+  StreamSubscription? _userDataSubscription;
 
   @override
   void initState() {
@@ -61,6 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_isOwnProfile) {
       _loadNotificationSettings();
       _loadUnreadMessageCount();
+      _loadUnreadAdminMessageCount();
     } else {
       _loadFollowStatus();
     }
@@ -118,9 +128,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  Future<void> _loadUnreadAdminMessageCount() async {
+    final currentUserId = _authService.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    final count = await _firestoreService.getUnreadAdminToUserMessageCount(currentUserId);
+    if (mounted) {
+      setState(() {
+        _unreadAdminMessageCount = count;
+      });
+    }
+
+    _adminMessageCountSubscription?.cancel();
+    _adminMessageCountSubscription =
+        _firestoreService.getAdminToUserMessagesStream(currentUserId).listen((messages) {
+      if (!mounted) return;
+      final unreadCount = messages.where((m) => !m.isRead).length;
+      setState(() {
+        _unreadAdminMessageCount = unreadCount;
+      });
+    });
+  }
+
   @override
   void dispose() {
     _messageCountSubscription?.cancel();
+    _adminMessageCountSubscription?.cancel();
+    _userDataSubscription?.cancel();
     super.dispose();
   }
 
@@ -144,13 +178,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => _isLoading = true);
     
+    // Önceki subscription'ı iptal et
+    _userDataSubscription?.cancel();
+    
+    // Real-time listener ekle (rozet güncellemeleri için)
+    _userDataSubscription = _firestore
+        .collection('users')
+        .doc(targetUserId)
+        .snapshots()
+        .listen((doc) {
+      if (doc.exists) {
+        try {
+          if (mounted) {
+            setState(() {
+              _user = AppUser.fromFirestore(doc);
+              _isLoading = false;
+            });
+          }
+        } catch (parseError) {
+          _log('Kullanıcı verisi parse hatası: $parseError');
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
+        }
+      } else {
+        // Eğer kendi profilimizse yeni kullanıcı oluştur
+        if (_isOwnProfile) {
+          final currentUser = _authService.currentUser;
+          if (currentUser != null) {
+            final newUser = AppUser(
+              uid: currentUser.uid,
+              username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
+              profileImageUrl: currentUser.photoURL ?? '',
+              points: 0,
+              dealCount: 0,
+              totalLikes: 0,
+              badges: [],
+            );
+            _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore(), SetOptions(merge: true));
+            if (mounted) {
+              setState(() {
+                _user = newUser;
+                _isLoading = false;
+              });
+            }
+          }
+        } else if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
+    }, onError: (error) {
+      _log('Kullanıcı verisi dinleme hatası: $error');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    });
+    
+    // İlk yükleme için de bir kez get() yap (hızlı başlangıç için)
     try {
       final doc = await _firestore.collection('users').doc(targetUserId).get();
       if (doc.exists) {
         try {
-        setState(() {
-          _user = AppUser.fromFirestore(doc);
-        });
+          if (mounted) {
+            setState(() {
+              _user = AppUser.fromFirestore(doc);
+              _isLoading = false;
+            });
+          }
         } catch (parseError) {
           _log('Kullanıcı verisi parse hatası: $parseError');
           // Parse hatası durumunda varsayılan kullanıcı oluştur
@@ -166,11 +260,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 totalLikes: 0,
                 badges: [],
               );
-              await _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore());
-              setState(() {
-                _user = newUser;
-              });
+              await _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore(), SetOptions(merge: true));
+              if (mounted) {
+                setState(() {
+                  _user = newUser;
+                  _isLoading = false;
+                });
+              }
             }
+          } else if (mounted) {
+            setState(() => _isLoading = false);
           }
         }
       } else {
@@ -178,20 +277,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (_isOwnProfile) {
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
-        final newUser = AppUser(
+            final newUser = AppUser(
               uid: currentUser.uid,
               username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
               profileImageUrl: currentUser.photoURL ?? '',
-          points: 0,
-          dealCount: 0,
-          totalLikes: 0,
+              points: 0,
+              dealCount: 0,
+              totalLikes: 0,
               badges: [],
-        );
-            await _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore());
-          setState(() {
-          _user = newUser;
-          });
+            );
+            await _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore(), SetOptions(merge: true));
+            if (mounted) {
+              setState(() {
+                _user = newUser;
+                _isLoading = false;
+              });
+            }
           }
+        } else if (mounted) {
+          setState(() => _isLoading = false);
         }
       }
     } catch (e) {
@@ -214,15 +318,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadNotificationSettings() async {
     try {
-      // NotificationService ile aynı alanı kullan (allNotificationsEnabled)
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(_authService.currentUser?.uid)
-          .get();
-      
-      if (userDoc.exists && userDoc.data() != null) {
+      final enabled = await NotificationService().getGeneralNotificationsEnabled();
+      if (mounted) {
         setState(() {
-          _notificationsEnabled = userDoc.data()!['allNotificationsEnabled'] ?? true;
+          _notificationsEnabled = enabled;
         });
       }
     } catch (e) {
@@ -285,6 +384,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final List<String> profileImages = [
       'assets/kullanıcı pp.jpg',
       'assets/kkpp.jpg',
+      'assets/ayı.jpg',
     ];
 
     showDialog(
@@ -926,12 +1026,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           // Rozetler (kullanıcı adının altında)
                           if (_user?.badges != null && _user!.badges.isNotEmpty) ...[
                             const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              alignment: WrapAlignment.center,
-                              children: BadgeHelper.getBadgeInfos(_user!.badges)
-                                  .map((badge) => Container(
+                            Builder(
+                              builder: (context) {
+                                _log('🔍 Profil ekranında rozetler gösteriliyor: ${_user!.badges}');
+                                final badgeInfos = BadgeHelper.getBadgeInfos(_user!.badges);
+                                _log('🔍 BadgeHelper.getBadgeInfos sonucu: ${badgeInfos.length} rozet');
+                                return Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  alignment: WrapAlignment.center,
+                                  children: badgeInfos
+                                      .map((badge) => Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
                                           color: badge.color.withValues(alpha: 0.15),
@@ -961,6 +1066,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ),
                                       ))
                                   .toList(),
+                                );
+                              },
                             ),
                           ],
                           const SizedBox(height: 8),
@@ -1037,6 +1144,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 // Settings Section (sadece kendi profilinde)
                 if (_isOwnProfile) ...[
+                const SizedBox(height: 24),
                 _buildSectionHeader('AYARLAR', textSub!),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1058,7 +1166,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         // Notifications
                         _buildSettingItem(
                           icon: Icons.notifications,
-                          title: 'Bildirimler',
+                          title: 'Bildirim Ayarları',
                           iconBgColor: primaryColor.withValues(alpha: 0.2),
                           iconColor: isDark ? Colors.yellow[200]! : Colors.yellow[800]!,
                           trailing: Row(
@@ -1084,6 +1192,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             if (_isOwnProfile && mounted) {
                               await _loadNotificationSettings();
                             }
+                          },
+                          isDark: isDark,
+                        ),
+                        _buildDivider(isDark),
+                        // Takip Ettiklerim
+                        _buildSettingItem(
+                          icon: Icons.person_add,
+                          title: 'Takip Ettiklerim',
+                          iconBgColor: Colors.pink.withValues(alpha: 0.2),
+                          iconColor: Colors.pink,
+                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const FollowingUsersScreen(),
+                              ),
+                            );
                           },
                           isDark: isDark,
                         ),
@@ -1182,21 +1308,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         _buildDivider(isDark),
                         // Language
+                        // Admin'den gelen bildirimler
                         _buildSettingItem(
-                          icon: Icons.language,
-                          title: 'Dil Seçeneği',
+                          icon: Icons.campaign,
+                          title: 'Bildirimler',
                           iconBgColor: Colors.purple.withValues(alpha: 0.1),
                           iconColor: Colors.purple,
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text('Türkçe', style: TextStyle(fontSize: 12, color: textSub, fontWeight: FontWeight.w500)),
-                              const SizedBox(width: 4),
+                              if (_unreadAdminMessageCount > 0)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    _unreadAdminMessageCount > 99 ? '99+' : _unreadAdminMessageCount.toString(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
                               Icon(Icons.chevron_right, color: Colors.grey[400]),
                             ],
                           ),
                           onTap: () {
-                            // TODO: Language selection
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AdminNotificationsScreen(),
+                              ),
+                            );
                           },
                           isDark: isDark,
                         ),
@@ -1396,8 +1543,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                     ),
                   ),
-                    // Admin menü butonu (sadece admin ve başka kullanıcı profili görüntülenirken)
-                    if (_isAdmin && !_isOwnProfile && _user != null)
+
+
+                    // Profil İşlemleri Menüsü (Raporla, Admin işlemleri vb.)
+                    if (!_isOwnProfile && _user != null)
                       PopupMenuButton<String>(
                         icon: Icon(Icons.more_vert, color: textMain),
                         onSelected: (value) {
@@ -1405,26 +1554,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             _showBadgeDialog(_user!);
                           } else if (value == 'block') {
                             _blockUser(_user!);
+                          } else if (value == 'report') {
+                            showReportDialog(
+                              context,
+                              reportedId: _user!.uid,
+                              type: 'user',
+                            );
                           }
                         },
                         itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'badge',
-                            child: Row(
-                              children: [
-                                Icon(Icons.workspace_premium, color: Colors.amber, size: 20),
-                                SizedBox(width: 8),
-                                Text('Rozet Yönet'),
-                              ],
+                          if (_isAdmin) ...[
+                            const PopupMenuItem(
+                              value: 'badge',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.workspace_premium, color: Colors.amber, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Rozet Yönet'),
+                                ],
+                              ),
                             ),
-                          ),
+                            const PopupMenuItem(
+                              value: 'block',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.block, color: Colors.red, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Kullanıcıyı Engelle'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuDivider(),
+                          ],
                           const PopupMenuItem(
-                            value: 'block',
+                            value: 'report',
                             child: Row(
                               children: [
-                                Icon(Icons.block, color: Colors.red, size: 20),
+                                Icon(Icons.flag_outlined, color: Colors.red, size: 20),
                                 SizedBox(width: 8),
-                                Text('Kullanıcıyı Engelle'),
+                                Text('Kullanıcıyı Raporla'),
                               ],
                             ),
                           ),
@@ -1638,87 +1806,145 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final TextEditingController badgeController = TextEditingController();
     
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        title: Text(
-          '${user.username} - Rozet Yönetimi',
-          style: TextStyle(
-            color: isDark ? Colors.white : Colors.black,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Mevcut Rozetler:',
-                style: TextStyle(
-                  color: isDark ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: user.badges.map((badgeId) {
-                  final badge = BadgeHelper.getBadgeInfo(badgeId);
-                  if (badge == null) return const SizedBox.shrink();
-                  return Chip(
-                    avatar: Text(badge.icon),
-                    label: Text(badge.name),
-                    backgroundColor: badge.color.withValues(alpha: 0.2),
-                    deleteIcon: Icon(Icons.close, size: 16, color: badge.color),
-                    onDeleted: () => _removeBadge(user.uid, badgeId),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Rozet Ekle:',
-                style: TextStyle(
-                  color: isDark ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: BadgeHelper.getAllBadgeIds()
-                    .where((badgeId) => !user.badges.contains(badgeId))
-                    .map((badgeId) {
-                  final badge = BadgeHelper.getBadgeInfo(badgeId)!;
-                  return ActionChip(
-                    avatar: Text(badge.icon),
-                    label: Text(badge.name),
-                    backgroundColor: badge.color.withValues(alpha: 0.1),
-                    onPressed: () => _addBadge(user.uid, badgeId),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Kapat',
-              style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+          title: Text(
+            '${user.username} - Rozet Yönetimi',
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black,
+              fontWeight: FontWeight.w700,
             ),
           ),
-        ],
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mevcut Rozetler:',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: user.badges.map((badgeId) {
+                      final badge = BadgeHelper.getBadgeInfo(badgeId);
+                      if (badge == null) return const SizedBox.shrink();
+                      return Chip(
+                        avatar: Text(badge.icon),
+                        label: Text(badge.name),
+                        backgroundColor: badge.color.withValues(alpha: 0.2),
+                        deleteIcon: Icon(Icons.close, size: 16, color: badge.color),
+                        onDeleted: () => _removeBadge(user.uid, badgeId),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Yeni Rozet Ekle:',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: badgeController,
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                    decoration: InputDecoration(
+                      hintText: 'Rozet adı girin (örn: VIP, Moderatör)',
+                      hintStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      filled: true,
+                      fillColor: isDark ? Colors.grey[800] : Colors.grey[100],
+                    ),
+                    onSubmitted: (value) {
+                      if (value.trim().isNotEmpty) {
+                        _addBadge(user.uid, value.trim());
+                        badgeController.clear();
+                        Navigator.pop(context);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        final badgeName = badgeController.text.trim();
+                        if (badgeName.isNotEmpty) {
+                          _addBadge(user.uid, badgeName);
+                          badgeController.clear();
+                          Navigator.pop(context);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Rozet Ekle'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Önceden Tanımlı Rozetler:',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: BadgeHelper.getAllBadgeIds()
+                        .where((badgeId) => !user.badges.contains(badgeId))
+                        .map((badgeId) {
+                      final badge = BadgeHelper.getBadgeInfo(badgeId)!;
+                      return ActionChip(
+                        avatar: Text(badge.icon),
+                        label: Text(badge.name),
+                        backgroundColor: badge.color.withValues(alpha: 0.1),
+                        onPressed: () => _addBadge(user.uid, badgeId),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                badgeController.dispose();
+                Navigator.pop(context);
+              },
+              child: Text(
+                'Kapat',
+                style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+              ),
+            ),
+          ],
+        ),
       ),
     );
+    badgeController.dispose();
   }
 
   Future<void> _addBadge(String userId, String badgeId) async {

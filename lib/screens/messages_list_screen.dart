@@ -144,6 +144,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                     ),
                   );
                 },
+                onLongPress: () => _showDeleteDialog(context, message, otherUserName),
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   padding: const EdgeInsets.all(12),
@@ -257,5 +258,68 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
       return DateFormat('d MMM', 'tr_TR').format(date);
     }
   }
+
+  Future<void> _showDeleteDialog(BuildContext context, Message message, String userName) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konuşmayı Sil'),
+        content: Text('$userName ile olan konuşmayı silmek istediğinize emin misiniz?'),
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        // Bu konuşmadaki tüm mesajları sil
+        final messages = await _firestoreService.getUserMessagesStream(_authService.currentUser!.uid).first;
+        final otherUserId = message.senderId == _authService.currentUser!.uid
+            ? message.receiverId
+            : message.senderId;
+        
+        final conversationMessages = messages.where((m) => 
+          (m.senderId == _authService.currentUser!.uid && m.receiverId == otherUserId) ||
+          (m.receiverId == _authService.currentUser!.uid && m.senderId == otherUserId)
+        ).toList();
+        
+        for (var msg in conversationMessages) {
+          await _firestoreService.deleteUserMessage(msg.id);
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Konuşma silindi'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        _log('❌ Mesaj silme hatası: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Silme hatası: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
 }
+
+
 

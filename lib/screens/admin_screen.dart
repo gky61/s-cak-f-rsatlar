@@ -3,6 +3,10 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
 import '../models/deal.dart';
 import '../models/category.dart';
 import '../models/user.dart';
@@ -14,10 +18,32 @@ import '../theme/app_theme.dart';
 import 'deal_detail_screen.dart';
 import 'profile_screen.dart';
 import 'message_screen.dart';
+import '../widgets/admin_reports_list.dart';
+import 'notification_debug_screen.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
 }
+
+// Affiliate Link Configuration
+// Buraya kendi affiliate ID'lerinizi ekleyin
+const Map<String, Map<String, String>> _affiliateConfig = {
+  'trendyol': {
+    'boutiqueId': '', // Trendyol Boutique ID'nizi buraya ekleyin
+  },
+  'hepsiburada': {
+    'utmSource': 'linkgelir', // Hepsiburada Link Gelir için genellikle 'linkgelir' kullanılır
+  },
+  'n11': {
+    'refId': '', // N11 Referans ID'nizi buraya ekleyin
+  },
+  'amazon': {
+    'tag': '', // Amazon Associate Tag'inizi buraya ekleyin
+  },
+  'gittigidiyor': {
+    'affiliateId': '', // GittiGidiyor Affiliate ID'nizi buraya ekleyin
+  },
+};
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -38,6 +64,15 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   int _expiredCount = 0;
   int _usersCount = 0;
   int _unreadMessagesCount = 0;
+  int _pendingReportsCount = 0;
+  
+  // Stream Subscriptions - Bellek sızıntısını önlemek için
+  StreamSubscription? _pendingSubscription;
+  StreamSubscription? _userSubmittedSubscription;
+  StreamSubscription? _expiredSubscription;
+  StreamSubscription? _usersSubscription;
+  StreamSubscription? _messagesSubscription;
+  StreamSubscription? _reportsSubscription;
   
   // Kullanıcı arama
   String _userSearchQuery = '';
@@ -102,13 +137,61 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadTabCounts();
+    _loadReportCounts();
+    // Admin paneli her açıldığında admin_deals topic'ine abone ol (bildirimlerin gelmesi için)
+    _ensureAdminNotificationSubscription();
+  }
+
+  /// Admin bildirimlerine (onay bekleyen fırsatlar) abone olmayı garanti et
+  Future<void> _ensureAdminNotificationSubscription() async {
+    try {
+      await NotificationService().subscribeToAdminTopic();
+      if (kDebugMode) _log('✅ Admin bildirim aboneliği doğrulandı');
+    } catch (e) {
+      if (kDebugMode) _log('⚠️ Admin bildirim aboneliği: $e');
+    }
+  }
+
+  /// Kullanıcı manuel olarak admin bildirim aboneliğini yeniler
+  Future<void> _refreshAdminNotificationSubscription() async {
+    try {
+      await NotificationService().subscribeToAdminTopic();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Admin bildirimleri yenilendi. Yeni onay bekleyen fırsatlarda bildirim alacaksınız.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Abonelik yenilenemedi: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
   
+  @override
+  void dispose() {
+    // Tüm stream subscription'ları iptal et
+    _pendingSubscription?.cancel();
+    _userSubmittedSubscription?.cancel();
+    _expiredSubscription?.cancel();
+    _usersSubscription?.cancel();
+    _messagesSubscription?.cancel();
+    _reportsSubscription?.cancel();
+    _tabController.dispose();
+    _userSearchController.dispose();
+    super.dispose();
+  }
+
   void _loadTabCounts() {
     // Onay bekleyen (bot fırsatları)
-    _firestoreService.getPendingDealsStream().listen((deals) {
+    _pendingSubscription = _firestoreService.getPendingDealsStream().listen((deals) {
       if (mounted) {
         setState(() {
           _pendingCount = deals.length;
@@ -117,7 +200,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     });
     
     // Paylaşılanlar (kullanıcı fırsatları)
-    _firestoreService.getUserSubmittedPendingDealsStream().listen((deals) {
+    _userSubmittedSubscription = _firestoreService.getUserSubmittedPendingDealsStream().listen((deals) {
       if (mounted) {
         setState(() {
           _userSubmittedCount = deals.length;
@@ -126,7 +209,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     });
     
     // Süresi bitenler
-    _firestoreService.getExpiredDealsStream().listen((deals) {
+    _expiredSubscription = _firestoreService.getExpiredDealsStream().listen((deals) {
       if (mounted) {
         setState(() {
           _expiredCount = deals.length;
@@ -135,7 +218,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     });
     
     // Kullanıcılar
-    FirebaseFirestore.instance
+    _usersSubscription = FirebaseFirestore.instance
         .collection('users')
         .snapshots()
         .listen((snapshot) {
@@ -147,7 +230,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     });
 
     // Okunmamış mesajlar (admin tarafından okunmamış)
-    _firestoreService.getAllMessagesStream().listen((messages) {
+    _messagesSubscription = _firestoreService.getAllMessagesStream().listen((messages) {
       if (mounted) {
         setState(() {
           _unreadMessagesCount = messages.where((m) => !m.isReadByAdmin).length;
@@ -162,6 +245,27 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     return Scaffold(
       appBar: AppBar(
         title: const Text('Yönetici Paneli'),
+        actions: [
+          Tooltip(
+            message: 'Admin bildirim aboneliğini yenile',
+            child: IconButton(
+              icon: const Icon(Icons.notifications_active_outlined),
+              onPressed: _refreshAdminNotificationSubscription,
+            ),
+          ),
+          Tooltip(
+            message: 'Bildirim Tanı Aracı',
+            child: IconButton(
+              icon: const Icon(Icons.bug_report, color: Colors.red),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationDebugScreen()),
+                );
+              },
+            ),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -182,6 +286,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             _buildTabWithBadge('Süresi Biten', _expiredCount),
             _buildTabWithBadge('Kullanıcılar', _usersCount),
             _buildTabWithBadge('Mesajlar', _unreadMessagesCount),
+            _buildTabWithBadge('Raporlar', _pendingReportsCount),
           ],
         ),
       ),
@@ -193,9 +298,24 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           _buildDealList(_AdminListType.expired),
           _buildUsersList(),
           _buildMessagesList(),
+          const AdminReportsList(),
         ],
       ),
     );
+  }
+
+  // Rapor sayısı için yeni metod
+  void _loadReportCounts() {
+     _reportsSubscription = _firestoreService.reportsCollection
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _pendingReportsCount = snapshot.docs.length;
+        });
+      }
+    });
   }
 
   Widget _buildDealList(_AdminListType type) {
@@ -391,7 +511,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          deal.isApproved 
+                          (deal.isApproved == true)
                               ? 'Bu fırsat onaylanmış ve yayınlanmıştı, süresi dolduğu için pasife alınmış.'
                               : 'Bu fırsat onaylanmamış ve süresi dolduğu için pasife alınmış.',
                           style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12),
@@ -839,6 +959,155 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
+  // Kısa link çözme (Firebase Function çağrısı)
+  Future<String?> _resolveShortLink(String shortUrl) async {
+    try {
+      final functionsUrl =
+          'https://us-central1-sicak-firsatlar-e6eae.cloudfunctions.net/resolveShortLink';
+      final uri = Uri.parse('$functionsUrl?url=${Uri.encodeComponent(shortUrl)}');
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['resolvedUrl'] != null) {
+          return data['resolvedUrl'] as String;
+        }
+      }
+      return null;
+    } catch (e) {
+      _log('Kısa link çözme hatası: $e');
+      return null;
+    }
+  }
+
+  // Mağaza tespit etme
+  String _detectStoreFromUrl(String url) {
+    if (url.isEmpty) return 'Bilinmeyen';
+
+    try {
+      final uri = Uri.parse(url);
+      final hostname = uri.host.toLowerCase();
+
+      if (hostname.contains('trendyol.com')) return 'Trendyol';
+      if (hostname.contains('hepsiburada.com')) return 'Hepsiburada';
+      if (hostname.contains('n11.com')) return 'N11';
+      if (hostname.contains('amazon.com')) return 'Amazon';
+      if (hostname.contains('gittigidiyor.com')) return 'GittiGidiyor';
+
+      return 'Bilinmeyen';
+    } catch (e) {
+      return 'Bilinmeyen';
+    }
+  }
+
+  // Affiliate link'e dönüştürme
+  String _convertToAffiliateLink(String originalUrl) {
+    if (originalUrl.isEmpty) return originalUrl;
+
+    try {
+      final uri = Uri.parse(originalUrl);
+      final hostname = uri.host.toLowerCase();
+
+      // Hepsiburada kısa link kontrolü
+      if (hostname.contains('hb.biz') || hostname.contains('app.hb.biz')) {
+        _log('ℹ️ Kısa link tespit edildi: $originalUrl');
+        // Kısa linkler zaten çözülmüş olmalı, eğer hala kısa linkse olduğu gibi bırak
+        return originalUrl;
+      }
+
+      // Trendyol
+      if (hostname.contains('trendyol.com')) {
+        final boutiqueId = _affiliateConfig['trendyol']?['boutiqueId'];
+        if (boutiqueId != null && boutiqueId.isNotEmpty) {
+          // Mevcut boutiqueId'yi temizle
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('boutiqueId');
+          // Kendi boutiqueId'yi ekle
+          newQueryParams['boutiqueId'] = boutiqueId;
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      // Hepsiburada (Link Gelir) - Normal ürün linkleri
+      if (hostname.contains('hepsiburada.com')) {
+        final utmSource = _affiliateConfig['hepsiburada']?['utmSource'];
+        if (utmSource != null && utmSource.isNotEmpty) {
+          // Mevcut affiliate parametrelerini kontrol et
+          final existingUtmSource = uri.queryParameters['utm_source'];
+          if (existingUtmSource == utmSource) {
+            _log('ℹ️ Link zaten kendi affiliate linkiniz: $originalUrl');
+            return originalUrl; // Kendi linkiniz, değiştirme
+          }
+
+          // Başkasının affiliate linkini kendi affiliate linkimize dönüştür
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('utm_source');
+          newQueryParams.remove('utm_medium');
+          newQueryParams.remove('utm_campaign');
+          newQueryParams.remove('utm_content');
+          newQueryParams.remove('wt_inf');
+
+          // Kendi affiliate parametrelerini ekle
+          newQueryParams['utm_source'] = utmSource;
+          newQueryParams['utm_medium'] = 'referral';
+          newQueryParams['utm_campaign'] = 'urun_paylasim';
+
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      // N11
+      if (hostname.contains('n11.com')) {
+        final refId = _affiliateConfig['n11']?['refId'];
+        if (refId != null && refId.isNotEmpty) {
+          // Mevcut ref parametresini temizle
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('ref');
+          // Kendi ref ID'sini ekle
+          newQueryParams['ref'] = refId;
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      // Amazon
+      if (hostname.contains('amazon.com.tr') || hostname.contains('amazon.com')) {
+        final tag = _affiliateConfig['amazon']?['tag'];
+        if (tag != null && tag.isNotEmpty) {
+          // Mevcut tag parametresini temizle
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('tag');
+          // Kendi tag'ini ekle
+          newQueryParams['tag'] = tag;
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      // GittiGidiyor
+      if (hostname.contains('gittigidiyor.com')) {
+        final affiliateId = _affiliateConfig['gittigidiyor']?['affiliateId'];
+        if (affiliateId != null && affiliateId.isNotEmpty) {
+          // Mevcut affiliateId parametresini temizle
+          final newQueryParams = Map<String, String>.from(uri.queryParameters);
+          newQueryParams.remove('affiliateId');
+          // Kendi affiliateId'yi ekle
+          newQueryParams['affiliateId'] = affiliateId;
+          final newUri = uri.replace(queryParameters: newQueryParams);
+          return newUri.toString();
+        }
+      }
+
+      // Desteklenmeyen site veya affiliate ID yoksa orijinal linki döndür
+      return originalUrl;
+    } catch (e) {
+      _log('Link dönüştürme hatası: $e');
+      return originalUrl;
+    }
+  }
+
   Future<void> _showEditDialog(Deal deal) async {
     final titleController = TextEditingController(text: deal.title);
     final descriptionController = TextEditingController(text: deal.description);
@@ -850,22 +1119,74 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final linkController = TextEditingController(text: deal.link);
     final imageUrlController = TextEditingController(text: deal.imageUrl);
 
-    // Kategori eşleştirmesi: Firestore'da kategori adı saklanıyor, dropdown'da ID kullanılıyor
+    // Kategori eşleştirmesi: Firestore'da kategori adı veya ID'si saklanıyor olabilir
     String? selectedCategoryId;
     String? selectedSubCategory = deal.subCategory;
     
-    // Kategori adından ID'yi bul
+    final normalizedDealCategory = deal.category.toLowerCase().trim();
+
+    // 1. Adım: ID ile tam eşleşme kontrolü
     for (final cat in Category.categories) {
-      if (cat.name == deal.category || cat.id == deal.category) {
+      if (cat.id.toLowerCase() == normalizedDealCategory) {
         selectedCategoryId = cat.id;
         break;
       }
     }
-    // Bulunamazsa varsayılan olarak 'elektronik' kullan
-    selectedCategoryId ??= 'elektronik';
+
+    // 2. Adım: İsim ile eşleşme kontrolü (case-insensitive)
+    if (selectedCategoryId == null) {
+      for (final cat in Category.categories) {
+        if (cat.name.toLowerCase() == normalizedDealCategory) {
+          selectedCategoryId = cat.id;
+          break;
+        }
+      }
+    }
+
+    // 3. Adım: Özel eşleştirmeler (eski veriler veya farklı formatlar için)
+    if (selectedCategoryId == null) {
+      if (normalizedDealCategory.contains('giyim') || normalizedDealCategory.contains('moda')) {
+        selectedCategoryId = 'moda';
+      } else if (normalizedDealCategory.contains('ev') || normalizedDealCategory.contains('yasam')) {
+        selectedCategoryId = 'ev_yasam';
+      } else if (normalizedDealCategory.contains('bebek') || normalizedDealCategory.contains('anne')) {
+        selectedCategoryId = 'anne_bebek';
+      } else if (normalizedDealCategory.contains('kozmetik') || normalizedDealCategory.contains('bakim')) {
+        selectedCategoryId = 'kozmetik';
+      } else if (normalizedDealCategory.contains('spor')) {
+        selectedCategoryId = 'spor_outdoor';
+      } else if (normalizedDealCategory.contains('market') && !normalizedDealCategory.contains('yapi')) {
+        selectedCategoryId = 'supermarket';
+      } else if (normalizedDealCategory.contains('yapi') || normalizedDealCategory.contains('oto')) {
+        selectedCategoryId = 'yapi_oto';
+      } else if (normalizedDealCategory.contains('kitap') || normalizedDealCategory.contains('hobi')) {
+        selectedCategoryId = 'kitap_hobi';
+      } else if (normalizedDealCategory.contains('elektronik') || normalizedDealCategory.contains('telefon') || normalizedDealCategory.contains('bilgisayar')) {
+        selectedCategoryId = 'elektronik';
+      }
+    }
+
+    // Bulunamazsa varsayılan olarak 'diger' kullan (listede varsa)
+    if (selectedCategoryId == null) {
+       // 'diger' kategorisi var mı kontrol et, yoksa 'elektronik' yap
+       final hasDiger = Category.categories.any((c) => c.id == 'diger');
+       selectedCategoryId = hasDiger ? 'diger' : 'elektronik';
+    }
+    
+    // Alt kategori kontrolü: Eğer mevcut alt kategori, seçili kategorinin subcategories listesinde yoksa null yap
+    if (selectedSubCategory != null && selectedCategoryId != null) {
+      final category = Category.categories.firstWhere(
+        (cat) => cat.id == selectedCategoryId,
+        orElse: () => Category.categories.first,
+      );
+      if (!category.subcategories.contains(selectedSubCategory)) {
+        selectedSubCategory = null; // Geçersiz alt kategori, null yap
+      }
+    }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final primaryColor = Theme.of(context).colorScheme.primary;
     
     await showDialog(
       context: context,
@@ -939,6 +1260,170 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ],
                   ),
                   const SizedBox(height: 16),
+                  // Link alanı ve Affiliate Link'e Dönüştür butonu - ÜSTTE GÖSTER
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: primaryColor.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.link, color: primaryColor, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Ürün Linki',
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: linkController,
+                          style: TextStyle(color: textColor),
+                          decoration: InputDecoration(
+                            labelText: 'Ürün URL',
+                            border: OutlineInputBorder(),
+                            hintText: 'https://...',
+                            filled: true,
+                            fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
+                            suffixIcon: linkController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(
+                                      Icons.close,
+                                      color: Colors.grey[600],
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        linkController.clear();
+                                      });
+                                    },
+                                    tooltip: 'Linki Temizle',
+                                  )
+                                : null,
+                          ),
+                          keyboardType: TextInputType.url,
+                          onChanged: (value) {
+                            setState(() {}); // Trigger rebuild to show/hide clear button
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final currentUrl = linkController.text.trim();
+                              if (currentUrl.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Lütfen önce bir URL girin'),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              // Loading göster
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (context) => const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+
+                              try {
+                                String urlToConvert = currentUrl;
+
+                                // Kısa link kontrolü (Hepsiburada kısa linkleri)
+                                if (urlToConvert.contains('hb.biz') ||
+                                    urlToConvert.contains('app.hb.biz')) {
+                                  try {
+                                    final resolvedUrl = await _resolveShortLink(urlToConvert);
+                                    if (resolvedUrl != null && resolvedUrl.isNotEmpty) {
+                                      urlToConvert = resolvedUrl;
+                                      _log('✅ Kısa link çözüldü: $urlToConvert');
+                                    }
+                                  } catch (e) {
+                                    _log('⚠️ Kısa link çözülemedi: $e');
+                                  }
+                                }
+
+                                // Affiliate link'e dönüştür
+                                final convertedUrl = _convertToAffiliateLink(urlToConvert);
+
+                                if (context.mounted) {
+                                  Navigator.pop(context); // Loading dialog'u kapat
+
+                                  if (convertedUrl != urlToConvert) {
+                                    linkController.text = convertedUrl;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('✅ Affiliate link\'e dönüştürüldü!'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  } else {
+                                    // Link zaten affiliate link veya dönüştürülemedi
+                                    final store = _detectStoreFromUrl(urlToConvert);
+                                    if (store == 'Bilinmeyen') {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('⚠️ Bu mağaza desteklenmiyor'),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              'ℹ️ Link zaten affiliate link veya $store için affiliate ID yapılandırılmamış'),
+                                          backgroundColor: Colors.blue,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  Navigator.pop(context); // Loading dialog'u kapat
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('❌ Hata: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.swap_horiz, size: 20),
+                            label: const Text(
+                              'Affiliate Link\'e Dönüştür',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: storeController,
                     style: TextStyle(color: textColor),
@@ -948,19 +1433,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                       filled: true,
                       fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: linkController,
-                    style: TextStyle(color: textColor),
-                    decoration: InputDecoration(
-                      labelText: 'Ürün URL',
-                      border: OutlineInputBorder(),
-                      hintText: 'https://...',
-                      filled: true,
-                      fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
-                    ),
-                    keyboardType: TextInputType.url,
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -1143,8 +1615,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   ? IconButton(
                       icon: const Icon(Icons.clear),
                       onPressed: () {
+                        _userSearchController.clear();
                         setState(() {
-                          _userSearchController.clear();
                           _userSearchQuery = '';
                         });
                       },
@@ -1159,55 +1631,54 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             ),
             onChanged: (value) {
               setState(() {
-                _userSearchQuery = value.toLowerCase();
+                _userSearchQuery = value.toLowerCase().trim();
               });
             },
           ),
         ),
         // Kullanıcı listesi
         Expanded(
-          child: StreamBuilder<List<DocumentSnapshot>>(
+          child: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')
                 .orderBy('points', descending: true)
                 .limit(200)
-                .snapshots()
-                .map((snapshot) => snapshot.docs),
+                .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final allUsers = snapshot.data ?? [];
-              
-              // Arama filtreleme
-              final users = _userSearchQuery.isEmpty
-                  ? allUsers
-                  : allUsers.where((doc) {
-                      final data = doc.data() as Map<String, dynamic>?;
-                      final username = (data?['username'] ?? '').toString().toLowerCase();
-                      final nickname = (data?['nickname'] ?? '').toString().toLowerCase();
-                      final uid = doc.id.toLowerCase();
-                      return username.contains(_userSearchQuery) ||
-                             nickname.contains(_userSearchQuery) ||
-                             uid.contains(_userSearchQuery);
-                    }).toList();
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Hata: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                );
+              }
 
-              if (users.isEmpty) {
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        _userSearchQuery.isEmpty ? Icons.people_outline : Icons.search_off,
+                        Icons.people_outline,
                         size: 64,
-                        color: Colors.grey,
+                        color: Colors.grey[400],
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        _userSearchQuery.isEmpty 
-                            ? 'Kullanıcı bulunamadı'
-                            : '"$_userSearchQuery" ile eşleşen kullanıcı yok',
+                        'Kullanıcı bulunamadı',
                         style: TextStyle(color: Colors.grey[600]),
                       ),
                     ],
@@ -1215,83 +1686,308 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 );
               }
 
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: users.length,
-                itemBuilder: (context, index) {
-                  final userDoc = users[index];
-                  final user = AppUser.fromFirestore(userDoc);
-            
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ProfileScreen(userId: user.uid),
-                    ),
-                  );
-                },
-                leading: CircleAvatar(
-                  backgroundColor: primaryColor.withValues(alpha: 0.1),
-                  backgroundImage: user.profileImageUrl.isNotEmpty
-                      ? CachedNetworkImageProvider(user.profileImageUrl)
-                      : null,
-                  child: user.profileImageUrl.isEmpty
-                      ? Text(
-                          user.username.isNotEmpty ? user.username[0].toUpperCase() : 'U',
-                          style: TextStyle(
-                            color: primaryColor,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        )
-                      : null,
-                ),
-                title: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        user.username,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+              final allDocs = snapshot.data!.docs;
+              
+              // Arama filtreleme
+              List<DocumentSnapshot> filteredDocs;
+              if (_userSearchQuery.isEmpty) {
+                filteredDocs = allDocs;
+              } else {
+                filteredDocs = allDocs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>?;
+                  if (data == null) return false;
+                  
+                  final username = (data['username'] ?? '').toString().toLowerCase();
+                  final nickname = (data['nickname'] ?? '').toString().toLowerCase();
+                  final email = (data['email'] ?? '').toString().toLowerCase();
+                  final uid = doc.id.toLowerCase();
+                  
+                  return username.contains(_userSearchQuery) ||
+                         nickname.contains(_userSearchQuery) ||
+                         email.contains(_userSearchQuery) ||
+                         uid.contains(_userSearchQuery);
+                }).toList();
+              }
+
+              if (filteredDocs.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.search_off,
+                        size: 64,
+                        color: Colors.grey[400],
                       ),
+                      const SizedBox(height: 16),
+                      Text(
+                        '"$_userSearchQuery" ile eşleşen kullanıcı yok',
+                        style: TextStyle(color: Colors.grey[600]),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                itemCount: filteredDocs.length,
+                itemBuilder: (context, index) {
+                  final userDoc = filteredDocs[index];
+                  final userData = userDoc.data() as Map<String, dynamic>?;
+                  
+                  if (userData == null) {
+                    return const SizedBox.shrink();
+                  }
+                  
+                  // Verileri güvenli şekilde al
+                  final username = (userData['username'] ?? 'Kullanıcı').toString();
+                  final nickname = (userData['nickname'] ?? '').toString();
+                  final displayName = nickname.isNotEmpty ? nickname : username;
+                  final profileImageUrl = (userData['profileImageUrl'] ?? '').toString();
+                  final points = (userData['points'] ?? 0) as int;
+                  final totalLikes = (userData['totalLikes'] ?? 0) as int;
+                  final badges = (userData['badges'] ?? []) as List<dynamic>;
+                  final badgeIds = badges.map((e) => e.toString()).toList();
+                  final userId = userDoc.id;
+                  
+                  final email = userData['email']?.toString() ?? 'E-posta bilinmiyor';
+                  final createdAtVal = userData['createdAt'];
+                  String formattedSignUpDate = 'Bilinmiyor';
+                  if (createdAtVal is Timestamp) {
+                    formattedSignUpDate = DateFormat('dd.MM.yyyy HH:mm').format(createdAtVal.toDate());
+                  } else if (createdAtVal is String) {
+                    try {
+                      formattedSignUpDate = DateFormat('dd.MM.yyyy HH:mm').format(DateTime.parse(createdAtVal));
+                    } catch (_) {}
+                  }
+                  
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    elevation: 1,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    // Rozetler
-                    ...BadgeHelper.getBadgeInfos(user.badges).map(
-                      (badge) => Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: Tooltip(
-                          message: badge.name,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: badge.color.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: badge.color.withValues(alpha: 0.4),
-                                width: 1,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProfileScreen(userId: userId),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            // Avatar
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundColor: primaryColor.withValues(alpha: 0.1),
+                              backgroundImage: profileImageUrl.isNotEmpty
+                                  ? CachedNetworkImageProvider(profileImageUrl)
+                                  : null,
+                              child: profileImageUrl.isEmpty
+                                  ? Text(
+                                      displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 20,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 12),
+                            // Kullanıcı bilgileri
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          displayName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      // Rozetler
+                                      ...BadgeHelper.getBadgeInfos(badgeIds).take(3).map(
+                                        (badge) => Padding(
+                                          padding: const EdgeInsets.only(left: 4),
+                                          child: Tooltip(
+                                            message: badge.name,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: badge.color.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: badge.color.withValues(alpha: 0.4),
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                badge.icon,
+                                                style: const TextStyle(fontSize: 11),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (badgeIds.length > 3)
+                                        Tooltip(
+                                          message: '${badgeIds.length - 3} rozet daha',
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.withValues(alpha: 0.2),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              '+${badgeIds.length - 3}',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey[700],
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.stars,
+                                        size: 14,
+                                        color: Colors.amber[700],
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '$points Puan',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Icon(
+                                        Icons.favorite,
+                                        size: 14,
+                                        color: Colors.red[400],
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '$totalLikes Beğeni',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  // E-posta adresi
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.email_outlined,
+                                        size: 13,
+                                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          email,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  // Üyelik Tarihi
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_month_outlined,
+                                        size: 13,
+                                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Üyelik: $formattedSignUpDate',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (username != displayName) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '@$username',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey[500],
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
-                            child: Text(
-                              badge.icon,
-                              style: const TextStyle(fontSize: 12),
+                            // Rozet yönetim butonu
+                            IconButton(
+                              icon: const Icon(Icons.workspace_premium),
+                              color: primaryColor,
+                              onPressed: () {
+                                try {
+                                  final user = AppUser(
+                                    uid: userId,
+                                    username: username,
+                                    nickname: nickname,
+                                    profileImageUrl: profileImageUrl,
+                                    points: points,
+                                    totalLikes: totalLikes,
+                                    badges: badgeIds,
+                                  );
+                                  _showBadgeDialog(user);
+                                } catch (e) {
+                                  _log('Kullanıcı oluşturma hatası: $e');
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Hata: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              },
+                              tooltip: 'Rozet Yönet',
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-                subtitle: Text('${user.points} Puan • ${user.totalLikes} Beğeni'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.workspace_premium),
-                  onPressed: () => _showBadgeDialog(user),
-                  tooltip: 'Rozet Ver',
-                ),
-              ),
-            );
-          },
-        );
+                  );
+                },
+              );
             },
           ),
         ),
@@ -1453,6 +2149,52 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
+  Future<void> _deleteAllMessages(int count) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tüm Mesajları Sil'),
+        content: Text(
+          'Toplam $count adet mesajı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Evet, Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final deletedCount = await _firestoreService.deleteAllMessages();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$deletedCount mesaj silindi 🗑️'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   // Admin için mesaj listesi
   Widget _buildMessagesList() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1496,154 +2238,179 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: messages.length,
-          itemBuilder: (context, index) {
-            final message = messages[index];
-            final isUnreadByAdmin = !message.isReadByAdmin;
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _deleteAllMessages(messages.length),
+                  icon: const Icon(Icons.delete_sweep, size: 20),
+                  label: Text('Tüm Mesajları Sil (${messages.length})'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: messages.length,
+                itemBuilder: (context, index) {
+                  final message = messages[index];
+                  final isUnreadByAdmin = !message.isReadByAdmin;
 
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              color: isUnreadByAdmin
-                  ? (isDark
-                      ? primaryColor.withValues(alpha: 0.15)
-                      : primaryColor.withValues(alpha: 0.1))
-                  : null,
-              child: InkWell(
-                onTap: () {
-                  // Mesaj detayını göster
-                  _showMessageDetail(message);
-                  // Admin tarafından okundu olarak işaretle
-                  if (isUnreadByAdmin) {
-                    _firestoreService.markMessageAsReadByAdmin(message.id);
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          ClipOval(
-                            child: message.senderImageUrl.isNotEmpty
-                                ? CachedNetworkImage(
-                                    imageUrl: message.senderImageUrl,
-                                    width: 40,
-                                    height: 40,
-                                    fit: BoxFit.cover,
-                                    placeholder: (context, url) =>
-                                        const CircularProgressIndicator(strokeWidth: 2),
-                                    errorWidget: (context, url, error) =>
-                                        const Icon(Icons.person, size: 40),
-                                  )
-                                : const Icon(Icons.person, size: 40),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    color: isUnreadByAdmin
+                        ? (isDark
+                            ? primaryColor.withValues(alpha: 0.15)
+                            : primaryColor.withValues(alpha: 0.1))
+                        : null,
+                    child: InkWell(
+                      onTap: () {
+                        // Mesaj detayını göster
+                        _showMessageDetail(message);
+                        // Admin tarafından okundu olarak işaretle
+                        if (isUnreadByAdmin) {
+                          _firestoreService.markMessageAsReadByAdmin(message.id);
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
                               children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '${message.senderName} → ${message.receiverName}',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: isUnreadByAdmin
-                                              ? FontWeight.w700
-                                              : FontWeight.w600,
-                                          color: isDark ? Colors.white : Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                    if (isUnreadByAdmin)
-                                      Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          color: primaryColor,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                  ],
+                                ClipOval(
+                                  child: message.senderImageUrl.isNotEmpty
+                                      ? CachedNetworkImage(
+                                          imageUrl: message.senderImageUrl,
+                                          width: 40,
+                                          height: 40,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              const CircularProgressIndicator(strokeWidth: 2),
+                                          errorWidget: (context, url, error) =>
+                                              const Icon(Icons.person, size: 40),
+                                        )
+                                      : const Icon(Icons.person, size: 40),
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              '${message.senderName} → ${message.receiverName}',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: isUnreadByAdmin
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w600,
+                                                color: isDark ? Colors.white : Colors.black87,
+                                              ),
+                                            ),
+                                          ),
+                                          if (isUnreadByAdmin)
+                                            Container(
+                                              width: 10,
+                                              height: 10,
+                                              decoration: BoxDecoration(
+                                                color: primaryColor,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        DateFormat('d MMMM yyyy, HH:mm', 'tr_TR').format(message.createdAt),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.05)
+                                    : Colors.grey[100],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                message.text,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(
+                                  message.isRead ? Icons.done_all : Icons.done,
+                                  size: 16,
+                                  color: message.isRead
+                                      ? Colors.blue
+                                      : Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
                                 Text(
-                                  DateFormat('d MMMM yyyy, HH:mm', 'tr_TR').format(message.createdAt),
+                                  message.isRead ? 'Okundu' : 'Gönderildi',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: isDark ? Colors.grey[400] : Colors.grey[600],
                                   ),
                                 ),
+                                const Spacer(),
+                                if (isUnreadByAdmin)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Text(
+                                      'Yeni',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.05)
-                              : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          message.text,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: isDark ? Colors.white : Colors.black87,
-                            height: 1.5,
-                          ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(
-                            message.isRead ? Icons.done_all : Icons.done,
-                            size: 16,
-                            color: message.isRead
-                                ? Colors.blue
-                                : Colors.grey,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            message.isRead ? 'Okundu' : 'Gönderildi',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? Colors.grey[400] : Colors.grey[600],
-                            ),
-                          ),
-                          const Spacer(),
-                          if (isUnreadByAdmin)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: primaryColor,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Text(
-                                'Yeni',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ],
         );
       },
     );

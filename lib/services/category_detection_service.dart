@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import '../models/category.dart';
 
 void _log(String message) {
-  if (kDebugMode) _log(message);
+  if (kDebugMode) print(message);
 }
 
 class CategoryDetectionService {

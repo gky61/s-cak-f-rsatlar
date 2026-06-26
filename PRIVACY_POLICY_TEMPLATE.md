@@ -97,3 +97,8 @@ Gizlilik politikamız hakkında sorularınız için:
 
 **Not:** Bu şablon, genel bir gizlilik politikası şablonudur. Yasal gereklilikler için bir avukata danışmanız önerilir.
 
+
+
+
+
+

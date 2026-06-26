@@ -1,0 +1,22 @@
+# Oracle Cloud Shell'de çalıştırılacak komutlar (Adım Adım)
+
+# 1. Tüm compartment'leri listele
+oci iam compartment list --all --output table
+
+# 2. Compartment ID'yi manuel al (yukarıdaki çıktıdan)
+# Örnek: COMP_ID="ocid1.compartment.oc1..xxxxx"
+
+# 3. Instance'ları listele
+oci compute instance list --compartment-id-in-subtree true --all --query "data[*].{Name:display-name,State:lifecycle-state}" --output table
+
+# ALTERNATIF: Cloud Shell'deki bot dizinini kontrol et
+cd sicak_firsatlar_bot
+ls -la
+cat .env | grep TELEGRAM_CHANNELS
+
+# Eğer .env dosyası varsa, kanalı ekle
+nano .env
+# TELEGRAM_CHANNELS satırını bul ve @indirimkaplani ekle
+
+
+

@@ -57,6 +57,10 @@ dependencies:
   # Image compression - Görsel sıkıştırma için
   flutter_image_compress: ^2.3.0
 
+  # AdMob - Reklamlar için
+  google_mobile_ads: ^5.0.0
+  firebase_performance: ^0.9.4+7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

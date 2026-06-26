@@ -54,13 +54,24 @@ class BadgeHelper {
   };
 
   static BadgeInfo? getBadgeInfo(String badgeId) {
-    return badges[badgeId];
+    // Önce tanımlı rozetleri kontrol et
+    if (badges.containsKey(badgeId)) {
+      return badges[badgeId];
+    }
+    // Tanımlı değilse, dinamik rozet oluştur (web'deki gibi)
+    return BadgeInfo(
+      name: badgeId, // Rozet adını direkt kullan
+      icon: '🏅', // Varsayılan ikon
+      color: const Color(0xFFFFA500), // Varsayılan turuncu renk
+      description: badgeId, // Açıklama olarak rozet adı
+    );
   }
 
   static List<BadgeInfo> getBadgeInfos(List<String> badgeIds) {
     return badgeIds
-        .map((id) => badges[id])
-        .whereType<BadgeInfo>()
+        .map((id) => getBadgeInfo(id))
+        .where((badge) => badge != null)
+        .cast<BadgeInfo>()
         .toList();
   }
 

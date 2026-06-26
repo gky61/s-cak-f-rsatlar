@@ -16,10 +16,11 @@ const affiliateConfig = {
         boutiqueId: '', // Trendyol Boutique ID'nizi buraya ekleyin
         // Örnek: '123456' veya 'abc123'
     },
-    // Hepsiburada Affiliate ID (örnek: https://www.hepsiburada.com/...?utm_source=XXXXX)
+    // Hepsiburada Affiliate ID (Link Gelir programı için genellikle 'linkgelir' kullanılır)
     hepsiburada: {
-        utmSource: '', // Hepsiburada UTM Source ID'nizi buraya ekleyin
-        // Örnek: 'affiliate123' veya 'partner456'
+        utmSource: 'linkgelir', // Hepsiburada Link Gelir için genellikle 'linkgelir' kullanılır
+        // Eğer özel bir partner ID'niz varsa onu yazın
+        // Örnek: 'linkgelir' veya 'partner456'
     },
     // N11 Affiliate ID (örnek: https://www.n11.com/...?ref=XXXXX)
     n11: {

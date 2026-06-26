@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'dart:async';
 import 'dart:ui';
 import '../services/firestore_service.dart';
@@ -10,6 +11,7 @@ import '../services/theme_service.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../widgets/offline_banner.dart';
+import '../widgets/ad_deal_card.dart';
 import '../models/category.dart';
 import '../models/deal.dart';
 import '../theme/app_theme.dart';
@@ -59,24 +61,225 @@ class _HomeScreenState extends State<HomeScreen> {
   
   // Pagination için state
   List<Deal> _allDeals = [];
-  List<Deal> _displayedDeals = [];
   int _displayLimit = 20;
   bool _isLoadingMore = false;
   bool _hasMore = true;
+  
+  late Stream<List<Deal>> _dealsStream;
+  
+  // Engelleme kontrolü için
+  StreamSubscription? _blockedUserListener;
+  
+  // Okunmamış mesaj sayıları
+  int _unreadMessageCount = 0;
+  int _unreadAdminMessageCount = 0;
+  StreamSubscription? _messageCountSubscription;
+  StreamSubscription? _adminMessageCountSubscription;
 
   @override
   void initState() {
     super.initState();
+    _dealsStream = _firestoreService.getDealsStream();
     _viewMode = _themeService.viewMode;
     _checkAdminStatus();
+    _checkBlockedStatus();
     _notificationService.requestPermission();
     _notificationService.setupNotificationListeners();
     _cleanupExpiredDeals();
     _loadFollowedCategories();
+    _loadUnreadMessageCounts();
     // Theme service listener ekle
     _themeService.addListener(_onThemeChanged);
     // Scroll listener ekle
     _scrollController.addListener(_onScroll);
+  }
+  
+  @override
+  void dispose() {
+    _blockedUserListener?.cancel();
+    _messageCountSubscription?.cancel();
+    _adminMessageCountSubscription?.cancel();
+    _themeService.removeListener(_onThemeChanged);
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    _categoryScrollController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+  
+  // Okunmamış mesaj sayılarını yükle
+  Future<void> _loadUnreadMessageCounts() async {
+    final currentUserId = _authService.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    try {
+      // İlk yükleme
+      final userMessageCount = await _firestoreService.getUnreadMessageCount(currentUserId);
+      final adminMessageCount = await _firestoreService.getUnreadAdminToUserMessageCount(currentUserId);
+      
+      if (mounted) {
+        setState(() {
+          _unreadMessageCount = userMessageCount;
+          _unreadAdminMessageCount = adminMessageCount;
+        });
+      }
+
+      // Kullanıcı mesajları için stream
+      _messageCountSubscription?.cancel();
+      _messageCountSubscription = _firestoreService.getUserMessagesStream(currentUserId).listen((messages) {
+        if (mounted) {
+          final unreadCount = messages
+              .where((m) => m.receiverId == currentUserId && !m.isRead)
+              .length;
+          setState(() {
+            _unreadMessageCount = unreadCount;
+          });
+        }
+      });
+
+      // Admin mesajları için stream
+      _adminMessageCountSubscription?.cancel();
+      _adminMessageCountSubscription = _firestoreService.getAdminToUserMessagesStream(currentUserId).listen((messages) {
+        if (mounted) {
+          final unreadCount = messages.where((m) => !m.isRead).length;
+          setState(() {
+            _unreadAdminMessageCount = unreadCount;
+          });
+        }
+      });
+    } catch (e) {
+      _log('❌ Okunmamış mesaj sayısı yükleme hatası: $e');
+    }
+  }
+  
+  // Engelleme durumunu kontrol et
+  Future<void> _checkBlockedStatus() async {
+    final currentUser = _authService.currentUser;
+    if (currentUser == null) return;
+    
+    try {
+      _log('🔍 HomeScreen: Engelleme kontrolü yapılıyor: ${currentUser.uid}');
+      final isBlocked = await _firestoreService.isUserBlocked(currentUser.uid);
+      _log('🔍 HomeScreen: Engelleme durumu: $isBlocked');
+      
+      if (isBlocked) {
+        _log('🚫 HomeScreen: Kullanıcı engellenmiş, oturum kapatılıyor: ${currentUser.uid}');
+        _blockedUserListener?.cancel();
+        
+        // Önce bildirim aboneliklerini temizle
+        await _notificationService.clearAllSubscriptions();
+        
+        // Sonra oturumu kapat
+        await _authService.signOut();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.block, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red[600],
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      } else {
+        // Kullanıcı engellenmemiş, real-time listener başlat
+        _startBlockedUserListener(currentUser.uid);
+      }
+    } catch (e) {
+      _log('❌ HomeScreen: Engelleme kontrolü hatası: $e');
+    }
+  }
+  
+  // Real-time listener: Kullanıcı uygulama açıkken engellenirse çıkış yaptır
+  void _startBlockedUserListener(String userId) {
+    // Eğer zaten bir listener varsa, yeni bir tane başlatma
+    if (_blockedUserListener != null) {
+      _log('👂 HomeScreen: Listener zaten aktif, yeni listener başlatılmıyor');
+      return;
+    }
+    
+    _log('👂 HomeScreen: Real-time engelleme listener başlatılıyor: $userId');
+    try {
+      _blockedUserListener = _firestoreService.firestore
+          .collection('blockedUsers')
+          .doc(userId)
+          .snapshots()
+          .listen((snapshot) async {
+        _log('👂 HomeScreen: Engelleme listener tetiklendi: exists=${snapshot.exists}, mounted=$mounted, userId=$userId');
+        if (snapshot.exists && mounted) {
+          _log('🚫 HomeScreen: Kullanıcı engellendi (real-time), oturum kapatılıyor: $userId');
+          _blockedUserListener?.cancel();
+          
+          try {
+            // Önce bildirim aboneliklerini temizle
+            await _notificationService.clearAllSubscriptions();
+            _log('✅ HomeScreen: Bildirim abonelikleri temizlendi');
+            
+            // Sonra oturumu kapat
+            await _authService.signOut();
+            _log('✅ HomeScreen: Oturum kapatıldı');
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(Icons.block, color: Colors.white),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: Colors.red[600],
+                  behavior: SnackBarBehavior.floating,
+                  margin: const EdgeInsets.all(16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
+          } catch (e) {
+            _log('❌ HomeScreen: Engelleme işlemi hatası: $e');
+            // Hata olsa bile oturumu kapatmayı dene
+            try {
+              await _authService.signOut();
+            } catch (signOutError) {
+              _log('❌ HomeScreen: SignOut hatası: $signOutError');
+            }
+          }
+        } else if (!snapshot.exists) {
+          _log('✅ HomeScreen: Kullanıcı engeli kaldırıldı (real-time): $userId');
+        }
+      }, onError: (error) {
+        _log('❌ HomeScreen: Blocked user listener hatası: $error');
+        _blockedUserListener = null; // Hata durumunda listener'ı sıfırla
+      });
+      _log('✅ HomeScreen: Real-time engelleme listener başarıyla başlatıldı: $userId');
+    } catch (e) {
+      _log('❌ HomeScreen: Listener başlatma hatası: $e');
+    }
   }
 
   void _onScroll() {
@@ -116,7 +319,6 @@ class _HomeScreenState extends State<HomeScreen> {
         
         setState(() {
           _displayLimit = newLimit;
-          _displayedDeals = _allDeals.take(_displayLimit).toList();
           _hasMore = hasMore;
           _isLoadingMore = false;
         });
@@ -138,16 +340,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _viewMode = _themeService.viewMode;
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _themeService.removeListener(_onThemeChanged);
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    _categoryScrollController.dispose();
-    _searchController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadFollowedCategories() async {
@@ -255,6 +447,28 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // Reklam pozisyonlarını hesapla (5-6-5-6-5-6 pattern)
+  // Pattern: İlk reklam 5 deal'den sonra, ikinci 6 deal'den sonra, üçüncü 5 deal'den sonra, vs.
+  // Pozisyonlar: 5, 12, 18, 25, 31, 38, ...
+  List<int> _calculateAdPositions(int dealCount) {
+    List<int> positions = [];
+    int currentPosition = 5; // İlk reklam 5 deal'den sonra
+    int patternIndex = 0; // Pattern index: 0=6 (ilk reklamdan sonra), 1=5, 2=6, 3=5, ...
+    
+    // Pattern: [5, 6, 5, 6, 5, 6, ...]
+    while (currentPosition < dealCount) {
+      positions.add(currentPosition);
+      
+      // Pattern'e göre interval belirle: çift index'ler 6, tek index'ler 5
+      // İlk reklamdan sonra 6 deal, ikinci reklamdan sonra 5 deal, üçüncü reklamdan sonra 6 deal, ...
+      int interval = (patternIndex % 2 == 0) ? 6 : 5;
+      currentPosition += interval + 1; // +1 reklam kartı için
+      patternIndex++;
+    }
+    
+    return positions;
+  }
+
   // Expired deal'leri temizle (gün bittiğinde sil)
   Future<void> _cleanupExpiredDeals() async {
     try {
@@ -269,13 +483,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkAdminStatus() async {
-    final isAdmin = await _authService.isAdmin();
-    if (mounted) setState(() => _isAdmin = isAdmin);
+    try {
+      _log('🔍 Admin durumu kontrol ediliyor...');
+      final isAdmin = await _authService.isAdmin();
+      _log('👮 Admin durumu: $isAdmin');
+      if (mounted) {
+        setState(() {
+          _isAdmin = isAdmin;
+          _log('✅ _isAdmin state güncellendi: $_isAdmin');
+        });
+      }
+      // Admin ise bildirim aboneliğini garanti et (mobilde giriş sonrası FCM gecikmeli olabilir)
+      if (isAdmin) {
+        Future.delayed(const Duration(seconds: 2), () async {
+          if (!mounted) return;
+          try {
+            await _notificationService.subscribeToAdminTopic();
+            _log('✅ Ana sayfa: Admin bildirim aboneliği doğrulandı');
+          } catch (e) {
+            _log('⚠️ Admin bildirim aboneliği (Home): $e');
+          }
+        });
+      }
+    } catch (e) {
+      _log('❌ Admin kontrolü hatası: $e');
+    }
   }
 
   void _toggleSearchMode() {
     setState(() {
       _isSearchMode = !_isSearchMode;
+      _displayLimit = 20;
       if (_isSearchMode) {
         _searchController.text = _searchQuery;
         // Arama modu açıldığında cursor'u sona al
@@ -295,6 +533,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onSearchChanged(String value) {
     setState(() {
       _searchQuery = value;
+      _displayLimit = 20;
     });
   }
 
@@ -302,6 +541,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _searchQuery = '';
       _searchController.clear();
+      _displayLimit = 20;
     });
   }
 
@@ -496,6 +736,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onSelected: (_) => setState(() {
                             _selectedCategory = category.id;
                             _selectedSubCategory = null;
+                            _displayLimit = 20;
                           }),
                           backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.surface,
                           selectedColor: AppTheme.secondary,
@@ -534,7 +775,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // Liste
           Expanded(
             child: StreamBuilder<List<Deal>>(
-              stream: _firestoreService.getDealsStream(),
+              stream: _dealsStream,
               builder: (context, snapshot) {
                 // StreamBuilder optimizasyonu - sadece gerekli durumlarda rebuild
                 // Hata durumu
@@ -622,17 +863,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   }).toList();
                 }
 
-                // Pagination için deal'leri güncelle (optimize edildi)
-                if (_allDeals.length != filteredDeals.length || 
-                    (_allDeals.isNotEmpty && filteredDeals.isNotEmpty && 
-                     _allDeals.first.id != filteredDeals.first.id)) {
-                  // Sadece gerçekten değiştiyse güncelle
-                        _allDeals = filteredDeals;
-                        _displayLimit = 20;
-                        _displayedDeals = filteredDeals.take(_displayLimit).toList();
-                        _hasMore = filteredDeals.length > _displayLimit;
-                        _isLoadingMore = false;
-                }
+                // Pagination için deal'leri güncelle
+                _allDeals = filteredDeals;
+                _hasMore = filteredDeals.length > _displayLimit;
 
                 if (filteredDeals.isEmpty) {
                   return Center(
@@ -651,9 +884,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 // Pagination için gösterilecek deal'ler
-                final dealsToShow = _displayedDeals.isEmpty 
-                    ? filteredDeals.take(_displayLimit).toList()
-                    : _displayedDeals;
+                final dealsToShow = filteredDeals.take(_displayLimit).toList();
+
+                // Reklam kartlarını ekle (5-6-5-6-5-6 pattern)
+                // Pattern: İlk reklam 5 deal'den sonra, ikinci 6 deal'den sonra, üçüncü 5 deal'den sonra, vs.
+                List<int> adPositions = _calculateAdPositions(dealsToShow.length);
+                final int adCount = adPositions.length;
+                final int totalItemCount = dealsToShow.length + adCount + (_hasMore && _isLoadingMore ? 1 : 0);
 
                 return RefreshIndicator(
                   onRefresh: () async {
@@ -666,7 +903,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (mounted) {
                       setState(() {
                         _displayLimit = 20;
-                        _displayedDeals = _allDeals.take(_displayLimit).toList();
                         _hasMore = _allDeals.length > _displayLimit;
                         _isLoadingMore = false;
                       });
@@ -685,13 +921,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           mainAxisSpacing: 12,
                           childAspectRatio: 0.68,
                         ),
-                        cacheExtent: 2000, // Daha fazla cache için artırıldı
+                        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                        cacheExtent: 500, // Optimize edilmiş cache
                         addAutomaticKeepAlives: false, // Performans için
                         addRepaintBoundaries: true, // Repaint optimizasyonu
                         addSemanticIndexes: false, // Performans için
-                        itemCount: dealsToShow.length + (_hasMore && _isLoadingMore ? 1 : 0),
+                        itemCount: totalItemCount,
                         itemBuilder: (context, index) {
-                          if (index == dealsToShow.length) {
+                          // Loading indicator kontrolü
+                          if (index >= dealsToShow.length + adCount) {
                             return Center(
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -709,7 +947,35 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             );
                           }
-                          final deal = dealsToShow[index];
+                          
+                          // Reklam pozisyonunu kontrol et (5-6-5-6-5-6 pattern)
+                          // Reklam pozisyonları: 5, 12, 18, 25, 31, 38, ...
+                          
+                          // Kaç reklam geçtiğini hesapla
+                          int passedAds = 0;
+                          for (int i = 0; i < adPositions.length; i++) {
+                            final adPosition = adPositions[i];
+                            if (index == adPosition) {
+                              // Bu pozisyon bir reklam pozisyonu
+                              return RepaintBoundary(
+                                key: ValueKey('ad_card_vertical_$i'),
+                                child: AdDealCard(
+                                  viewMode: CardViewMode.vertical,
+                                  adUnitId: 'ca-app-pub-6853997017739651/8758625050', // Ana Sayfa Banner - Gerçek Ad Unit ID
+                                ),
+                              );
+                            }
+                            if (index > adPosition) {
+                              passedAds++;
+                            }
+                          }
+                          
+                          // Normal deal kartı (geçilen reklam sayısını çıkar)
+                          final actualIndex = index - passedAds;
+                          if (actualIndex >= dealsToShow.length || actualIndex < 0) {
+                            return const SizedBox.shrink();
+                          }
+                          final deal = dealsToShow[actualIndex];
                           return RepaintBoundary(
                             key: ValueKey('deal_card_${deal.id}'),
                             child: DealCard(
@@ -730,13 +996,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         controller: _scrollController,
                         key: ValueKey('deal_list_$_selectedCategory'),
                         padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
-                        cacheExtent: 2000, // Daha fazla cache için artırıldı
+                        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                        cacheExtent: 500, // Optimize edilmiş cache
                         addAutomaticKeepAlives: false, // Performans için
                         addRepaintBoundaries: true, // Repaint optimizasyonu
                         addSemanticIndexes: false, // Performans için
-                        itemCount: dealsToShow.length + (_hasMore && _isLoadingMore ? 1 : 0),
+                        itemCount: totalItemCount,
                         itemBuilder: (context, index) {
-                          if (index == dealsToShow.length) {
+                          // Loading indicator kontrolü
+                          if (index >= dealsToShow.length + adCount) {
                             return Center(
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -754,7 +1022,35 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             );
                           }
-                          final deal = dealsToShow[index];
+                          
+                          // Reklam pozisyonunu kontrol et (5-6-5-6-5-6 pattern)
+                          // Reklam pozisyonları: 5, 12, 18, 25, 31, 38, ...
+                          
+                          // Kaç reklam geçtiğini hesapla
+                          int passedAds = 0;
+                          for (int i = 0; i < adPositions.length; i++) {
+                            final adPosition = adPositions[i];
+                            if (index == adPosition) {
+                              // Bu pozisyon bir reklam pozisyonu
+                              return RepaintBoundary(
+                                key: ValueKey('ad_card_horizontal_$i'),
+                                child: AdDealCard(
+                                  viewMode: CardViewMode.horizontal,
+                                  adUnitId: 'ca-app-pub-6853997017739651/8758625050', // Ana Sayfa Banner - Gerçek Ad Unit ID
+                                ),
+                              );
+                            }
+                            if (index > adPosition) {
+                              passedAds++;
+                            }
+                          }
+                          
+                          // Normal deal kartı (geçilen reklam sayısını çıkar)
+                          final actualIndex = index - passedAds;
+                          if (actualIndex >= dealsToShow.length || actualIndex < 0) {
+                            return const SizedBox.shrink();
+                          }
+                          final deal = dealsToShow[actualIndex];
                           return RepaintBoundary(
                             key: ValueKey('deal_card_list_${deal.id}'),
                             child: DealCard(
@@ -806,6 +1102,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {
                       _selectedCategory = 'tumu';
                       _selectedSubCategory = null;
+                      _displayLimit = 20;
                     });
                     // Kategori barını başa kaydır
                     if (_categoryScrollController.hasClients) {
@@ -851,6 +1148,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.person,
                 label: 'Profil',
                 isSelected: false,
+                badgeCount: _unreadMessageCount + _unreadAdminMessageCount,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -913,29 +1211,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     size: 18,
                   ),
                 ),
+                // Sağ alt köşede kırmızı nokta (bildirim göstergesi)
                 if (badgeCount > 0)
                   Positioned(
-                    right: -4,
-                    top: -4,
+                    right: -2,
+                    bottom: -2,
                     child: Container(
-                      padding: const EdgeInsets.all(4),
+                      width: 10,
+                      height: 10,
                       decoration: BoxDecoration(
                         color: Colors.red,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: Text(
-                        badgeCount > 99 ? '99+' : badgeCount.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
+                        border: Border.all(
+                          color: isDark ? AppTheme.darkSurface : Colors.white,
+                          width: 2,
                         ),
-                        textAlign: TextAlign.center,
                       ),
                     ),
                   ),
@@ -1027,6 +1317,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _selectedCategory = category.id;
                 _selectedSubCategory = null;
               }
+              _displayLimit = 20;
               _isCategoryMenuExpanded = false;
             });
           },
@@ -1116,6 +1407,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     // Alt kategori yoksa direkt seç
                     _selectedCategory = category.id;
                     _selectedSubCategory = null;
+                    _displayLimit = 20;
                     _isCategoryMenuExpanded = false;
                   } else {
                     // Alt kategori varsa expand/collapse yap
@@ -1126,6 +1418,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       _selectedCategory = category.id;
                       _selectedSubCategory = null;
                     }
+                    _displayLimit = 20;
                   }
                 });
               },

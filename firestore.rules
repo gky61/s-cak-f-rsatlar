@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========================================
+    // HELPER FUNCTIONS
+    // ========================================
+    
+    // Kullanıcı giriş yapmış mı?
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // İstek yapan kullanıcının ID'si
+    function userId() {
+      return request.auth.uid;
+    }
+    
+    // Kullanıcı admin mi?
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Kullanıcı engellenmiş mi?
+    function isBlocked() {
+      return exists(/databases/$(database)/documents/blockedUsers/$(request.auth.uid));
+    }
+    
+    // Engellenmiş kullanıcı yazamaz
+    function canWrite() {
+      return isAuthenticated() && !isBlocked();
+    }
+    
+    // ========================================
+    // USERS COLLECTION
+    // ========================================
+    match /users/{targetUserId} {
+      // Herkes okuyabilir (profil bilgileri için)
+      allow read: if isAuthenticated();
+      
+      // Sadece kendi profilini oluşturabilir/güncelleyebilir
+      allow create: if isAuthenticated() && userId() == targetUserId;
+      allow update: if isAuthenticated() && (userId() == targetUserId || isAdmin());
+      
+      // Sadece admin silebilir
+      allow delete: if isAdmin();
+      
+      // Favoriler subcollection
+      match /favorites/{dealId} {
+        allow read: if isAuthenticated() && userId() == targetUserId;
+        allow write: if canWrite() && userId() == targetUserId;
+      }
+      
+      // Kullanıcı bildirimleri (yorum cevapları vb.)
+      match /notifications/{notificationId} {
+        allow read, write: if isAuthenticated() && userId() == targetUserId;
+      }
+    }
+    
+    // ========================================
+    // DEALS COLLECTION
+    // ========================================
+    match /deals/{dealId} {
+      // Herkes onaylı fırsatları okuyabilir
+      allow read: if true;
+      
+      // Giriş yapmış ve engellenmemiş kullanıcılar fırsat ekleyebilir
+      allow create: if canWrite();
+      
+      // Sahibi veya admin güncelleyebilir
+      allow update: if canWrite() && 
+                    (resource.data.postedBy == userId() || isAdmin());
+      
+      // Sahibi veya admin silebilir
+      allow delete: if isAuthenticated() && 
+                    (resource.data.postedBy == userId() || isAdmin());
+      
+      // Votes subcollection
+      match /votes/{voteUserId} {
+        allow read: if isAuthenticated();
+        allow write: if canWrite() && userId() == voteUserId;
+      }
+      
+      // Comments subcollection
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if canWrite();
+        allow update: if canWrite() && 
+                      (resource.data.userId == userId() || isAdmin());
+        allow delete: if isAuthenticated() && 
+                      (resource.data.userId == userId() || isAdmin());
+      }
+    }
+    
+    // ========================================
+    // MESSAGES COLLECTION (User-to-User)
+    // ========================================
+    match /messages/{messageId} {
+      // Sadece gönderen veya alıcı okuyabilir
+      allow read: if isAuthenticated() && 
+                  (resource.data.senderId == userId() || 
+                   resource.data.receiverId == userId() ||
+                   isAdmin());
+      
+      // Giriş yapmış kullanıcılar mesaj gönderebilir
+      allow create: if canWrite() && request.resource.data.senderId == userId();
+      
+      // Alıcı mesajı okundu işaretleyebilir
+      allow update: if isAuthenticated() && 
+                    resource.data.receiverId == userId();
+      
+      // Gönderen veya admin silebilir
+      allow delete: if isAuthenticated() && 
+                    (resource.data.senderId == userId() || isAdmin());
+    }
+    
+    // ========================================
+    // ADMIN TO USER MESSAGES
+    // ========================================
+    match /adminToUserMessages/{messageId} {
+      // Sadece alıcı kullanıcı veya admin okuyabilir
+      allow read: if isAuthenticated() && 
+                  (resource.data.userId == userId() || isAdmin());
+      
+      // Sadece admin oluşturabilir
+      allow create: if isAdmin();
+      
+      // Kullanıcı okundu işaretleyebilir, admin güncelleyebilir
+      allow update: if isAuthenticated() && 
+                    (resource.data.userId == userId() || isAdmin());
+      
+      // Sadece alıcı veya admin silebilir
+      allow delete: if isAuthenticated() && 
+                    (resource.data.userId == userId() || isAdmin());
+    }
+    
+    // ========================================
+    // ADMIN MESSAGES (Moderation logs)
+    // ========================================
+    match /adminMessages/{messageId} {
+      // Sadece admin okuyabilir/yazabilir
+      allow read, write: if isAdmin();
+    }
+    
+    // ========================================
+    // BLOCKED USERS
+    // ========================================
+    match /blockedUsers/{blockedUserId} {
+      // Sadece admin yönetebilir
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // ========================================
+    // BANNED USERS (Comment/Deal bans)
+    // ========================================
+    match /commentBannedUsers/{bannedUserId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    match /dealBannedUsers/{bannedUserId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // ========================================
+    // SETTINGS
+    // ========================================
+    match /settings/{settingId} {
+      // Herkes okuyabilir
+      allow read: if true;
+      // Sadece admin yazabilir
+      allow write: if isAdmin();
+    }
+    
+    // ========================================
+    // REPORTS (Şikayet sistemi)
+    // ========================================
+    match /reports/{reportId} {
+      // Sadece admin okuyabilir
+      allow read: if isAdmin();
+      // Giriş yapmış kullanıcılar şikayet edebilir
+      allow create: if canWrite();
+      // Sadece admin güncelleyebilir/silebilir
+      allow update, delete: if isAdmin();
+    }
+    
+    // ========================================
+    // FALLBACK RULE - Diğer tüm koleksiyonlar
+    // ========================================
+    match /{document=**} {
+      // Varsayılan olarak hiçbir erişime izin verme
+      allow read, write: if false;
+    }
+  }
+}

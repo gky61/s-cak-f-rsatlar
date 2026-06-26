@@ -1,29 +1,39 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:typed_data'; // For Int64List
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../main.dart';
+import '../main.dart'; // navigatorKey için
 import '../screens/deal_detail_screen.dart';
+import '../screens/admin_notifications_screen.dart';
+import '../screens/admin_screen.dart';
+import '../screens/message_screen.dart';
 
 /// Debug modda log yazdır
 void _log(String message) {
   if (kDebugMode) {
     print(message);
   }
+  // Logları stream'e ekle (Debug ekranı için)
+  NotificationService.logStream.add(message);
 }
 
 class NotificationService {
+  static final StreamController<String> logStream = StreamController<String>.broadcast();
+
+  static bool _notificationListenersSetup = false;
+
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _keywordListener;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _followDealsListener;
   final Set<String> _notifiedDealIds = <String>{};
@@ -80,13 +90,30 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         if (response.payload != null) {
-          // Mesaj bildirimi ise mesaj ekranına yönlendir
-          if (response.payload!.startsWith('message:')) {
-            final messageId = response.payload!.substring(8);
-            _navigateToMessage(messageId);
-          } else {
-            // Deal bildirimi ise deal ekranına yönlendir
-            _navigateToDeal(response.payload!);
+          final payload = response.payload!;
+          
+          // Admin mesaj bildirimi ise admin bildirimler ekranına yönlendir
+          if (payload.startsWith('message:')) {
+            _navigateToAdminNotifications();
+          } 
+          // Admin deal bildirimi ise admin ekranına yönlendir
+          else if (payload.startsWith('admin_deal:')) {
+            _navigateToAdminScreen();
+          }
+          // Yorum cevabı bildirimi ise deal ekranına yönlendir ve yoruma scroll et
+          else if (payload.startsWith('comment_reply:')) {
+            final parts = payload.split(':');
+            if (parts.length >= 3) {
+              final dealId = parts[1];
+              final commentId = parts[2];
+              _navigateToDeal(dealId, commentId: commentId);
+            } else {
+              _log('⚠️ Yorum cevabı bildirimi formatı hatalı: $payload');
+            }
+          } 
+          // Deal bildirimi ise deal ekranına yönlendir
+          else {
+            _navigateToDeal(payload);
           }
         }
       },
@@ -94,16 +121,29 @@ class NotificationService {
 
     // Android notification channel oluştur (genel bildirimler)
     const androidChannel = AndroidNotificationChannel(
-      'sicak_firsatlar_channel',
+      'sicak_firsatlar_general_v2',
       'Sıcak Fırsatlar Bildirimleri',
       description: 'Yeni fırsat bildirimleri için kanal',
-      importance: Importance.high,
+      importance: Importance.max,
       playSound: true,
     );
 
     await _localNotifications
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(androidChannel);
+
+    // Android notification channel oluştur (yorum cevapları)
+    const commentReplyChannel = AndroidNotificationChannel(
+      'comment_replies_channel',
+      'Yorum Cevapları',
+      description: 'Yorumlarınıza gelen cevaplar için bildirimler',
+      importance: Importance.high,
+      playSound: true,
+    );
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(commentReplyChannel);
 
     // Android notification channel oluştur (anahtar kelime bildirimleri - özel ses)
     const keywordChannel = AndroidNotificationChannel(
@@ -139,19 +179,35 @@ class NotificationService {
 
     // Android notification channel oluştur (mesaj bildirimleri)
     const messagesChannel = AndroidNotificationChannel(
-      'messages_channel',
+      'messages_channel_v3', // v3
       'Mesaj Bildirimleri',
       description: 'Kullanıcılar arası mesajlaşma bildirimleri',
-      importance: Importance.high,
+      importance: Importance.max,
       playSound: true,
       enableVibration: true,
       enableLights: true,
-      ledColor: Color(0xFF2196F3), // Mavi LED
+      ledColor: Color(0xFF2196F3),
     );
 
     await _localNotifications
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(messagesChannel);
+
+    // Android notification channel oluştur (admin mesaj bildirimleri)
+    const adminMessagesChannel = AndroidNotificationChannel(
+      'admin_messages_channel_v3',
+      'Admin Mesaj Bildirimleri',
+      description: 'Admin tarafından gönderilen mesaj bildirimleri',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      enableLights: true,
+      ledColor: Color(0xFF2196F3),
+    );
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(adminMessagesChannel);
 
     // Android notification channel oluştur (takip bildirimleri)
     const followChannel = AndroidNotificationChannel(
@@ -203,6 +259,16 @@ class NotificationService {
 
     // Local notifications izinleri
     await initializeLocalNotifications();
+
+    // Android 13+ (API 33+): Bildirim iznini runtime'da iste (mesaj vb. bildirimler için gerekli)
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      final granted = await _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+      if (granted == true) {
+        _log('✅ Android: Bildirim izni verildi');
+      }
+    }
   }
 
   // Kategori bildirimine abone ol
@@ -388,31 +454,42 @@ class NotificationService {
     }
   }
   
-  // Admin bildirimlerine abone ol
+  // Admin bildirimlerine abone ol (Retry mekanizmalı)
   Future<void> subscribeToAdminTopic() async {
+    int attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        await _messaging.subscribeToTopic('admin_deals');
+        _log('✅ Admin bildirimlerine (admin_deals) abone olundu (Deneme ${attempts + 1})');
+        return; // Başarılı
+      } catch (e) {
+        attempts++;
+        _log('❌ Admin abonelik hatası (Deneme $attempts/$maxAttempts): $e');
+        if (attempts >= maxAttempts) break;
+        await Future.delayed(Duration(seconds: 2 * attempts)); // Exponential backoff
+      }
+    }
+    _log('❌ Admin aboneliği $maxAttempts denemeden sonra BAŞARISIZ oldu.');
+  }
+
+  /// Uygulama ön plana geldiğinde veya manuel çağrıldığında: kullanıcı admin ise
+  /// admin_deals topic'ine abone ol. Böylece abonelik kaybı veya gecikme durumunda düzelir.
+  Future<void> ensureAdminTopicSubscriptionIfAdmin() async {
     try {
-      // Önce mevcut abonelikleri kontrol et
-      await _messaging.subscribeToTopic('admin_deals');
-      _log('✅ Admin bildirimlerine (admin_deals) abone olundu');
-      
-      // Aboneliği doğrula - FCM token'ı kontrol et
-      final token = await _messaging.getToken();
-      if (token != null) {
-        _log('✅ FCM Token mevcut: ${token.substring(0, 20)}...');
-      } else {
-        _log('⚠️ FCM Token bulunamadı!');
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return;
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) return;
+      final data = userDoc.data();
+      final adminValue = data?['isAdmin'] ?? data?['isadmin'];
+      final isAdmin = adminValue == true || adminValue == 'true' || adminValue == 1;
+      if (isAdmin) {
+        await subscribeToAdminTopic();
       }
     } catch (e) {
-      _log('❌ Admin abonelik hatası: $e');
-      // Hata durumunda tekrar dene
-      Future.delayed(const Duration(seconds: 3), () async {
-        try {
-          await _messaging.subscribeToTopic('admin_deals');
-          _log('✅ Admin aboneliği tekrar denendi ve başarılı');
-        } catch (retryError) {
-          _log('❌ Admin abonelik tekrar deneme hatası: $retryError');
-        }
-      });
+      _log('❌ ensureAdminTopicSubscriptionIfAdmin: $e');
     }
   }
 
@@ -428,9 +505,19 @@ class NotificationService {
 
   /// Çıkış yapıldığında TÜM topic aboneliklerini temizle
   /// Bu fonksiyon signOut sırasında çağrılmalı
+  // Yorum cevabı bildirim listener'ını durdur
+  void _stopCommentReplyListener() {
+    _commentReplyListener?.cancel();
+    _commentReplyListener = null;
+    _log('🛑 Yorum cevabı bildirim listener\'ı durduruldu');
+  }
+
   Future<void> clearAllSubscriptions() async {
     try {
       _log('🧹 Tüm bildirim abonelikleri temizleniyor...');
+      
+      // Yorum cevabı bildirim listener'ını durdur
+      _stopCommentReplyListener();
       
       // Admin topic'inden çık
       await _messaging.unsubscribeFromTopic('admin_deals');
@@ -470,6 +557,10 @@ class NotificationService {
       // Keyword listener'ı durdur
       _stopKeywordListener();
       
+      // Mesaj listener'ı durdur
+      _messageListener?.cancel();
+      _messageListener = null;
+      
       _log('✅ Tüm bildirim abonelikleri temizlendi');
     } catch (e) {
       _log('❌ Abonelik temizleme hatası: $e');
@@ -480,41 +571,382 @@ class NotificationService {
   Future<void> initializeForUser({bool isAdmin = false}) async {
     _log('🔔 Bildirim servisi başlatılıyor... (isAdmin: $isAdmin)');
     
-    // Önce FCM token'ı kaydet
-    await saveFCMToken();
-    
-    final generalEnabled = await getGeneralNotificationsEnabled();
-    _log('📋 Genel bildirimler: ${generalEnabled ? "Açık" : "Kapalı"}');
-    
-    // Admin ise, genel bildirimler kapalı olsa bile admin bildirimlerini al
-    if (isAdmin) {
-      _log('👮 Admin kullanıcı tespit edildi - Admin bildirimleri aktifleştiriliyor...');
+    try {
+      // Kanalları oluşturmak için her açılışta başlat
+      await initializeLocalNotifications();
+
+      // Önce FCM token'ı kaydet (bunu her seferinde yap ki güncel kalsın)
+      await saveFCMToken();
       
-      // Admin için admin topic'ine KESINLIKLE abone ol (genel bildirim ayarından bağımsız)
-      await subscribeToAdminTopic();
+      final generalEnabled = await getGeneralNotificationsEnabled();
+      _log('📋 Genel bildirimler: ${generalEnabled ? "Açık" : "Kapalı"}');
       
-      // Aboneliği doğrula
-      _log('✅ Admin topic aboneliği tamamlandı');
-      
-      // Genel bildirim ayarını kontrol et ve ona göre ayarla
-      await _setAllDealsSubscription(generalEnabled);
-    } else {
-      _log('👤 Normal kullanıcı - Admin bildirimleri devre dışı');
-      
-      // Normal kullanıcı - genel bildirim ayarına göre ayarla
-      await _setAllDealsSubscription(generalEnabled);
-      
-      // Normal kullanıcı - admin bildirimlerinden kesinlikle çık
-      await unsubscribeFromAdminTopic();
+      // Admin ise, genel bildirimler kapalı olsa bile admin bildirimlerini al
+      if (isAdmin) {
+        _log('👮 Admin kullanıcı tespit edildi - Admin bildirimleri aktifleştiriliyor...');
+        
+        // Admin için admin topic'ine KESINLIKLE abone ol
+        await subscribeToAdminTopic();
+        
+        // Genel bildirim ayarını kontrol et
+        await _setAllDealsSubscription(generalEnabled);
+        
+        // NOT: _setupAdminDealsListener() KALDIRILDI!
+        // FCM topic (admin_deals) üzerinden Cloud Functions zaten bildirim gönderiyor.
+        // Hem FCM hem Firestore listener açıkken ÇİFT BİLDİRİM sorunu oluşuyordu.
+        // Artık sadece FCM bildirimleri kullanılıyor.
+      } else {
+        _log('👤 Normal kullanıcı - Admin bildirimleri devre dışı');
+        
+        // Normal kullanıcı - genel bildirim ayarına göre ayarla
+        await _setAllDealsSubscription(generalEnabled);
+        
+        // Normal kullanıcı - admin bildirimlerinden kesinlikle çık
+        await unsubscribeFromAdminTopic();
+      }
+
+      // Kullanıcının takip ettiği topic'lere yeniden abone ol
+      await resubscribeToTopics();
+
+      // Yorum cevabı bildirimlerini dinle
+      _setupCommentReplyListener();
+
+      // Mesaj bildirimlerini dinle
+      _setupMessageListener();
+
+      // Bildirim dinleyicilerini başlat (ön plan, arka plan, kapalı durumlar için)
+      // Bunu sadece bir kez başlatmak yeterli olabilir ama idempotent (tekrarlanabilir) olmalı
+      setupNotificationListeners();
+
+      _log('✅ Bildirim servisi başarıyla başlatıldı ve yapılandırıldı.');
+    } catch (e) {
+      _log('❌ Bildirim servisi başlatılırken hata oluştu: $e');
+      // Kritik bir hata ise, belki daha sonra tekrar denenebilir
+    }
+  }
+
+  // Mesaj bildirimlerini dinle (Firestore üzerinden)
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _messageListener;
+
+  void _setupMessageListener() {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) {
+      _log('⚠️ Mesaj listener başlatılamadı: userId null');
+      return;
     }
 
-    // Kullanıcının takip ettiği topic'lere yeniden abone ol
-    await resubscribeToTopics();
-
-    _log('✅ Bildirim servisi başlatıldı');
+    _messageListener?.cancel();
     
-    // NOT: Anahtar kelime bildirimleri artık Cloud Function üzerinden push ile geliyor.
-    // Bu nedenle client-side dinleyici kapatıldı (aksi halde app açıldığında geçmiş ilanlar için bildirim basıyor).
+    _log('🔔 Mesaj bildirim listener\'ı başlatılıyor: userId=$userId');
+    
+    bool isFirst = true;
+    
+    // Son 1 dakikadaki mesajları dinle (eski mesajlar için bildirim gönderme)
+    // Not: createdAt ile filtreleme index gerektirebilir, bu yüzden sadece isRead kontrolü yapıp
+    // client-side'da zaman kontrolü yapacağız.
+    _messageListener = _firestore
+        .collection('messages')
+        .where('receiverId', isEqualTo: userId)
+        // .where('isRead', isEqualTo: false) // Debug için kapattık: Client-side filtreleyeceğiz
+        .snapshots()
+        .listen(
+      (snapshot) {
+        _log('📬 Mesaj listener tetiklendi: ${snapshot.docs.length} (Toplam) / ${snapshot.docChanges.length} (Değişiklik) (isFirst: $isFirst)');
+        
+        if (isFirst) {
+          isFirst = false;
+          _log('ℹ️ Mesaj ilk snapshot es geçildi, bildirim tetiklenmeyecek.');
+          return;
+        }
+        
+        for (final doc in snapshot.docChanges) {
+          if (doc.type == DocumentChangeType.added) {
+            final data = doc.doc.data();
+            if (data == null) continue;
+            
+            // Client-side isRead kontrolü
+            final isRead = data['isRead'] == true;
+            if (isRead) {
+               _log('ℹ️ Mesaj okundu olduğu için atlandı: ${doc.doc.id}');
+               continue;
+            }
+
+            // Mesajın ne zaman oluşturulduğunu kontrol et
+            final createdAt = data['createdAt'] as Timestamp?;
+            if (createdAt == null) continue;
+            
+            // Server timestamp gecikmesi olabilir, bu yüzden 5 dk tolerans veriyoruz.
+            final createdDate = createdAt.toDate();
+            final now = DateTime.now();
+            final difference = now.difference(createdDate).inMinutes;
+            
+            _log('📨 Yeni Mesaj Adayı: ${doc.doc.id} (Fark: $difference dk)');
+            
+            if (difference > 5) {
+               _log('⏳ Çok eski mesaj, bildirim yok.');
+               continue; // 5 dakikadan eski
+            }
+
+            // 5 dakikadan yeni mesajlar için bildirim göster
+            // SharedPreferences ile son kontrol zamanı tutulabilirdi ama şimdilik 
+            // sadece çok yeni mesajları alalım.
+            if (difference <= 5) {
+               // Karmaşık _showLocalNotification yerine doğrudan basit metod
+               final sender = data['senderName'] as String? ?? 'Biri';
+               final msg = data['text'] as String? ?? 'Mesaj';
+               showDirectMessageNotification(sender, msg);
+            }
+          }
+        }
+      },
+      onError: (error) {
+        _log('❌ Mesaj bildirim listener hatası: $error');
+      },
+    );
+  }
+
+  // EN BASİT BİLDİRİM GÖSTERME METODU
+  Future<void> showDirectMessageNotification(String title, String body) async {
+    try {
+      final id = DateTime.now().millisecondsSinceEpoch % 100000;
+      
+      const androidDetails = AndroidNotificationDetails(
+        'messages_channel_v3', // TEST EDİLMİŞ VE ÇALIŞAN KANAL
+        'Mesaj Bildirimleri',
+        importance: Importance.max,
+        priority: Priority.max,
+        playSound: true,
+        enableVibration: true,
+      );
+
+      await _localNotifications.show(
+        id,
+        '💬 $title',
+        body,
+        const NotificationDetails(android: androidDetails),
+      );
+      _log('✅ BASİT BİLDİRİM GÖSTERİLDİ: $title - $body');
+    } catch (e) {
+      _log('❌ BASİT BİLDİRİM HATASI: $e');
+    }
+  }
+
+  // Onay bekleyen fırsatları dinle (Admin için - Bot & Kullanıcı Hepsi)
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _adminDealsListener;
+
+  void _setupAdminDealsListener() {
+    // Sadece admin çağırmalı (üst blokta kontrol ediliyor ama double-check)
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+
+    _adminDealsListener?.cancel();
+    _log('🔔 Admin fırsat listener başlatılıyor (Bot & Kullanıcı dahili)...');
+
+    // Onay bekleyen (isApproved: false) VE süresi bitmemiş (isExpired: false)
+    // Bot veya Kullanıcı olması farketmez, hepsini getir.
+    _adminDealsListener = _firestore
+        .collection('deals')
+        .where('isApproved', isEqualTo: false)
+        .where('isExpired', isEqualTo: false)
+        // .where('isUserSubmitted', isEqualTo: true) // KALDIRILDI: Bot fırsatları da gelsin diye
+        .snapshots()
+        .listen((snapshot) {
+      
+      for (final doc in snapshot.docChanges) {
+        if (doc.type == DocumentChangeType.added) {
+          final data = doc.doc.data();
+          if (data == null) continue;
+
+          final createdAt = data['createdAt'] as Timestamp?;
+          if (createdAt == null) continue;
+
+          // Sadece yeni eklenenleri (son 10 dk) bildir
+          final createdDate = createdAt.toDate();
+          final now = DateTime.now();
+          final difference = now.difference(createdDate).inMinutes;
+
+          if (difference <= 10) {
+            final title = data['title'] ?? 'Yeni Fırsat';
+            final isUserSubmitted = data['isUserSubmitted'] == true;
+            final source = isUserSubmitted ? 'Kullanıcı' : '🤖 Bot';
+
+            _showAdminDealNotification(
+              dealId: doc.doc.id,
+              title: 'Onay Bekleyen Fırsat',
+              body: '$source yeni bir fırsat yakaladı: $title',
+            );
+          }
+        }
+      }
+    }, onError: (e) {
+      _log('❌ Admin fırsat listener hatası: $e');
+    });
+  }
+
+  // Admin için basit bildirim göster
+  Future<void> _showAdminDealNotification({
+    required String dealId,
+    required String title,
+    required String body,
+  }) async {
+    try {
+      final id = DateTime.now().millisecondsSinceEpoch % 100000;
+      
+      const androidDetails = AndroidNotificationDetails(
+        'admin_channel', 
+        'Admin Bildirimleri',
+        importance: Importance.max,
+        priority: Priority.max,
+        playSound: true,
+        enableVibration: true,
+        fullScreenIntent: true,
+      );
+
+      await _localNotifications.show(
+        id,
+        '👮‍♂️ $title',
+        body,
+        const NotificationDetails(android: androidDetails),
+        payload: 'admin_deal:$dealId',
+      );
+      _log('✅ Admin bildirimi gösterildi: $dealId');
+    } catch (e) {
+      _log('❌ Admin bildirim hatası: $e');
+    }
+  }
+
+  // Yorum cevabı bildirimlerini dinle (Firestore üzerinden)
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _commentReplyListener;
+  
+  void _setupCommentReplyListener() {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) {
+      _log('⚠️ Yorum cevabı listener başlatılamadı: userId null');
+      return;
+    }
+
+    _commentReplyListener?.cancel();
+    
+    _log('🔔 Yorum cevabı bildirim listener\'ı başlatılıyor: userId=$userId');
+    
+    bool isFirst = true;
+    
+    _commentReplyListener = _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .where('type', isEqualTo: 'comment_reply')
+        .where('read', isEqualTo: false)
+        .snapshots()
+        .listen(
+      (snapshot) async {
+        _log('📬 Yorum cevabı bildirim listener tetiklendi: ${snapshot.docChanges.length} (Değişiklik) (isFirst: $isFirst)');
+        
+        if (isFirst) {
+          isFirst = false;
+          _log('ℹ️ Yorum cevabı ilk snapshot es geçildi, bildirim tetiklenmeyecek.');
+          return;
+        }
+        
+        // Yorum bildirimleri ayarını kontrol et
+        final commentNotificationsEnabled = await getCommentReplyNotificationsEnabled(userId);
+        
+        for (final change in snapshot.docChanges) {
+          if (change.type == DocumentChangeType.added) {
+            try {
+              final doc = change.doc;
+              final data = doc.data();
+              if (data == null) continue;
+              
+              final dealId = data['dealId'] as String? ?? '';
+              final commentId = data['commentId'] as String? ?? '';
+              final replyUserName = data['replyUserName'] as String? ?? 'Birisi';
+              final replyText = data['replyText'] as String? ?? '';
+              final dealTitle = data['dealTitle'] as String? ?? 'Fırsat';
+              
+              _log('📨 Yorum cevabı bildirimi işleniyor: dealId=$dealId, commentId=$commentId, replyUserName=$replyUserName');
+              
+              // Yorum bildirimleri açıksa telefon bildirimi göster
+              if (commentNotificationsEnabled) {
+                // Local bildirim göster
+                await _showCommentReplyLocalNotification(
+                  dealId: dealId,
+                  commentId: commentId,
+                  replyUserName: replyUserName,
+                  replyText: replyText,
+                  dealTitle: dealTitle,
+                );
+                _log('✅ Yorum cevabı telefon bildirimi gösterildi');
+              } else {
+                _log('🚫 Yorum bildirimleri kapalı, telefon bildirimi gösterilmedi (sadece profilde görünecek)');
+              }
+              
+              // NOT: Okundu işaretleme işlemi artık burada otomatik yapılmamaktadır.
+              // Kullanıcı bildirimler sayfasında tıklayınca/görünce okundu yapılacaktır.
+            } catch (e) {
+              _log('❌ Bildirim işleme hatası: $e');
+            }
+          }
+        }
+      },
+      onError: (error) {
+        _log('❌ Yorum cevabı bildirim listener hatası: $error');
+      },
+    );
+    
+    _log('✅ Yorum cevabı bildirim listener\'ı başlatıldı: userId=$userId');
+  }
+  
+  // Yorum cevabı için local bildirim göster
+  Future<void> _showCommentReplyLocalNotification({
+    required String dealId,
+    required String commentId,
+    required String replyUserName,
+    required String replyText,
+    required String dealTitle,
+  }) async {
+    if (kIsWeb) return;
+    
+    final androidDetails = AndroidNotificationDetails(
+      'comment_replies_channel',
+      'Yorum Cevapları',
+      channelDescription: 'Yorumlarınıza gelen cevaplar için bildirimler',
+      importance: Importance.max,
+      priority: Priority.max,
+      showWhen: true,
+      playSound: true,
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 250, 250, 250]),
+      channelShowBadge: true,
+      enableLights: true,
+      color: const Color(0xFF2196F3),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    // Payload: dealId ve commentId
+    final payload = 'comment_reply:$dealId:$commentId';
+
+    await _localNotifications.show(
+      commentId.hashCode,
+      '$replyUserName yorumunuza cevap verdi',
+      replyText,
+      details,
+      payload: payload,
+    );
+
+    _log('📬 Yorum cevabı bildirimi gösterildi: $replyUserName');
   }
 
   /// Keyword listener'ı durdur
@@ -524,6 +956,12 @@ class NotificationService {
     _keywordListenerAttached = false;
     _notifiedDealIds.clear();
     _log('🛑 Keyword listener durduruldu');
+  }
+
+  Future<void> checkKeywordsAndNotify(String dealId, String title, String description) async {
+    // Sadece tetikleyici.
+    // İlerde gerekirse buraya manuel tetiklemeler eklenebilir.
+    _log('KeywordCheck çağrıldı: $title');
   }
 
   Future<void> _startKeywordListener() async {
@@ -541,6 +979,9 @@ class NotificationService {
     int lastCheckMs = prefs.getInt('keyword_last_check_ms') ?? 0;
 
     _keywordListenerAttached = true;
+    
+    bool isFirst = true;
+    
     _keywordListener = _firestore
         .collection('deals')
         .where('isApproved', isEqualTo: true)
@@ -548,6 +989,7 @@ class NotificationService {
         .limit(50)
         .snapshots()
         .listen((snapshot) async {
+      _log('📬 Anahtar kelime listener tetiklendi: ${snapshot.docs.length} (isFirst: $isFirst)');
       int latestMs = lastCheckMs;
 
       for (final doc in snapshot.docs) {
@@ -577,18 +1019,28 @@ class NotificationService {
         if (matched.isEmpty) continue;
         if (ownerId.isNotEmpty && ownerId == userId) continue; // kendi ilanı
 
-        await _showKeywordNotification(
-          title: '🎯 İlginizi Çeken Bir Fırsat Bulundu!',
-          body: '"$matched" kelimesi içeren yeni bir fırsat paylaşıldı. Hemen inceleyin!',
-          payload: doc.id,
-        );
-        _notifiedDealIds.add(doc.id);
-        _log('✅ Anahtar kelime bildirimi (client dinleyici): ${doc.id} / $matched');
+        if (!isFirst) {
+          await _showKeywordNotification(
+            title: '🎯 İlginizi Çeken Bir Fırsat Bulundu!',
+            body: '"$matched" kelimesi içeren yeni bir fırsat paylaşıldı. Hemen inceleyin!',
+            payload: doc.id,
+          );
+          _notifiedDealIds.add(doc.id);
+          _log('✅ Anahtar kelime bildirimi (client dinleyici): ${doc.id} / $matched');
+        } else {
+          // İlk snapshot'takileri sessizce işaretle
+          _notifiedDealIds.add(doc.id);
+        }
       }
 
       if (latestMs > lastCheckMs) {
         lastCheckMs = latestMs;
         await prefs.setInt('keyword_last_check_ms', latestMs);
+      }
+      
+      if (isFirst) {
+        isFirst = false;
+        _log('ℹ️ Anahtar kelime ilk snapshot es geçildi, son kontrol zamanı güncellendi.');
       }
     }, onError: (err) {
       _log('❌ Anahtar kelime dinleyici hatası: $err');
@@ -635,9 +1087,39 @@ class NotificationService {
     final notification = message.notification;
     final data = message.data;
     final dealId = data['dealId'] ?? '';
+    final messageId = data['messageId'] ?? '';
     final type = data['type'] ?? 'deal';
 
-    if (notification == null) return;
+    // ⚠️ DUPLİKE ÖNLEYİCİ: FCM notification payload varsa, sistem zaten bildirim gösteriyor
+    // Bu durumda biz tekrar local notification göstermemeliyiz (çift bildirim önleme)
+    // Sadece data-only mesajlarında (notification == null) local bildirim göster
+    if (notification != null) {
+      _log('📬 FCM sistem bildirimi var, local bildirim atlanıyor: ${notification.title}');
+      return;
+    }
+
+    // Ön planda FCM bazen sadece data gönderir (notification null). Yine de bildirim göster.
+    String title;
+    String body;
+    
+    // data'dan veya varsayılan metinlerden oluştur
+    if (type == 'admin_deal') {
+      title = data['notification_title'] as String? ?? '👮‍♂️ Yeni Onay Bekleyen Fırsat';
+      body = data['notification_body'] as String? ?? 'Onay için bekleyen bir fırsat var. Dokunun.';
+    } else if (type == 'admin_message') {
+      title = data['notification_title'] as String? ?? '📩 Yeni Admin Mesajı';
+      body = data['notification_body'] as String? ?? 'Bir mesajınız var. Dokunun.';
+    } else if (type == 'comment_reply') {
+      title = data['notification_title'] as String? ?? '💬 Yorumunuza cevap var';
+      body = data['notification_body'] as String? ?? 'Birisi yorumunuza cevap verdi.';
+    } else if (type == 'message') {
+      title = data['notification_title'] as String? ?? '💬 Yeni Mesaj';
+      body = data['notification_body'] as String? ?? 'Yeni bir mesajınız var.';
+    } else {
+      title = data['notification_title'] as String? ?? data['title'] as String? ?? 'Yeni Fırsat';
+      body = data['notification_body'] as String? ?? data['body'] as String? ?? 'Bir fırsat paylaşıldı.';
+    }
+    if (title.isEmpty && body.isEmpty) return;
 
     // Bildirim tipine göre channel seç
     String channelId;
@@ -665,16 +1147,22 @@ class NotificationService {
         importance = Importance.high;
         break;
       case 'message':
-        channelId = 'messages_channel';
+        channelId = 'messages_channel_v3'; // v3: Force update & Category
         channelName = 'Mesaj Bildirimleri';
         channelDescription = 'Kullanıcılar arası mesajlaşma bildirimleri';
-        importance = Importance.high;
+        importance = Importance.max;
+        break;
+      case 'admin_message':
+        channelId = 'admin_messages_channel_v3';
+        channelName = 'Admin Mesaj Bildirimleri';
+        channelDescription = 'Admin tarafından gönderilen mesaj bildirimleri';
+        importance = Importance.max;
         break;
       default:
-        channelId = 'sicak_firsatlar_channel';
+        channelId = 'sicak_firsatlar_general_v2';
         channelName = 'Sıcak Fırsatlar Bildirimleri';
         channelDescription = 'Yeni fırsat bildirimleri için kanal';
-        importance = Importance.high;
+        importance = Importance.max;
     }
 
     final androidDetails = AndroidNotificationDetails(
@@ -682,13 +1170,18 @@ class NotificationService {
       channelName,
       channelDescription: channelDescription,
       importance: importance,
-      priority: Priority.high,
+      priority: Priority.max,
+      category: AndroidNotificationCategory.message, // Kategori eklendi
       showWhen: true,
-      playSound: true, // Ses çal
-      enableVibration: true, // Titreşim
-      enableLights: true, // LED
-      // Admin bildirimleri için mavi renk
+      playSound: true,
+      enableVibration: true,
+      enableLights: true,
       color: type == 'admin_deal' ? const Color(0xFF2196F3) : null,
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      ticker: title,
+      visibility: NotificationVisibility.public,
+      fullScreenIntent: true, // Test için: Ekranı uyandırmayı dene
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -702,19 +1195,105 @@ class NotificationService {
       iOS: iosDetails,
     );
 
+    // Payload: admin_message için messageId, admin_deal için admin_deal:dealId, diğerleri için dealId
+    final payload = type == 'admin_message' 
+        ? 'message:${messageId}' 
+        : type == 'admin_deal'
+            ? 'admin_deal:$dealId'
+            : dealId;
+    
+    // Notification ID: benzersiz olmalı
+    final notificationId = type == 'admin_message' 
+        ? messageId.hashCode 
+        : dealId.hashCode;
+
     await _localNotifications.show(
-      dealId.hashCode,
-      notification.title,
-      notification.body,
+      notificationId,
+      title,
+      body,
       details,
-      payload: dealId,
+      payload: payload,
     );
 
-    _log('📬 Local bildirim gösterildi: ${notification.title} (channel: $channelId, type: $type)');
+    _log('📬 Local bildirim gösterildi: $title (channel: $channelId, type: $type)');
+  }
+
+  // Bildirime tıklandığında yönlendirme yap
+  void _handleNotificationTap(Map<String, dynamic> data) {
+    final type = data['type'] ?? 'deal';
+    _log('🔔 Bildirim tipi: $type, data: $data');
+    
+    switch (type) {
+      case 'admin_message':
+        // Admin mesaj bildirimi - AdminNotificationsScreen'e yönlendir
+        _navigateToAdminNotifications();
+        break;
+        
+      case 'admin_deal':
+        // Admin deal bildirimi - AdminScreen'e yönlendir
+        _navigateToAdminScreen();
+        break;
+        
+      case 'message':
+        // Kullanıcı mesajı - Mesaj sayfasına yönlendir
+        final senderId = data['senderId'] ?? '';
+        final senderName = data['senderName'] ?? '';
+        if (senderId.isNotEmpty) {
+          _navigateToChat(senderId, senderName);
+        } else {
+          _log('⚠️ Mesaj bildiriminde senderId bulunamadı');
+          // Ana sayfaya git
+        }
+        break;
+        
+      case 'comment_reply':
+        // Yorum cevabı - Fırsat detayına ve yoruma yönlendir
+        final dealId = data['dealId'] ?? '';
+        final commentId = data['commentId'] ?? '';
+        if (dealId.isNotEmpty) {
+          _navigateToDeal(dealId, commentId: commentId.isNotEmpty ? commentId : null);
+        } else {
+          _log('⚠️ Yorum cevabı bildiriminde dealId bulunamadı');
+        }
+        break;
+        
+      case 'keyword':
+      case 'follow':
+      case 'deal':
+      default:
+        // Fırsat bildirimi - Deal detay sayfasına yönlendir
+        final dealId = data['dealId'] ?? '';
+        if (dealId.isNotEmpty) {
+          _navigateToDeal(dealId);
+        } else {
+          _log('⚠️ Bildirimde dealId bulunamadı, data: $data');
+        }
+        break;
+    }
+  }
+
+  // Sohbet sayfasına yönlendirme
+  void _navigateToChat(String userId, String userName) {
+    final navigator = navigatorKey.currentState;
+    if (navigator != null) {
+      _log('🔔 Sohbet sayfasına yönlendiriliyor: $userId ($userName)');
+      // MessageScreen'e yönlendir
+      navigator.push(
+        MaterialPageRoute(
+          builder: (context) => MessageScreen(
+            otherUserId: userId,
+            otherUserName: userName.isNotEmpty ? userName : 'Kullanıcı',
+            otherUserImageUrl: '', // Bildirimde resim URL yok, boş bırak
+          ),
+        ),
+      );
+    } else {
+      _log('⚠️ Navigator henüz hazır değil, sohbet yönlendirmesi yapılamıyor');
+    }
   }
 
   // Deal detay sayfasına yönlendirme
-  void _navigateToDeal(String dealId) {
+  void _navigateToDeal(String dealId, {String? commentId}) {
     if (dealId.isEmpty) {
       _log('⚠️ Deal ID boş, yönlendirme yapılamıyor');
       return;
@@ -722,10 +1301,13 @@ class NotificationService {
     
     final navigator = navigatorKey.currentState;
     if (navigator != null) {
-      _log('🔔 Deal detay sayfasına yönlendiriliyor: $dealId');
+      _log('🔔 Deal detay sayfasına yönlendiriliyor: $dealId${commentId != null ? " (yorum: $commentId)" : ""}');
       navigator.push(
         MaterialPageRoute(
-          builder: (context) => DealDetailScreen(dealId: dealId),
+          builder: (context) => DealDetailScreen(
+            dealId: dealId,
+            scrollToCommentId: commentId,
+          ),
         ),
       );
     } else {
@@ -750,8 +1332,45 @@ class NotificationService {
     }
   }
 
-  // Bildirim dinleyicilerini başlat
+  // Admin bildirimler ekranına yönlendirme
+  void _navigateToAdminNotifications() {
+    final navigator = navigatorKey.currentState;
+    if (navigator != null) {
+      _log('🔔 Admin bildirimler ekranına yönlendiriliyor');
+      navigator.push(
+        MaterialPageRoute(
+          builder: (context) => const AdminNotificationsScreen(),
+        ),
+      );
+    } else {
+      _log('⚠️ Navigator henüz hazır değil, yönlendirme yapılamıyor');
+    }
+  }
+
+  // Admin ekranına yönlendirme (onay bekleyen fırsatlar için)
+  void _navigateToAdminScreen() {
+    final navigator = navigatorKey.currentState;
+    if (navigator != null) {
+      _log('🔔 Admin ekranına yönlendiriliyor (onay bekleyen fırsatlar)');
+      navigator.push(
+        MaterialPageRoute(
+          builder: (context) => const AdminScreen(),
+        ),
+      );
+    } else {
+      _log('⚠️ Navigator henüz hazır değil, yönlendirme yapılamıyor');
+    }
+  }
+
+  // Bildirim dinleyicilerini başlat (sadece bir kez; çift kayıt önlenir)
   void setupNotificationListeners() {
+    if (_notificationListenersSetup) {
+      _log('📬 Bildirim dinleyicileri zaten kayıtlı, atlanıyor');
+      return;
+    }
+    _notificationListenersSetup = true;
+    _log('📬 Bildirim dinleyicileri kaydediliyor...');
+
     // Uygulama ön planda iken gelen bildirimler
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _log('📬 Yeni bildirim (ön plan): ${message.notification?.title}');
@@ -763,234 +1382,94 @@ class NotificationService {
     // Bildirime tıklayınca (uygulama arka planda veya kapalı)
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       _log('🔔 Bildirim açıldı: ${message.data}');
-      final dealId = message.data['dealId'] ?? '';
-      if (dealId.isNotEmpty) {
-        _navigateToDeal(dealId);
-      } else {
-        _log('⚠️ Bildirimde dealId bulunamadı');
-      }
+      _handleNotificationTap(message.data);
     });
     
     // Uygulama kapalıyken bildirime tıklanırsa
     FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
         _log('🔔 Uygulama kapalıyken bildirim açıldı: ${message.data}');
-        final dealId = message.data['dealId'] ?? '';
-        if (dealId.isNotEmpty) {
-          // Navigator'ın hazır olması için kısa bir gecikme
-          Future.delayed(const Duration(milliseconds: 500), () {
-            _navigateToDeal(dealId);
-          });
-        } else {
-          _log('⚠️ Bildirimde dealId bulunamadı');
-        }
+        // Uygulama henüz tam yüklenmemiş olabilir, biraz bekle
+        Future.delayed(const Duration(milliseconds: 800), () {
+          _handleNotificationTap(message.data);
+        });
       }
     });
   }
 
-  Future<void> _setAllDealsSubscription(bool enabled) async {
-    try {
-      if (enabled) {
-        await _messaging.subscribeToTopic('all_deals');
-        _log('✅ Genel bildirimlere (all_deals) abone olundu');
-      } else {
-        await _messaging.unsubscribeFromTopic('all_deals');
-        _log('🚫 Genel bildirimler kapatıldı (all_deals topic)');
-      }
-    } catch (e) {
-      _log('❌ Genel bildirim abonelik hatası: $e');
-      rethrow;
-    }
-  }
-
+  // --- Genel Bildirim Ayarları ---
   Future<bool> getGeneralNotificationsEnabled() async {
-    try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return true;
-
-      final doc = await _firestore.collection('users').doc(userId).get();
-      if (doc.exists) {
-        final data = doc.data();
-        if (data != null && data.containsKey('allNotificationsEnabled')) {
-          return data['allNotificationsEnabled'] as bool? ?? true;
-        }
-      }
-      return true;
-    } catch (e) {
-      _log('Genel bildirim tercih okuma hatası: $e');
-      return true;
-    }
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('general_notifications') ?? true;
   }
 
   Future<void> setGeneralNotifications(bool enabled) async {
-    final userId = _auth.currentUser?.uid;
-    if (userId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('general_notifications', enabled);
+
+    await _setAllDealsSubscription(enabled);
 
     try {
-      await _setAllDealsSubscription(enabled);
-      await _firestore.collection('users').doc(userId).set(
-        {'allNotificationsEnabled': enabled},
-        SetOptions(merge: true),
-      );
-      _log(enabled
-          ? '✅ Genel bildirimler kaydedildi (açık)'
-          : '🚫 Genel bildirimler kaydedildi (kapalı)');
+      final userId = _auth.currentUser?.uid;
+      if (userId != null) {
+        await _firestore.collection('users').doc(userId).update({
+          'allNotificationsEnabled': enabled,
+        });
+        _log('✅ Firestore allNotificationsEnabled güncellendi: $enabled');
+      }
     } catch (e) {
-      _log('Genel bildirim tercih güncelleme hatası: $e');
-      rethrow;
+      _log('⚠️ Firestore allNotificationsEnabled güncellenirken hata oluştu: $e');
     }
   }
 
-  // Anahtar kelime bildirimleri için metodlar
-  Future<List<String>> getNotificationKeywords() async {
-    try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return [];
+  Future<void> _setAllDealsSubscription(bool enabled) async {
+    if (enabled) {
+      await _messaging.subscribeToTopic('all_deals');
+      _log('✅ Genel bildirimlere (all_deals) abone olundu.');
+    } else {
+      await _messaging.unsubscribeFromTopic('all_deals');
+      _log('🚫 Genel bildirimlerden (all_deals) çıkıldı.');
+    }
+  }
 
+  // --- Yorum Cevabı Bildirim Ayarları ---
+  Future<bool> getCommentReplyNotificationsEnabled(String userId) async {
+    try {
       final doc = await _firestore.collection('users').doc(userId).get();
       if (doc.exists) {
-        final data = doc.data();
-        // Öncelik: watchKeywords (yeni alan), yoksa notificationKeywords
-        if (data != null && data.containsKey('watchKeywords')) {
-          return List<String>.from(data['watchKeywords'] ?? []);
-        }
-        return List<String>.from(data?['notificationKeywords'] ?? []);
+        return doc.data()?['commentReplyNotificationsEnabled'] ?? true;
       }
-      return [];
+      return true; // Varsayılan açık
     } catch (e) {
-      _log('Anahtar kelime alma hatası: $e');
-      return [];
+      return true;
     }
   }
 
-  Future<void> addNotificationKeyword(String keyword) async {
+  Future<void> setCommentReplyNotificationsEnabled(String userId, bool enabled) async {
     try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return;
-
-      final trimmedKeyword = keyword.trim().toLowerCase();
-      if (trimmedKeyword.isEmpty) return;
-
-      // Kullanıcı dokümanının var olup olmadığını kontrol et
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      if (!userDoc.exists) {
-        await _firestore.collection('users').doc(userId).set({
-          'notificationKeywords': [trimmedKeyword],
-          'followedCategories': [],
-          'followedSubCategories': [],
-          'allNotificationsEnabled': true,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      } else {
-        final currentKeywords = List<String>.from(
-          userDoc.data()?['notificationKeywords'] ?? [],
-        );
-        if (!currentKeywords.contains(trimmedKeyword)) {
-          await _firestore.collection('users').doc(userId).update({
-            'notificationKeywords': FieldValue.arrayUnion([trimmedKeyword]),
-          });
-        }
-      }
-      _log('✅ Anahtar kelime eklendi: $trimmedKeyword');
+      await _firestore.collection('users').doc(userId).set({
+        'commentReplyNotificationsEnabled': enabled,
+      }, SetOptions(merge: true));
     } catch (e) {
-      _log('❌ Anahtar kelime ekleme hatası: $e');
-      rethrow;
+      _log('Yorum cevabı bildirim ayarı kaydedilemedi: $e');
     }
   }
 
-  Future<void> removeNotificationKeyword(String keyword) async {
-    try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return;
-
-      final trimmedKeyword = keyword.trim().toLowerCase();
-      await _firestore.collection('users').doc(userId).update({
-        'notificationKeywords': FieldValue.arrayRemove([trimmedKeyword]),
-      });
-      _log('✅ Anahtar kelime kaldırıldı: $trimmedKeyword');
-    } catch (e) {
-      _log('❌ Anahtar kelime kaldırma hatası: $e');
-      rethrow;
-    }
+  // Anahtar kelime listesini getir
+  Future<List<String>> getNotificationKeywords() async {
+     final userId = _auth.currentUser?.uid;
+     if (userId == null) return [];
+     // UserService kullanmadan, direkt firestore'dan veya SharedPreferences'tan
+     // UserService'e erişim döngüsel bağımlılık yapabilir, o yüzden dikkat.
+     // Şimdilik user doc altından okuyalım
+     try {
+       final doc = await _firestore.collection('users').doc(userId).get();
+       return List<String>.from(doc.data()?['watchKeywords'] ?? []);
+     } catch (e) {
+       return [];
+     }
   }
-
-  // Yeni fırsat için anahtar kelime kontrolü yap ve eşleşen kullanıcılara bildirim gönder
-  Future<void> checkKeywordsAndNotify(String dealId, String dealTitle, String dealDescription) async {
-    try {
-      _log('🔍 Anahtar kelime kontrolü: $dealTitle');
-      
-      // Tüm kullanıcıları al (watchKeywords alanı olanlar)
-      final usersSnapshot = await _firestore
-          .collection('users')
-          .where('watchKeywords', isNotEqualTo: null)
-          .get();
-      
-      if (usersSnapshot.docs.isEmpty) {
-        return;
-      }
-      
-      // Deal başlık ve açıklamasını küçük harfe çevir (case-insensitive arama için)
-      final searchText = '${dealTitle.toLowerCase()} ${dealDescription.toLowerCase()}';
-      
-      int notificationCount = 0;
-      
-      for (var userDoc in usersSnapshot.docs) {
-        try {
-          final userData = userDoc.data();
-          final watchKeywords = userData['watchKeywords'];
-          
-          if (watchKeywords == null || watchKeywords is! List || watchKeywords.isEmpty) {
-            continue;
-          }
-          
-          // Kullanıcının anahtar kelimelerini kontrol et
-          final keywords = List<String>.from(watchKeywords);
-          final matchedKeywords = <String>[];
-          
-          for (var keyword in keywords) {
-            final keywordLower = keyword.toLowerCase();
-            if (searchText.contains(keywordLower)) {
-              matchedKeywords.add(keyword);
-            }
-          }
-          
-          // Eşleşme varsa bildirim gönder
-          if (matchedKeywords.isNotEmpty) {
-            final userId = userDoc.id;
-            final currentUserId = _auth.currentUser?.uid;
-            
-            // Kendi fırsatını paylaşan kişiye bildirim gönderme
-            if (userId == currentUserId) {
-              continue;
-            }
-            
-            // Local bildirim gönder
-            try {
-              await _showKeywordNotification(
-                title: '🎯 İlginizi Çeken Bir Fırsat Bulundu!',
-                body: '"${matchedKeywords.first}" kelimesi içeren yeni bir fırsat paylaşıldı. Hemen inceleyin!',
-                payload: dealId,
-              );
-              
-              notificationCount++;
-              _log('✅ Bildirim: $userId → "${matchedKeywords.first}"');
-            } catch (notifError) {
-              _log('❌ Bildirim hatası: $notifError');
-            }
-          }
-        } catch (e) {
-          _log('❌ Kullanıcı işlem hatası: ${userDoc.id}');
-        }
-      }
-      
-      if (notificationCount > 0) {
-        _log('✅ $notificationCount anahtar kelime bildirimi gönderildi');
-      }
-    } catch (e) {
-      _log('❌ Anahtar kelime kontrolü hatası: $e');
-    }
-  }
-
+  
   // Anahtar kelime için local bildirim göster (özel kanal ve ses)
   Future<void> _showKeywordNotification({
     required String title,
@@ -1005,12 +1484,11 @@ class NotificationService {
       // Anahtar kelime bildirimleri için özel kanal kullan
       final androidDetails = AndroidNotificationDetails(
         'keyword_alerts_channel', // Özel kanal ID
-        'Anahtar Kelime Uyarıları',
+        'Özel Fırsat Bildirimleri',
         channelDescription: 'Takip ettiğiniz anahtar kelimeler için özel bildirimler',
         importance: Importance.max, // En yüksek önem
         priority: Priority.max, // En yüksek öncelik
         playSound: true,
-        sound: const RawResourceAndroidNotificationSound('notification'), // Vurgulu ses
         enableVibration: true,
         vibrationPattern: Int64List.fromList([0, 250, 250, 250]), // Titreşim deseni
         enableLights: true,
@@ -1056,7 +1534,7 @@ class NotificationService {
       _log('❌ Anahtar kelime bildirim hatası: $e');
     }
   }
-
+  
   // Mesaj bildirimi gönder
   Future<void> sendMessageNotification({
     required String receiverId,
@@ -1084,7 +1562,7 @@ class NotificationService {
       final title = '💬 Yeni Mesaj';
       final body = '$senderName: ${messageText.length > 50 ? messageText.substring(0, 50) + "..." : messageText}';
 
-      // Android notification details
+      // Android notification details (ledOnMs/ledOffMs: Oreo öncesi Android için zorunlu)
       const androidDetails = AndroidNotificationDetails(
         'messages_channel',
         'Mesaj Bildirimleri',
@@ -1094,7 +1572,9 @@ class NotificationService {
         playSound: true,
         enableVibration: true,
         enableLights: true,
-        ledColor: Color(0xFF2196F3), // Mavi LED
+        ledColor: Color(0xFF2196F3),
+        ledOnMs: 1000,
+        ledOffMs: 500,
       );
 
       // iOS notification details
@@ -1141,5 +1621,72 @@ class NotificationService {
     _log('ℹ️ Takip bildirimleri artık Cloud Function tarafından otomatik gönderiliyor');
     return;
   }
-}
 
+  // Yorum cevabı bildirimi gönder (Firestore üzerinden)
+  Future<void> sendCommentReplyNotification({
+    required String recipientUserId,
+    required String dealId,
+    required String dealTitle,
+    required String commentId,
+    required String parentCommentId,
+    required String replyUserName,
+    required String replyText,
+  }) async {
+    try {
+      _log('📤 Yorum cevabı bildirimi gönderiliyor: recipientUserId=$recipientUserId, dealId=$dealId, commentId=$commentId');
+
+      // Firestore'a bildirim isteği ekle
+      // Bu bildirim, kullanıcının cihazında dinlenen bir listener tarafından yakalanacak
+      await _firestore.collection('users').doc(recipientUserId).collection('notifications').add({
+        'type': 'comment_reply',
+        'dealId': dealId,
+        'dealTitle': dealTitle,
+        'commentId': commentId,
+        'parentCommentId': parentCommentId,
+        'replyUserName': replyUserName,
+        'replyText': replyText.length > 100 ? '${replyText.substring(0, 100)}...' : replyText,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+      });
+
+      _log('✅ Yorum cevabı bildirimi Firestore\'a eklendi: $recipientUserId');
+    } catch (e) {
+      _log('❌ Yorum cevabı bildirimi gönderme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Debug için test bildirimi
+  Future<void> testLocalNotification() async {
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'messages_channel_v3', // v3
+        'Mesaj Bildirimleri',
+        channelDescription: 'Kullanıcılar arası mesajlaşma bildirimleri',
+        importance: Importance.max,
+        priority: Priority.max,
+        category: AndroidNotificationCategory.message,
+        fullScreenIntent: true,
+        ticker: 'ticker',
+        icon: '@mipmap/ic_launcher', // İkonu açıkça belirtelim
+      );
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+      const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+      
+      await _localNotifications.show(
+        999,
+        'Test Bildirimi (Mesaj Kanalı)',
+        'Bu bir test mesajıdır. Eğer bunu görüyorsanız mesaj bildirimleri çalışmalıdır.',
+        details,
+      );
+      _log('✅ Test bildirimi gönderildi');
+    } catch (e) {
+      _log('❌ Test bildirimi hatası: $e');
+      rethrow;
+    }
+  }
+}

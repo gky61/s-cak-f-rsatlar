@@ -84,3 +84,8 @@ Firebase Console'da Functions bölümünden deploy edilen fonksiyonları kontrol
 ### Cloud Function Hatası?
 Firebase Console > Functions > Logs bölümünden hata mesajlarını kontrol edin.
 
+
+
+
+
+

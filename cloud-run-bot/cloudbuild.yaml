@@ -1,0 +1,40 @@
+# Cloud Build configuration
+# Docker olmadan image build eder
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/telegram-bot:latest'
+      - '.'
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: 
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/telegram-bot:latest'
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'telegram-bot'
+      - '--image=gcr.io/$PROJECT_ID/telegram-bot:latest'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--timeout=3600'
+      - '--min-instances=1'
+      - '--max-instances=1'
+
+images:
+  - 'gcr.io/$PROJECT_ID/telegram-bot:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

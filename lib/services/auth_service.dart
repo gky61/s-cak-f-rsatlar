@@ -261,7 +261,7 @@ class AuthService {
         await _firestore
             .collection('users')
             .doc(currentUser.uid)
-            .set(appUser.toFirestore());
+            .set(appUser.toFirestore(), SetOptions(merge: true));
       }
       
       return appUser;
@@ -330,6 +330,15 @@ class AuthService {
             updateData['profileImageUrl'] = firebaseUser.photoURL;
           }
           
+          // E-posta ve üyelik tarihi eksikse ekle/güncelle
+          final existingData = existingUserDoc.data() as Map<String, dynamic>?;
+          if (firebaseUser.email != null && (existingData == null || existingData['email'] != firebaseUser.email)) {
+            updateData['email'] = firebaseUser.email;
+          }
+          if (existingData == null || !existingData.containsKey('createdAt')) {
+            updateData['createdAt'] = FieldValue.serverTimestamp();
+          }
+          
           // Sadece değişen alanlar varsa güncelle (following listesi korunur çünkü update() sadece belirtilen alanları günceller)
           if (updateData.isNotEmpty) {
             await _firestore
@@ -357,7 +366,11 @@ class AuthService {
           await _firestore
               .collection('users')
               .doc(firebaseUser.uid)
-              .set(appUser.toFirestore(), SetOptions(merge: true));
+              .set({
+            ...appUser.toFirestore(),
+            if (firebaseUser.email != null) 'email': firebaseUser.email,
+            'createdAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
         }
       } else {
         // Yeni kullanıcı ise tam veriyi oluştur
@@ -365,7 +378,11 @@ class AuthService {
         await _firestore
             .collection('users')
             .doc(firebaseUser.uid)
-            .set(appUser.toFirestore());
+            .set({
+          ...appUser.toFirestore(),
+          if (firebaseUser.email != null) 'email': firebaseUser.email,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       }
 
       _log('✅ Giriş başarılı: ${firebaseUser.email}');
@@ -458,7 +475,7 @@ class AuthService {
           await _firestore
               .collection('users')
               .doc(userCredential.user!.uid)
-              .set(appUser.toFirestore());
+              .set(appUser.toFirestore(), SetOptions(merge: true));
         }
         
         _log('✅ Apple ile giriş başarılı');
@@ -512,7 +529,11 @@ class AuthService {
         await _firestore
             .collection('users')
             .doc(credential.user!.uid)
-            .set(appUser.toFirestore());
+            .set({
+          ...appUser.toFirestore(),
+          'email': email,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
 
         _log('✅ Kayıt başarılı: $email');
         return appUser;
@@ -615,7 +636,14 @@ class AuthService {
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         final data = userDoc.data();
-        return data?['isAdmin'] == true;
+        
+        // Hem isAdmin (büyük A) hem de isadmin (küçük harf) kontrolü yap
+        final adminValue = data?['isAdmin'] ?? data?['isadmin'];
+        final isAdmin = adminValue == true || adminValue == 'true' || adminValue == 1;
+        
+        _log('👮 Admin kontrolü: isAdmin=$isAdmin (isAdmin: ${data?['isAdmin']}, isadmin: ${data?['isadmin']})');
+        
+        return isAdmin;
       }
       return false;
     } catch (e) {

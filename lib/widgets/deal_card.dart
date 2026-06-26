@@ -15,7 +15,7 @@ import '../theme/app_theme.dart';
 import '../screens/profile_screen.dart';
 
 void _log(String message) {
-  if (kDebugMode) _log(message);
+  if (kDebugMode) print(message);
 }
 
 class DealCard extends StatefulWidget {
@@ -38,22 +38,41 @@ class _DealCardState extends State<DealCard> {
   String? _effectiveImageUrl;
   bool _isLoadingImage = false;
   bool _imageLoadAttempted = false;
+  bool _showVoteCount = false; // Oy sayısını göster/gizle
 
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
   final AuthService _authService = AuthService();
 
   // Kategori ID'sini kategori adına çevir
   String _getCategoryDisplayName(String categoryIdOrName) {
-    // Önce ID olarak kontrol et
+    if (categoryIdOrName.isEmpty) {
+      return 'Genel';
+    }
+    
+    // Önce ID olarak kontrol et (case-insensitive)
+    final categoryIdLower = categoryIdOrName.toLowerCase().trim();
+    
+    // "diğer" -> "diger" dönüşümü (eski bot formatı için)
+    final normalizedId = categoryIdLower == 'diğer' ? 'diger' : categoryIdLower;
+    
     try {
       final category = Category.categories.firstWhere(
-        (cat) => cat.id.toLowerCase() == categoryIdOrName.toLowerCase(),
+        (cat) => cat.id.toLowerCase() == normalizedId,
         orElse: () => Category.categories.first, // Bulunamazsa "Tümü" döndür
       );
       return category.name;
     } catch (e) {
-      // ID olarak bulunamazsa, zaten name olabilir, direkt döndür
-      return categoryIdOrName;
+      // ID olarak bulunamazsa, name olarak kontrol et
+      try {
+        final category = Category.categories.firstWhere(
+          (cat) => cat.name.toLowerCase() == categoryIdOrName.toLowerCase(),
+          orElse: () => Category.categories.first,
+        );
+        return category.name;
+      } catch (e2) {
+        // Hiçbiri bulunamazsa, direkt döndür (eski format için)
+        return categoryIdOrName;
+      }
     }
   }
 
@@ -68,6 +87,8 @@ class _DealCardState extends State<DealCard> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.deal.id != widget.deal.id || oldWidget.deal.imageUrl != widget.deal.imageUrl) {
       _checkImage();
+      // Deal değiştiğinde oy sayısı gösterimini sıfırla
+      _showVoteCount = false;
     }
   }
     
@@ -161,8 +182,10 @@ class _DealCardState extends State<DealCard> {
           ),
         ],
         border: Border.all(
-          color: isDark ? Colors.grey[600]! : Colors.grey[300]!,
-          width: 2, // border-2
+          color: deal.isEditorPick 
+              ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
+              : (isDark ? Colors.grey[600]! : Colors.grey[300]!),
+          width: deal.isEditorPick ? 2.5 : 2, // Editör seçimi için biraz daha kalın
         ),
         ),
         child: Material(
@@ -196,21 +219,31 @@ class _DealCardState extends State<DealCard> {
                         ),
                         child: _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
                             ? Padding(
-                                padding: const EdgeInsets.all(12.0), // Kenarlardan boşluk
+                                padding: const EdgeInsets.all(4.0), // Minimal padding - görseli büyüt
                                 child: CachedNetworkImage(
                                   imageUrl: _effectiveImageUrl!,
-                                  fit: BoxFit.contain, // Tam ürün görünsün, kırpma yok
-                                  memCacheWidth: 800,
-                                  memCacheHeight: 800,
-                                  maxHeightDiskCache: 800,
-                                  maxWidthDiskCache: 800,
-                                  placeholder: (context, url) => const Center(
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  fit: BoxFit.contain, // Tam ürün görünsün, kırpma yok - oran korunur
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  memCacheWidth: 1200, // Daha yüksek kalite için cache boyutu artırıldı
+                                  memCacheHeight: 1200,
+                                  maxHeightDiskCache: 1200,
+                                  maxWidthDiskCache: 1200,
+                                  fadeInDuration: const Duration(milliseconds: 300),
+                                  fadeOutDuration: const Duration(milliseconds: 100),
+                                  placeholder: (context, url) => Container(
+                                    color: Colors.grey[100],
+                                    child: const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
                                   ),
-                                  errorWidget: (context, url, error) => Icon(
-                                    Icons.image_not_supported_rounded,
-                                    color: Colors.grey[300],
-                                    size: 48,
+                                  errorWidget: (context, url, error) => Container(
+                                    color: Colors.grey[100],
+                                    child: Icon(
+                                      Icons.image_not_supported_rounded,
+                                      color: Colors.grey[300],
+                                      size: 48,
+                                    ),
                                   ),
                                 ),
                               )
@@ -251,40 +284,11 @@ class _DealCardState extends State<DealCard> {
                           ),
                         ),
                       ),
-                      // Editör Seçimi Rozeti (Sağ Alt)
-                      if (deal.isEditorPick)
-                        Positioned(
-                          bottom: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Colors.orange[700]!, Colors.orange[500]!],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.orange.withValues(alpha: 0.5),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.star,
-                              color: Colors.white,
-                              size: 12,
-                            ),
-                          ),
-                        ),
                       // İndirim Rozeti (Sağ Alt)
                       if (deal.discountRate != null && deal.discountRate! > 0)
                         Positioned(
                           bottom: 8,
-                          right: deal.isEditorPick ? 32 : 8,
+                          right: 8,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                             decoration: BoxDecoration(
@@ -330,15 +334,46 @@ class _DealCardState extends State<DealCard> {
                             final totalVotes = hotVotes + coldVotes;
                             if (totalVotes == 0) return const SizedBox.shrink();
                             
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.7),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                _getThermometerEmoji(hotVotes, coldVotes),
-                                style: const TextStyle(fontSize: 14),
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _showVoteCount = true;
+                                });
+                                // 2 saniye sonra emoji'ye geri dön
+                                Future.delayed(const Duration(seconds: 2), () {
+                                  if (mounted) {
+                                    setState(() {
+                                      _showVoteCount = false;
+                                    });
+                                  }
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.75),
+                                  borderRadius: BorderRadius.circular(6),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.3),
+                                      blurRadius: 2,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: _showVoteCount
+                                    ? Text(
+                                        '$totalVotes',
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Text(
+                                        _getThermometerEmoji(hotVotes, coldVotes),
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
                               ),
                             );
                           },
@@ -736,8 +771,10 @@ class _DealCardState extends State<DealCard> {
           ),
         ],
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-          width: 2,
+          color: deal.isEditorPick 
+              ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
+              : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05)),
+          width: deal.isEditorPick ? 2.5 : 2, // Editör seçimi için biraz daha kalın
         ),
       ),
       child: Material(
@@ -775,23 +812,31 @@ class _DealCardState extends State<DealCard> {
                         // Görsel
                         _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
                             ? Padding(
-                                padding: const EdgeInsets.all(8.0),
+                                padding: const EdgeInsets.all(4.0), // Minimal padding - görseli büyüt
                                 child: CachedNetworkImage(
                                   imageUrl: _effectiveImageUrl!,
-                                  width: 124,
-                                  height: 124,
-                                  fit: BoxFit.contain,
-                                  memCacheWidth: 560,
-                                  memCacheHeight: 560,
-                                  maxHeightDiskCache: 560,
-                                  maxWidthDiskCache: 560,
-                                  placeholder: (context, url) => const Center(
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  fit: BoxFit.contain, // Tam ürün görünsün, kırpma yok - oran korunur
+                                  memCacheWidth: 1000, // Daha yüksek kalite için cache boyutu artırıldı
+                                  memCacheHeight: 1000,
+                                  maxHeightDiskCache: 1000,
+                                  maxWidthDiskCache: 1000,
+                                  fadeInDuration: const Duration(milliseconds: 300),
+                                  fadeOutDuration: const Duration(milliseconds: 100),
+                                  placeholder: (context, url) => Container(
+                                    color: Colors.grey[100],
+                                    child: const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
                                   ),
-                                  errorWidget: (context, url, error) => Icon(
-                                    Icons.image_not_supported_rounded,
-                                    color: Colors.grey[300],
-                                    size: 32,
+                                  errorWidget: (context, url, error) => Container(
+                                    color: Colors.grey[100],
+                                    child: Icon(
+                                      Icons.image_not_supported_rounded,
+                                      color: Colors.grey[300],
+                                      size: 32,
+                                    ),
                                   ),
                                 ),
                               )
@@ -800,35 +845,6 @@ class _DealCardState extends State<DealCard> {
                                 color: Colors.grey[300],
                                 size: 32,
                               ),
-                        // Editör Seçimi Rozeti (Sağ Üst)
-                        if (deal.isEditorPick)
-                          Positioned(
-                            top: 6,
-                            right: 6,
-                            child: Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [Colors.orange[700]!, Colors.orange[500]!],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(999),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.orange.withValues(alpha: 0.5),
-                                    blurRadius: 2,
-                                    offset: const Offset(0, 1),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.star,
-                                color: Colors.white,
-                                size: 10,
-                              ),
-                            ),
-                          ),
                         // Zaman Rozeti (Sol Alt)
                         Positioned(
                           bottom: 6,
@@ -864,7 +880,7 @@ class _DealCardState extends State<DealCard> {
                         if (deal.discountRate != null && deal.discountRate! > 0)
                           Positioned(
                             bottom: 6,
-                            right: deal.isEditorPick ? 28 : 6,
+                            right: 6,
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                               decoration: BoxDecoration(
@@ -921,15 +937,46 @@ class _DealCardState extends State<DealCard> {
                               final totalVotes = hotVotes + coldVotes;
                               if (totalVotes == 0) return const SizedBox.shrink();
                               
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.7),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  _getThermometerEmoji(hotVotes, coldVotes),
-                                  style: const TextStyle(fontSize: 12),
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _showVoteCount = true;
+                                  });
+                                  // 2 saniye sonra emoji'ye geri dön
+                                  Future.delayed(const Duration(seconds: 2), () {
+                                    if (mounted) {
+                                      setState(() {
+                                        _showVoteCount = false;
+                                      });
+                                    }
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.75),
+                                    borderRadius: BorderRadius.circular(6),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.3),
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: _showVoteCount
+                                      ? Text(
+                                          '$totalVotes',
+                                          style: const TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : Text(
+                                          _getThermometerEmoji(hotVotes, coldVotes),
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
                                 ),
                               );
                             },

@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 void _log(String message) {
-  if (kDebugMode) _log(message);
+  if (kDebugMode) print(message);
 }
 
 class AppUser {
@@ -105,16 +105,20 @@ class AppUser {
             // List<Object?> veya List<dynamic> olabilir, güvenli şekilde String'e çevir
             badges = badgesData
                 .where((e) => e != null)
-                .map((e) => e.toString())
+                .map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty)
                 .toList();
+            _log('✅ Badges parsed: ${badges.length} rozet - $badges');
           } else if (badgesData is String) {
             // Eğer string olarak saklanmışsa (eski veri)
             badges = [];
+            _log('⚠️ Badges string formatında, boş liste döndürülüyor');
           }
+        } else {
+          _log('ℹ️ Badges data null');
         }
       } catch (e) {
-        _log('Badges parse hatası: $e');
+        _log('❌ Badges parse hatası: $e');
         badges = [];
       }
       

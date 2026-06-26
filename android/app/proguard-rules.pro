@@ -170,3 +170,66 @@
     public static *** i(...);
 }
 
+# ============================================
+# AdMob (Google Mobile Ads) - KRİTİK
+# ============================================
+
+# AdMob SDK
+-keep class com.google.android.gms.ads.** { *; }
+-keep class com.google.ads.** { *; }
+-dontwarn com.google.android.gms.ads.**
+
+# AdMob Mediation
+-keep class com.google.android.gms.ads.mediation.** { *; }
+-keep class com.google.android.gms.ads.mediation.adapter.** { *; }
+-dontwarn com.google.android.gms.ads.mediation.**
+
+# AdMob Response Info
+-keep class com.google.android.gms.ads.ResponseInfo { *; }
+-keep class com.google.android.gms.ads.AdInfo { *; }
+
+# AdMob Ad Request
+-keep class com.google.android.gms.ads.AdRequest { *; }
+-keep class com.google.android.gms.ads.AdRequest$* { *; }
+
+# AdMob Ad Size
+-keep class com.google.android.gms.ads.AdSize { *; }
+
+# AdMob Banner Ad
+-keep class com.google.android.gms.ads.BannerAd { *; }
+-keep class com.google.android.gms.ads.BaseAdView { *; }
+
+# AdMob Ad Listener
+-keep class com.google.android.gms.ads.AdListener { *; }
+-keep class com.google.android.gms.ads.BannerAdListener { *; }
+
+# AdMob Ad Widget
+-keep class com.google.android.gms.ads.AdView { *; }
+
+# AdMob Initialization
+-keep class com.google.android.gms.ads.MobileAds { *; }
+-keep class com.google.android.gms.ads.initialization.** { *; }
+
+# AdMob Request Configuration
+-keep class com.google.android.gms.ads.RequestConfiguration { *; }
+
+# Flutter AdMob Plugin
+-keep class io.flutter.plugins.googlemobileads.** { *; }
+-dontwarn io.flutter.plugins.googlemobileads.**
+
+# AdMob için reflection kullanılan sınıflar
+-keepattributes Signature
+-keepattributes *Annotation*
+-keepattributes EnclosingMethod
+-keepattributes InnerClasses
+
+# AdMob için Parcelable
+-keepclassmembers class * implements android.os.Parcelable {
+    public static final ** CREATOR;
+}
+
+# AdMob için Serializable
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+}
+
