@@ -2,7 +2,6 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const https = require('https');
 const http = require('http');
-const { fetchChannelMessages } = require('./telegram_client');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -1279,83 +1278,7 @@ function resolveRedirect(url) {
   });
 }
 
-// ==================== TELEGRAM BOT - HTTP (DİREKT TETİKLEME) ====================
 
-/**
- * Dinleyen bot yeni mesaj aldığında bu URL'yi çağırır – bekleme yok, anında işlenir.
- * Body: { "channel": "@kanal" } veya { "channels": ["@kanal1", "@kanal2"] }
- * İsteğe bağlı header: X-Webhook-Secret (functions.config().telegram.webhook_secret ile eşleşirse doğrulanır)
- */
-const runTelegramFetch = async (channels) => {
-  const config = functions.config();
-  const telegramApiId = config.telegram?.api_id;
-  const telegramApiHash = config.telegram?.api_hash;
-  const telegramSession = config.telegram?.session_string;
-  const defaultChannels = config.telegram?.channels;
-
-  if (!telegramApiId || !telegramApiHash || !telegramSession) {
-    throw new Error('Telegram credentials eksik (api_id, api_hash, session_string)');
-  }
-
-  const list = channels && channels.length > 0
-    ? channels
-    : (defaultChannels || '').split(',').map((ch) => ch.trim()).filter(Boolean);
-
-  if (list.length === 0) {
-    throw new Error('Kanal yok. Body\'de channel/channels gönderin veya telegram.channels config set edin.');
-  }
-
-  const geminiApiKey = config.gemini?.apikey;
-
-  for (const channel of list) {
-    await fetchChannelMessages(channel, telegramApiId, telegramApiHash, telegramSession, { geminiApiKey });
-  }
-  return { ok: true, processed: list };
-};
-
-exports.processTelegramChannel = functions
-  .runWith({ timeoutSeconds: 540, memory: '512MB' })
-  .https.onRequest(async (req, res) => {
-    try {
-      if (req.method !== 'POST' && req.method !== 'GET') {
-        res.status(405).send('Method Not Allowed');
-        return;
-      }
-
-      const webhookSecret = functions.config().telegram?.webhook_secret;
-      if (webhookSecret && req.get('X-Webhook-Secret') !== webhookSecret) {
-        res.status(401).send('Unauthorized');
-        return;
-      }
-
-      let channels = [];
-      if (req.method === 'POST' && req.body) {
-        if (req.body.channel) channels = [req.body.channel];
-        else if (Array.isArray(req.body.channels)) channels = req.body.channels;
-      } else if (req.method === 'GET' && req.query.channel) {
-        channels = [req.query.channel];
-      }
-
-      const result = await runTelegramFetch(channels);
-      res.status(200).json(result);
-    } catch (e) {
-      functions.logger.error('processTelegramChannel hata:', e);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-/** Eski isimle çağrı uyumluluğu: fetchChannelMessages artık HTTP ile tetiklenir, schedule yok */
-exports.fetchChannelMessages = functions
-  .runWith({ timeoutSeconds: 540, memory: '512MB' })
-  .https.onRequest(async (req, res) => {
-    try {
-      const result = await runTelegramFetch();
-      res.status(200).json(result);
-    } catch (e) {
-      functions.logger.error('fetchChannelMessages hata:', e);
-      res.status(500).json({ error: e.message });
-    }
-  });
 
 /**
  * 📷 ESKİ GÖRSELLERİ TEMİZLE - Her gün gece yarısı çalışır

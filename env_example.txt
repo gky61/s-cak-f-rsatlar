@@ -4,12 +4,12 @@ TELEGRAM_API_HASH=your_api_hash_here
 TELEGRAM_SESSION_NAME=telegram_session
 
 # Telegram Kanalları (virgülle ayrılmış)
-TELEGRAM_CHANNELS=@indirimkaplani,-3371238729
+TELEGRAM_CHANNELS=@indirimkaplani
 
 # Firebase
 FIREBASE_CREDENTIALS_PATH=firebase_key.json
 
-
-
+# Gemini
+GEMINI_API_KEY=your_api_key_here
 
 

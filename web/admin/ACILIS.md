@@ -26,14 +26,14 @@ Eğer kod değişikliği yapıp test etmek istiyorsanız:
 
 ### Seçenek 1: Python ile
 ```bash
-cd "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR/web/admin"
+cd "./web/admin"
 python3 -m http.server 8000
 ```
 Sonra tarayıcıda: `http://localhost:8000`
 
 ### Seçenek 2: Firebase Serve ile
 ```bash
-cd "/Users/gokayalemdar/Desktop/SICAK FIRSATLAR"
+cd "."
 firebase serve --only hosting
 ```
 Sonra tarayıcıda: `http://localhost:5000/admin`
