@@ -28,9 +28,7 @@ class AuthService {
   
   // Lazy initialization - sadece gerektiğinde oluştur
   GoogleSignIn get _googleSignInInstance {
-    _googleSignIn ??= GoogleSignIn(
-      serverClientId: '560592268193-peu6i6g5nelkklqi6gpaqq4056kgse44.apps.googleusercontent.com',
-    );
+    _googleSignIn ??= GoogleSignIn();
     return _googleSignIn!;
   }
 
