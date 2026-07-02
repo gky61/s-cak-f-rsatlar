@@ -656,5 +656,38 @@ class AuthService {
   bool _isValidEmail(String email) {
     return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
   }
+
+  // Hesap silme
+  Future<void> deleteAccount() async {
+    try {
+      final user = currentUser;
+      if (user == null) {
+        throw AuthException('Oturum açık değil.');
+      }
+
+      // 1. Kullanıcı verilerini Firestore'dan sil
+      await _firestore.collection('users').doc(user.uid).delete();
+
+      // 2. Firebase Auth'dan kullanıcıyı sil
+      await user.delete();
+
+      // 3. Oturumu temizle
+      if (_googleSignIn != null) {
+        try {
+          await _googleSignIn!.signOut();
+        } catch (_) {}
+      }
+
+      _log('✅ Hesap ve veriler başarıyla silindi.');
+    } catch (e) {
+      _log('Hesap silme hatası: $e');
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('requires-recent-login')) {
+        throw AuthException(
+            'Güvenlik nedeniyle hesabınızı silmeden önce yeniden giriş yapmanız gerekmektedir. Lütfen çıkış yapıp tekrar giriş yaptıktan sonra tekrar deneyin.');
+      }
+      throw AuthException('Hesap silinirken bir hata oluştu: ${e.toString()}');
+    }
+  }
 }
 

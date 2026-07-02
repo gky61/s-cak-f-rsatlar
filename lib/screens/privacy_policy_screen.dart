@@ -48,6 +48,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             _buildBulletPoint(context, 'Ziyaret ettiğiniz uygulama sayfaları, ziyaret zamanı ve tarihi, bu sayfalarda geçirdiğiniz süre', isDark),
             _buildBulletPoint(context, 'Uygulamada geçirdiğiniz süre', isDark),
             _buildBulletPoint(context, 'Mobil cihazınızda kullandığınız işletim sistemi', isDark),
+            _buildBulletPoint(context, 'Google veya Apple ile giriş yaptığınızda alınan e-posta adresi, profil fotoğrafı ve temel kimlik bilgileri', isDark),
             const SizedBox(height: 24),
             _buildSection(
               context,
@@ -66,6 +67,11 @@ class PrivacyPolicyScreen extends StatelessWidget {
             _buildLink(context, 'AdMob', 'https://support.google.com/admob/answer/6128543?hl=en', isDark),
             _buildLink(context, 'Google Analytics for Firebase', 'https://firebase.google.com/support/privacy', isDark),
             _buildLink(context, 'Firebase Crashlytics', 'https://firebase.google.com/support/privacy/', isDark),
+            _buildLink(context, 'Firebase Authentication', 'https://firebase.google.com/support/privacy/', isDark),
+            _buildLink(context, 'Firebase Cloud Messaging', 'https://firebase.google.com/support/privacy/', isDark),
+            _buildLink(context, 'Firebase Performance Monitoring', 'https://firebase.google.com/support/privacy/', isDark),
+            _buildLink(context, 'Google Sign-In', 'https://policies.google.com/privacy', isDark),
+            _buildLink(context, 'Sign in with Apple', 'https://www.apple.com/legal/privacy/tr/', isDark),
             const SizedBox(height: 24),
             _buildSection(
               context,
@@ -73,6 +79,15 @@ class PrivacyPolicyScreen extends StatelessWidget {
               'Uygulama, kullanıcı deneyimini geliştirmek ve belirli özellikler sağlamak için Yapay Zeka (AI) teknolojileri kullanır. AI bileşenleri, kişiselleştirilmiş içerik, öneriler veya otomatik işlevler sunmak için kullanıcı verilerini işleyebilir. Tüm AI işleme, bu gizlilik politikası ve geçerli yasalar uyarınca gerçekleştirilir.',
               isDark,
             ),
+            const SizedBox(height: 24),
+            _buildSection(
+              context,
+              'Hesap ve Veri Silme Hakları',
+              'Kullanıcılar, diledikleri zaman uygulamadaki "Profilim" > "Hesabımı Sil" seçeneğini kullanarak, web sitemiz üzerindeki Hesap Silme Talebi Sayfası aracılığıyla ya da kolikfirsat@gmail.com adresine e-posta yoluyla destek talebinde bulunarak, hesaplarının ve bağlı tüm kişisel verilerin (profil bilgileri, favoriler, tercihler) kalıcı olarak silinmesini talep edebilirler. Hesap silindiğinde verileriniz sistemlerimizden tamamen temizlenir ve bu işlem geri alınamaz.',
+              isDark,
+            ),
+            const SizedBox(height: 12),
+            _buildLink(context, 'Web Hesap Silme Talebi Sayfası', 'https://sicak-firsatlar-e6eae.web.app/delete-account.html', isDark),
             const SizedBox(height: 24),
             _buildSection(
               context,
@@ -111,7 +126,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             const SizedBox(height: 24),
             _buildText(
               context,
-              'Bu gizlilik politikası 2025-12-22 tarihinden itibaren geçerlidir.',
+              'Bu gizlilik politikası 2026-07-02 tarihinden itibaren geçerlidir.',
               isDark,
               isBold: true,
             ),
@@ -146,7 +161,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Bu gizlilik politikası sayfası App Privacy Policy Generator tarafından oluşturulmuştur.',
+                      'Bu gizlilik politikası sayfası App Privacy Policy Generator kullanılarak oluşturulmuş ve mağaza politikalarına uygun olarak güncellenmiştir.',
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark ? Colors.grey[400] : Colors.grey[600],

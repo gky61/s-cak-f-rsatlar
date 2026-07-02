@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hesap Silme Talebi - FIRSATKOLİK</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f9f9f9;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+        .logo-area {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo-area h1 {
+            color: #FF6B35;
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+        .logo-area p {
+            color: #777;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        h2 {
+            font-size: 20px;
+            color: #222;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 8px;
+        }
+        p.info-text {
+            color: #555;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .warning-box {
+            background-color: #FFF5F2;
+            border-left: 4px solid #FF6B35;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        .warning-box h4 {
+            color: #D32F2F;
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .warning-box ul {
+            margin-left: 20px;
+            color: #555;
+            font-size: 13px;
+        }
+        .warning-box li {
+            margin-bottom: 4px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 6px;
+        }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1.5px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #FF6B35;
+            box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.15);
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 25px;
+        }
+        .checkbox-group input {
+            margin-top: 4px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .checkbox-group label {
+            font-size: 13px;
+            color: #555;
+            cursor: pointer;
+            user-select: none;
+        }
+        .btn-submit {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            background-color: #FF6B35;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .btn-submit:hover {
+            background-color: #E85A24;
+        }
+        .footer-links {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 12px;
+        }
+        .footer-links a {
+            color: #FF6B35;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        .success-message {
+            display: none;
+            text-align: center;
+            padding: 30px 10px;
+        }
+        .success-message h3 {
+            color: #2E7D32;
+            font-size: 22px;
+            margin-bottom: 12px;
+        }
+        .success-message p {
+            color: #555;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .btn-home {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #f0f0f0;
+            color: #333;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-area">
+            <h1>FIRSATKOLİK</h1>
+            <p>Hesap ve Veri Silme Talebi</p>
+        </div>
+
+        <div id="form-container">
+            <h2>Hesabınızı Silin</h2>
+            <p class="info-text">FIRSATKOLİK uygulamasındaki hesabınızı silmek için aşağıdaki formu doldurunuz. Talebiniz alındıktan sonra 7 iş günü içerisinde hesabınız ve ilişkili tüm verileriniz kalıcı olarak silinecektir.</p>
+
+            <div class="warning-box">
+                <h4>⚠️ Önemli Uyarı</h4>
+                <ul>
+                    <li>Hesabınız silindiğinde profil bilgileriniz, kayıtlı favorileriniz ve tüm kişisel tercihleriniz geri döndürülemeyecek şekilde silinir.</li>
+                    <li>Paylaştığınız fırsatlar ve yaptığınız yorumlar, topluluk bütünlüğünü bozmamak adına anonimleştirilerek sistemde kalabilir.</li>
+                    <li>Bu işlem geri alınamaz.</li>
+                </ul>
+            </div>
+
+            <!-- 
+              Ücretsiz ve sunucusuz form gönderimi için Web3Forms servisi kullanılmıştır.
+              Kendi e-postanıza yönlendirmek için:
+              1. https://web3forms.com adresinden ücretsiz bir Access Key alın.
+              2. Aşağıdaki "YOUR_ACCESS_KEY_HERE" değerini aldığınız anahtarla değiştirin.
+            -->
+            <form action="https://api.web3forms.com/submit" method="POST" id="delete-form">
+                <input type="hidden" name="access_key" value="b998149f-da81-486a-8e02-584252151089">
+                <input type="hidden" name="subject" value="Fırsatkolik - Yeni Hesap Silme Talebi">
+                <input type="hidden" name="from_name" value="Fırsatkolik Web Form">
+
+                <div class="form-group">
+                    <label for="name">Ad Soyad</label>
+                    <input type="text" id="name" name="name" required placeholder="Uygulamada kullandığınız adınız">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">E-posta Adresi</label>
+                    <input type="email" id="email" name="email" required placeholder="Giriş yapmak için kullandığınız e-posta">
+                </div>
+
+                <div class="form-group">
+                    <label for="username">Kullanıcı Adı (Opsiyonel)</label>
+                    <input type="text" id="username" name="username" placeholder="Örn: firsatci123">
+                </div>
+
+                <div class="form-group">
+                    <label for="reason">Hesap Silme Nedeni (Opsiyonel)</label>
+                    <textarea id="reason" name="reason" rows="3" placeholder="Sizi daha iyi anlamamız için nedeninizi paylaşabilirsiniz..."></textarea>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="confirm" required>
+                    <label for="confirm">FIRSATKOLİK hesabımın ve buna bağlı kişisel verilerimin silinmesini onaylıyorum. Bu işlemin geri alınamayacağını kabul ediyorum.</label>
+                </div>
+
+                <button type="submit" class="btn-submit">Hesap Silme Talebini Gönder</button>
+            </form>
+        </div>
+
+        <div id="success-container" class="success-message">
+            <h3>Talebiniz Alındı! ✅</h3>
+            <p>Hesap silme talebiniz başarıyla bize ulaşmıştır. Güvenlik doğrulamalarının ardından hesabınız ve verileriniz 7 iş günü içerisinde sistemimizden tamamen silinecektir.</p>
+            <a href="privacy-policy.html" class="btn-home">Gizlilik Politikasına Dön</a>
+        </div>
+
+        <div class="footer-links">
+            <a href="privacy-policy.html">Gizlilik Politikası</a> | 
+            <a href="mailto:kolikfirsat@gmail.com">Destek Al</a>
+        </div>
+    </div>
+
+    <script>
+        // Form gönderimi sonrası sayfayı yenilemeden başarılı mesajı göstermek için küçük bir JS
+        const form = document.getElementById('delete-form');
+        const formContainer = document.getElementById('form-container');
+        const successContainer = document.getElementById('success-container');
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(form);
+            const object = Object.fromEntries(formData);
+            const json = JSON.stringify(object);
+
+            // Eğer Access Key güncellenmemişse, kullanıcıyı mailto linkine yönlendir (failsafe fallback)
+            if (object.access_key === 'YOUR_ACCESS_KEY_HERE') {
+                const mailtoUrl = `mailto:kolikfirsat@gmail.com?subject=Hesap Silme Talebi - Fırsatkolik&body=Merhaba,%0D%0A%0D%0A${object.email} e-posta adresine bağlı Fırsatkolik hesabımın ve verilerimin tamamen silinmesini talep ediyorum.%0D%0A%0D%0AAd Soyad: ${object.name}%0D%0AKullanıcı Adı: ${object.username || '-'}%0D%0ASilme Nedeni: ${object.reason || '-'}`;
+                window.location.href = mailtoUrl;
+                
+                formContainer.style.display = 'none';
+                successContainer.style.display = 'block';
+                return;
+            }
+
+            // Web3Forms API'sine gönder
+            fetch('https://api.web3forms.com/submit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: json
+            })
+            .then(async (response) => {
+                let jsonRes = await response.json();
+                if (response.status == 200) {
+                    formContainer.style.display = 'none';
+                    successContainer.style.display = 'block';
+                } else {
+                    alert(jsonRes.message);
+                }
+            })
+            .catch(error => {
+                console.log(error);
+                alert("Bir hata oluştu, lütfen daha sonra tekrar deneyin.");
+            });
+        });
+    </script>
+</body>
+</html>

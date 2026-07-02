@@ -780,6 +780,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hesabımı Sil'),
+        content: const Text(
+            'Hesabınızı ve tüm verilerinizi kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Hesabı Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _authService.deleteAccount();
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const AuthScreen()),
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString())),
+          );
+        }
+      }
+    }
+  }
+
   String _getUserLevel() {
     if (_user == null) return 'Seviye 1';
     final points = _user!.points;
@@ -1486,6 +1526,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onPressed: _signOut,
                           icon: const Icon(Icons.logout),
                           label: const Text('Çıkış Yap'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            backgroundColor: Colors.red.withValues(alpha: 0.05),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(color: Colors.red.withValues(alpha: 0.1)),
+                            ),
+                            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                          ),
+                                        ),
+                                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: TextButton.icon(
+                          onPressed: _deleteAccount,
+                          icon: const Icon(Icons.delete_forever),
+                          label: const Text('Hesabımı Sil'),
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.red,
                             backgroundColor: Colors.red.withValues(alpha: 0.05),

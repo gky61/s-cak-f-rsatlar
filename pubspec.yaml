@@ -24,7 +24,7 @@ dependencies:
   
   # UI ve yardımcı paketler
   cupertino_icons: ^1.0.2
-  intl: ^0.20.2
+  intl: ^0.19.0
   google_fonts: ^6.1.0
   cached_network_image: ^3.3.1
   photo_view: ^0.14.0
