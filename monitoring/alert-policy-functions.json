@@ -1,0 +1,23 @@
+{
+  "displayName": "Cloud Functions Hata Alarmı",
+  "conditions": [
+    {
+      "displayName": "5 dakikada 5 hata",
+      "conditionThreshold": {
+        "filter": "resource.type=\"cloud_function\" AND metric.type=\"cloudfunctions.googleapis.com/function/execution_count\" AND metric.labels.status!=\"ok\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 5,
+        "duration": "300s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM"
+          }
+        ]
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": []
+}

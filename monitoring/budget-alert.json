@@ -1,0 +1,32 @@
+{
+  "displayName": "FirsatKolik 500 TL Butce Uyarisi",
+  "budgetFilter": {
+    "projects": [
+      "projects/560592268193",
+      "projects/228657473310"
+    ]
+  },
+  "amount": {
+    "specifiedAmount": {
+      "currencyCode": "TRY",
+      "units": "500"
+    }
+  },
+  "thresholdRules": [
+    {
+      "thresholdPercent": 0.5,
+      "spendBasis": "CURRENT_SPEND"
+    },
+    {
+      "thresholdPercent": 0.8,
+      "spendBasis": "CURRENT_SPEND"
+    },
+    {
+      "thresholdPercent": 1.0,
+      "spendBasis": "CURRENT_SPEND"
+    }
+  ],
+  "notificationsRule": {
+    "enableProjectLevelRecipients": true
+  }
+}

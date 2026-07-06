@@ -1,0 +1,7 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "firebase": true,
+        "gcloud": true,
+        "npx firebase-tools": true
+    }
+}
