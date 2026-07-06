@@ -1,6 +1,8 @@
 {
   "projects": {
-    "default": "sicak-firsatlar-e6eae"
+    "default": "sicak-firsatlar-e6eae",
+    "dev": "sicak-firsatlar-e6eae",
+    "prod": "firsatkolik-prod-e6eae"
   }
 }
 

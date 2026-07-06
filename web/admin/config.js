@@ -1,5 +1,5 @@
-// Firebase Configuration
-const firebaseConfig = {
+// Firebase Configurations for Dev and Prod environments
+const devConfig = {
     apiKey: 'AIzaSyDOmrSDBA_tzCCrPdDk28uMSXwpkDw_EZU',
     authDomain: 'sicak-firsatlar-e6eae.firebaseapp.com',
     projectId: 'sicak-firsatlar-e6eae',
@@ -7,6 +7,33 @@ const firebaseConfig = {
     messagingSenderId: '560592268193',
     appId: '1:560592268193:web:64b68da3637d1e10d6f9e0'
 };
+
+const prodConfig = {
+    apiKey: 'AIzaSyAELCy_sPjPKIg204FLnPFInx7xLh5dFUA',
+    authDomain: 'firsatkolik-prod-e6eae.firebaseapp.com',
+    projectId: 'firsatkolik-prod-e6eae',
+    storageBucket: 'firsatkolik-prod-e6eae.firebasestorage.app',
+    messagingSenderId: '228657473310',
+    appId: '1:228657473310:web:dc7c29279871906a380b0f'
+};
+
+// Environment configuration with local overrides for development/testing
+const isProdHost = window.location.hostname.includes('firsatkolik-prod') || window.location.hostname.includes('firsatkolik.app');
+const isDevHost = window.location.hostname.includes('sicak-firsatlar-e6eae');
+
+let selectedEnv = 'dev'; // default fallback
+
+if (isProdHost) {
+    selectedEnv = 'prod';
+} else if (isDevHost) {
+    selectedEnv = 'dev';
+} else {
+    // If running on localhost or other local network IPs, check localStorage for manual switch override
+    selectedEnv = localStorage.getItem('firebase_env') || 'dev';
+}
+
+const firebaseConfig = selectedEnv === 'prod' ? prodConfig : devConfig;
+
 
 // Affiliate Link Configuration
 // Buraya kendi affiliate ID'lerinizi ekleyin

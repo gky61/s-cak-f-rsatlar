@@ -304,7 +304,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     children: [
                   // Logo ve Başlık
                   Container(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)],
@@ -318,10 +318,14 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.local_fire_department_rounded,
-                      size: 64,
-                      color: Colors.white,
+                    child: Transform.scale(
+                      scale: 1.4,
+                      child: Image.asset(
+                        'assets/foreground.png',
+                        width: 120,
+                        height: 120,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 32),

@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /deals/{allPaths=**} {
+      // İstemci uygulaması görselleri anonim HTTP ile indirdiği için okuma herkese açık olmalıdır
+      allow read: if true;
+      // Bot yazma işlemlerini admin yetkisiyle (Admin SDK) yaptığı için sunucu kuralları bypass edilir, istemcilere yazma kapatılır
+      allow write: if false;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -55,8 +55,8 @@ functions/.runtimeconfig.json
 
 # Release signing keys (GÜVENLİK - ASLA GİT'E EKLEMEYİN!)
 android/key.properties
-android/*.jks
-android/*.keystore
+**/*.jks
+**/*.keystore
 
 # Bot configuration secrets
 cloud-run-bot/env.yaml

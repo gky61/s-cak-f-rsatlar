@@ -193,19 +193,12 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
                       final snapshot = await FirebaseFirestore.instance
                           .collection('messages')
                           .where('receiverId', isEqualTo: userId)
-                          // .orderBy('createdAt', descending: true) // Index gerektiriyor, kapattık
-                          .limit(5) // Son 5 tanesini çekmeye çalışalım (rastgele gelebilir)
+                          .orderBy('createdAt', descending: true)
+                          .limit(5)
                           .get();
                       
                       if (snapshot.docs.isNotEmpty) {
-                        // Client tarafında sırala (varsa createdAt'e göre)
                         final docs = snapshot.docs.toList();
-                        docs.sort((a, b) {
-                           final tA = a.data()['createdAt'] as Timestamp?;
-                           final tB = b.data()['createdAt'] as Timestamp?;
-                           if (tA == null || tB == null) return 0;
-                           return tB.compareTo(tA); // Descending
-                        });
 
                         final data = docs.first.data();
                         _addLog('📄 Mesaj Bulundu (ID: ${docs.first.id}):');

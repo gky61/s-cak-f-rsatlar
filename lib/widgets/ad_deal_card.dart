@@ -3,16 +3,19 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
 import 'ad_banner_widget.dart';
+import '../firebase_options.dart';
+
 
 class AdDealCard extends StatelessWidget {
   final CardViewMode viewMode;
-  final String adUnitId;
+  final String? adUnitId;
 
   const AdDealCard({
     super.key,
     required this.viewMode,
-    this.adUnitId = 'ca-app-pub-6853997017739651/8758625050', // Ana Sayfa Banner - Gerçek Ad Unit ID
+    this.adUnitId,
   });
+
 
   // Reklam boyutunu belirle - Standart AdMob boyutları kullan
   AdSize _getAdSize(CardViewMode mode) {
@@ -58,9 +61,10 @@ class AdDealCard extends StatelessWidget {
                 height: double.infinity,
                 color: Colors.white, // Reklam arka planı
                 child: AdBannerWidget(
-                  adUnitId: adUnitId,
+                  adUnitId: adUnitId ?? DefaultFirebaseOptions.bannerAdUnitId,
                   adSize: adSize, // Standart AdMob reklam boyutu
                 ),
+
               ),
               // Reklam etiketi (üstte, sağ üst köşede)
               Positioned(
@@ -127,9 +131,10 @@ class AdDealCard extends StatelessWidget {
                 height: double.infinity,
                 color: Colors.white, // Reklam arka planı
                 child: AdBannerWidget(
-                  adUnitId: adUnitId,
+                  adUnitId: adUnitId ?? DefaultFirebaseOptions.bannerAdUnitId,
                   adSize: adSize, // Standart AdMob reklam boyutu
                 ),
+
               ),
               // Reklam etiketi (üstte, sağ üst köşede)
               Positioned(

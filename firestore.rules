@@ -188,6 +188,31 @@ service cloud.firestore {
     }
     
     // ========================================
+    // NOTIFICATIONS CENTER (FAZ 3)
+    // ========================================
+    match /notificationLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /notificationStats/{statId} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Comments collectionGroup rule for notifications/reports
+    match /{path=**}/comments/{commentId} {
+      allow read: if true;
+      allow write: if canWrite();
+    }
+
+    // ========================================
+    // SYSTEM ERRORS LOGS (FAZ 4)
+    // ========================================
+    match /systemErrors/{errorId} {
+      allow read, write: if isAdmin();
+      allow create: if true; // Tüm servislerin hata logu yazabilmesi için
+    }
+
+    // ========================================
     // FALLBACK RULE - Diğer tüm koleksiyonlar
     // ========================================
     match /{document=**} {

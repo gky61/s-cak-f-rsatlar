@@ -18,12 +18,25 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// Environment variables
-const API_ID = process.env.TELEGRAM_API_ID;
-const API_HASH = process.env.TELEGRAM_API_HASH;
-const SESSION_STRING = process.env.TELEGRAM_SESSION_STRING;
-const CHANNELS = process.env.TELEGRAM_CHANNELS ? process.env.TELEGRAM_CHANNELS.split(',') : [];
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// Environment variables - sanitized to prevent newline/quote issues from Secret Manager
+const API_ID = (process.env.TELEGRAM_API_ID || '').trim();
+const API_HASH = (process.env.TELEGRAM_API_HASH || '').trim();
+
+let rawSession = process.env.TELEGRAM_SESSION_STRING || '';
+rawSession = rawSession.trim();
+if ((rawSession.startsWith('"') && rawSession.endsWith('"')) || (rawSession.startsWith("'") && rawSession.endsWith("'"))) {
+  rawSession = rawSession.substring(1, rawSession.length - 1);
+}
+const SESSION_STRING = rawSession;
+
+let CHANNELS = process.env.TELEGRAM_CHANNELS ? process.env.TELEGRAM_CHANNELS.split(',') : [];
+
+let rawGeminiKey = process.env.GEMINI_API_KEY || '';
+rawGeminiKey = rawGeminiKey.trim();
+if ((rawGeminiKey.startsWith('"') && rawGeminiKey.endsWith('"')) || (rawGeminiKey.startsWith("'") && rawGeminiKey.endsWith("'"))) {
+  rawGeminiKey = rawGeminiKey.substring(1, rawGeminiKey.length - 1);
+}
+const GEMINI_API_KEY = rawGeminiKey;
 
 // Gemini AI initialization
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -40,6 +53,123 @@ console.log(`📡 Dinlenecek kanallar:`, CHANNELS.join(', '));
 let client = null;
 let isRunning = false;
 let isStarting = false;
+
+// Faz 2 - Bot Sayaçları ve Durum Değişkenleri
+let msgCount = 0;
+let dealCount = 0;
+let dupCount = 0;
+let errCount = 0;
+let lastMessageTime = null;
+let botEnabled = true;
+let countersDate = new Date().toDateString();
+
+function checkDateAndResetCounters() {
+  const todayStr = new Date().toDateString();
+  if (countersDate !== todayStr) {
+    msgCount = 0;
+    dealCount = 0;
+    dupCount = 0;
+    errCount = 0;
+    countersDate = todayStr;
+    console.log('🔄 Yeni gün başladı, in-memory bot sayaçları sıfırlandı.');
+  }
+}
+
+async function loadCountersFromFirestore() {
+  try {
+    console.log('🔄 Firestore\'dan günlük sayaçlar yükleniyor...');
+    const statusRef = db.collection('settings').doc('telegramBot');
+    const doc = await statusRef.get();
+    
+    if (doc.exists) {
+      const data = doc.data();
+      const todayStr = new Date().toDateString();
+      
+      // Eğer Firestore'daki countersDate bugünün tarihi ise sayaçları oradan yükle
+      if (data.countersDate === todayStr) {
+        msgCount = data.msgCount || 0;
+        dealCount = data.dealCount || 0;
+        dupCount = data.dupCount || 0;
+        errCount = data.errCount || 0;
+        countersDate = todayStr;
+        console.log(`✅ Sayaçlar başarıyla yüklendi: msgCount=${msgCount}, dealCount=${dealCount}, dupCount=${dupCount}, errCount=${errCount}`);
+      } else {
+        console.log('📅 Firestore\'daki sayaç tarihi eski veya bulunamadı, sayaçlar 0 olarak başlatılıyor.');
+        countersDate = todayStr;
+        // Firestore'u yeni tarih ve sıfırlanmış sayaçlarla güncelle
+        await statusRef.set({
+          msgCount: 0,
+          dealCount: 0,
+          dupCount: 0,
+          errCount: 0,
+          countersDate: todayStr
+        }, { merge: true });
+      }
+    }
+  } catch (error) {
+    console.error('❌ Firestore\'dan sayaçları yüklerken hata oluştu:', error.message);
+  }
+}
+
+async function sendHeartbeat() {
+  try {
+    checkDateAndResetCounters();
+    const statusRef = db.collection('settings').doc('telegramBot');
+    const environment = (process.env.PROJECT_ID || '').includes('prod') ? 'PROD' : 'DEV';
+    await statusRef.set({
+      lastHeartbeatAt: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'online',
+      environment: environment,
+      lastMessageTime: lastMessageTime ? admin.firestore.Timestamp.fromDate(lastMessageTime) : null,
+      msgCount: msgCount,
+      dealCount: dealCount,
+      dupCount: dupCount,
+      errCount: errCount,
+      botEnabled: botEnabled,
+      countersDate: countersDate
+    }, { merge: true });
+    console.log('💓 Heartbeat sent successfully!');
+  } catch (err) {
+    console.error('❌ Heartbeat gönderim hatası:', err.message);
+  }
+}
+
+let settingsUnsubscribe = null;
+
+function initSettingsListener() {
+  console.log('👂 Firestore settings/telegramBot real-time dinleyicisi başlatılıyor...');
+  if (settingsUnsubscribe) {
+    settingsUnsubscribe();
+  }
+  
+  settingsUnsubscribe = db.collection('settings').doc('telegramBot').onSnapshot(async (snapshot) => {
+    if (snapshot.exists) {
+      const data = snapshot.data();
+      botEnabled = data.botEnabled !== false;
+      console.log(`⚙️ Firestore Ayarları: botEnabled = ${botEnabled}`);
+      
+      // Dinamik Kanal Yönetimi Kontrolü
+      if (data.monitoredChannels && Array.isArray(data.monitoredChannels)) {
+        const newChannels = data.monitoredChannels.map(c => c.trim()).filter(Boolean);
+        const currentChannelsStr = JSON.stringify([...CHANNELS].sort());
+        const newChannelsStr = JSON.stringify([...newChannels].sort());
+        
+        if (currentChannelsStr !== newChannelsStr) {
+          console.log(`🔄 Monitored channels listesi değişti:`, newChannels);
+          CHANNELS = newChannels;
+          if (isRunning && client) {
+            await subscribeToChannels();
+          }
+        }
+      }
+    } else {
+      botEnabled = true;
+    }
+  }, (error) => {
+    console.error('❌ Settings dinleyici hatası:', error.message);
+    errCount++;
+  });
+}
 
 /**
  * Firestore bağlantısını test et
@@ -142,9 +272,53 @@ function getAllLinks(message) {
 }
 
 /**
+ * Faz 2: Gemini API kullanım metriklerini Firestore'a kaydet (Bot tarafı)
+ */
+async function updateGeminiStatus(isError, isJsonError, estimatedCost) {
+  try {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const statusRef = db.collection('settings').doc('geminiStatus');
+    
+    await db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(statusRef);
+      if (doc.exists && doc.data().date === todayStr) {
+        transaction.update(statusRef, {
+          dailyRequests: admin.firestore.FieldValue.increment(1),
+          dailyErrors: admin.firestore.FieldValue.increment(isError ? 1 : 0),
+          dailyJsonErrors: admin.firestore.FieldValue.increment(isJsonError ? 1 : 0),
+          dailyCost: admin.firestore.FieldValue.increment(isError ? 0 : estimatedCost),
+          lastRequestAt: admin.firestore.FieldValue.serverTimestamp(),
+          status: isError ? 'error' : 'online',
+          model: 'Gemini 2.5/2.0 Flash'
+        });
+      } else {
+        transaction.set(statusRef, {
+          date: todayStr,
+          dailyRequests: 1,
+          dailyErrors: isError ? 1 : 0,
+          dailyJsonErrors: isJsonError ? 1 : 0,
+          dailyCost: isError ? 0 : estimatedCost,
+          lastRequestAt: admin.firestore.FieldValue.serverTimestamp(),
+          status: isError ? 'error' : 'online',
+          model: 'Gemini 2.5/2.0 Flash'
+        });
+      }
+    });
+    console.log('📊 Bot Gemini Status güncellendi.');
+  } catch (dbErr) {
+    console.error('❌ Bot Gemini Status güncellenemedi:', dbErr.message);
+  }
+}
+
+/**
  * Gemini AI ile görsel analizi 🤖
  */
 async function analyzeImageWithGemini(imageBuffer, messageText) {
+  let isError = false;
+  let isJsonError = false;
+  let estimatedCost = 0.0001; // default fallback cost
+  let responseText = '';
+
   try {
     console.log('🤖 Gemini AI görsel analizi başlıyor...');
     const startTime = Date.now();
@@ -218,20 +392,33 @@ async function analyzeImageWithGemini(imageBuffer, messageText) {
     ]);
 
     const response = result.response;
-    const text = response.text();
+    responseText = response.text();
+
+    // Cost estimation
+    try {
+      const usage = response.usageMetadata;
+      if (usage) {
+        const inputTokens = usage.promptTokenCount || 0;
+        const outputTokens = usage.candidatesTokenCount || 0;
+        estimatedCost = (inputTokens * 0.075 / 1000000) + (outputTokens * 0.30 / 1000000);
+      }
+    } catch (useErr) {
+      console.warn('⚠️ Usage estimation error:', useErr.message);
+    }
 
     const analysisTime = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`✅ Gemini analizi tamamlandı! Süre: ${analysisTime}s`);
-    console.log(`📊 Gemini yanıtı: ${text}`);
+    console.log(`📊 Gemini yanıtı: ${responseText}`);
 
     // JSON temizleme ve parse
     let analysis;
     try {
-      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
       analysis = JSON.parse(cleanText);
     } catch (e) {
+      isJsonError = true;
       console.warn('⚠️ JSON parse hatası, regex deneniyor...');
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         analysis = JSON.parse(jsonMatch[0]);
       } else {
@@ -250,8 +437,12 @@ async function analyzeImageWithGemini(imageBuffer, messageText) {
     };
 
   } catch (error) {
+    isError = true;
     console.error('❌ Gemini analiz hatası:', error.message);
+    await logErrorToFirestore('bot', 'Gemini Image Analysis Error', error.message, error.stack);
     return null;
+  } finally {
+    await updateGeminiStatus(isError, isJsonError, estimatedCost);
   }
 }
 
@@ -259,6 +450,11 @@ async function analyzeImageWithGemini(imageBuffer, messageText) {
  * Gemini AI ile metin analizi (Görsel yoksa) 📝
  */
 async function analyzeTextWithGemini(messageText) {
+  let isError = false;
+  let isJsonError = false;
+  let estimatedCost = 0.0001; // default fallback cost
+  let responseText = '';
+
   try {
     console.log('🤖 Gemini AI metin analizi başlıyor...');
     const startTime = Date.now();
@@ -319,7 +515,19 @@ async function analyzeTextWithGemini(messageText) {
 
     const result = await model.generateContent(prompt);
     const response = result.response;
-    const text = response.text();
+    responseText = response.text();
+
+    // Cost estimation
+    try {
+      const usage = response.usageMetadata;
+      if (usage) {
+        const inputTokens = usage.promptTokenCount || 0;
+        const outputTokens = usage.candidatesTokenCount || 0;
+        estimatedCost = (inputTokens * 0.075 / 1000000) + (outputTokens * 0.30 / 1000000);
+      }
+    } catch (useErr) {
+      console.warn('⚠️ Usage estimation error:', useErr.message);
+    }
 
     const analysisTime = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`✅ Gemini metin analizi tamamlandı! Süre: ${analysisTime}s`);
@@ -327,11 +535,12 @@ async function analyzeTextWithGemini(messageText) {
     // JSON temizleme ve parse
     let analysis;
     try {
-      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
       analysis = JSON.parse(cleanText);
     } catch (e) {
+      isJsonError = true;
       console.warn('⚠️ JSON parse hatası, regex deneniyor...');
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         analysis = JSON.parse(jsonMatch[0]);
       } else {
@@ -350,8 +559,12 @@ async function analyzeTextWithGemini(messageText) {
     };
 
   } catch (error) {
+    isError = true;
     console.error('❌ Gemini metin analiz hatası:', error.message);
+    await logErrorToFirestore('bot', 'Gemini Text Analysis Error', error.message, error.stack);
     return null;
+  } finally {
+    await updateGeminiStatus(isError, isJsonError, estimatedCost);
   }
 }
 
@@ -685,7 +898,9 @@ async function saveDealToFirebase(message, chatInfo) {
           console.error(`❌ [${uniqueDocId}] Buffer boş! Görsel indirilemedi.`);
         } else {
           // 🤖 AI ANALİZİ VE UPLOAD - TAM PARALEL! ⚡⚡⚡
-          const bucketName = 'sicak-firsatlar-e6eae.firebasestorage.app';
+          // GCP ortamından veya fallback olarak prod projesinden bucket adını oluştur
+          const projectId = process.env.PROJECT_ID || process.env.GCP_PROJECT || process.env.GCLOUD_PROJECT || 'firsatkolik-prod-e6eae';
+          const bucketName = `${projectId}.firebasestorage.app`;
           const bucket = admin.storage().bucket(bucketName);
           const filename = `deals/${chatInfo.id}_${messageId}.jpg`;
           const file = bucket.file(filename);
@@ -851,9 +1066,120 @@ async function saveDealToFirebase(message, chatInfo) {
   }
 }
 
-/**
- * Telegram Client'ı başlat
- */
+async function subscribeToChannels() {
+  if (!client) return;
+  
+  console.log('🧹 Tüm event handler\'lar kaldırılıyor...');
+  try {
+    client.removeEventHandler();
+  } catch (e) {
+    console.warn('⚠️ Event handler kaldırma hatası:', e.message);
+  }
+  
+  console.log(`🔊 ${CHANNELS.length} kanal için dinleyiciler başlatılıyor...`);
+  
+  for (const channelUsername of CHANNELS) {
+    try {
+      const trimmedChannel = channelUsername.trim();
+      if (!trimmedChannel) continue;
+      
+      let channel;
+      if (trimmedChannel.startsWith('@')) {
+        console.log(`🔍 Username ile aranıyor: ${trimmedChannel}`);
+        channel = await client.getEntity(trimmedChannel);
+      } else {
+        console.log(`🔍 ID ile aranıyor: ${trimmedChannel}`);
+        const channelId = trimmedChannel.startsWith('-100')
+          ? trimmedChannel.substring(4)
+          : (trimmedChannel.startsWith('-') ? trimmedChannel.substring(1) : trimmedChannel);
+          
+        try {
+          const peer = new Api.PeerChannel({ channelId: BigInt(channelId) });
+          channel = await client.getEntity(peer);
+        } catch (e1) {
+          try {
+            channel = await client.getEntity(BigInt(channelId));
+          } catch (e2) {
+            console.error(`❌ Kanal bulunamadı: ${trimmedChannel}`, e2.message);
+            continue;
+          }
+        }
+      }
+      
+      console.log(`✅ Kanal bulundu: ${channel.title} (${trimmedChannel})`);
+      
+      const channelInfo = {
+        id: channel.id,
+        title: channel.title,
+        username: channel.username,
+        broadcast: channel.broadcast,
+      };
+      
+      client.addEventHandler(async (event) => {
+        try {
+          checkDateAndResetCounters();
+          
+          if (!botEnabled) {
+            console.log('⏸️ Bot pasif durumda, mesaj atlandı.');
+            return;
+          }
+          
+          const message = event.message;
+          if (!message) return;
+          
+          msgCount++;
+          lastMessageTime = new Date();
+          
+          const messageId = message.id;
+          const links = getAllLinks(message);
+          if (!links.length) {
+            console.log(`⏩ [${channelInfo.title}] Mesajda link yok, atlanıyor.`);
+            return;
+          }
+          
+          const mainLink = links[0];
+          
+          // MÜKERRER (DUPLICATE) KONTROLÜ
+          console.log(`🔍 [${channelInfo.title}] Mükerrer link kontrolü yapılıyor: ${mainLink}`);
+          const dupCheckLink = await db.collection('deals')
+            .where('link', '==', mainLink)
+            .limit(1)
+            .get();
+          
+          let dupCheckUrl = { empty: true };
+          if (dupCheckLink.empty) {
+            dupCheckUrl = await db.collection('deals')
+              .where('url', '==', mainLink)
+              .limit(1)
+              .get();
+          }
+          
+          if (!dupCheckLink.empty || !dupCheckUrl.empty) {
+            console.log(`⏩ [${channelInfo.title}] Aynı link zaten kayıtlı, mükerrer atlanıyor: ${mainLink}`);
+            dupCount++;
+            return;
+          }
+          
+          console.log(`📝 Mesaj içeriği: ${message.message?.substring(0, 100)}...`);
+          
+          const success = await saveDealToFirebase(message, channelInfo);
+          if (success) {
+            dealCount++;
+          }
+        } catch (error) {
+          errCount++;
+          console.error(`❌ Mesaj işleme hatası (${channelInfo.title}):`, error.message);
+        }
+      }, new NewMessage({ chats: [channel.id] }));
+      
+      console.log(`👂 ${channel.title} dinleniyor...`);
+    } catch (error) {
+      errCount++;
+      console.error(`❌ Kanal bulunamadı: ${channelUsername}`, error.message);
+    }
+  }
+}
+
 async function startBot() {
   if (isRunning || isStarting) {
     console.log('⚠️ Bot zaten çalışıyor veya başlatılıyor!');
@@ -868,7 +1194,6 @@ async function startBot() {
     if (client) {
       try {
         console.log('🧹 Eski client temizleniyor...');
-        // Tüm event handler'ları kaldır
         client.removeEventHandler();
         await client.disconnect();
         client = null;
@@ -880,18 +1205,17 @@ async function startBot() {
 
     const stringSession = new StringSession(SESSION_STRING);
     client = new TelegramClient(stringSession, parseInt(API_ID), API_HASH, {
-      connectionRetries: 100, // Daha fazla deneme
+      connectionRetries: 100,
       autoReconnect: true,
       useWSS: false,
-      timeout: 60, // 60 saniye timeout (önceden 30)
-      requestRetries: 10, // Request retry sayısı
-      floodSleepThreshold: 60, // Flood wait süresini otomatik bekle (60 saniye)
+      timeout: 60,
+      requestRetries: 10,
+      floodSleepThreshold: 60,
       deviceModel: 'Cloud Run Bot',
       systemVersion: '1.0',
       appVersion: '1.0',
     });
 
-    // Bağlantı koptuğunda logla
     client.on('disconnected', () => {
       console.warn('⚠️ Telegram bağlantısı koptu!');
       isRunning = false;
@@ -900,86 +1224,7 @@ async function startBot() {
     await client.connect();
     console.log('✅ Telegram Client bağlandı!');
 
-    // Her kanal için event handler ekle
-    for (const channelUsername of CHANNELS) {
-      try {
-        const trimmedChannel = channelUsername.trim();
-        let channel;
-
-        // Username ile mi yoksa ID ile mi?
-        if (trimmedChannel.startsWith('@')) {
-          // Public kanal - username ile
-          console.log(`🔍 Username ile aranıyor: ${trimmedChannel}`);
-          channel = await client.getEntity(trimmedChannel);
-        } else {
-          // Private kanal/grup - ID ile
-          console.log(`🔍 ID ile aranıyor: ${trimmedChannel}`);
-
-          // Negatif ID'yi pozitife çevir
-          const channelId = trimmedChannel.startsWith('-')
-            ? trimmedChannel.substring(1)
-            : trimmedChannel;
-
-          // PeerChannel ile dene
-          try {
-            const peer = new Api.PeerChannel({
-              channelId: BigInt(channelId)
-            });
-            channel = await client.getEntity(peer);
-            console.log(`✅ PeerChannel ile bulundu: ${channel.title}`);
-          } catch (e1) {
-            console.log(`⚠️ PeerChannel ile bulunamadı (${e1.message}), BigInt deniyor...`);
-            try {
-              channel = await client.getEntity(BigInt(channelId));
-              console.log(`✅ BigInt ile bulundu: ${channelId}`);
-            } catch (e2) {
-              console.error(`❌ Kanal bulunamadı: ${trimmedChannel}`);
-              console.error(`   Hata: ${e2.message}`);
-              continue;
-            }
-          }
-        }
-
-        console.log(`✅ Kanal bulundu: ${channel.title} (${trimmedChannel})`);
-
-        // Kanal bilgilerini sakla (closure için)
-        const channelInfo = {
-          id: channel.id,
-          title: channel.title,
-          username: channel.username,
-          broadcast: channel.broadcast,
-        };
-
-        // Yeni mesaj event handler - channel ID kullan
-        client.addEventHandler(async (event) => {
-          try {
-            const message = event.message;
-            if (!message) return;
-
-            const messageId = message.id;
-            const messageText = message.message || '';
-            console.log(`📩 [${channelInfo.title}] Yeni mesaj: ${messageId}`);
-
-            // Link kontrolü - hızlıca (Metin, Buton, Gizli Link)
-            const links = getAllLinks(message);
-            if (!links.length) {
-              console.log(`⏩ [${channelInfo.title}] Mesajda link yok, atlanıyor.`);
-              return;
-            }
-
-            console.log(`📝 Mesaj içeriği: ${messageText.substring(0, 100)}...`);
-
-            await saveDealToFirebase(message, channelInfo);
-          } catch (error) {
-            console.error(`❌ Mesaj işleme hatası (${channelInfo.title}):`, error.message);
-          }
-        }, new NewMessage({ chats: [channel.id] }));
-
-        console.log(`👂 ${channel.title} dinleniyor...`);
-      } catch (error) {
-        console.error(`❌ Kanal bulunamadı: ${channelUsername}`, error.message);
-      }
-    }
+    await subscribeToChannels();
 
     isRunning = true;
     isStarting = false;
@@ -994,10 +1239,9 @@ async function startBot() {
 
   } catch (error) {
     console.error('❌ Bot başlatma hatası:', error);
+    await logErrorToFirestore('bot', 'Bot Start Error', error.message, error.stack);
     isRunning = false;
     isStarting = false;
-
-    // 30 saniye sonra tekrar dene
     console.log('🔄 30 saniye sonra yeniden denenecek...');
     setTimeout(startBot, 30000);
   }
@@ -1034,7 +1278,18 @@ process.on('SIGINT', async () => {
   if (!isDbOk) {
     console.warn('⚠️ Firestore testi başarısız oldu, ancak bot başlatılmaya çalışılıyor...');
   }
+  
+  // Günlük sayaçları Firestore'dan yükle
+  await loadCountersFromFirestore();
+  
   await startBot();
+  
+  // Heartbeat'i hemen gönder ve periyodik döngüyü başlat (5 dakikada bir)
+  await sendHeartbeat();
+  setInterval(sendHeartbeat, 5 * 60 * 1000);
+  
+  // Firestore ayarlarını dinle
+  initSettingsListener();
 })().catch(console.error);
 
 // Health check endpoint için basit HTTP server
@@ -1061,3 +1316,65 @@ server.listen(PORT, () => {
   console.log(`🌐 HTTP Server listening on port ${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
 });
+
+/**
+ * Faz 4: Firestore 'systemErrors' koleksiyonuna hata logu yaz (Bot tarafı)
+ */
+async function logErrorToFirestore(service, errorType, message, stack, severity = 'error') {
+  try {
+    await db.collection('systemErrors').add({
+      service: service,
+      errorType: errorType,
+      message: message,
+      stack: stack || null,
+      status: 'unresolved',
+      severity: severity,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    console.log(`💾 Bot logu Firestore'a kaydedildi: [${service}] (${severity}) ${errorType}`);
+  } catch (err) {
+    console.error('❌ Bot logu Firestore\'a kaydedilemedi:', err.message);
+  }
+}
+
+// Global Uncaught Error Handlers to log all unexpected fatal errors before crash
+process.on('uncaughtException', async (err) => {
+  console.error('🔥 Bot Uncaught Exception:', err);
+  
+  // Start exit timer immediately in case Firestore write hangs
+  const exitTimer = setTimeout(() => {
+    console.error('⌛ Exit timer triggered. Exiting now.');
+    process.exit(1);
+  }, 3000);
+
+  try {
+    await logErrorToFirestore('bot', 'Uncaught Exception (Fatal)', err.message, err.stack, 'fatal');
+  } catch (logErr) {
+    console.error('❌ Failed to log global exception to Firestore:', logErr);
+  } finally {
+    clearTimeout(exitTimer);
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', async (reason, promise) => {
+  console.error('🔥 Bot Unhandled Rejection:', reason);
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : null;
+  
+  // Start exit timer immediately in case Firestore write hangs
+  const exitTimer = setTimeout(() => {
+    console.error('⌛ Exit timer triggered. Exiting now.');
+    process.exit(1);
+  }, 3000);
+
+  try {
+    await logErrorToFirestore('bot', 'Unhandled Rejection (Fatal)', msg, stack, 'fatal');
+  } catch (logErr) {
+    console.error('❌ Failed to log global rejection to Firestore:', logErr);
+  } finally {
+    clearTimeout(exitTimer);
+    process.exit(1);
+  }
+});
+

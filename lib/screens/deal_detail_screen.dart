@@ -23,6 +23,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../main.dart'; // navigatorKey için
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import '../firebase_options.dart';
 
 import '../widgets/report_dialog.dart';
 import '../widgets/comments_bottom_sheet.dart';
@@ -3157,10 +3160,24 @@ $priceText$discountText
 
   Future<String?> _resolveShortLink(String shortUrl) async {
     try {
+      final projectId = DefaultFirebaseOptions.flavorProjectId;
       final functionsUrl =
-          'https://us-central1-sicak-firsatlar-e6eae.cloudfunctions.net/resolveShortLink';
+          'https://us-central1-$projectId.cloudfunctions.net/resolveShortLink';
       final uri = Uri.parse('$functionsUrl?url=${Uri.encodeComponent(shortUrl)}');
-      final response = await http.get(uri);
+      
+      String? token;
+      try {
+        token = await FirebaseAppCheck.instance.getToken();
+      } catch (e) {
+        _log('App Check token alınamadı: $e');
+      }
+
+      final response = await http.get(
+        uri,
+        headers: {
+          if (token != null) 'X-Firebase-AppCheck': token,
+        },
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

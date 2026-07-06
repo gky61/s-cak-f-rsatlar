@@ -1315,22 +1315,7 @@ class NotificationService {
     }
   }
 
-  void _navigateToMessage(String messageId) {
-    if (messageId.isEmpty) {
-      _log('⚠️ Message ID boş, yönlendirme yapılamıyor');
-      return;
-    }
-    
-    final navigator = navigatorKey.currentState;
-    if (navigator != null) {
-      _log('🔔 Mesaj sayfasına yönlendiriliyor: $messageId');
-      // Mesaj listesi ekranına yönlendir (mesaj ID'si ile scroll yapılabilir)
-      // Şimdilik mesaj listesi ekranına yönlendiriyoruz
-      // TODO: Mesaj listesi ekranı oluşturulduğunda buraya ekle
-    } else {
-      _log('⚠️ Navigator henüz hazır değil, yönlendirme yapılamıyor');
-    }
-  }
+
 
   // Admin bildirimler ekranına yönlendirme
   void _navigateToAdminNotifications() {

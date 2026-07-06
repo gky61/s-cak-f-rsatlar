@@ -149,7 +149,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(24),
                           child: Image.asset(
-                            'assets/Gemini_Generated_Image_55xiw755xiw755xi.png',
+                            'assets/store-icon.png',
                             width: 120,
                             height: 120,
                             fit: BoxFit.cover,

@@ -961,7 +961,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 key: ValueKey('ad_card_vertical_$i'),
                                 child: AdDealCard(
                                   viewMode: CardViewMode.vertical,
-                                  adUnitId: 'ca-app-pub-6853997017739651/8758625050', // Ana Sayfa Banner - Gerçek Ad Unit ID
                                 ),
                               );
                             }
@@ -1036,7 +1035,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 key: ValueKey('ad_card_horizontal_$i'),
                                 child: AdDealCard(
                                   viewMode: CardViewMode.horizontal,
-                                  adUnitId: 'ca-app-pub-6853997017739651/8758625050', // Ana Sayfa Banner - Gerçek Ad Unit ID
                                 ),
                               );
                             }

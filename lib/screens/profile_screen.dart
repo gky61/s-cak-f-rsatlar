@@ -16,9 +16,7 @@ import '../models/category.dart';
 import 'notification_settings_screen.dart';
 import 'keyword_tracking_screen.dart';
 import 'auth_screen.dart';
-import 'auth_screen.dart';
 // import 'edit_profile_screen.dart'; // Dosya bulunamadı, geçici olarak yorum satırı
-import 'notification_debug_screen.dart'; // Eklendi
 import 'privacy_policy_screen.dart';
 import 'faq_screen.dart';
 import 'category_preferences_screen.dart';
@@ -27,6 +25,7 @@ import 'message_screen.dart';
 import 'messages_list_screen.dart';
 import 'admin_notifications_screen.dart';
 import 'following_users_screen.dart';
+import 'user_deals_screen.dart';
 import 'package:flutter/services.dart';
 
 void _log(String message) {
@@ -1236,6 +1235,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           isDark: isDark,
                         ),
                         _buildDivider(isDark),
+                        // Paylaştığım Fırsatlar
+                        _buildSettingItem(
+                          icon: Icons.local_offer,
+                          title: 'Paylaştığım Fırsatlar',
+                          iconBgColor: primaryColor.withValues(alpha: 0.1),
+                          iconColor: primaryColor,
+                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+                          onTap: () {
+                            final currentUserId = _authService.currentUser?.uid;
+                            if (currentUserId != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => UserDealsScreen(
+                                    userId: currentUserId,
+                                    username: _user?.username ?? '',
+                                    isOwnProfile: true,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          isDark: isDark,
+                        ),
+                        _buildDivider(isDark),
                         // Takip Ettiklerim
                         _buildSettingItem(
                           icon: Icons.person_add,
@@ -1568,6 +1592,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ],
                                   ),
                                 ),
+                ],
+                if (!_isOwnProfile && _user != null) ...[
+                  const SizedBox(height: 24),
+                  _buildSectionHeader('FIRSATLAR', textSub!),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: surfaceColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 20,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          _buildSettingItem(
+                            icon: Icons.local_offer,
+                            title: 'Paylaştığı Fırsatları Gör',
+                            iconBgColor: primaryColor.withValues(alpha: 0.1),
+                            iconColor: primaryColor,
+                            trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => UserDealsScreen(
+                                    userId: widget.userId!,
+                                    username: _user?.username ?? '',
+                                    isOwnProfile: false,
+                                  ),
+                                ),
+                              );
+                            },
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 100), // Bottom nav padding
               ],

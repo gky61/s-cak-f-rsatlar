@@ -86,6 +86,69 @@ async function createModerationMessage({ type, userId, userName, content, dealId
   }
 }
 
+async function logErrorToFirestore(service, errorType, message, stack, severity = 'error') {
+  try {
+    await admin.firestore().collection('systemErrors').add({
+      service,
+      errorType,
+      message,
+      stack: stack || null,
+      status: 'unresolved',
+      severity,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    functions.logger.info(`💾 Log Firestore'a kaydedildi: [${service}] (${severity}) ${errorType}`);
+  } catch (err) {
+    functions.logger.error('❌ Log Firestore\'a kaydedilemedi:', err.message);
+  }
+}
+
+// Higher-order function to wrap Firestore/PubSub trigger callbacks
+function wrapTrigger(name, handler) {
+  return async (arg1, arg2) => {
+    try {
+      return await handler(arg1, arg2);
+    } catch (error) {
+      functions.logger.error(`❌ [Trigger Error] ${name}:`, error.message);
+      await logErrorToFirestore('functions', `${name} Trigger Error`, error.message, error.stack, 'error');
+      throw error;
+    }
+  };
+}
+
+// Higher-order function to wrap HTTPS onRequest callbacks
+function wrapRequest(name, handler) {
+  return async (req, res) => {
+    try {
+      return await handler(req, res);
+    } catch (error) {
+      functions.logger.error(`❌ [Request Error] ${name}:`, error.message);
+      await logErrorToFirestore('functions', `${name} Request Error`, error.message, error.stack, 'error');
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+      throw error;
+    }
+  };
+}
+
+// Higher-order function to wrap HTTPS onCall callbacks
+function wrapCall(name, handler) {
+  return async (data, context) => {
+    try {
+      return await handler(data, context);
+    } catch (error) {
+      functions.logger.error(`❌ [Call Error] ${name}:`, error.message);
+      // Skip if it's already an HttpsError we intentionally threw
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      await logErrorToFirestore('functions', `${name} Call Error`, error.message, error.stack, 'error');
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  };
+}
+
 const cleanTopicName = (str) => {
   if (!str) return 'genel';
   return normalize(str).replace(/[^a-z0-9_]/g, '_');
@@ -500,7 +563,7 @@ async function sendFollowNotifications(deal, dealId) {
  */
 exports.onDealCreated = functions.firestore
   .document('deals/{dealId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(wrapTrigger('onDealCreated', async (snap, context) => {
     const deal = snap.data();
     const dealId = context.params.dealId;
 
@@ -678,14 +741,14 @@ exports.onDealCreated = functions.firestore
     } catch (error) {
       functions.logger.error('❌ Admin bildirimi hatası:', error);
     }
-  });
+  }));
 
 /**
  * 2. FIRSAT GÜNCELLENDİĞİNDE (Onaylandıysa Herkese Bildir + Anahtar Kelime)
  */
 exports.onDealUpdated = functions.firestore
   .document('deals/{dealId}')
-  .onUpdate(async (change, context) => {
+  .onUpdate(wrapTrigger('onDealUpdated', async (change, context) => {
     const newData = change.after.data();
     const oldData = change.before.data();
     const dealId = context.params.dealId;
@@ -705,12 +768,12 @@ exports.onDealUpdated = functions.firestore
     }
 
     return null;
-  });
+  }));
 
 // Yorum moderasyonu - Collection group trigger
 exports.onCommentCreated = functions.firestore
   .document('deals/{dealId}/comments/{commentId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(wrapTrigger('onCommentCreated', async (snap, context) => {
     const comment = snap.data();
     const commentId = context.params.commentId;
     const dealId = context.params.dealId;
@@ -793,14 +856,14 @@ exports.onCommentCreated = functions.firestore
     }
 
     return null;
-  });
+  }));
 
 /**
  * 4. ADMIN MESAJI GÖNDERİLDİĞİNDE - Kullanıcıya Push Notification Gönder
  */
 exports.onAdminMessageCreated = functions.firestore
   .document('adminToUserMessages/{messageId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(wrapTrigger('onAdminMessageCreated', async (snap, context) => {
     const message = snap.data();
     const messageId = context.params.messageId;
     const userId = message.userId;
@@ -899,7 +962,7 @@ exports.onAdminMessageCreated = functions.firestore
       });
       return null;
     }
-  });
+  }));
 
 /**
  * 5. KULLANICI MESAJI GÖNDERİLDİĞİNDE (User-to-User)
@@ -907,7 +970,7 @@ exports.onAdminMessageCreated = functions.firestore
  */
 exports.onUserMessageCreated = functions.firestore
   .document('messages/{messageId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(wrapTrigger('onUserMessageCreated', async (snap, context) => {
     const message = snap.data();
     const messageId = context.params.messageId;
 
@@ -999,14 +1062,14 @@ exports.onUserMessageCreated = functions.firestore
       functions.logger.error('❌ Mesaj bildirimi hatası:', error);
       return null;
     }
-  });
+  }));
 
 /**
  * 6. YORUM CEVABI BİLDİRİMİ - Push Notification Gönder
  */
 exports.onCommentReplyNotificationCreated = functions.firestore
   .document('users/{userId}/notifications/{notificationId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(wrapTrigger('onCommentReplyNotificationCreated', async (snap, context) => {
     const notification = snap.data();
     const userId = context.params.userId;
     const notificationId = context.params.notificationId;
@@ -1112,10 +1175,10 @@ exports.onCommentReplyNotificationCreated = functions.firestore
       functions.logger.error('❌ Yorum cevabı bildirimi hatası:', error);
       return null;
     }
-  });
+  }));
 
 // Kısa linki gerçek URL'ye dönüştürme fonksiyonu
-exports.resolveShortLink = functions.https.onRequest(async (req, res) => {
+exports.resolveShortLink = functions.https.onRequest(wrapRequest('resolveShortLink', async (req, res) => {
   // CORS headers
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -1172,7 +1235,7 @@ exports.resolveShortLink = functions.https.onRequest(async (req, res) => {
       error: error.message
     });
   }
-});
+}));
 
 // Redirect takibi yapan helper fonksiyon
 function resolveRedirect(url) {
@@ -1288,7 +1351,7 @@ exports.cleanupOldImages = functions
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
   .pubsub.schedule('0 0 * * *') // Her gün gece 00:00'da çalışır
   .timeZone('Europe/Istanbul')
-  .onRun(async (context) => {
+  .onRun(wrapTrigger('cleanupOldImages', async (context) => {
     functions.logger.info('🧹 Eski görsel temizleme başlıyor...');
 
     const bucketName = 'sicak-firsatlar-e6eae.firebasestorage.app';
@@ -1342,7 +1405,7 @@ exports.cleanupOldImages = functions
     }
 
     return null;
-  });
+  }));
 
 /**
  * 📷 MANUEL GÖRSELLERİ TEMİZLE - HTTP ile tetiklenir (test için)
@@ -1350,7 +1413,7 @@ exports.cleanupOldImages = functions
  */
 exports.cleanupOldImagesManual = functions
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
-  .https.onRequest(async (req, res) => {
+  .https.onRequest(wrapRequest('cleanupOldImagesManual', async (req, res) => {
     functions.logger.info('🧹 Manuel görsel temizleme başlıyor...');
 
     const bucketName = 'sicak-firsatlar-e6eae.firebasestorage.app';
@@ -1400,4 +1463,330 @@ exports.cleanupOldImagesManual = functions
       functions.logger.error('❌ Manuel temizleme hatası:', error);
       res.status(500).json({ error: error.message });
     }
-  });
+  }));
+
+// Gemini AI Proxy Cloud Function
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+exports.analyzeProductProxy = functions
+  .runWith({ secrets: ['GEMINI_API_KEY'], timeoutSeconds: 60, memory: '256MB' })
+  .https.onRequest(wrapRequest('analyzeProductProxy', async (req, res) => {
+    // CORS headers
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-Firebase-AppCheck');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    // App Check doğrulaması
+    const appCheckToken = req.header('X-Firebase-AppCheck');
+    if (!appCheckToken) {
+      functions.logger.warn('⚠️ Missing App Check token');
+      res.status(401).json({ error: 'Unauthorized: Missing App Check token', success: false });
+      return;
+    }
+    try {
+      await admin.appCheck().verifyToken(appCheckToken);
+    } catch (err) {
+      functions.logger.error('❌ App Check verification failed:', err.message);
+      res.status(401).json({ error: 'Unauthorized: Invalid App Check token', success: false });
+      return;
+    }
+
+    let isError = false;
+    let isJsonError = false;
+    let estimatedCost = 0.0001; // default fallback cost
+    let responseText = '';
+
+    try {
+      const { contents, generationConfig } = req.body;
+      if (!contents) {
+        res.status(400).json({ error: 'Missing contents in request body', success: false });
+        return;
+      }
+
+      const geminiApiKey = process.env.GEMINI_API_KEY;
+      if (!geminiApiKey) {
+        res.status(500).json({ error: 'Gemini API Key is not configured on the server', success: false });
+        return;
+      }
+
+      functions.logger.info('🤖 Calling Gemini API via proxy...');
+      const genAI = new GoogleGenerativeAI(geminiApiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+      const result = await model.generateContent({
+        contents: contents,
+        generationConfig: generationConfig
+      });
+
+      const response = await result.response;
+      responseText = response.text();
+
+      // Estimate cost based on usageMetadata if available
+      try {
+        const usage = response.usageMetadata;
+        if (usage) {
+          const inputTokens = usage.promptTokenCount || 0;
+          const outputTokens = usage.candidatesTokenCount || 0;
+          estimatedCost = (inputTokens * 0.075 / 1000000) + (outputTokens * 0.30 / 1000000);
+        }
+      } catch (useErr) {
+        functions.logger.warn('⚠️ Usage estimation error:', useErr.message);
+      }
+
+      // Check if valid JSON (if output format is JSON)
+      if (generationConfig && generationConfig.responseMimeType === 'application/json') {
+        try {
+          JSON.parse(responseText.replace(/```json/g, '').replace(/```/g, '').trim());
+        } catch (jsonErr) {
+          isJsonError = true;
+          functions.logger.warn('⚠️ Gemini output was not valid JSON:', jsonErr.message);
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        text: responseText
+      });
+    } catch (error) {
+      isError = true;
+      throw error; // Re-throw to let wrapRequest log it to systemErrors!
+    } finally {
+      // Update FireStore settings/geminiStatus
+      try {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const statusRef = admin.firestore().collection('settings').doc('geminiStatus');
+        
+        await admin.firestore().runTransaction(async (transaction) => {
+          const doc = await transaction.get(statusRef);
+          if (doc.exists && doc.data().date === todayStr) {
+            transaction.update(statusRef, {
+              dailyRequests: admin.firestore.FieldValue.increment(1),
+              dailyErrors: admin.firestore.FieldValue.increment(isError ? 1 : 0),
+              dailyJsonErrors: admin.firestore.FieldValue.increment(isJsonError ? 1 : 0),
+              dailyCost: admin.firestore.FieldValue.increment(isError ? 0 : estimatedCost),
+              lastRequestAt: admin.firestore.FieldValue.serverTimestamp(),
+              status: isError ? 'error' : 'online',
+              model: 'Gemini 2.5/2.0 Flash'
+            });
+          } else {
+            transaction.set(statusRef, {
+              date: todayStr,
+              dailyRequests: 1,
+              dailyErrors: isError ? 1 : 0,
+              dailyJsonErrors: isJsonError ? 1 : 0,
+              dailyCost: isError ? 0 : estimatedCost,
+              lastRequestAt: admin.firestore.FieldValue.serverTimestamp(),
+              status: isError ? 'error' : 'online',
+              model: 'Gemini 2.5/2.0 Flash'
+            });
+          }
+        });
+        functions.logger.info('🤖 Gemini Status updated successfully.');
+      } catch (dbErr) {
+        functions.logger.error('❌ Failed to update Gemini Status:', dbErr.message);
+      }
+    }
+  }));
+
+/**
+ * 11. Manuel Bildirim Gönderimi (Callable) - FAZ 3
+ */
+exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNotification', async (data, context) => {
+  // Admin yetki kontrolü
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
+  }
+
+  const userDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
+  const isAdmin = userDoc.exists && (
+    userDoc.data().isAdmin === true || 
+    userDoc.data().isadmin === true || 
+    userDoc.data().isAdmin === 'true' || 
+    userDoc.data().isadmin === 'true'
+  );
+
+  if (!isAdmin) {
+    throw new functions.https.HttpsError('permission-denied', 'Bu işlem için yetkiniz yok.');
+  }
+
+  const { title, body, imageUrl, targetType, targetValue } = data;
+
+  if (!title || !body) {
+    throw new functions.https.HttpsError('invalid-argument', 'Başlık ve mesaj içeriği zorunludur.');
+  }
+
+  // FCM Mesaj Gövdesi
+  const message = {
+    notification: {
+      title: title,
+      body: body
+    },
+    data: {
+      type: 'manual_notification',
+      click_action: 'FLUTTER_NOTIFICATION_CLICK',
+      title: title,
+      body: body
+    },
+    android: {
+      priority: 'high',
+      notification: {
+        channelId: 'sicak_firsatlar_general_v2',
+        sound: 'default'
+      }
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: 'default',
+          badge: 1
+        }
+      }
+    }
+  };
+
+  if (imageUrl) {
+    message.android.notification.imageUrl = imageUrl;
+    message.apns.fcm_options = { image: imageUrl };
+    message.data.imageUrl = imageUrl;
+  }
+
+  // Hedef Tanımlama
+  if (targetType === 'all') {
+    message.topic = 'all_deals';
+  } else if (targetType === 'uid') {
+    const targetUserDoc = await admin.firestore().collection('users').doc(targetValue).get();
+    if (!targetUserDoc.exists || !targetUserDoc.data().fcmToken) {
+      throw new functions.https.HttpsError('not-found', 'Belirtilen kullanıcının bildirim token\'ı bulunamadı.');
+    }
+    message.token = targetUserDoc.data().fcmToken;
+  } else if (targetType === 'token') {
+    message.token = targetValue;
+  } else {
+    throw new functions.https.HttpsError('invalid-argument', 'Geçersiz hedef türü.');
+  }
+
+  const logRef = admin.firestore().collection('notificationLogs').doc();
+  const sentBy = context.auth.uid;
+  const sentAt = admin.firestore.FieldValue.serverTimestamp();
+
+  try {
+    functions.logger.info(`🤖 Manuel bildirim gönderiliyor. Hedef: ${targetType}`);
+    const responseId = await admin.messaging().send(message);
+
+    // Başarılı log kaydet
+    await logRef.set({
+      id: logRef.id,
+      title,
+      body,
+      imageUrl: imageUrl || null,
+      targetType,
+      targetValue: targetValue || null,
+      sentAt,
+      sentBy,
+      status: 'success',
+      responseId
+    });
+
+    // Günlük istatistik güncelle (çizgi grafik için)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const statRef = admin.firestore().collection('notificationStats').doc(todayStr);
+    await statRef.set({
+      date: todayStr,
+      count: admin.firestore.FieldValue.increment(1)
+    }, { merge: true });
+
+    return { success: true, responseId };
+  } catch (error) {
+    functions.logger.error('❌ Manuel bildirim gönderme hatası:', error.message);
+
+    // Başarısız log kaydet
+    await logRef.set({
+      id: logRef.id,
+      title,
+      body,
+      imageUrl: imageUrl || null,
+      targetType,
+      targetValue: targetValue || null,
+      sentAt,
+      sentBy,
+      status: 'failed',
+      error: error.message
+    });
+
+    throw error; // Re-throw to let wrapCall log it to systemErrors!
+  }
+}));
+
+/**
+ * 12. Geçersiz FCM Token'larının Temizleme (Callable) - FAZ 3
+ */
+exports.cleanupInvalidTokens = functions.https.onCall(wrapCall('cleanupInvalidTokens', async (data, context) => {
+  // Admin yetki kontrolü
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
+  }
+
+  const userDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
+  const isAdmin = userDoc.exists && (
+    userDoc.data().isAdmin === true || 
+    userDoc.data().isadmin === true || 
+    userDoc.data().isAdmin === 'true' || 
+    userDoc.data().isadmin === 'true'
+  );
+
+  if (!isAdmin) {
+    throw new functions.https.HttpsError('permission-denied', 'Bu işlem için yetkiniz yok.');
+  }
+
+  try {
+    functions.logger.info('🤖 Geçersiz token temizleme işlemi başlatıldı...');
+    
+    const usersSnap = await admin.firestore().collection('users')
+      .where('fcmToken', '>=', '')
+      .limit(500)
+      .get();
+
+    let checkedCount = 0;
+    let cleanedCount = 0;
+
+    const promises = usersSnap.docs.map(async (doc) => {
+      const fcmToken = doc.data().fcmToken;
+      if (!fcmToken) return;
+      
+      checkedCount++;
+      try {
+        // FCM Dry Run (Gerçek gönderme yapmaz, sadece doğrular)
+        await admin.messaging().send({
+          token: fcmToken,
+          data: { dryRun: 'true' }
+        }, true);
+      } catch (error) {
+        if (
+          error.code === 'messaging/invalid-registration-token' ||
+          error.code === 'messaging/registration-token-not-registered'
+        ) {
+          functions.logger.info(`🔥 Geçersiz token siliniyor. Kullanıcı: ${doc.id}`);
+          await doc.ref.update({
+            fcmToken: admin.firestore.FieldValue.delete()
+          });
+          cleanedCount++;
+        }
+      }
+    });
+
+    await Promise.all(promises);
+
+    return {
+      success: true,
+      checkedCount,
+      cleanedCount
+    };
+  } catch (error) {
+    throw error; // Re-throw to let wrapCall log it to systemErrors!
+  }
+}));

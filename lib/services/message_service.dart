@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import '../models/message.dart';
 import '../models/admin_to_user_message.dart';
-import 'notification_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -72,14 +71,6 @@ class MessageService {
         .where('senderId', isEqualTo: userId1)
         .where('receiverId', isEqualTo: userId2)
         .snapshots();
-    
-    // Kullanıcının aldığı mesajlar (userId2 -> userId1)
-    final receivedStream = _firestore
-        .collection('messages')
-        .where('senderId', isEqualTo: userId2)
-        .where('receiverId', isEqualTo: userId1)
-        .snapshots();
-    
     // İki stream'i birleştir
     return sentStream.asyncMap((sentSnapshot) async {
       final receivedSnapshot = await _firestore

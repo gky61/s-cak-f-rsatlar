@@ -3,6 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_performance/firebase_performance.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, FlutterError;
 import 'dart:async';
@@ -14,8 +16,6 @@ import 'services/connectivity_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
-import 'screens/admin_screen.dart';
-import 'screens/deal_detail_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/firestore_service.dart';
 import 'services/ai_service.dart';
@@ -149,12 +149,24 @@ void main() async {
       if (details.stack != null) print('Stack: ${details.stack}');
     }
     FlutterError.presentError(details);
+    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
   };
 
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    // App Check Aktivasyonu
+    try {
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+        appleProvider: AppleProvider.deviceCheck,
+      );
+      _log('🛡️ Firebase App Check başarıyla başlatıldı');
+    } catch (e) {
+      _log('⚠️ Firebase App Check başlatma hatası: $e');
+    }
     
     // Background message handler'ı sadece web dışı platformlarda kaydet
     if (!kIsWeb) {
@@ -171,35 +183,56 @@ void main() async {
       _log('⚠️ Firebase Performance Monitoring başlatma hatası: $e');
     }
     
-    // AdMob'u başlat
+    // AdMob Başlatıcı Yardımcı Fonksiyonu
+    Future<void> initAdMob() async {
+      try {
+        if (kDebugMode) {
+          final configuration = RequestConfiguration(
+            testDeviceIds: const <String>[
+              '7dc74815-ecce-4731-b631-27ab9c0cbd15', // Test telefonu
+            ],
+          );
+          await MobileAds.instance.updateRequestConfiguration(configuration);
+          _log('✅ Test cihazı yapılandırması eklendi (sadece debug mod)');
+        }
+        
+        await MobileAds.instance.initialize();
+        _log('✅ AdMob SDK başlatıldı');
+        
+        if (kDebugMode) {
+          _log('   Test modu: ... (debug build)');
+        } else {
+          _log('   Production modu: Gerçek reklamlar gösterilecek');
+        }
+      } catch (e) {
+        _log('⚠️ AdMob başlatma hatası: $e');
+      }
+    }
+
+    // UMP Consent Information ve AdMob Başlatma
     try {
-      // Test cihazları için yapılandırma
-      // NOT: Android emülatörleri otomatik test cihazıdır
-      // NOT: Release öncesi bu test device ID kodlarını kaldırın!
-      // Dokümantasyon: https://developers.google.com/admob/android/test-ads#enable_test_devices
-      if (kDebugMode) {
-        // Sadece debug modda test cihazı ID'sini ekle
-        final configuration = RequestConfiguration(
-          testDeviceIds: const <String>[
-            '7dc74815-ecce-4731-b631-27ab9c0cbd15', // Test telefonu (AdMob konsolunda kayıtlı)
-          ],
-        );
-        MobileAds.instance.updateRequestConfiguration(configuration);
-        _log('✅ Test cihazı yapılandırması eklendi (sadece debug mod)');
-      }
-      
-      await MobileAds.instance.initialize();
-      _log('✅ AdMob SDK başlatıldı');
-      
-      if (kDebugMode) {
-        _log('   Test modu: Aktif (debug build)');
-        _log('   Test cihaz ID: 7dc74815-ecce-4731-b631-27ab9c0cbd15');
-      } else {
-        // Release build'de test device ID bilgisi gösterilmez
-        _log('   Production modu: Gerçek reklamlar gösterilecek');
-      }
+      final params = ConsentRequestParameters();
+      ConsentInformation.instance.requestConsentInfoUpdate(
+        params,
+        () async {
+          if (await ConsentInformation.instance.isConsentFormAvailable()) {
+            ConsentForm.loadAndShowConsentFormIfRequired((FormError? error) async {
+              if (error != null) {
+                _log('⚠️ UMP ConsentForm hatası: ${error.message}');
+              }
+              await initAdMob();
+            });
+          } else {
+            await initAdMob();
+          }
+        },
+        (FormError error) async {
+          _log('⚠️ UMP Consent request hatası: ${error.message}');
+          await initAdMob(); // Hata durumunda yine de reklamları başlat (fallback)
+        },
+      );
     } catch (e) {
-      _log('⚠️ AdMob başlatma hatası: $e');
+      _log('⚠️ AdMob/UMP başlatma genel hatası: $e');
     }
     
     // Connectivity service'i başlat
@@ -242,6 +275,7 @@ void main() async {
       print('ZonedGuarded yakalanmamış hata: $error');
       print('Stack: $stack');
     }
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
   });
 }
 

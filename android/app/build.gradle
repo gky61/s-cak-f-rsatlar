@@ -3,6 +3,7 @@ plugins {
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
     id "com.google.gms.google-services"
+    id "com.google.firebase.crashlytics"
 }
 
 def localProperties = new Properties()
@@ -57,6 +58,21 @@ android {
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+    }
+
+    flavorDimensions "default"
+
+    productFlavors {
+        dev {
+            dimension "default"
+            applicationId "com.sicakfirsatlar.sicak_firsatlar"
+            resValue "string", "app_name", "FırsatKolik Dev"
+        }
+        prod {
+            dimension "default"
+            applicationId "com.firsatkolik.app"
+            resValue "string", "app_name", "FırsatKolik"
+        }
     }
 
     signingConfigs {

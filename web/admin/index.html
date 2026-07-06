@@ -70,6 +70,9 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
     <!-- Login Screen -->
@@ -144,16 +147,19 @@
             <div class="p-6 flex items-center gap-3">
                 <div class="bg-center bg-no-repeat bg-cover rounded-lg size-10 shadow-lg shadow-blue-500/20" style="background-image: linear-gradient(135deg, #135bec 0%, #3b82f6 100%);"></div>
                 <div class="flex flex-col">
-                    <h1 class="text-white text-lg font-bold tracking-tight">AdminPanel</h1>
+                    <div class="flex items-center gap-1.5">
+                        <h1 class="text-white text-lg font-bold tracking-tight">AdminPanel</h1>
+                        <span id="envBadge" class="hidden">DEV</span>
+                    </div>
                     <p class="text-slate-400 text-xs font-normal">Süper Yönetici</p>
                 </div>
             </div>
             <nav class="flex flex-col gap-2 px-4 mt-4 flex-1 overflow-y-auto">
-                <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" href="#">
+                <a id="dashboardMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
                     <span class="material-symbols-outlined">dashboard</span>
                     <p class="text-sm font-medium">Dashboard</p>
                 </a>
-                <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20" href="#">
+                <a id="dealsMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20 cursor-pointer" href="#">
                     <span class="material-symbols-outlined icon-filled">local_offer</span>
                     <p class="text-sm font-medium">Fırsatlar</p>
                 </a>
@@ -165,12 +171,20 @@
                     <span class="material-symbols-outlined icon-filled">mail</span>
                     <p class="text-sm font-medium">Mesajlar</p>
                 </a>
-                <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" href="#">
+                <a id="reportsMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
                     <span class="material-symbols-outlined">analytics</span>
                     <p class="text-sm font-medium">Raporlar</p>
                 </a>
+                <a id="notificationsMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
+                    <span class="material-symbols-outlined">notifications</span>
+                    <p class="text-sm font-medium">Bildirimler</p>
+                </a>
+                <a id="logsMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
+                    <span class="material-symbols-outlined">bug_report</span>
+                    <p class="text-sm font-medium">Sistem Logları</p>
+                </a>
                 <div class="h-px bg-slate-800 my-2 mx-2"></div>
-                <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors" href="#">
+                <a id="settingsMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
                     <span class="material-symbols-outlined">settings</span>
                     <p class="text-sm font-medium">Ayarlar</p>
                 </a>
@@ -198,6 +212,278 @@
 
             <!-- Scrollable Content Area -->
             <div class="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark p-4 md:p-8">
+                <!-- Dashboard View -->
+                <div id="dashboardView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
+                    <!-- Page Heading -->
+                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div class="flex flex-col gap-1">
+                            <div class="flex items-center gap-3">
+                                <h2 class="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Genel Bakış</h2>
+                                <span id="envBadgeMobile" class="hidden px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider animate-pulse">DEV</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-base">Uygulamanın genel durumunu, istatistiklerini ve teknik sağlığını takip edin.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="refreshDashboardBtn" class="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-surface-darker border border-slate-700 hover:bg-slate-800 text-white text-sm font-medium transition-colors">
+                                <span class="material-symbols-outlined text-[20px]">refresh</span>
+                                <span>Yenile</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Stats Cards Grid -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
+                        <!-- Toplam Üye -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-blue-500">groups</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Toplam Üye</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="dashTotalUsers">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Bugün Yeni Üye -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-purple-500">person_add</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Bugün Yeni Üye</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="dashTodayNewUsers">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Bugün Gelen Fırsat -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-orange-500">add_shopping_cart</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Bugün Gelen Fırsat</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="dashTodayDeals">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Onay Bekleyen -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-amber-500">pending</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Onay Bekleyen</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="dashPendingDeals">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Bugün Onaylanan -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-emerald-500">check_circle</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Bugün Onaylanan</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="dashTodayApproved">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Bugün Reddedilen -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-red-500">cancel</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Bugün Reddedilen</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="dashTodayRejected">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Bugün Yazılan Yorum -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-teal-500">chat</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Bugün Yazılan Yorum</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="dashTodayComments">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Ortalama Onay Süresi -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-indigo-500">timer</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Ortalama Onay Süresi</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="dashAvgApprovalTime">-</p>
+                            </div>
+                        </div>
+
+                        <!-- Aktif Bot Sayısı -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-sky-500">smart_toy</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Aktif Telegram Bot</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="dashBotCount">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- System Health Section -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Telegram Bot Sağlığı -->
+                        <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="material-symbols-outlined text-blue-500 text-2xl">smart_toy</span>
+                                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">Telegram Bot Durumu</h3>
+                                </div>
+                                <span id="botStatusBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400">
+                                    <span class="w-2 h-2 rounded-full bg-red-500"></span>Çevrimdışı
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-lg flex flex-col">
+                                    <span class="text-slate-500 dark:text-slate-400 text-xs">Bugün Okunan Mesaj</span>
+                                    <span class="text-slate-900 dark:text-white text-lg font-bold" id="botTotalMessages">0</span>
+                                </div>
+                                <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-lg flex flex-col">
+                                    <span class="text-slate-500 dark:text-slate-400 text-xs">Bugün Eklenen Fırsat</span>
+                                    <span class="text-slate-900 dark:text-white text-lg font-bold" id="botAddedDeals">0</span>
+                                </div>
+                                <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-lg flex flex-col">
+                                    <span class="text-slate-500 dark:text-slate-400 text-xs">Bugün Mükerrer Atlanan</span>
+                                    <span class="text-slate-900 dark:text-white text-lg font-bold" id="botDuplicateDeals">0</span>
+                                </div>
+                                <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-lg flex flex-col">
+                                    <span class="text-slate-500 dark:text-slate-400 text-xs">Bugün Oluşan Hatalar</span>
+                                    <span class="text-slate-900 dark:text-white text-lg font-bold text-red-500" id="botErrorCount">0</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/50 pt-3">
+                                <span>Son Sinyal (Heartbeat): <strong id="botLastHeartbeat">-</strong></span>
+                                <span>Ortam: <strong id="botEnvironment">-</strong></span>
+                            </div>
+                        </div>
+
+                        <!-- Gemini AI Sağlığı -->
+                        <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="material-symbols-outlined text-purple-500 text-2xl">psychology</span>
+                                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">Yapay Zeka Durumu</h3>
+                                </div>
+                                <span id="geminiStatusBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>Çevrimiçi
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-lg flex flex-col">
+                                    <span class="text-slate-500 dark:text-slate-400 text-xs">Bugün Yapılan İstek</span>
+                                    <span class="text-slate-900 dark:text-white text-lg font-bold" id="geminiRequests">0</span>
+                                </div>
+                                <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-lg flex flex-col">
+                                    <span class="text-slate-500 dark:text-slate-400 text-xs">Bugün Oluşan Hatalar</span>
+                                    <span class="text-slate-900 dark:text-white text-lg font-bold" id="geminiErrors">0</span>
+                                </div>
+                                <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-lg flex flex-col">
+                                    <span class="text-slate-500 dark:text-slate-400 text-xs">Bugün JSON Hataları</span>
+                                    <span class="text-slate-900 dark:text-white text-lg font-bold" id="geminiJsonErrors">0</span>
+                                </div>
+                                <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-lg flex flex-col">
+                                    <span class="text-slate-500 dark:text-slate-400 text-xs">Tahmini Maliyet (Bugün)</span>
+                                    <span class="text-slate-900 dark:text-white text-lg font-bold text-emerald-500" id="geminiCost">$0.00</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/50 pt-3">
+                                <span>Son Analiz: <strong id="geminiLastRequest">-</strong></span>
+                                <span>Model: <strong id="geminiModel">Gemini 2.5 Flash</strong></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Son 7 Gün Fırsat Giriş Grafiği -->
+                        <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 pb-3">Fırsat Giriş Trendi (Son 7 Gün)</h3>
+                            <div class="relative h-72">
+                                <canvas id="dealsTrendChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Kategori Dağılım Grafiği -->
+                        <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 pb-3">Kategoriye Göre Fırsat Dağılımı</h3>
+                            <div class="relative h-72 flex items-center justify-center">
+                                <canvas id="categoriesDistributionChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Analytics Grid -->
+                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                        <!-- Liderlik Tablosu (En Aktif Üyeler) -->
+                        <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 pb-3">🏆 Liderlik Tablosu</h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead>
+                                        <tr class="text-left text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                                            <th class="pb-2 font-semibold">Sıra</th>
+                                            <th class="pb-2 font-semibold">Kullanıcı</th>
+                                            <th class="pb-2 font-semibold text-right">Puan</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dashLeaderboardBody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                                        <!-- Will be filled by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- En Beğenilenler -->
+                        <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 pb-3">🔥 En Popüler Fırsatlar</h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead>
+                                        <tr class="text-left text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                                            <th class="pb-2 font-semibold">Fırsat</th>
+                                            <th class="pb-2 font-semibold text-right">Beğeni (Derece)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dashTopLikesBody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                                        <!-- Will be filled by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- En Çok Yorum Alanlar -->
+                        <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 pb-3">💬 En Çok Yorum Alanlar</h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead>
+                                        <tr class="text-left text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                                            <th class="pb-2 font-semibold">Fırsat</th>
+                                            <th class="pb-2 font-semibold text-right">Yorum Sayısı</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dashTopCommentsBody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                                        <!-- Will be filled by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Deals View -->
                 <div id="dealsView" class="max-w-7xl mx-auto flex flex-col gap-6">
                     <!-- Page Heading -->
@@ -289,14 +575,45 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2 shrink-0 border-t xl:border-t-0 border-slate-200 dark:border-slate-700 pt-4 xl:pt-0">
-                            <span class="text-slate-500 dark:text-slate-400 text-sm hidden sm:block">Sırala:</span>
-                            <select class="form-select bg-slate-50 dark:bg-surface-darker border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5">
-                                <option>En Yeni</option>
-                                <option>En Eski</option>
-                                <option>Fiyat: Artan</option>
-                                <option>Fiyat: Azalan</option>
-                            </select>
+                        <div class="flex flex-wrap items-center gap-3 shrink-0 border-t xl:border-t-0 border-slate-200 dark:border-slate-700 pt-4 xl:pt-0">
+                            <!-- Category Filter -->
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-slate-500 dark:text-slate-400 text-xs hidden sm:block">Kategori:</span>
+                                <select id="categoryFilter" class="form-select bg-slate-50 dark:bg-surface-darker border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-primary focus:border-primary block p-2">
+                                    <option value="all">Tümü</option>
+                                    <option value="elektronik">Elektronik</option>
+                                    <option value="moda">Moda & Giyim</option>
+                                    <option value="ev_yasam">Ev & Yaşam</option>
+                                    <option value="anne_bebek">Anne & Bebek</option>
+                                    <option value="kozmetik">Kozmetik & Bakım</option>
+                                    <option value="spor_outdoor">Spor & Outdoor</option>
+                                    <option value="supermarket">Süpermarket</option>
+                                    <option value="yapi_oto">Yapı Market & Oto</option>
+                                    <option value="kitap_hobi">Kitap & Hobi</option>
+                                    <option value="diger">Diğer</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Source Filter -->
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-slate-500 dark:text-slate-400 text-xs hidden sm:block">Kaynak:</span>
+                                <select id="sourceFilter" class="form-select bg-slate-50 dark:bg-surface-darker border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-primary focus:border-primary block p-2">
+                                    <option value="all">Tümü</option>
+                                    <option value="bot">Telegram Botu</option>
+                                    <option value="user">Kullanıcı</option>
+                                </select>
+                            </div>
+
+                            <!-- Sort -->
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-slate-500 dark:text-slate-400 text-xs hidden sm:block">Sırala:</span>
+                                <select id="sortSelect" class="form-select bg-slate-50 dark:bg-surface-darker border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-primary focus:border-primary block p-2">
+                                    <option value="newest">En Yeni</option>
+                                    <option value="oldest">En Eski</option>
+                                    <option value="price_asc">Fiyat: Artan</option>
+                                    <option value="price_desc">Fiyat: Azalan</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -457,7 +774,381 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Reports (Raporlar) View -->
+                <div id="reportsView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
+                    <!-- Page Heading -->
+                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div class="flex flex-col gap-1">
+                            <h2 class="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Kullanıcı Şikayetleri</h2>
+                            <p class="text-slate-500 dark:text-slate-400 text-base">Kullanıcılar tarafından bildirilen şikayetleri inceleyin ve yönetin.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Reports Table -->
+                    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                        <div id="reportsList" class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+                                    <tr>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tarih</th>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tip</th>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Şikayet Edilen ID</th>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Şikayet Nedeni</th>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Açıklama</th>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Raporlayan</th>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Durum</th>
+                                        <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reportsTableBody" class="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+                                    <tr>
+                                        <td colspan="8" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                                            <div class="flex flex-col items-center gap-2">
+                                                <span class="material-symbols-outlined text-4xl opacity-50">hourglass_empty</span>
+                                                <p>Şikayetler yükleniyor...</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notifications (Bildirimler) View -->
+                <div id="notificationsView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
+                    <!-- Page Heading -->
+                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div class="flex flex-col gap-1">
+                            <h2 class="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Bildirim Merkezi</h2>
+                            <p class="text-slate-500 dark:text-slate-400 text-base">Manuel push bildirimleri gönderin, sistem loglarını inceleyin ve token temizliği yapın.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Content Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Left Panel: Form & Cleanup -->
+                        <div class="flex flex-col gap-6">
+                            <!-- Send Notification Form Card -->
+                            <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                                <div class="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                                    <span class="material-symbols-outlined text-primary text-2xl">send_to_mobile</span>
+                                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">Manuel Bildirim Gönder</h3>
+                                </div>
+                                
+                                <form id="manualNotifForm" class="flex flex-col gap-4">
+                                    <div class="flex flex-col gap-1.5">
+                                        <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="notifTitle">Bildirim Başlığı</label>
+                                        <input type="text" id="notifTitle" required class="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm" placeholder="Örn: Kaçırılmayacak Fırsat!">
+                                    </div>
+                                    
+                                    <div class="flex flex-col gap-1.5">
+                                        <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="notifBody">Bildirim Gövdesi (Mesaj)</label>
+                                        <textarea id="notifBody" required rows="3" class="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm resize-none" placeholder="Bildirim içeriğini buraya yazın..."></textarea>
+                                    </div>
+                                    
+                                    <div class="flex flex-col gap-1.5">
+                                        <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="notifImageUrl">Görsel URL (Opsiyonel)</label>
+                                        <input type="url" id="notifImageUrl" class="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm" placeholder="https://domain.com/resim.jpg">
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div class="flex flex-col gap-1.5">
+                                            <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="notifTargetType">Hedef Türü</label>
+                                            <select id="notifTargetType" class="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm">
+                                                <option value="all">Tüm Kullanıcılar (Topic)</option>
+                                                <option value="uid">Belirli Kullanıcı (UID)</option>
+                                                <option value="token">FCM Cihaz Token'ı</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div id="notifTargetValueWrapper" class="flex flex-col gap-1.5 hidden">
+                                            <label class="text-sm font-bold text-slate-700 dark:text-slate-300" for="notifTargetValue" id="notifTargetValueLabel">Hedef Değeri</label>
+                                            <input type="text" id="notifTargetValue" class="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm" placeholder="Kullanıcı UID veya FCM Token">
+                                        </div>
+                                    </div>
+                                    
+                                    <button type="submit" id="sendNotifBtn" class="flex items-center justify-center gap-1.5 mt-2 rounded-lg h-10 w-full bg-primary hover:bg-primary/90 text-white text-sm font-bold transition-all shadow-md shadow-blue-900/20">
+                                        <span class="material-symbols-outlined text-[18px]">send</span>
+                                        <span>Bildirim Gönder</span>
+                                    </button>
+                                </form>
+                            </div>
+                            
+                            <!-- Token Cleanup Card -->
+                            <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                                <div class="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                                    <span class="material-symbols-outlined text-amber-500 text-2xl">cleaning_services</span>
+                                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">FCM Token Temizliği</h3>
+                                </div>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">
+                                    FCM sunucularında geçersiz hale gelen (uygulamayı silmiş veya bildirim iznini kapatmış) cihaz token'larını tarayıp veritabanından kaldırarak temizlik gerçekleştirir.
+                                </p>
+                                <div class="flex flex-col gap-3">
+                                    <button id="cleanTokensBtn" class="flex items-center justify-center gap-1.5 rounded-lg h-10 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-800 dark:text-white text-sm font-bold transition-all border border-slate-200 dark:border-slate-700">
+                                        <span class="material-symbols-outlined text-[18px]">delete_sweep</span>
+                                        <span>Geçersiz Token'ları Temizle</span>
+                                    </button>
+                                    
+                                    <div id="cleanTokensResult" class="hidden p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-emerald-800 dark:text-emerald-400 text-xs font-semibold text-center">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right Panel: Chart & Logs -->
+                        <div class="flex flex-col gap-6">
+                            <!-- Trend Chart Card -->
+                            <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                                <div class="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                                    <span class="material-symbols-outlined text-purple-500 text-2xl">show_chart</span>
+                                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">Bildirim Gönderim Trendi (Son 7 Gün)</h3>
+                                </div>
+                                <div class="h-[200px] w-full relative">
+                                    <canvas id="notifTrendChart"></canvas>
+                                </div>
+                            </div>
+                            
+                            <!-- Logs Card -->
+                            <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                                <div class="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/50">
+                                    <span class="material-symbols-outlined text-blue-500 text-2xl">history</span>
+                                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">Son Gönderilen Bildirimler</h3>
+                                </div>
+                                
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-sm text-left text-slate-500 dark:text-slate-400">
+                                        <thead class="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-surface-darker uppercase">
+                                            <tr>
+                                                <th class="px-3 py-2">Tarih</th>
+                                                <th class="px-3 py-2">Başlık / İçerik</th>
+                                                <th class="px-3 py-2">Hedef</th>
+                                                <th class="px-3 py-2">Durum</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="notifLogsTableBody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                                            <tr>
+                                                <td colspan="4" class="px-3 py-8 text-center text-slate-400 dark:text-slate-600">
+                                                    Yükleniyor...
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Logs (Hatalar) View -->
+                <div id="logsView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
+                    <!-- Page Heading -->
+                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div class="flex flex-col gap-1">
+                            <h2 class="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Sistem Hata Logları</h2>
+                            <p class="text-slate-500 dark:text-slate-400 text-base">Bot, Cloud Functions ve Admin Panel üzerinden bildirilen sistem hatalarını izleyin.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="resolveAllErrorsBtn" class="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors">
+                                <span class="material-symbols-outlined text-[20px]">done_all</span>
+                                <span>Tümünü Çözüldü İşaretle</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Metric Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- Unresolved Errors Card -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-red-500">error</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Toplam Çözülmemiş Hata</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-3xl font-bold" id="unresolvedErrorsCount">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Top Error Service Card -->
+                        <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <span class="material-symbols-outlined text-6xl text-amber-500">bug_report</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-sm font-medium">En Hatalı Servis</p>
+                            <div class="flex items-end gap-2">
+                                <p class="text-slate-900 dark:text-white text-2xl font-bold" id="topErrorService">-</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filters Toolbar -->
+                    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
+                        <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                            <!-- Service Filter -->
+                            <div class="flex flex-col gap-1 w-full sm:w-48">
+                                <label for="errorFilterService" class="text-xs font-semibold text-slate-500 dark:text-slate-400">Servis Kaynağı</label>
+                                <select id="errorFilterService" class="block w-full border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 leading-5 bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                                    <option value="all">Tüm Servisler</option>
+                                    <option value="bot">Telegram Bot</option>
+                                    <option value="functions">Cloud Functions</option>
+                                    <option value="web">Web Admin Panel</option>
+                                </select>
+                            </div>
+                            <!-- Status Filter -->
+                            <div class="flex flex-col gap-1 w-full sm:w-56">
+                                <label for="errorFilterStatus" class="text-xs font-semibold text-slate-500 dark:text-slate-400">Durum ve Seviye</label>
+                                <select id="errorFilterStatus" class="block w-full border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 leading-5 bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                                    <option value="unresolved">Çözülmemiş Hatalar (Tümü)</option>
+                                    <option value="resolved">Çözülmüş Hatalar</option>
+                                    <option value="fatal">🔥 Kritik / Çökmeler (fatal)</option>
+                                    <option value="warning">⚠️ Uyarılar (warning)</option>
+                                    <option value="info">ℹ️ Sistem Bilgileri (info)</option>
+                                    <option value="all">Tüm Loglar (Temiz / Çözülmüş Dahil)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Logs Table Card -->
+                    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+                                    <tr>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-40">Tarih</th>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-36">Servis</th>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-48">Hata Tipi</th>
+                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Hata Mesajı</th>
+                                        <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-32">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="logsTableBody" class="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+                                    <tr>
+                                        <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                                            <div class="flex flex-col items-center gap-2">
+                                                <span class="material-symbols-outlined text-4xl opacity-50">hourglass_empty</span>
+                                                <p>Sistem logları yükleniyor...</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings (Ayarlar) View -->
+                <div id="settingsView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
+                    <!-- Page Heading -->
+                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div class="flex flex-col gap-1">
+                            <h2 class="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Sistem Ayarları</h2>
+                            <p class="text-slate-500 dark:text-slate-400 text-base">Uygulama genelindeki özellikleri ve kısıtlamaları kontrol edin.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Settings Controls -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Emergency Toggles -->
+                        <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-6">
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 pb-3">Acil Durum Kontrolleri</h3>
+                            
+                            <!-- Deal Sharing Toggle -->
+                            <div class="flex items-center justify-between gap-4">
+                                <div class="flex flex-col gap-1">
+                                    <h4 class="text-sm font-bold text-slate-900 dark:text-white">Fırsat Paylaşımını Engelle</h4>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">Kapatıldığında, mobil uygulamadaki tüm kullanıcı paylaşımları durdurulur.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                    <input id="settingsToggleDealSharingBtn" class="sr-only peer" type="checkbox"/>
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                </label>
+                            </div>
+                            
+                            <!-- Comment Sharing Toggle -->
+                            <div class="flex items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <div class="flex flex-col gap-1">
+                                    <h4 class="text-sm font-bold text-slate-900 dark:text-white">Yorum Yazmayı Durdur</h4>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">Kapatıldığında, mobil uygulamadaki yorum ekleme alanları kapatılır.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                    <input id="settingsToggleCommentSharingBtn" class="sr-only peer" type="checkbox"/>
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                </label>
+                            </div>
+
+                            <!-- Telegram Bot Toggle -->
+                            <div class="flex items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <div class="flex flex-col gap-1">
+                                    <h4 class="text-sm font-bold text-slate-900 dark:text-white">Telegram Botu Çalıştır</h4>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">Kapatıldığında, bot yeni mesajları işlemeyi durdurur.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                    <input id="settingsToggleBotBtn" class="sr-only peer" type="checkbox" checked/>
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Bot & App Config Card -->
+                        <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-6">
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 pb-3">Bot ve Uygulama Yapılandırması</h3>
+                            
+                            <!-- Telegram Channel Management -->
+                            <div class="flex flex-col gap-2">
+                                <label class="text-sm font-bold text-slate-900 dark:text-white" for="settingsTelegramChannels">Dinlenen Telegram Kanalları</label>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Kanal kullanıcı adlarını veya ID'lerini virgülle ayırarak girin (örn. @firsatkanal, -100123456789)</p>
+                                <textarea id="settingsTelegramChannels" rows="3" class="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary resize-none" placeholder="@kanal1, @kanal2"></textarea>
+                            </div>
+                            
+                            <!-- Max Daily Push Limit -->
+                            <div class="flex flex-col gap-2 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <label class="text-sm font-bold text-slate-900 dark:text-white" for="settingsMaxNotificationLimit">Maksimum Günlük Bildirim Limiti</label>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Otomatik bildirimlerin günde en fazla kaç push gönderebileceğini belirleyin.</p>
+                                <input type="number" id="settingsMaxNotificationLimit" class="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary" placeholder="Örn: 20" min="1">
+                            </div>
+                            
+                            <div class="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <button id="saveConfigBtn" class="flex items-center justify-center gap-1.5 rounded-lg h-10 px-6 bg-primary hover:bg-primary/90 text-white text-sm font-bold transition-all shadow-md shadow-blue-900/20">
+                                    <span class="material-symbols-outlined text-[18px]">save</span>
+                                    <span>Ayarları Kaydet</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Admin Yetki Yönetimi - Full Width Card -->
+                    <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white">Admin Yetki Yönetimi</h3>
+                            <span class="text-xs text-slate-500 dark:text-slate-400">Yönetici hesaplarını buradan kontrol edin</span>
+                        </div>
+
+                        <!-- Current admins list -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Mevcut Yöneticiler</h4>
+                            <div id="adminUsersList" class="divide-y divide-slate-100 dark:divide-slate-800/60">
+                                <p class="text-xs text-slate-400 py-2">Yükleniyor...</p>
+                            </div>
+                        </div>
+
+                        <!-- Grant admin by UID input -->
+                        <div class="pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                            <h4 class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Kullanıcıya Admin Yetkisi Ver</h4>
+                            <div class="flex gap-3">
+                                <input type="text" id="grantAdminUidInput" placeholder="Kullanıcı UID veya e-posta adresi girin..." class="flex-1 px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                                <button id="grantAdminBtn" onclick="window.grantAdminByInput()" class="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-semibold transition-colors whitespace-nowrap">
+                                    <span class="material-symbols-outlined text-[18px]">add_moderator</span>
+                                    <span>Yetki Ver</span>
+                                </button>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-1.5">UID değeri, kullanıcı detay sayfasında bulunabilir.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
+
         </main>
     </div>
 

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
+import '../firebase_options.dart';
+
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
@@ -87,7 +89,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
               isDark,
             ),
             const SizedBox(height: 12),
-            _buildLink(context, 'Web Hesap Silme Talebi Sayfası', 'https://sicak-firsatlar-e6eae.web.app/delete-account.html', isDark),
+            _buildLink(
+              context,
+              'Web Hesap Silme Talebi Sayfası',
+              'https://${DefaultFirebaseOptions.flavorProjectId}.web.app/delete-account.html',
+              isDark,
+            ),
             const SizedBox(height: 24),
             _buildSection(
               context,

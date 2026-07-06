@@ -18,12 +18,25 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// Environment variables
-const API_ID = process.env.TELEGRAM_API_ID;
-const API_HASH = process.env.TELEGRAM_API_HASH;
-const SESSION_STRING = process.env.TELEGRAM_SESSION_STRING;
+// Environment variables - sanitized to prevent newline/quote issues from Secret Manager
+const API_ID = (process.env.TELEGRAM_API_ID || '').trim();
+const API_HASH = (process.env.TELEGRAM_API_HASH || '').trim();
+
+let rawSession = process.env.TELEGRAM_SESSION_STRING || '';
+rawSession = rawSession.trim();
+if ((rawSession.startsWith('"') && rawSession.endsWith('"')) || (rawSession.startsWith("'") && rawSession.endsWith("'"))) {
+  rawSession = rawSession.substring(1, rawSession.length - 1);
+}
+const SESSION_STRING = rawSession;
+
 const CHANNELS = process.env.TELEGRAM_CHANNELS ? process.env.TELEGRAM_CHANNELS.split(',') : [];
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+let rawGeminiKey = process.env.GEMINI_API_KEY || '';
+rawGeminiKey = rawGeminiKey.trim();
+if ((rawGeminiKey.startsWith('"') && rawGeminiKey.endsWith('"')) || (rawGeminiKey.startsWith("'") && rawGeminiKey.endsWith("'"))) {
+  rawGeminiKey = rawGeminiKey.substring(1, rawGeminiKey.length - 1);
+}
+const GEMINI_API_KEY = rawGeminiKey;
 
 // Gemini AI initialization
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -685,7 +698,9 @@ async function saveDealToFirebase(message, chatInfo) {
           console.error(`❌ [${uniqueDocId}] Buffer boş! Görsel indirilemedi.`);
         } else {
           // 🤖 AI ANALİZİ VE UPLOAD - TAM PARALEL! ⚡⚡⚡
-          const bucketName = 'sicak-firsatlar-e6eae.firebasestorage.app';
+          // GCP ortamından veya fallback olarak prod projesinden bucket adını oluştur
+          const projectId = process.env.PROJECT_ID || process.env.GCP_PROJECT || process.env.GCLOUD_PROJECT || 'firsatkolik-prod-e6eae';
+          const bucketName = `${projectId}.firebasestorage.app`;
           const bucket = admin.storage().bucket(bucketName);
           const filename = `deals/${chatInfo.id}_${messageId}.jpg`;
           const file = bucket.file(filename);

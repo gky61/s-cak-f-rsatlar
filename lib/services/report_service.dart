@@ -66,9 +66,7 @@ class ReportService {
       query = query.where('type', isEqualTo: type);
     }
     
-    // Index oluşturulana kadar sıralamayı kaldırıyoruz.
-    // Index oluşturulunca: return query.orderBy('createdAt', descending: true).snapshots().map((snapshot) {
-    return query.snapshots().map((snapshot) {
+    return query.orderBy('createdAt', descending: true).snapshots().map((snapshot) {
       return snapshot.docs.map((doc) => Report.fromFirestore(doc)).toList();
     });
   }

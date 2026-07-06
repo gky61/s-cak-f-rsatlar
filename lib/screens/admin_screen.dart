@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import '../firebase_options.dart';
 import '../models/deal.dart';
 import '../models/category.dart';
 import '../models/user.dart';
@@ -962,10 +964,24 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   // Kısa link çözme (Firebase Function çağrısı)
   Future<String?> _resolveShortLink(String shortUrl) async {
     try {
+      final projectId = DefaultFirebaseOptions.flavorProjectId;
       final functionsUrl =
-          'https://us-central1-sicak-firsatlar-e6eae.cloudfunctions.net/resolveShortLink';
+          'https://us-central1-$projectId.cloudfunctions.net/resolveShortLink';
       final uri = Uri.parse('$functionsUrl?url=${Uri.encodeComponent(shortUrl)}');
-      final response = await http.get(uri);
+      
+      String? token;
+      try {
+        token = await FirebaseAppCheck.instance.getToken();
+      } catch (e) {
+        _log('App Check token alınamadı: $e');
+      }
+
+      final response = await http.get(
+        uri,
+        headers: {
+          if (token != null) 'X-Firebase-AppCheck': token,
+        },
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

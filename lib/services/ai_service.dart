@@ -1,77 +1,75 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
+import 'package:firebase_app_check/firebase_app_check.dart';
+import '../firebase_options.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
 }
 
-/// Gemini AI servisi - Ürün kategori ve fiyat tespiti
+/// Gemini AI Proxy servisi - Ürün kategori ve fiyat tespiti
 class AIService {
-  static const String _apiKey = 'AIzaSyCAxNjruy70BhZedYaBZdm_mSpUHsR3Yr0';
-  // API endpoint - Gemini 2.5 Flash (güncel model)
-  // Not: gemini-1.5-flash artık mevcut değil, gemini-2.5-flash kullanıyoruz
-  static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+  static String get _proxyUrl {
+    final projectId = DefaultFirebaseOptions.flavorProjectId;
+    return 'https://us-central1-$projectId.cloudfunctions.net/analyzeProductProxy';
+  }
+
   
-  // Alternatif endpoint'ler (fallback için)
-  static const List<String> _alternativeEndpoints = [
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent',
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:generateContent',
-  ];
-  
-  /// API bağlantısını test et (birden fazla endpoint dener)
-  static Future<bool> testConnection() async {
-    // Önce ana endpoint'i dene
-    final endpoints = [_baseUrl, ..._alternativeEndpoints];
-    
-    for (final endpoint in endpoints) {
-      try {
-        _log('🔄 Test ediliyor: $endpoint');
-        final response = await http.post(
-          Uri.parse('$endpoint?key=$_apiKey'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'contents': [
-              {
-                'parts': [
-                  {'text': 'Test mesajı. Sadece "OK" yaz.'}
-                ]
-              }
-            ],
-            'generationConfig': {
-              'temperature': 0.1,
-              'maxOutputTokens': 10,
-            }
-          }),
-        ).timeout(const Duration(seconds: 10));
-        
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          if (data['error'] != null) {
-            _log('❌ API Test Hatası: ${data['error']['message']}');
-            continue; // Bir sonraki endpoint'i dene
-          }
-          _log('✅ Gemini API bağlantısı başarılı: $endpoint');
-          return true;
-        } else {
-          _log('❌ API Test Hatası (${response.statusCode}): $endpoint');
-          try {
-            final errorData = jsonDecode(response.body);
-            _log('❌ API Test Detay: ${errorData['error']}');
-          } catch (_) {
-            _log('❌ API Test Ham Yanıt: ${response.body.substring(0, 200)}');
-          }
-          continue; // Bir sonraki endpoint'i dene
-        }
-      } catch (e) {
-        _log('❌ API Test Exception ($endpoint): $e');
-        continue; // Bir sonraki endpoint'i dene
-      }
+  static Future<Map<String, String>> _getHeaders() async {
+    String? token;
+    try {
+      token = await FirebaseAppCheck.instance.getToken();
+    } catch (e) {
+      _log('⚠️ App Check token alınamadı: $e');
     }
-    
-    _log('❌ Tüm endpoint\'ler başarısız oldu. API key\'i kontrol edin.');
-    return false;
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'X-Firebase-AppCheck': token,
+    };
+  }
+  
+  /// API bağlantısını test et (proxy üzerinden)
+  static Future<bool> testConnection() async {
+    try {
+      final endpoint = _proxyUrl;
+      _log('🔄 Test ediliyor: $endpoint');
+      final headers = await _getHeaders();
+      
+      final response = await http.post(
+        Uri.parse(endpoint),
+        headers: headers,
+        body: jsonEncode({
+          'contents': [
+            {
+              'parts': [
+                {'text': 'Test mesajı. Sadece "OK" yaz.'}
+              ]
+            }
+          ],
+          'generationConfig': {
+            'temperature': 0.1,
+            'maxOutputTokens': 10,
+          }
+        }),
+      ).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == false) {
+          _log('❌ API Test Hatası: ${data['error']}');
+          return false;
+        }
+        _log('✅ Gemini API Proxy bağlantısı başarılı');
+        return true;
+      } else {
+        _log('❌ API Test Hatası (${response.statusCode}): $endpoint');
+        return false;
+      }
+    } catch (e) {
+      _log('❌ API Test Exception: $e');
+      return false;
+    }
   }
 
   /// Ürün linkinden kategori ve fiyat bilgilerini AI ile tespit et
@@ -130,9 +128,10 @@ ${description != null ? 'Açıklama: $description' : ''}
 }
 ''';
 
+      final headers = await _getHeaders();
       final response = await http.post(
-        Uri.parse('$_baseUrl?key=$_apiKey'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse(_proxyUrl),
+        headers: headers,
         body: jsonEncode({
           'contents': [
             {
@@ -151,27 +150,19 @@ ${description != null ? 'Açıklama: $description' : ''}
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
-        // Hata kontrolü - API bazen 200 döndürüp error içerebilir
-        if (data['error'] != null) {
-          final errorMsg = data['error']['message'] ?? 'Bilinmeyen API hatası';
+        if (data['success'] == false) {
+          final errorMsg = data['error'] ?? 'Bilinmeyen proxy hatası';
           _log('❌ AI API Error Response: $errorMsg');
           return {'success': false, 'error': errorMsg};
         }
         
-        // Candidates kontrolü
-        if (data['candidates'] == null || data['candidates'].isEmpty) {
-          _log('❌ AI API: Candidates boş');
-          return {'success': false, 'error': 'AI yanıt vermedi'};
-        }
-        
-        final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? '';
+        final text = data['text'] ?? '';
         
         if (text.isEmpty) {
           _log('❌ AI API: Boş yanıt');
           return {'success': false, 'error': 'AI boş yanıt döndürdü'};
         }
         
-        // JSON temizleme
         final cleanText = text
             .replaceAll('```json', '')
             .replaceAll('```', '')
@@ -196,17 +187,13 @@ ${description != null ? 'Açıklama: $description' : ''}
           return {'success': false, 'error': 'AI yanıtı parse edilemedi: $jsonError'};
         }
       } else {
-        // Detaylı hata mesajı
         String errorMessage = 'API hatası: ${response.statusCode}';
         try {
           final errorData = jsonDecode(response.body);
           if (errorData['error'] != null) {
-            errorMessage = errorData['error']['message'] ?? errorMessage;
-            _log('❌ AI API Detaylı Hata: ${errorData['error']}');
+            errorMessage = errorData['error'] ?? errorMessage;
           }
-        } catch (_) {
-          _log('❌ AI API Ham Hata Yanıtı: ${response.body}');
-        }
+        } catch (_) {}
         
         _log('❌ AI API Hatası: ${response.statusCode} - $errorMessage');
         return {'success': false, 'error': errorMessage};
@@ -240,9 +227,10 @@ KURALLAR:
 
 Cevap (sadece kategori kodu):''';
 
+      final headers = await _getHeaders();
       final response = await http.post(
-        Uri.parse('$_baseUrl?key=$_apiKey'),
-        headers: {'Content-Type': 'application/json'},
+        Uri.parse(_proxyUrl),
+        headers: headers,
         body: jsonEncode({
           'contents': [
             {
@@ -261,35 +249,16 @@ Cevap (sadece kategori kodu):''';
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
-        // Hata kontrolü
-        if (data['error'] != null) {
-          final errorMsg = data['error']['message'] ?? 'Bilinmeyen API hatası';
-          _log('❌ AI Kategori Tespit Hatası: $errorMsg');
+        if (data['success'] == false) {
+          _log('❌ AI Kategori Tespit Hatası: ${data['error']}');
           return null;
         }
         
-        // Candidates kontrolü
-        if (data['candidates'] == null || data['candidates'].isEmpty) {
-          _log('❌ AI Kategori: Candidates boş');
-          return null;
-        }
-        
-        final category = data['candidates']?[0]?['content']?['parts']?[0]?['text']?.trim() ?? '';
+        final category = data['text']?.trim() ?? '';
         _log('🤖 AI Kategori: $category');
         return category.isNotEmpty ? category : null;
       } else {
-        // Detaylı hata mesajı
-        String errorMessage = 'API hatası: ${response.statusCode}';
-        try {
-          final errorData = jsonDecode(response.body);
-          if (errorData['error'] != null) {
-            errorMessage = errorData['error']['message'] ?? errorMessage;
-            _log('❌ AI Kategori API Detaylı Hata: ${errorData['error']}');
-          }
-        } catch (_) {
-          _log('❌ AI Kategori API Ham Hata: ${response.body}');
-        }
-        _log('❌ AI Kategori API Hatası: ${response.statusCode} - $errorMessage');
+        _log('❌ AI Kategori API Hatası: ${response.statusCode}');
         return null;
       }
     } catch (e) {
@@ -298,8 +267,3 @@ Cevap (sadece kategori kodu):''';
     }
   }
 }
-
-
-
-
-
