@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
+import 'notification_service.dart';
 import '../models/user.dart' as app_user;
 
 /// Production-ready log fonksiyonu
@@ -264,6 +265,12 @@ class AuthService {
             .set(appUser.toFirestore(), SetOptions(merge: true));
       }
       
+      try {
+        await NotificationService().saveFCMToken(userId: currentUser.uid);
+      } catch (tokenErr) {
+        _log('⚠️ Recovery sonrası FCM Token kaydetme hatası: $tokenErr');
+      }
+      
       return appUser;
     } catch (e) {
       _log('❌ Veri düzeltme hatası: $e');
@@ -390,6 +397,13 @@ class AuthService {
       if (appUser.following.isNotEmpty) {
         _log('📋 Takip edilen kullanıcılar: ${appUser.following.join(", ")}');
       }
+      
+      try {
+        await NotificationService().saveFCMToken(userId: firebaseUser.uid);
+      } catch (tokenErr) {
+        _log('⚠️ Login sonrası FCM Token kaydetme hatası: $tokenErr');
+      }
+      
       return appUser;
     } catch (e) {
       _log('❌ Kullanıcı kaydetme hatası: $e');
@@ -568,6 +582,15 @@ class AuthService {
         password: password,
       );
       _log('✅ Email ile giriş başarılı: $email');
+      
+      if (credential.user != null) {
+        try {
+          await NotificationService().saveFCMToken(userId: credential.user!.uid);
+        } catch (tokenErr) {
+          _log('⚠️ Login sonrası FCM Token kaydetme hatası: $tokenErr');
+        }
+      }
+      
       return credential.user;
     } catch (e) {
       _log('Giriş hatası: $e');
@@ -592,13 +615,18 @@ class AuthService {
   // Çıkış - Production Ready
   Future<void> signOut() async {
     try {
+      // Cihaz token'ını temizle
+      try {
+        await NotificationService().clearDeviceToken();
+      } catch (e) {
+        _log('NotificationService clear token: $e');
+      }
+
       // Google Sign-In oturumunu temizle
-      if (_googleSignIn != null) {
-        try {
-          await _googleSignIn!.signOut();
-        } catch (e) {
-          _log('Google Sign-Out: $e');
-        }
+      try {
+        await _googleSignInInstance.signOut();
+      } catch (e) {
+        _log('Google Sign-Out: $e');
       }
       
       // Firebase Auth oturumunu temizle

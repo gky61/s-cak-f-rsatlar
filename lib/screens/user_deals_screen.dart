@@ -11,12 +11,14 @@ class UserDealsScreen extends StatefulWidget {
   final String userId;
   final String username;
   final bool isOwnProfile;
+  final int? limit;
 
   const UserDealsScreen({
     super.key,
     required this.userId,
     required this.username,
     required this.isOwnProfile,
+    this.limit,
   });
 
   @override
@@ -51,7 +53,7 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
         ),
       ),
       body: StreamBuilder<List<Deal>>(
-        stream: _firestoreService.getUserDealsStream(widget.userId),
+        stream: _firestoreService.getUserDealsStream(widget.userId, limit: widget.limit),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return _buildLoadingGrid();

@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data'; // For Int64List
-
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,6 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/notification_preferences.dart';
+import '../models/notification_subscription.dart';
+import '../models/user_device.dart';
 
 import '../main.dart'; // navigatorKey için
 import '../screens/deal_detail_screen.dart';
@@ -271,185 +274,215 @@ class NotificationService {
     }
   }
 
-  // Kategori bildirimine abone ol
+  Future<String> _getOrCreateDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? deviceId = prefs.getString('notification_device_id');
+    if (deviceId == null) {
+      final rand = Random();
+      final randomId = List.generate(16, (index) => rand.nextInt(10)).join();
+      deviceId = 'device_${DateTime.now().millisecondsSinceEpoch}_$randomId';
+      await prefs.setString('notification_device_id', deviceId);
+    }
+    return deviceId;
+  }
+
+  Future<void> clearDeviceToken() async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      final deviceId = await _getOrCreateDeviceId();
+      if (userId != null) {
+        final docRef = _firestore.collection('userDevices').doc('${userId}_$deviceId');
+        await docRef.update({
+          'active': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        _log('✅ Device token marked inactive on logout');
+      }
+    } catch (e) {
+      _log('⚠️ Error clearing device token: $e');
+    }
+  }
+
+  String _getSubscriptionId(String uid, String type, String key) {
+    final sanitizedKey = _sanitizeTopicName(key);
+    return '${uid}_${type}_$sanitizedKey';
+  }
+
+  String normalizeKeyword(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll('ç', 'c')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ı', 'i')
+        .replaceAll('ö', 'o')
+        .replaceAll('ş', 's')
+        .replaceAll('ü', 'u')
+        .replaceAll('Ç', 'c')
+        .replaceAll('Ğ', 'g')
+        .replaceAll('İ', 'i')
+        .replaceAll('Ö', 'o')
+        .replaceAll('Ş', 's')
+        .replaceAll('Ü', 'u')
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .trim();
+  }
+
+  // --- Kategori Abonelikleri ---
   Future<void> subscribeToCategory(String categoryId) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+    final subId = _getSubscriptionId(userId, 'category', categoryId);
     try {
-      await _messaging.subscribeToTopic('category_$categoryId');
-      
-      // Kullanıcının takip ettiği kategorileri güncelle
-      final userId = _auth.currentUser?.uid;
-      if (userId != null) {
-        await _firestore.collection('users').doc(userId).update({
-          'followedCategories': FieldValue.arrayUnion([categoryId])
-        });
-      }
-      
-      _log('$categoryId kategorisine abone olundu');
+      await _firestore.collection('notificationSubscriptions').doc(subId).set({
+        'uid': userId,
+        'type': 'category',
+        'key': categoryId,
+        'displayValue': categoryId,
+        'normalizedValue': categoryId.toLowerCase(),
+        'includeDescendants': true,
+        'enabled': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      _log('✅ Category subscription added: $categoryId');
     } catch (e) {
-      _log('Kategori abonelik hatası: $e');
+      _log('❌ Category subscription add error: $e');
+      rethrow;
     }
   }
 
-  // Kategori bildiriminden çık
   Future<void> unsubscribeFromCategory(String categoryId) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+    final subId = _getSubscriptionId(userId, 'category', categoryId);
     try {
-      await _messaging.unsubscribeFromTopic('category_$categoryId');
-      
-      // Kullanıcının takip ettiği kategorileri güncelle
-      final userId = _auth.currentUser?.uid;
-      if (userId != null) {
-        await _firestore.collection('users').doc(userId).update({
-          'followedCategories': FieldValue.arrayRemove([categoryId])
-        });
-      }
-      
-      _log('$categoryId kategorisinden çıkıldı');
+      await _firestore.collection('notificationSubscriptions').doc(subId).delete();
+      _log('✅ Category subscription deleted: $categoryId');
     } catch (e) {
-      _log('Kategori çıkış hatası: $e');
+      _log('❌ Category subscription delete error: $e');
+      rethrow;
     }
   }
 
-  // Alt kategori bildirimine abone ol
+  // --- Alt Kategori Abonelikleri ---
   Future<void> subscribeToSubCategory(String categoryId, String subCategoryId) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+    final key = '$categoryId:$subCategoryId';
+    final subId = _getSubscriptionId(userId, 'category', key);
     try {
-      final sanitizedSubCategory = _sanitizeTopicName(subCategoryId);
-      final topic = 'subcategory_${categoryId}_$sanitizedSubCategory';
-      await _messaging.subscribeToTopic(topic);
-      _log('✅ Topic abone olundu: $topic');
-      
-      // Kullanıcının takip ettiği alt kategorileri güncelle
-      final userId = _auth.currentUser?.uid;
-      if (userId != null) {
-        final subCategoryKey = '$categoryId:$subCategoryId';
-        
-        // Önce kullanıcı dokümanının var olup olmadığını kontrol et
-        final userDoc = await _firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
-          // Kullanıcı dokümanı yoksa oluştur
-          await _firestore.collection('users').doc(userId).set({
-            'followedSubCategories': [subCategoryKey],
-            'followedCategories': [],
-            'allNotificationsEnabled': true,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        } else {
-          // Kullanıcı dokümanı varsa güncelle
-          await _firestore.collection('users').doc(userId).update({
-            'followedSubCategories': FieldValue.arrayUnion([subCategoryKey])
-          });
-        }
-        
-        _log('✅ Firestore güncellendi: $subCategoryKey');
-      }
-      
-      _log('✅ $categoryId - $subCategoryId alt kategorisine abone olundu');
+      await _firestore.collection('notificationSubscriptions').doc(subId).set({
+        'uid': userId,
+        'type': 'category',
+        'key': key,
+        'displayValue': subCategoryId,
+        'normalizedValue': key.toLowerCase(),
+        'includeDescendants': false,
+        'enabled': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      _log('✅ Subcategory subscription added: $key');
     } catch (e) {
-      _log('❌ Alt kategori abonelik hatası: $e');
-      rethrow; // Hata fırlat ki UI'da gösterilebilsin
+      _log('❌ Subcategory subscription add error: $e');
+      rethrow;
     }
   }
 
-  // Alt kategori bildiriminden çık
   Future<void> unsubscribeFromSubCategory(String categoryId, String subCategoryId) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+    final key = '$categoryId:$subCategoryId';
+    final subId = _getSubscriptionId(userId, 'category', key);
     try {
-      final sanitizedSubCategory = _sanitizeTopicName(subCategoryId);
-      final topic = 'subcategory_${categoryId}_$sanitizedSubCategory';
-      await _messaging.unsubscribeFromTopic(topic);
-      _log('✅ Topic abonelikten çıkıldı: $topic');
-      
-      // Kullanıcının takip ettiği alt kategorileri güncelle
-      final userId = _auth.currentUser?.uid;
-      if (userId != null) {
-        final subCategoryKey = '$categoryId:$subCategoryId';
-        await _firestore.collection('users').doc(userId).update({
-          'followedSubCategories': FieldValue.arrayRemove([subCategoryKey])
-        });
-        _log('✅ Firestore güncellendi: $subCategoryKey kaldırıldı');
-      }
-      
-      _log('✅ $categoryId - $subCategoryId alt kategorisinden çıkıldı');
+      await _firestore.collection('notificationSubscriptions').doc(subId).delete();
+      _log('✅ Subcategory subscription deleted: $key');
     } catch (e) {
-      _log('❌ Alt kategori çıkış hatası: $e');
-      rethrow; // Hata fırlat ki UI'da gösterilebilsin
+      _log('❌ Subcategory subscription delete error: $e');
+      rethrow;
     }
   }
 
-  // Kullanıcının takip ettiği kategorileri al
+  // --- Takip Edilen Kategorileri Getir ---
   Future<List<String>> getFollowedCategories() async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return [];
     try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return [];
-
-      final doc = await _firestore.collection('users').doc(userId).get();
-      if (doc.exists) {
-        final data = doc.data();
-        return List<String>.from(data?['followedCategories'] ?? []);
-      }
-      return [];
+      final snap = await _firestore
+          .collection('notificationSubscriptions')
+          .where('uid', isEqualTo: userId)
+          .where('type', isEqualTo: 'category')
+          .where('enabled', isEqualTo: true)
+          .get();
+      return snap.docs
+          .map((doc) => doc.data()['key'] as String)
+          .where((key) => !key.contains(':'))
+          .toList();
     } catch (e) {
-      _log('Takip edilen kategorileri alma hatası: $e');
+      _log('Error getting followed categories: $e');
       return [];
     }
   }
 
-  // Kullanıcının takip ettiği alt kategorileri al
   Future<List<String>> getFollowedSubCategories() async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return [];
     try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return [];
-
-      final doc = await _firestore.collection('users').doc(userId).get();
-      if (doc.exists) {
-        final data = doc.data();
-        return List<String>.from(data?['followedSubCategories'] ?? []);
-      }
-      return [];
+      final snap = await _firestore
+          .collection('notificationSubscriptions')
+          .where('uid', isEqualTo: userId)
+          .where('type', isEqualTo: 'category')
+          .where('enabled', isEqualTo: true)
+          .get();
+      return snap.docs
+          .map((doc) => doc.data()['key'] as String)
+          .where((key) => key.contains(':'))
+          .toList();
     } catch (e) {
-      _log('Takip edilen alt kategorileri alma hatası: $e');
+      _log('Error getting followed subcategories: $e');
       return [];
     }
   }
 
-  // FCM token'ı al ve kaydet
-  Future<void> saveFCMToken() async {
+  // --- FCM Token Kaydetme ---
+  Future<void> saveFCMToken({String? userId}) async {
     try {
-      // Web'de token almak için farklı bir yaklaşım gerekebilir
       final token = await _messaging.getToken(vapidKey: kIsWeb ? null : null);
-      final userId = _auth.currentUser?.uid;
+      final resolvedUserId = userId ?? _auth.currentUser?.uid;
       
-      if (token != null && userId != null) {
-        // Kullanıcı dokümanının var olup olmadığını kontrol et
-        final userDoc = await _firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
-          // Kullanıcı dokümanı yoksa oluştur
-          await _firestore.collection('users').doc(userId).set({
-            'fcmToken': token,
-            'followedCategories': [],
-            'followedSubCategories': [],
-            'allNotificationsEnabled': true,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        } else {
-          // Kullanıcı dokümanı varsa güncelle
-          await _firestore.collection('users').doc(userId).update({
-            'fcmToken': token,
-          });
-        }
-        _log('✅ FCM Token kaydedildi: ${token.substring(0, 20)}...');
+      if (token != null && resolvedUserId != null) {
+        final deviceId = await _getOrCreateDeviceId();
+        final deviceIdDoc = '${resolvedUserId}_$deviceId';
         
-        // Token yenilendiğinde güncelle
+        final permissionStatus = await checkSystemPermissionStatus();
+        final platform = kIsWeb ? 'web' : (defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android');
+
+        await _firestore.collection('userDevices').doc(deviceIdDoc).set({
+          'uid': resolvedUserId,
+          'deviceId': deviceId,
+          'platform': platform,
+          'fcmToken': token,
+          'permissionStatus': permissionStatus,
+          'active': true,
+          'lastSeenAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        
+        _log('✅ User device / FCM Token registered in userDevices: $deviceIdDoc');
+        
         _messaging.onTokenRefresh.listen((newToken) async {
-          if (userId != null) {
-            await _firestore.collection('users').doc(userId).update({
+          final currentUserId = resolvedUserId;
+          if (currentUserId != null) {
+            await _firestore.collection('userDevices').doc('${currentUserId}_$deviceId').set({
               'fcmToken': newToken,
-            });
-            _log('✅ FCM Token yenilendi: ${newToken.substring(0, 20)}...');
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+            _log('✅ User device FCM Token refreshed');
           }
         });
       }
     } catch (e) {
       _log('❌ FCM Token kaydetme hatası: $e');
-      // Web'de token alınamazsa uygulama çalışmaya devam etmeli
       if (!kIsWeb) rethrow;
     }
   }
@@ -561,22 +594,25 @@ class NotificationService {
       _messageListener?.cancel();
       _messageListener = null;
       
+      // Admin fırsat listener'ı durdur
+      _adminDealsListener?.cancel();
+      _adminDealsListener = null;
+      
       _log('✅ Tüm bildirim abonelikleri temizlendi');
     } catch (e) {
       _log('❌ Abonelik temizleme hatası: $e');
     }
   }
 
-  // Kullanıcı giriş yaptığında çağrılacak
-  Future<void> initializeForUser({bool isAdmin = false}) async {
-    _log('🔔 Bildirim servisi başlatılıyor... (isAdmin: $isAdmin)');
+  Future<void> initializeForUser({String? userId, bool isAdmin = false}) async {
+    _log('🔔 Bildirim servisi başlatılıyor... (userId: $userId, isAdmin: $isAdmin)');
     
     try {
       // Kanalları oluşturmak için her açılışta başlat
       await initializeLocalNotifications();
 
       // Önce FCM token'ı kaydet (bunu her seferinde yap ki güncel kalsın)
-      await saveFCMToken();
+      await saveFCMToken(userId: userId);
       
       final generalEnabled = await getGeneralNotificationsEnabled();
       _log('📋 Genel bildirimler: ${generalEnabled ? "Açık" : "Kapalı"}');
@@ -700,7 +736,12 @@ class NotificationService {
         }
       },
       onError: (error) {
-        _log('❌ Mesaj bildirim listener hatası: $error');
+        // Çıkış sırasında PERMISSION_DENIED beklenen bir durumdur, sessizce geç
+        if (error.toString().contains('permission-denied')) {
+          _log('ℹ️ Mesaj listener çıkış sırasında kapandı (beklenen)');
+        } else {
+          _log('❌ Mesaj bildirim listener hatası: $error');
+        }
       },
     );
   }
@@ -890,7 +931,11 @@ class NotificationService {
         }
       },
       onError: (error) {
-        _log('❌ Yorum cevabı bildirim listener hatası: $error');
+        if (error.toString().contains('permission-denied')) {
+          _log('ℹ️ Yorum cevabı bildirim listener çıkış sırasında kapandı (beklenen)');
+        } else {
+          _log('❌ Yorum cevabı bildirim listener hatası: $error');
+        }
       },
     );
     
@@ -990,6 +1035,14 @@ class NotificationService {
         .snapshots()
         .listen((snapshot) async {
       _log('📬 Anahtar kelime listener tetiklendi: ${snapshot.docs.length} (isFirst: $isFirst)');
+      
+      // Kelime bildirimi ayarı kapalı ise hiçbir şey yapma
+      final enabled = await getKeywordNotificationsEnabled(userId);
+      if (!enabled) {
+        _log('🎯 Kelime bildirimi kapalı, kontrol atlanıyor.');
+        return;
+      }
+      
       int latestMs = lastCheckMs;
 
       for (final doc in snapshot.docs) {
@@ -1050,13 +1103,23 @@ class NotificationService {
   // Kullanıcının takip ettiği tüm topic'lere yeniden abone ol
   Future<void> resubscribeToTopics() async {
     try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return;
+      
+      final categoryEnabled = await getCategoryNotificationsEnabled(userId);
+      
       final categories = await getFollowedCategories();
       final subCategories = await getFollowedSubCategories();
       
       // Kategorilere abone ol
       for (final categoryId in categories) {
-        await _messaging.subscribeToTopic('category_$categoryId');
-        _log('✅ Kategori topic abone olundu: category_$categoryId');
+        if (categoryEnabled) {
+          await _messaging.subscribeToTopic('category_$categoryId');
+          _log('✅ Kategori topic abone olundu: category_$categoryId');
+        } else {
+          await _messaging.unsubscribeFromTopic('category_$categoryId');
+          _log('🚫 Kategori topic aboneliği kaldırıldı: category_$categoryId');
+        }
       }
       
       // Alt kategorilere abone ol
@@ -1067,8 +1130,13 @@ class NotificationService {
           final subCategoryId = parts[1];
           final sanitizedSubCategory = _sanitizeTopicName(subCategoryId);
           final topic = 'subcategory_${categoryId}_$sanitizedSubCategory';
-          await _messaging.subscribeToTopic(topic);
-          _log('✅ Alt kategori topic abone olundu: $topic');
+          if (categoryEnabled) {
+            await _messaging.subscribeToTopic(topic);
+            _log('✅ Alt kategori topic abone olundu: $topic');
+          } else {
+            await _messaging.unsubscribeFromTopic(topic);
+            _log('🚫 Alt kategori topic aboneliği kaldırıldı: $topic');
+          }
         }
       }
     } catch (e) {
@@ -1382,79 +1450,179 @@ class NotificationService {
     });
   }
 
-  // --- Genel Bildirim Ayarları ---
+  // --- Notification Preferences ---
+  Future<NotificationPreferences> getNotificationPreferences() async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return NotificationPreferences.defaultPreferences();
+    try {
+      final doc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notificationPreferences')
+          .doc('main')
+          .get();
+      return NotificationPreferences.fromFirestore(doc);
+    } catch (e) {
+      _log('Preferences get error: $e');
+      return NotificationPreferences.defaultPreferences();
+    }
+  }
+
+  Future<void> updateNotificationPreferences(NotificationPreferences prefs) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+    try {
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notificationPreferences')
+          .doc('main')
+          .set(prefs.toMap(), SetOptions(merge: true));
+      _log('✅ Notification preferences updated in Firestore');
+      
+      // Kategori aboneliklerini tercihe göre güncelle (abone ol veya aboneliği kaldır)
+      await resubscribeToTopics();
+    } catch (e) {
+      _log('❌ Preferences update error: $e');
+      rethrow;
+    }
+  }
+
+  Future<String> checkSystemPermissionStatus() async {
+    if (kIsWeb) return 'authorized';
+    try {
+      final settings = await _messaging.getNotificationSettings();
+      switch (settings.authorizationStatus) {
+        case AuthorizationStatus.authorized:
+        case AuthorizationStatus.provisional:
+          return 'authorized';
+        case AuthorizationStatus.denied:
+          return 'denied';
+        case AuthorizationStatus.notDetermined:
+        default:
+          return 'notDetermined';
+      }
+    } catch (e) {
+      return 'notDetermined';
+    }
+  }
+
+  // --- Anahtar Kelime Abonelikleri ---
+  Future<List<String>> getNotificationKeywords() async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return [];
+    try {
+      final snap = await _firestore
+          .collection('notificationSubscriptions')
+          .where('uid', isEqualTo: userId)
+          .where('type', isEqualTo: 'keyword')
+          .where('enabled', isEqualTo: true)
+          .get();
+      return snap.docs.map((doc) => doc.data()['displayValue'] as String).toList();
+    } catch (e) {
+      _log('Error getting keyword subscriptions: $e');
+      return [];
+    }
+  }
+
+  Future<void> addKeywordSubscription(String keyword) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+    final normalized = normalizeKeyword(keyword);
+    if (normalized.isEmpty) return;
+
+    final subId = _getSubscriptionId(userId, 'keyword', normalized);
+    try {
+      await _firestore.collection('notificationSubscriptions').doc(subId).set({
+        'uid': userId,
+        'type': 'keyword',
+        'key': normalized,
+        'displayValue': keyword,
+        'normalizedValue': normalized,
+        'includeDescendants': true,
+        'enabled': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      _log('✅ Keyword subscription added: $keyword');
+    } catch (e) {
+      _log('❌ Keyword subscription add error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> removeKeywordSubscription(String keyword) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+    final normalized = normalizeKeyword(keyword);
+    final subId = _getSubscriptionId(userId, 'keyword', normalized);
+    try {
+      await _firestore.collection('notificationSubscriptions').doc(subId).delete();
+      _log('✅ Keyword subscription removed: $keyword');
+    } catch (e) {
+      _log('❌ Keyword subscription remove error: $e');
+      rethrow;
+    }
+  }
+
+  // --- Genel Bildirim Ayarları (Geriye Dönük Uyumluluk) ---
   Future<bool> getGeneralNotificationsEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('general_notifications') ?? true;
+    final prefs = await getNotificationPreferences();
+    return prefs.pushMasterEnabled;
   }
 
   Future<void> setGeneralNotifications(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('general_notifications', enabled);
-
-    await _setAllDealsSubscription(enabled);
-
-    try {
-      final userId = _auth.currentUser?.uid;
-      if (userId != null) {
-        await _firestore.collection('users').doc(userId).update({
-          'allNotificationsEnabled': enabled,
-        });
-        _log('✅ Firestore allNotificationsEnabled güncellendi: $enabled');
-      }
-    } catch (e) {
-      _log('⚠️ Firestore allNotificationsEnabled güncellenirken hata oluştu: $e');
-    }
+    final prefs = await getNotificationPreferences();
+    await updateNotificationPreferences(NotificationPreferences(
+      pushMasterEnabled: enabled,
+      dealNotificationsEnabled: prefs.dealNotificationsEnabled,
+      communityNotificationsEnabled: prefs.communityNotificationsEnabled,
+      submissionStatusNotificationsEnabled: prefs.submissionStatusNotificationsEnabled,
+      marketingNotificationsEnabled: prefs.marketingNotificationsEnabled,
+      quietHoursEnabled: prefs.quietHoursEnabled,
+      quietHoursStart: prefs.quietHoursStart,
+      quietHoursEnd: prefs.quietHoursEnd,
+      timezone: prefs.timezone,
+      updatedAt: DateTime.now(),
+    ));
   }
 
   Future<void> _setAllDealsSubscription(bool enabled) async {
-    if (enabled) {
-      await _messaging.subscribeToTopic('all_deals');
-      _log('✅ Genel bildirimlere (all_deals) abone olundu.');
-    } else {
-      await _messaging.unsubscribeFromTopic('all_deals');
-      _log('🚫 Genel bildirimlerden (all_deals) çıkıldı.');
-    }
+    // Legacy topic subscription stub
   }
 
-  // --- Yorum Cevabı Bildirim Ayarları ---
+  // --- Yorum Cevap Bildirimleri (Geriye Dönük Uyumluluk) ---
   Future<bool> getCommentReplyNotificationsEnabled(String userId) async {
-    try {
-      final doc = await _firestore.collection('users').doc(userId).get();
-      if (doc.exists) {
-        return doc.data()?['commentReplyNotificationsEnabled'] ?? true;
-      }
-      return true; // Varsayılan açık
-    } catch (e) {
-      return true;
-    }
+    final prefs = await getNotificationPreferences();
+    return prefs.communityNotificationsEnabled;
   }
 
   Future<void> setCommentReplyNotificationsEnabled(String userId, bool enabled) async {
-    try {
-      await _firestore.collection('users').doc(userId).set({
-        'commentReplyNotificationsEnabled': enabled,
-      }, SetOptions(merge: true));
-    } catch (e) {
-      _log('Yorum cevabı bildirim ayarı kaydedilemedi: $e');
-    }
+    final prefs = await getNotificationPreferences();
+    await updateNotificationPreferences(NotificationPreferences(
+      pushMasterEnabled: prefs.pushMasterEnabled,
+      dealNotificationsEnabled: prefs.dealNotificationsEnabled,
+      communityNotificationsEnabled: enabled,
+      submissionStatusNotificationsEnabled: prefs.submissionStatusNotificationsEnabled,
+      marketingNotificationsEnabled: prefs.marketingNotificationsEnabled,
+      quietHoursEnabled: prefs.quietHoursEnabled,
+      quietHoursStart: prefs.quietHoursStart,
+      quietHoursEnd: prefs.quietHoursEnd,
+      timezone: prefs.timezone,
+      updatedAt: DateTime.now(),
+    ));
   }
 
-  // Anahtar kelime listesini getir
-  Future<List<String>> getNotificationKeywords() async {
-     final userId = _auth.currentUser?.uid;
-     if (userId == null) return [];
-     // UserService kullanmadan, direkt firestore'dan veya SharedPreferences'tan
-     // UserService'e erişim döngüsel bağımlılık yapabilir, o yüzden dikkat.
-     // Şimdilik user doc altından okuyalım
-     try {
-       final doc = await _firestore.collection('users').doc(userId).get();
-       return List<String>.from(doc.data()?['watchKeywords'] ?? []);
-     } catch (e) {
-       return [];
-     }
+  Future<bool> getCategoryNotificationsEnabled(String userId) async {
+    final prefs = await getNotificationPreferences();
+    return prefs.categoryNotificationsEnabled;
   }
-  
+
+  Future<bool> getKeywordNotificationsEnabled(String userId) async {
+    final prefs = await getNotificationPreferences();
+    return prefs.keywordNotificationsEnabled;
+  }
+
   // Anahtar kelime için local bildirim göster (özel kanal ve ses)
   Future<void> _showKeywordNotification({
     required String title,
@@ -1466,7 +1634,6 @@ class NotificationService {
     }
     
     try {
-      // Anahtar kelime bildirimleri için özel kanal kullan
       final androidDetails = AndroidNotificationDetails(
         'keyword_alerts_channel', // Özel kanal ID
         'Özel Fırsat Bildirimleri',
@@ -1490,7 +1657,6 @@ class NotificationService {
         ),
       );
       
-      // iOS için özel ses (kritik uyarı)
       const iosDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
@@ -1528,7 +1694,6 @@ class NotificationService {
     required String messageId,
   }) async {
     try {
-      // Alıcının FCM token'ını al
       final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
       if (!receiverDoc.exists) {
         _log('⚠️ Alıcı bulunamadı: $receiverId');
@@ -1543,11 +1708,9 @@ class NotificationService {
         return;
       }
 
-      // Local notification göster
       final title = '💬 Yeni Mesaj';
       final body = '$senderName: ${messageText.length > 50 ? messageText.substring(0, 50) + "..." : messageText}';
 
-      // Android notification details (ledOnMs/ledOffMs: Oreo öncesi Android için zorunlu)
       const androidDetails = AndroidNotificationDetails(
         'messages_channel',
         'Mesaj Bildirimleri',
@@ -1562,7 +1725,6 @@ class NotificationService {
         ledOffMs: 500,
       );
 
-      // iOS notification details
       const iosDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
@@ -1592,9 +1754,6 @@ class NotificationService {
     }
   }
 
-  // Takip edilen kullanıcı fırsat paylaştığında bildirim gönder
-  // NOT: Bu fonksiyon artık kullanılmıyor - Cloud Function bu işi yapıyor
-  // Sadece geriye dönük uyumluluk için bırakıldı
   @Deprecated('Takip bildirimleri artık Cloud Function tarafından otomatik gönderiliyor')
   Future<void> sendFollowNotification({
     required String followingUserId,
@@ -1602,7 +1761,6 @@ class NotificationService {
     required String dealTitle,
     required String username,
   }) async {
-    // Cloud Function artık bu işi yapıyor, bu fonksiyon artık kullanılmıyor
     _log('ℹ️ Takip bildirimleri artık Cloud Function tarafından otomatik gönderiliyor');
     return;
   }
@@ -1620,10 +1778,10 @@ class NotificationService {
     try {
       _log('📤 Yorum cevabı bildirimi gönderiliyor: recipientUserId=$recipientUserId, dealId=$dealId, commentId=$commentId');
 
-      // Firestore'a bildirim isteği ekle
-      // Bu bildirim, kullanıcının cihazında dinlenen bir listener tarafından yakalanacak
-      await _firestore.collection('users').doc(recipientUserId).collection('notifications').add({
+      await _firestore.collection('users').doc(recipientUserId).collection('notifications').doc('reply_${commentId}_$recipientUserId').set({
         'type': 'comment_reply',
+        'title': '$replyUserName yorumunuza cevap verdi',
+        'body': replyText.length > 100 ? '${replyText.substring(0, 100)}...' : replyText,
         'dealId': dealId,
         'dealTitle': dealTitle,
         'commentId': commentId,

@@ -11,6 +11,7 @@ class Comment {
   final DateTime createdAt;
   final String? parentCommentId; // Ana yorum ID'si (cevap ise)
   final String? replyToUserName; // Cevap verilen kullanıcı adı
+  final String? quotedCommentText; // Alıntılanan yorum metni
   final List<String> userBadges; // Kullanıcının rozetleri (yorum anındaki)
 
   Comment({
@@ -24,6 +25,7 @@ class Comment {
     required this.createdAt,
     this.parentCommentId,
     this.replyToUserName,
+    this.quotedCommentText,
     this.userBadges = const [],
   });
 
@@ -41,6 +43,7 @@ class Comment {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       parentCommentId: data['parentCommentId'],
       replyToUserName: data['replyToUserName'],
+      quotedCommentText: data['quotedCommentText'],
       userBadges: List<String>.from(data['userBadges'] ?? []),
     );
   }
@@ -62,6 +65,9 @@ class Comment {
     }
     if (replyToUserName != null) {
       map['replyToUserName'] = replyToUserName!;
+    }
+    if (quotedCommentText != null) {
+      map['quotedCommentText'] = quotedCommentText!;
     }
     return map;
   }

@@ -43,6 +43,174 @@ class _DealCardState extends State<DealCard> {
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
   final AuthService _authService = AuthService();
 
+  String _getStoreAsset(String storeName) {
+    final lower = storeName.toLowerCase().trim();
+    if (lower.contains('trendyol')) return 'assets/trendyol.jpg';
+    if (lower.contains('hepsiburada')) return 'assets/hepsiburada.jpg';
+    if (lower.contains('n11')) return 'assets/n11.jpg';
+    if (lower.contains('amazon')) return 'assets/amazon.jpg';
+    if (lower.contains('pazarama')) return 'assets/pazarama.jpg';
+    if (lower.contains('vatan')) return 'assets/vatan.jpg';
+    if (lower.contains('mediamarkt') || lower.contains('media markt')) return 'assets/mediamarkt.jpg';
+    if (lower.contains('incehesap') || lower.contains('ince hesap')) return 'assets/incehesap.jpg';
+    if (lower.contains('itopya')) return 'assets/itopya.jpg';
+    if (lower.contains('pttavm') || lower.contains('ptt avm')) return 'assets/pttavm.jpg';
+    if (lower.contains('teknosa')) return 'assets/teknosa.jpg';
+    if (lower.contains('zara')) return 'assets/zara.jpg';
+    if (lower.contains('mango')) return 'assets/mango.jpg';
+    if (lower.contains('mavi')) return 'assets/mavi.jpg';
+    if (lower.contains('defacto')) return 'assets/defacto.jpg';
+    if (lower.contains('beymen')) return 'assets/beymen.jpg';
+    if (lower.contains('idefix')) return 'assets/idefix.jpg';
+    return 'assets/logo.jpg';
+  }
+  void _handleOnTap() {
+    if (widget.deal.isExpired) {
+      _showExpiredBottomSheet(context, widget.deal);
+    } else {
+      widget.onTap?.call();
+    }
+  }
+
+  void _showExpiredBottomSheet(BuildContext context, Deal deal) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkSurface : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top Drag Handle Indicator
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[800] : Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Warning Icon Container
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red[50] ?? const Color(0xFFFFEBEE),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.timer_off_rounded,
+                  size: 40,
+                  color: Colors.red[700],
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Title
+              const Text(
+                'Fırsat Süresi Doldu',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Description
+              Text(
+                'Aradığınız fırsat yayından kaldırılmış veya silinmiş olabilir.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
+              // Action Buttons
+              Row(
+                children: [
+                  // Close Button
+                  Expanded(
+                    flex: 1,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(
+                          color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Kapat',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Go to Store Button
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _openProductLink(deal.link);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Şansını Dene / Mağazaya Git',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          SizedBox(width: 6),
+                          Icon(Icons.arrow_outward, size: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+
   // Kategori ID'sini kategori adına çevir
   String _getCategoryDisplayName(String categoryIdOrName) {
     if (categoryIdOrName.isEmpty) {
@@ -166,11 +334,16 @@ class _DealCardState extends State<DealCard> {
     
     // View mode'a göre farklı layout
     if (widget.viewMode == CardViewMode.horizontal) {
-      return _buildHorizontalCard(context, deal, currencyFormat, isExpired, isDark);
+      return Opacity(
+        opacity: isExpired ? 0.5 : 1.0,
+        child: _buildHorizontalCard(context, deal, currencyFormat, isExpired, isDark),
+      );
     }
     
     // HTML tasarımına göre kart yapısı (grid 2 sütun)
-    return Container(
+    return Opacity(
+      opacity: isExpired ? 0.5 : 1.0,
+      child: Container(
         decoration: BoxDecoration(
         color: isDark ? AppTheme.darkSurface : const Color(0xFFF5F5F0), // card-bg: #F5F5F0 (daha açık kırık beyaz)
         borderRadius: BorderRadius.circular(12), // rounded-xl
@@ -192,7 +365,7 @@ class _DealCardState extends State<DealCard> {
           color: Colors.transparent,
           child: InkWell(
           borderRadius: BorderRadius.circular(12),
-            onTap: widget.onTap,
+            onTap: _handleOnTap,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -217,15 +390,16 @@ class _DealCardState extends State<DealCard> {
                             ),
                           ),
                         ),
-                        child: _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.all(4.0), // Minimal padding - görseli büyüt
+                        child: (isExpired || _effectiveImageUrl == null || _effectiveImageUrl!.isEmpty)
+                            ? Image.asset(_getStoreAsset(deal.store), fit: BoxFit.contain)
+                            : Padding(
+                                padding: const EdgeInsets.all(4.0),
                                 child: CachedNetworkImage(
                                   imageUrl: _effectiveImageUrl!,
-                                  fit: BoxFit.contain, // Tam ürün görünsün, kırpma yok - oran korunur
+                                  fit: BoxFit.contain,
                                   width: double.infinity,
                                   height: double.infinity,
-                                  memCacheWidth: 1200, // Daha yüksek kalite için cache boyutu artırıldı
+                                  memCacheWidth: 1200,
                                   memCacheHeight: 1200,
                                   maxHeightDiskCache: 1200,
                                   maxWidthDiskCache: 1200,
@@ -233,24 +407,13 @@ class _DealCardState extends State<DealCard> {
                                   fadeOutDuration: const Duration(milliseconds: 100),
                                   placeholder: (context, url) => Container(
                                     color: Colors.grey[100],
-                                    child: const Center(
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    ),
+                                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                                   ),
-                                  errorWidget: (context, url, error) => Container(
-                                    color: Colors.grey[100],
-                                    child: Icon(
-                                      Icons.image_not_supported_rounded,
-                                      color: Colors.grey[300],
-                                      size: 48,
-                                    ),
+                                  errorWidget: (context, url, error) => Image.asset(
+                                    _getStoreAsset(deal.store),
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
-                              )
-                            : Icon(
-                                Icons.image_not_supported_rounded,
-                                color: Colors.grey[300],
-                                size: 48,
                               ),
                       ),
                       // Zaman Rozeti (Sol Üst)
@@ -447,6 +610,31 @@ class _DealCardState extends State<DealCard> {
                           ),
                         ),
                       ),
+                      // SÜRESİ DOLDU Overlay
+                      if (isExpired)
+                        Positioned.fill(
+                          child: Container(
+                            color: Colors.black.withOpacity(0.4),
+                            child: Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.red[700],
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'SÜRESİ DOLDU',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -666,6 +854,7 @@ class _DealCardState extends State<DealCard> {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -781,7 +970,7 @@ class _DealCardState extends State<DealCard> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: widget.onTap,
+          onTap: _handleOnTap,
           child: Padding(
             padding: const EdgeInsets.all(10), // p-2.5
                     child: Row(
@@ -810,15 +999,16 @@ class _DealCardState extends State<DealCard> {
                           color: Colors.white,
                         ),
                         // Görsel
-                        _effectiveImageUrl != null && _effectiveImageUrl!.isNotEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.all(4.0), // Minimal padding - görseli büyüt
+                        (isExpired || _effectiveImageUrl == null || _effectiveImageUrl!.isEmpty)
+                            ? Image.asset(_getStoreAsset(deal.store), width: double.infinity, height: double.infinity, fit: BoxFit.contain)
+                            : Padding(
+                                padding: const EdgeInsets.all(4.0),
                                 child: CachedNetworkImage(
                                   imageUrl: _effectiveImageUrl!,
                                   width: double.infinity,
                                   height: double.infinity,
-                                  fit: BoxFit.contain, // Tam ürün görünsün, kırpma yok - oran korunur
-                                  memCacheWidth: 1000, // Daha yüksek kalite için cache boyutu artırıldı
+                                  fit: BoxFit.contain,
+                                  memCacheWidth: 1000,
                                   memCacheHeight: 1000,
                                   maxHeightDiskCache: 1000,
                                   maxWidthDiskCache: 1000,
@@ -826,24 +1016,13 @@ class _DealCardState extends State<DealCard> {
                                   fadeOutDuration: const Duration(milliseconds: 100),
                                   placeholder: (context, url) => Container(
                                     color: Colors.grey[100],
-                                    child: const Center(
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    ),
+                                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                                   ),
-                                  errorWidget: (context, url, error) => Container(
-                                    color: Colors.grey[100],
-                                    child: Icon(
-                                      Icons.image_not_supported_rounded,
-                                      color: Colors.grey[300],
-                                      size: 32,
-                                    ),
+                                  errorWidget: (context, url, error) => Image.asset(
+                                    _getStoreAsset(deal.store),
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
-                              )
-                            : Icon(
-                                Icons.image_not_supported_rounded,
-                                color: Colors.grey[300],
-                                size: 32,
                               ),
                         // Zaman Rozeti (Sol Alt)
                         Positioned(
@@ -1050,6 +1229,31 @@ class _DealCardState extends State<DealCard> {
                             ),
                           ),
                         ),
+                        // SÜRESİ DOLDU Overlay
+                        if (isExpired)
+                          Positioned.fill(
+                            child: Container(
+                              color: Colors.black.withOpacity(0.4),
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red[700],
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'SÜRESİ DOLDU',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -1306,29 +1510,29 @@ class _DealCardState extends State<DealCard> {
                                 elevation: 0,
                                 shadowColor: Colors.black.withValues(alpha: 0.2),
                                   ),
-                              child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                    'İncele',
-                                        style: TextStyle(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isExpired ? 'Şansını Dene' : 'İncele',
+                                    style: const TextStyle(
                                       fontWeight: FontWeight.w700,
-                                          fontSize: 12,
+                                      fontSize: 12,
                                       color: Colors.white,
                                     ),
                                   ),
-                                  SizedBox(width: 4),
-                                  Icon(
+                                  const SizedBox(width: 4),
+                                  const Icon(
                                     Icons.arrow_outward,
                                     size: 16,
                                     color: Colors.white,
-                                ),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                            ],
-                          ),
+                          ],
                         ),
+                      ),
                       ],
                     ),
                   ),

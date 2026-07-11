@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 
-import '../models/admin_to_user_message.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
@@ -29,38 +28,69 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     }
   }
 
-  Future<void> _openMessage(AdminToUserMessage msg) async {
-    // Okundu işaretle (sessiz)
-    if (!msg.isRead) {
-      await _firestoreService.markAdminToUserMessageAsRead(msg.id);
+  Future<void> _openNotification(Map<String, dynamic> item) async {
+    final currentUserId = _authService.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    // Okundu işaretle
+    if (!(item['read'] as bool)) {
+      await _firestoreService.markNotificationAsRead(currentUserId, item['id'] as String);
     }
 
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(msg.title.isEmpty ? 'Bildirim' : msg.title),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _formatDateTime(msg.createdAt),
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              Text(msg.content),
-            ],
+    final type = item['type'] as String;
+    final dealId = item['dealId'] as String;
+    final commentId = item['commentId'] as String;
+
+    if (type == 'deal') {
+      if (dealId.isNotEmpty && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DealDetailScreen(dealId: dealId),
           ),
+        );
+      }
+    } else if (type == 'comment_reply') {
+      if (dealId.isNotEmpty && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DealDetailScreen(
+              dealId: dealId,
+              scrollToCommentId: commentId.isNotEmpty ? commentId : null,
+            ),
+          ),
+        );
+      }
+    } else {
+      // Admin mesajları veya diğer durumlar için dialog göster
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(item['title'] as String),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatDateTime(item['createdAt'] as DateTime),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                Text(item['body'] as String),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Kapat'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Kapat'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
   }
 
   @override
@@ -77,49 +107,38 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         elevation: 0,
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
         actions: [
-          StreamBuilder<List<Map<String, dynamic>>>(
-            stream: currentUserId != null 
-                ? _combineNotificationStreams(currentUserId)
-                : Stream.value([]),
-            builder: (context, snapshot) {
-              final items = snapshot.data ?? [];
-              if (items.isEmpty || currentUserId == null) {
-                return const SizedBox.shrink();
-              }
-              
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: IconButton(
-                  onPressed: () => _showDeleteAllDialog(context, currentUserId!),
-                  icon: Icon(
-                    Icons.delete_outline,
-                    size: 20,
-                    color: isDark ? Colors.grey[400] : Colors.grey[700],
-                  ),
-                  tooltip: 'Tümünü Sil',
-                  padding: const EdgeInsets.all(8),
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 40,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: isDark 
-                        ? Colors.white.withValues(alpha: 0.05) 
-                        : Colors.grey[100],
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(
-                        color: isDark 
-                            ? Colors.white.withValues(alpha: 0.1) 
-                            : Colors.grey[300]!,
-                        width: 1,
-                      ),
+          if (currentUserId != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                onPressed: () => _showDeleteAllDialog(context, currentUserId),
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 20,
+                  color: isDark ? Colors.grey[400] : Colors.grey[700],
+                ),
+                tooltip: 'Tümünü Sil',
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(
+                  minWidth: 40,
+                  minHeight: 40,
+                ),
+                style: IconButton.styleFrom(
+                  backgroundColor: isDark 
+                      ? Colors.white.withValues(alpha: 0.05) 
+                      : Colors.grey[100],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: isDark 
+                          ? Colors.white.withValues(alpha: 0.1) 
+                          : Colors.grey[300]!,
+                      width: 1,
                     ),
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            ),
         ],
       ),
       body: currentUserId == null
@@ -183,143 +202,8 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   }
 
   Widget _buildNotificationsContent(String currentUserId, bool isDark, Color primaryColor) {
-    if (_selectedTab == 'admin') {
-      return _buildAdminNotifications(currentUserId, isDark);
-    } else if (_selectedTab == 'replies') {
-      return _buildCommentReplyNotifications(currentUserId, isDark, primaryColor);
-    } else {
-      // Tümü - hem admin hem yorum cevapları
-      return _buildAllNotifications(currentUserId, isDark, primaryColor);
-    }
-  }
-
-  Widget _buildAdminNotifications(String currentUserId, bool isDark) {
-    return StreamBuilder<List<AdminToUserMessage>>(
-              stream: _firestoreService.getAdminToUserMessagesStream(currentUserId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Hata: ${snapshot.error}'));
-                }
-
-                final items = snapshot.data ?? const <AdminToUserMessage>[];
-                if (items.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.notifications_none, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Henüz bildirim yok',
-                          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final msg = items[index];
-                    final isUnread = !msg.isRead;
-                    return InkWell(
-                      onTap: () => _openMessage(msg),
-                      onLongPress: () => _showDeleteDialog(context, msg),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isUnread
-                              ? (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF3F6FF))
-                              : (isDark ? AppTheme.darkSurface : Colors.white),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200]!,
-                          ),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: (isDark ? Colors.blueGrey[800] : Colors.blue[50])!,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                Icons.campaign,
-                                color: isDark ? Colors.white : Colors.blue[700],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          msg.title.isEmpty ? 'Bildirim' : msg.title,
-                                          style: TextStyle(
-                                            fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
-                                            fontSize: 15,
-                                            color: isDark ? Colors.white : Colors.black87,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        DateFormat('HH:mm').format(msg.createdAt),
-                                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    msg.content,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: isDark ? Colors.grey[400] : Colors.grey[700],
-                                    ),
-                                  ),
-                                  // Admin adı liste görünümünde gösterilmiyor (gereksiz kalabalık yapıyor)
-                                ],
-                              ),
-                            ),
-                            if (isUnread) ...[
-                              const SizedBox(width: 10),
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            );
-  }
-
-  Widget _buildCommentReplyNotifications(String currentUserId, bool isDark, Color primaryColor) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _firestoreService.getCommentReplyNotificationsStream(currentUserId),
+      stream: _firestoreService.getUserNotificationsStream(currentUserId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -328,16 +212,36 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           return Center(child: Text('Hata: ${snapshot.error}'));
         }
 
-        final items = snapshot.data ?? [];
+        final allItems = snapshot.data ?? [];
+        
+        // Tab filtrelemesi
+        final items = allItems.where((item) {
+          final type = item['type'] as String;
+          if (_selectedTab == 'admin') {
+            return type == 'admin_message' || type == 'admin';
+          } else if (_selectedTab == 'replies') {
+            return type == 'comment_reply' || type == 'comment';
+          }
+          return true;
+        }).toList();
+
         if (items.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.comment_outlined, size: 64, color: Colors.grey[400]),
+                Icon(
+                  _selectedTab == 'admin' 
+                      ? Icons.campaign_outlined 
+                      : (_selectedTab == 'replies' ? Icons.comment_outlined : Icons.notifications_none),
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
                 const SizedBox(height: 16),
                 Text(
-                  'Henüz yorum cevabı bildirimi yok',
+                  _selectedTab == 'admin'
+                      ? 'Henüz admin bildirimi yok'
+                      : (_selectedTab == 'replies' ? 'Henüz yorum cevabı bildirimi yok' : 'Henüz bildirim yok'),
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
               ],
@@ -350,40 +254,28 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           itemCount: items.length,
           separatorBuilder: (_, __) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
-            final notification = items[index];
-            final isUnread = !(notification['read'] as bool);
-            final replyUserName = notification['replyUserName'] as String;
-            final dealTitle = notification['dealTitle'] as String;
-            final replyText = notification['replyText'] as String;
-            final createdAt = notification['createdAt'] as DateTime;
-            final dealId = notification['dealId'] as String;
-            final commentId = notification['commentId'] as String;
+            final item = items[index];
+            final isUnread = !(item['read'] as bool);
+            final type = item['type'] as String;
             
+            // İkon ve renk belirleme
+            IconData icon = Icons.notifications;
+            Color iconColor = Colors.orange;
+            Color iconBg = isDark ? Colors.orange.withValues(alpha: 0.15) : Colors.orange[50]!;
+
+            if (type == 'comment_reply' || type == 'comment') {
+              icon = Icons.reply_rounded;
+              iconColor = Colors.green;
+              iconBg = isDark ? Colors.green.withValues(alpha: 0.15) : Colors.green[50]!;
+            } else if (type == 'admin_message' || type == 'admin') {
+              icon = Icons.campaign;
+              iconColor = Colors.blue;
+              iconBg = isDark ? Colors.blue.withValues(alpha: 0.15) : Colors.blue[50]!;
+            }
+
             return InkWell(
-              onTap: () async {
-                // Okundu işaretle
-                if (isUnread) {
-                  await _firestoreService.markCommentReplyNotificationAsRead(
-                    currentUserId,
-                    notification['id'] as String,
-                  );
-                }
-                // Deal detay ekranına git
-                if (mounted) {
-                  final navigator = navigatorKey.currentState;
-                  if (navigator != null) {
-                    navigator.push(
-                      MaterialPageRoute(
-                        builder: (context) => DealDetailScreen(
-                          dealId: dealId,
-                          scrollToCommentId: commentId,
-                        ),
-                      ),
-                    );
-                  }
-                }
-              },
-              onLongPress: () => _showDeleteCommentReplyDialog(context, currentUserId, notification),
+              onTap: () => _openNotification(item),
+              onLongPress: () => _showDeleteNotificationDialog(context, currentUserId, item),
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -402,13 +294,10 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: (isDark ? Colors.green[900] : Colors.green[50])!,
+                        color: iconBg,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(
-                        Icons.reply_rounded,
-                        color: isDark ? Colors.green[300] : Colors.green[700],
-                      ),
+                      child: Icon(icon, color: iconColor),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -419,7 +308,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  '$replyUserName yorumunuza cevap verdi',
+                                  item['title'] as String,
                                   style: TextStyle(
                                     fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
                                     fontSize: 15,
@@ -430,24 +319,27 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                DateFormat('HH:mm').format(createdAt),
+                                DateFormat('HH:mm').format(item['createdAt'] as DateTime),
                                 style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                               ),
                             ],
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            dealTitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: primaryColor,
+                          if (item['dealTitle'].toString().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 2.0),
+                              child: Text(
+                                item['dealTitle'] as String,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: primaryColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
                           Text(
-                            replyText,
+                            item['body'] as String,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -479,345 +371,10 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     );
   }
 
-  Widget _buildAllNotifications(String currentUserId, bool isDark, Color primaryColor) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _combineNotificationStreams(currentUserId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Hata: ${snapshot.error}'));
-        }
-
-        final items = snapshot.data ?? [];
-        if (items.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.notifications_none, size: 64, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                Text(
-                  'Henüz bildirim yok',
-                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.separated(
-          padding: const EdgeInsets.all(12),
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final item = items[index];
-            final type = item['type'] as String;
-            final isUnread = !(item['read'] as bool);
-            
-            if (type == 'admin') {
-              final msg = item['data'] as AdminToUserMessage;
-              return _buildAdminNotificationItem(msg, isUnread, isDark);
-            } else {
-              final notification = item['data'] as Map<String, dynamic>;
-              return _buildCommentReplyNotificationItem(
-                notification,
-                isUnread,
-                isDark,
-                primaryColor,
-                currentUserId,
-              );
-            }
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildAdminNotificationItem(AdminToUserMessage msg, bool isUnread, bool isDark) {
-    return InkWell(
-      onTap: () => _openMessage(msg),
-      onLongPress: () => _showDeleteDialog(context, msg),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isUnread
-              ? (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF3F6FF))
-              : (isDark ? AppTheme.darkSurface : Colors.white),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200]!,
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: (isDark ? Colors.blueGrey[800] : Colors.blue[50])!,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.campaign,
-                color: isDark ? Colors.white : Colors.blue[700],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          msg.title.isEmpty ? 'Bildirim' : msg.title,
-                          style: TextStyle(
-                            fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
-                            fontSize: 15,
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        DateFormat('HH:mm').format(msg.createdAt),
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    msg.content,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? Colors.grey[400] : Colors.grey[700],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isUnread) ...[
-              const SizedBox(width: 10),
-              Container(
-                width: 10,
-                height: 10,
-                decoration: const BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCommentReplyNotificationItem(
-    Map<String, dynamic> notification,
-    bool isUnread,
-    bool isDark,
-    Color primaryColor,
-    String currentUserId,
-  ) {
-    final replyUserName = notification['replyUserName'] as String;
-    final dealTitle = notification['dealTitle'] as String;
-    final replyText = notification['replyText'] as String;
-    final createdAt = notification['createdAt'] as DateTime;
-    final dealId = notification['dealId'] as String;
-    final commentId = notification['commentId'] as String;
-    
-    return InkWell(
-      onTap: () async {
-        if (isUnread) {
-          await _firestoreService.markCommentReplyNotificationAsRead(
-            currentUserId,
-            notification['id'] as String,
-          );
-        }
-        if (mounted) {
-          final navigator = navigatorKey.currentState;
-          if (navigator != null) {
-            navigator.push(
-              MaterialPageRoute(
-                builder: (context) => DealDetailScreen(
-                  dealId: dealId,
-                  scrollToCommentId: commentId,
-                ),
-              ),
-            );
-          }
-        }
-      },
-      onLongPress: () => _showDeleteCommentReplyDialog(context, currentUserId, notification),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isUnread
-              ? (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF3F6FF))
-              : (isDark ? AppTheme.darkSurface : Colors.white),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200]!,
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: (isDark ? Colors.green[900] : Colors.green[50])!,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.reply_rounded,
-                color: isDark ? Colors.green[300] : Colors.green[700],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '$replyUserName yorumunuza cevap verdi',
-                          style: TextStyle(
-                            fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
-                            fontSize: 15,
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        DateFormat('HH:mm').format(createdAt),
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    dealTitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: primaryColor,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    replyText,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? Colors.grey[400] : Colors.grey[700],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isUnread) ...[
-              const SizedBox(width: 10),
-              Container(
-                width: 10,
-                height: 10,
-                decoration: const BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Stream<List<Map<String, dynamic>>> _combineNotificationStreams(String userId) {
-    StreamController<List<Map<String, dynamic>>>? controller;
-    StreamSubscription? adminSub;
-    StreamSubscription? replySub;
-    
-    List<Map<String, dynamic>> adminItems = [];
-    List<Map<String, dynamic>> replyItems = [];
-    
-    controller = StreamController<List<Map<String, dynamic>>>(
-      onListen: () {
-        adminSub = _firestoreService.getAdminToUserMessagesStream(userId).listen((msgs) {
-          adminItems = msgs.map((m) => {
-            'type': 'admin',
-            'id': m.id,
-            'title': m.title.isEmpty ? 'Bildirim' : m.title,
-            'content': m.content,
-            'createdAt': m.createdAt,
-            'read': m.isRead,
-            'data': m,
-          }).toList();
-          _emitCombined(controller!, adminItems, replyItems);
-        });
-        
-        replySub = _firestoreService.getCommentReplyNotificationsStream(userId).listen((notifs) {
-          replyItems = notifs.map((n) => {
-            'type': 'comment_reply',
-            'id': n['id'] as String,
-            'title': '${n['replyUserName']} yorumunuza cevap verdi',
-            'content': '${n['dealTitle']}: ${n['replyText']}',
-            'createdAt': n['createdAt'] as DateTime,
-            'read': n['read'] as bool,
-            'data': n,
-          }).toList();
-          _emitCombined(controller!, adminItems, replyItems);
-        });
-      },
-      onCancel: () {
-        adminSub?.cancel();
-        replySub?.cancel();
-        controller?.close();
-      },
-    );
-    
-    return controller.stream;
-  }
-
-  void _emitCombined(
-    StreamController<List<Map<String, dynamic>>> controller,
-    List<Map<String, dynamic>> adminItems,
-    List<Map<String, dynamic>> replyItems,
-  ) {
-    final all = <Map<String, dynamic>>[];
-    all.addAll(adminItems);
-    all.addAll(replyItems);
-    
-    all.sort((a, b) {
-      final aDate = a['createdAt'] as DateTime;
-      final bDate = b['createdAt'] as DateTime;
-      return bDate.compareTo(aDate);
-    });
-    
-    if (!controller.isClosed) {
-      controller.add(all);
-    }
-  }
-
-  Future<void> _showDeleteCommentReplyDialog(
+  Future<void> _showDeleteNotificationDialog(
     BuildContext context,
     String userId,
-    Map<String, dynamic> notification,
+    Map<String, dynamic> item,
   ) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final confirmed = await showDialog<bool>(
@@ -842,56 +399,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
     if (confirmed == true && mounted) {
       try {
-        await _firestoreService.deleteCommentReplyNotification(
-          userId,
-          notification['id'] as String,
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Bildirim silindi'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Silme hatası: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _showDeleteDialog(BuildContext context, AdminToUserMessage msg) async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Bildirimi Sil'),
-        content: const Text('Bu bildirimi silmek istediğinize emin misiniz?'),
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Sil'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        await _firestoreService.deleteAdminToUserMessage(msg.id);
+        await _firestoreService.deleteNotification(userId, item['id'] as String);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -919,13 +427,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Tümünü Sil'),
-        content: Text(
-          _selectedTab == 'admin'
-              ? 'Tüm admin bildirimlerini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'
-              : _selectedTab == 'replies'
-                  ? 'Tüm yorum cevabı bildirimlerini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'
-                  : 'Tüm bildirimleri (admin + yorum cevapları) silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
-        ),
+        content: const Text('Tüm bildirimleri silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
         backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
         actions: [
           TextButton(
@@ -951,7 +453,6 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
     if (confirmed == true && mounted) {
       try {
-        // Loading göster
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -960,41 +461,24 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           ),
         );
 
-        int totalDeleted = 0;
-        
-        // Seçili tab'a göre silme işlemi
-        if (_selectedTab == 'admin') {
-          totalDeleted = await _firestoreService.deleteAllAdminToUserMessages(userId);
-        } else if (_selectedTab == 'replies') {
-          totalDeleted = await _firestoreService.deleteAllCommentReplyNotifications(userId);
-        } else {
-          // Tümü - hem admin hem yorum cevapları
-          final adminDeleted = await _firestoreService.deleteAllAdminToUserMessages(userId);
-          final replyDeleted = await _firestoreService.deleteAllCommentReplyNotifications(userId);
-          totalDeleted = adminDeleted + replyDeleted;
-        }
+        await _firestoreService.deleteAllNotifications(userId);
         
         if (mounted) {
-          Navigator.pop(context); // Loading dialog'u kapat
-          
+          Navigator.pop(context); // Close loading dialog
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                totalDeleted > 0 
-                    ? '$totalDeleted bildirim silindi'
-                    : 'Silinecek bildirim bulunamadı',
-              ),
+            const SnackBar(
+              content: Text('Tüm bildirimler silindi'),
               backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
+              duration: Duration(seconds: 2),
             ),
           );
         }
       } catch (e) {
         if (mounted) {
-          Navigator.pop(context); // Loading dialog'u kapat
+          Navigator.pop(context); // Close loading dialog
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Silme hatası: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e}'),
+              content: Text('Hata: $e'),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 3),
             ),
@@ -1004,5 +488,3 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     }
   }
 }
-
-

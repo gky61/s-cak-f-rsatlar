@@ -207,7 +207,62 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           );
         }
 
-        return _buildDealGrid(deals, isDark);
+        final hasExpired = deals.any((d) => d.isExpired);
+
+        return Column(
+          children: [
+            if (hasExpired)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Temizle'),
+                            content: const Text('Süresi dolmuş tüm favori ilanları listenizden kaldırmak istediğinize emin misiniz?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('İptal'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                child: const Text('Temizle'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          final expiredDeals = deals.where((d) => d.isExpired).toList();
+                          for (var d in expiredDeals) {
+                            await _firestoreService.removeFromFavorites(currentUser.uid, d.id);
+                          }
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Süresi dolan favoriler temizlendi')),
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.delete_sweep, color: Colors.redAccent, size: 18),
+                      label: const Text(
+                        'Süresi Dolanları Temizle',
+                        style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: _buildDealGrid(deals, isDark),
+            ),
+          ],
+        );
       },
     );
   }

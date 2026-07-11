@@ -172,8 +172,10 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
                   icon: const Icon(Icons.refresh),
                   label: const Text('Servisi Yenile'),
                   onPressed: () async {
-                    _addLog('Servis yeniden başlatılıyor...');
-                    await _notificationService.initializeForUser(isAdmin: await _authService.isAdmin());
+                    await _notificationService.initializeForUser(
+                      userId: _authService.currentUser?.uid,
+                      isAdmin: await _authService.isAdmin(),
+                    );
                     _addLog(' ✅ Servis başlatıldı.');
                   },
                 ),

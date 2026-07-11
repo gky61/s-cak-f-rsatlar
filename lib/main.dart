@@ -271,6 +271,13 @@ void main() async {
 
   runApp(const MyApp());
   }, (error, stack) {
+    // Çıkış sırasında oluşan permission-denied hataları beklenen durumlardır
+    if (error.toString().contains('permission-denied')) {
+      if (kDebugMode) {
+        print('ℹ️ ZonedGuarded: Çıkış sırasında beklenen permission-denied hatası (yoksayıldı)');
+      }
+      return;
+    }
     if (kDebugMode) {
       print('ZonedGuarded yakalanmamış hata: $error');
       print('Stack: $stack');
@@ -409,8 +416,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       if (isBlocked) {
         _log('🚫 Kullanıcı engellenmiş, oturum kapatılıyor: $userId');
         _blockedUserListener?.cancel();
-        await _authService.signOut();
         await _notificationService.clearAllSubscriptions();
+        await _authService.signOut();
         
         final ctx = navigatorKey.currentContext;
         if (mounted && ctx != null) {
@@ -516,8 +523,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
           _log('✅ Kullanıcı engeli kaldırıldı (real-time): $userId');
         }
       }, onError: (error) {
+        if (error.toString().contains('permission-denied')) {
+          _log('ℹ️ Blocked user listener çıkış sırasında kapandı (beklenen)');
+          return; // Çıkış sırasındaki beklenen hata, yeniden başlatma
+        }
         _log('❌ Blocked user listener hatası: $error');
-        // Hata durumunda listener'ı yeniden başlatmayı dene
+        // Gerçek hata durumunda listener'ı yeniden başlatmayı dene
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted && _lastUserId == userId) {
             _log('🔄 Listener hatası sonrası yeniden başlatılıyor...');
@@ -542,7 +553,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _log('✅ Admin kullanıcı tespit edildi, admin bildirimleri aktifleştiriliyor...');
       }
 
-      await _notificationService.initializeForUser(isAdmin: isAdmin);
+      await _notificationService.initializeForUser(userId: userId, isAdmin: isAdmin);
       
       // Admin ise, aboneliği doğrula
       if (isAdmin) {
@@ -653,6 +664,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
         // Eğer daha önce giriş yapmışsa (lastUserId != null), abonelikleri temizle
         if (_lastUserId != null) {
           _notificationService.clearAllSubscriptions();
+          _blockedUserListener?.cancel();
+          _blockedUserListener = null;
         }
         _lastUserId = null;
         _log('No user logged in');

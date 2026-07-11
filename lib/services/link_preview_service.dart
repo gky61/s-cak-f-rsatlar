@@ -1,11 +1,32 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
+
+// Scrapers
+import 'scrapers/base_scraper.dart';
+import 'scrapers/amazon_scraper.dart';
+import 'scrapers/hepsiburada_scraper.dart';
+import 'scrapers/n11_scraper.dart';
+import 'scrapers/pazarama_scraper.dart';
+import 'scrapers/vatan_scraper.dart';
+import 'scrapers/trendyol_scraper.dart';
+import 'scrapers/mediamarkt_scraper.dart';
+import 'scrapers/idefix_scraper.dart';
+import 'scrapers/itopya_scraper.dart';
+import 'scrapers/teknosa_scraper.dart';
+import 'scrapers/mavi_scraper.dart';
+import 'scrapers/defacto_scraper.dart';
+import 'scrapers/zara_scraper.dart';
+import 'scrapers/mango_scraper.dart';
+import 'scrapers/beymen_scraper.dart';
+import 'scrapers/pttavm_scraper.dart';
+import 'scrapers/incehesap_scraper.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -16,19 +37,139 @@ class LinkPreviewResult {
   final String? description;
   final String? imageUrl;
   final String? provider;
+  final double? price;
 
   LinkPreviewResult({
-    this.title,
-    this.description,
-    this.imageUrl,
-    this.provider,
-  });
+    String? title,
+    String? description,
+    String? imageUrl,
+    String? provider,
+    this.price,
+  })  : title = (title == 'null' || title == 'NULL') ? null : title,
+        description = (description == 'null' || description == 'NULL') ? null : description,
+        imageUrl = (imageUrl == 'null' || imageUrl == 'NULL') ? null : imageUrl,
+        provider = (provider == 'null' || provider == 'NULL') ? null : provider;
 }
 
 class LinkPreviewService {
   static final LinkPreviewService _instance = LinkPreviewService._internal();
+
+  final List<BaseProductScraper> _scrapers = [
+    AmazonScraper(),
+    HepsiburadaScraper(),
+    N11Scraper(),
+    PazaramaScraper(),
+    VatanScraper(),
+    TrendyolScraper(),
+    MediaMarktScraper(),
+    IdefixScraper(),
+    ItopyaScraper(),
+    TeknosaScraper(),
+    MaviScraper(),
+    DefactoScraper(),
+    ZaraScraper(),
+    MangoScraper(),
+    BeymenScraper(),
+    PttavmScraper(),
+    IncehesapScraper(),
+  ];
   static const _defaultUserAgent =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36';
+
+  bool _isLogoUrl(String urlString, String pageUrl) {
+    final lowerUrl = urlString.toLowerCase();
+    if (lowerUrl.endsWith('.svg') || lowerUrl.contains('.svg')) {
+      return true;
+    }
+    if (lowerUrl.contains('logo') || 
+        lowerUrl.contains('default') || 
+        lowerUrl.contains('brand') || 
+        lowerUrl.contains('banner') ||
+        lowerUrl.contains('pwa') ||
+        lowerUrl.contains('favicon') ||
+        lowerUrl.contains('avatar') ||
+        lowerUrl.contains('/icons/') ||
+        lowerUrl.contains('/icon/')) {
+      return true;
+    }
+    return false;
+  }
+
+  Map<String, String> _getHeadersForUrl(String url) {
+    final lowerUrl = url.toLowerCase();
+    String userAgent = _defaultUserAgent;
+    
+    if (lowerUrl.contains('n11.com') || 
+        lowerUrl.contains('teknosa.com') ||
+        lowerUrl.contains('amazon.') ||
+        lowerUrl.contains('amzn.') ||
+        lowerUrl.contains('hepsiburada.com') ||
+        lowerUrl.contains('mavi.com') ||
+        lowerUrl.contains('defacto.com.tr') ||
+        lowerUrl.contains('zara.com') ||
+        lowerUrl.contains('mango.com') ||
+        lowerUrl.contains('beymen.com') ||
+        lowerUrl.contains('hb.biz') ||
+        lowerUrl.contains('trendyol.com') ||
+        lowerUrl.contains('ty.gl') ||
+        lowerUrl.contains('pttavm.com') ||
+        lowerUrl.contains('incehesap.com')) {
+      userAgent = 'WhatsApp/2.23.4.15 A';
+    } else if (lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com')) {
+      userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+    }
+
+    return {
+      'User-Agent': userAgent,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Cache-Control': 'max-age=0',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Referer': 'https://www.google.com/',
+    };
+  }
+
+  static const _nativeHttpChannel = MethodChannel('com.sicakfirsatlar.app/native_http');
+
+  Future<String?> _fetchHtml(String url) async {
+    final lowerUrl = url.toLowerCase();
+    
+    // Akamai Bot Manager gibi sıkı korumaları aşmak için Android ve iOS'ta native HTTP kütüphanesini kullanıyoruz.
+    if ((defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) && lowerUrl.contains('zara.com')) {
+      _log('🚀 Native HTTP istemcisi çağrılıyor: $url');
+      try {
+        final String? html = await _nativeHttpChannel.invokeMethod<String>('fetchUrl', {
+          'url': url,
+          'userAgent': _getHeadersForUrl(url)['User-Agent'],
+        });
+        if (html != null && html.isNotEmpty) {
+          _log('✅ Native HTTP istemcisi başarılı (HTML Boyutu: ${html.length})');
+          return html;
+        }
+      } catch (e) {
+        _log('⚠️ Native HTTP istemcisi hata verdi: $e, standart Dart HTTP istemcisine geçiliyor...');
+      }
+    }
+
+    // Standart Dart HTTP İstemcisi
+    try {
+      final response = await http.get(
+        Uri.parse(url),
+        headers: _getHeadersForUrl(url),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return utf8.decode(response.bodyBytes);
+      } else {
+        _log('❌ Dart HTTP istemcisi hatası: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      _log('⚠️ Dart HTTP istemcisi hata verdi: $e');
+      return null;
+    }
+  }
 
   LinkPreviewService._internal();
 
@@ -36,23 +177,114 @@ class LinkPreviewService {
 
   Future<LinkPreviewResult?> fetchMetadata(String url) async {
     try {
-      _log('🔍 LinkPreviewService: URL çekiliyor: $url');
+      // Kısa linkler veya yönlendirme/takip linkleri için nihai uzun linki bul
+      String targetUrl = url;
+      final lowerUrl = url.toLowerCase();
+      final isShortOrRedirect = lowerUrl.contains('amzn.eu') || 
+                               lowerUrl.contains('amzn.to') || 
+                               lowerUrl.contains('hb.biz') ||
+                               lowerUrl.contains('publicis.link') ||
+                               lowerUrl.contains('bit.ly') ||
+                               lowerUrl.contains('tinyurl.com') ||
+                               lowerUrl.contains('t.co') ||
+                               lowerUrl.contains('rebrand.ly') ||
+                               lowerUrl.contains('rdrtr.com');
+
+      if (isShortOrRedirect) {
+        final resolved = await resolveUrlRedirects(url);
+        if (resolved.isNotEmpty) {
+          targetUrl = resolved;
+        }
+      }
+
+      _log('🔍 LinkPreviewService: URL çekiliyor: $targetUrl');
+      
+      // Eşleşen bir scraper var mı kontrol et
+      BaseProductScraper? matchedScraper;
+      for (final scraper in _scrapers) {
+        if (scraper.canHandle(targetUrl)) {
+          matchedScraper = scraper;
+          break;
+        }
+      }
+
+      if (matchedScraper != null) {
+        _log('⚡ Özel Scraper eşleşti (${matchedScraper.domain}), özel istek yapılıyor...');
+        try {
+          final htmlContent = await _fetchHtml(targetUrl);
+
+          if (htmlContent != null) {
+            if (targetUrl.toLowerCase().contains('zara.com')) {
+              _log('🔍 Zara DEBUG: Body Length = ${htmlContent.length}');
+              _log('🔍 Zara DEBUG: Contains zara.analyticsData = ${htmlContent.contains('zara.analyticsData')}');
+              _log('🔍 Zara DEBUG: Contains ProductGroup = ${htmlContent.contains('ProductGroup')}');
+              _log('🔍 Zara DEBUG: Title H1 exist = ${htmlContent.contains('product-detail-info__header-name')}');
+              _log('🔍 Zara DEBUG: Body preview = ${htmlContent.length > 1000 ? htmlContent.substring(0, 1000) : htmlContent}');
+            }
+            final document = html_parser.parse(htmlContent);
+            if (document != null) {
+              final imageUrl = matchedScraper.scrape(
+                document: document,
+                url: targetUrl,
+                isLogoUrl: (img) => _isLogoUrl(img, targetUrl),
+                resolveImageUrl: _resolveImageUrl,
+                log: _log,
+              );
+              
+              final title = matchedScraper.scrapeTitle(document) ?? 
+                            MetadataParser.parse(document, url: targetUrl)?.title;
+                            
+              final description = matchedScraper.scrapeDescription(document) ??
+                                  MetadataParser.parse(document, url: targetUrl)?.description;
+                            
+              final price = await matchedScraper.scrapePrice(document);
+              
+              final resolvedImage = _resolveImageUrl(imageUrl, targetUrl);
+              final provider = _cleanHost(targetUrl);
+              
+              _log('✅ Özel Scraper sonuç:');
+              _log('   - Başlık: $title');
+              _log('   - Açıklama: $description');
+              _log('   - Görsel: $resolvedImage');
+              _log('   - Fiyat: $price');
+              _log('   - Provider: $provider');
+
+              return LinkPreviewResult(
+                title: title,
+                description: description,
+                imageUrl: resolvedImage,
+                provider: provider,
+                price: price,
+              );
+            }
+          }
+        } catch (e) {
+          _log('⚠️ Özel Scraper hata verdi: $e, normal akışa geçiliyor...');
+        }
+      }
       
       // Timeout ile metadata_fetch dene
       Metadata? metadata;
       try {
-        metadata = await MetadataFetch.extract(url)
+        metadata = await MetadataFetch.extract(targetUrl)
             .timeout(const Duration(seconds: 10));
         _log('✅ Metadata fetch başarılı: ${metadata?.title ?? "başlık yok"}');
       } catch (e) {
         _log('⚠️ Metadata fetch hatası: $e');
       }
       
-      // Eğer görsel bulunamazsa, custom headers ile tekrar dene
-      if (metadata == null || metadata.image == null || metadata.image!.isEmpty) {
+      // Eğer görsel bulunamazsa veya bulunan görsel bir logo ise, custom headers ile tekrar dene
+      bool isLogo = false;
+      if (metadata != null && metadata.image != null) {
+        if (_isLogoUrl(metadata.image!, targetUrl)) {
+          isLogo = true;
+        }
+      }
+
+      if (metadata == null || metadata.image == null || metadata.image!.isEmpty || isLogo) {
         _log('🔄 Custom headers ile tekrar deneniyor...');
         try {
-          metadata = await _extractWithCustomHeaders(url)
+          metadata = await _extractWithCustomHeaders(targetUrl)
               .timeout(const Duration(seconds: 10));
           _log('✅ Custom headers başarılı: ${metadata?.image ?? "görsel yok"}');
         } catch (e) {
@@ -60,12 +292,20 @@ class LinkPreviewService {
         }
       }
 
-      // Hala görsel yoksa, manuel HTML parsing yap
+      // Hala görsel yoksa veya logo ise, manuel HTML parsing yap
       String? imageUrl = metadata?.image;
-      if (imageUrl == null || imageUrl.isEmpty) {
+      
+      bool isLogoImage = false;
+      if (imageUrl != null) {
+        if (_isLogoUrl(imageUrl, targetUrl)) {
+          isLogoImage = true;
+        }
+      }
+
+      if (imageUrl == null || imageUrl.isEmpty || isLogoImage) {
         _log('🔄 HTML parsing ile görsel aranıyor...');
         try {
-          imageUrl = await _extractImageFromHtml(url)
+          imageUrl = await _extractImageFromHtml(targetUrl)
               .timeout(const Duration(seconds: 15));
           _log('✅ HTML parsing sonucu: ${imageUrl ?? "görsel yok"}');
         } catch (e) {
@@ -73,8 +313,8 @@ class LinkPreviewService {
         }
       }
 
-      final resolvedImage = _resolveImageUrl(imageUrl, url);
-      final provider = metadata != null ? _inferProvider(metadata, url) : _cleanHost(url);
+      final resolvedImage = _resolveImageUrl(imageUrl, targetUrl);
+      final provider = metadata != null ? _inferProvider(metadata, targetUrl) : _cleanHost(targetUrl);
 
       _log('✅ LinkPreviewService sonuç:');
       _log('   - Başlık: ${metadata?.title ?? "yok"}');
@@ -98,12 +338,7 @@ class LinkPreviewService {
     try {
       final response = await http.get(
         Uri.parse(url),
-        headers: const {
-          'User-Agent': _defaultUserAgent,
-          'Accept':
-              'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-        },
+        headers: _getHeadersForUrl(url),
       );
 
       final document = MetadataFetch.responseToDocument(response);
@@ -117,15 +352,20 @@ class LinkPreviewService {
 
   String? _resolveImageUrl(String? imageUrl, String pageUrl) {
     if (imageUrl == null || imageUrl.isEmpty) return null;
+    
+    // Köşeli parantezleri (brackets) temizle
+    final cleanedUrl = imageUrl.replaceAll('[', '').replaceAll(']', '').trim();
+    if (cleanedUrl.isEmpty) return null;
+
     try {
-      final uri = Uri.parse(imageUrl);
+      final uri = Uri.parse(cleanedUrl);
       if (uri.hasScheme) {
-        return imageUrl;
+        return cleanedUrl;
       }
       final baseUri = Uri.parse(pageUrl);
       return baseUri.resolveUri(uri).toString();
     } catch (_) {
-      return imageUrl;
+      return cleanedUrl;
     }
   }
 
@@ -150,57 +390,51 @@ class LinkPreviewService {
   }
 
   // Amazon kısa linkini (amzn.eu) uzun linke (amazon.com.tr/dp/...) çevir
-  Future<String?> getFullAmazonUrl(String shortUrl) async {
+  // Herhangi bir URL'nin yönlendirmelerini (redirects) takip ederek nihai adresi bulur
+  Future<String> resolveUrlRedirects(String url) async {
     try {
-      // Sadece amzn.eu linklerini çevir
-      if (!shortUrl.contains('amzn.eu') && !shortUrl.contains('amzn.to')) {
-        return shortUrl; // Zaten uzun link ise direkt döndür
-      }
-
-      _log('🔗 Amazon kısa link çözülüyor: $shortUrl');
-      
-      // 1. Basit bir istek atarak linkin bizi nereye yönlendirdiğine bakıyoruz
+      _log('🔗 Yönlendirmeler çözülüyor: $url');
       final client = http.Client();
-      final request = http.Request('GET', Uri.parse(shortUrl))
-        ..followRedirects = false; // Otomatik yönlenmeyi kapatıyoruz ki header'ı okuyalım
-      
-      final response = await client.send(request).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          _log('⏱️ Amazon link çözümleme timeout');
-          throw TimeoutException('Amazon link çözümleme timeout');
-        },
-      );
-      
-      // 2. Yönlendirme adresini (Location) alıyoruz
-      // HTTP header'ları case-insensitive olabilir, hem küçük hem büyük harfle kontrol et
-      String? longUrl = response.headers['location'] ?? response.headers['Location'];
-      
-      // Eğer relative URL gelirse, absolute URL'e çevir
-      if (longUrl != null && longUrl.isNotEmpty) {
-        if (longUrl.startsWith('/')) {
-          // Relative URL ise, Amazon domain'ini ekle
-          final uri = Uri.parse(shortUrl);
-          longUrl = '${uri.scheme}://${uri.host}$longUrl';
-        } else if (!longUrl.startsWith('http')) {
-          // Protocol yoksa https ekle
-          longUrl = 'https://$longUrl';
-        }
+      var currentUrl = url;
+      var redirectCount = 0;
+      const maxRedirects = 8; // Amazon/Publicis zinciri 4-5 adımı bulabiliyor
+
+      while (redirectCount < maxRedirects) {
+        final request = http.Request('GET', Uri.parse(currentUrl))
+          ..followRedirects = false;
         
-        _log('✅ Amazon uzun link bulundu: $longUrl');
-        client.close();
-        return longUrl;
+        final response = await client.send(request).timeout(
+          const Duration(seconds: 4),
+        );
+        
+        final location = response.headers['location'] ?? response.headers['Location'];
+        if (location != null && location.isNotEmpty) {
+          var nextUrl = location;
+          if (nextUrl.startsWith('/')) {
+            final uri = Uri.parse(currentUrl);
+            nextUrl = '${uri.scheme}://${uri.host}$nextUrl';
+          } else if (!nextUrl.startsWith('http')) {
+            nextUrl = 'https://$nextUrl';
+          }
+          currentUrl = nextUrl;
+          redirectCount++;
+          _log('   -> Yönlendi ($redirectCount): $currentUrl');
+        } else {
+          break;
+        }
       }
-      
-      // Eğer location boşsa, orijinal linki döndür
-      _log('⚠️ Amazon link çözümleme başarısız (Location header bulunamadı), orijinal link kullanılıyor');
       client.close();
-      return shortUrl;
-      
+      _log('✅ Yönlendirme zinciri çözüldü. Nihai URL: $currentUrl');
+      return currentUrl;
     } catch (e) {
-      _log("❌ Amazon link çözümleme hatası: $e");
-      return shortUrl; // Hata olursa orijinalini döndür
+      _log('⚠️ Yönlendirme çözme hatası: $e, orijinal URL kullanılıyor');
+      return url;
     }
+  }
+
+  // Amazon kısa linkini (amzn.eu) uzun linke (amazon.com.tr/dp/...) çevir
+  Future<String?> getFullAmazonUrl(String shortUrl) async {
+    return resolveUrlRedirects(shortUrl);
   }
 
   // Amazon URL'den ASIN kodunu çıkar ve görsel URL'si oluştur (eski fonksiyon, geriye uyumluluk için)
@@ -213,16 +447,26 @@ class LinkPreviewService {
     try {
       String targetUrl = url;
 
-      // 1. Eğer link kısaltılmış Amazon linki ise (amzn.eu veya amzn.to)
-      // Bu formatlar desteklenir: amzn.eu/d/xxx, amzn.to/xxx, amzn.eu/xxx
-      if (url.contains("amzn.eu") || url.contains("amzn.to")) {
-        _log('🔄 Amazon kısa link tespit edildi ($url), uzun linke çevriliyor...');
-        final fullUrl = await getFullAmazonUrl(url);
-        if (fullUrl != null && fullUrl.isNotEmpty && fullUrl != url && !fullUrl.contains("amzn.eu") && !fullUrl.contains("amzn.to")) {
-          targetUrl = fullUrl; // Artık elimizde uzun link var!
-          _log('✅ Amazon kısa link çözüldü: $targetUrl');
+      // 1. Eğer link kısaltılmış Amazon linki veya yönlendirme linki ise çöz
+      final lowerUrl = url.toLowerCase();
+      final isShortOrRedirect = lowerUrl.contains('amzn.eu') || 
+                               lowerUrl.contains('amzn.to') || 
+                               lowerUrl.contains('hb.biz') ||
+                               lowerUrl.contains('publicis.link') ||
+                               lowerUrl.contains('bit.ly') ||
+                               lowerUrl.contains('tinyurl.com') ||
+                               lowerUrl.contains('t.co') ||
+                               lowerUrl.contains('rebrand.ly') ||
+                               lowerUrl.contains('rdrtr.com');
+
+      if (isShortOrRedirect) {
+        _log('🔄 Yönlendirmeli link tespit edildi ($url), çözülüyor...');
+        final fullUrl = await resolveUrlRedirects(url);
+        if (fullUrl.isNotEmpty && fullUrl != url) {
+          targetUrl = fullUrl;
+          _log('✅ Link çözüldü: $targetUrl');
         } else {
-          _log('⚠️ Amazon kısa link çözülemedi veya hala kısa link formatında, orijinal link kullanılıyor');
+          _log('⚠️ Link çözülemedi, orijinal link kullanılıyor');
         }
       }
 
@@ -239,7 +483,23 @@ class LinkPreviewService {
         // Amazon görsel linkini oluştur
         final amazonImageUrl = "https://images-na.ssl-images-amazon.com/images/P/$asin.01._SCLZZZZZZZ_.jpg";
         _log('✅ Amazon ASIN bulundu: $asin, Görsel URL: $amazonImageUrl');
-        return amazonImageUrl;
+        
+        // Boyut kontrolü yaparak 1x1 veya boş görsel (43 byte) olmasını engelle
+        try {
+          final res = await http.get(Uri.parse(amazonImageUrl))
+              .timeout(const Duration(seconds: 4));
+          if (res.statusCode == 200) {
+            final len = res.bodyBytes.length;
+            _log('ℹ️ Amazon ASIN görsel boyutu: $len bytes');
+            if (len > 1000) {
+              return amazonImageUrl; // Gerçek görsel
+            } else {
+              _log('⚠️ Amazon ASIN görseli geçersiz/boş (boyut: $len bytes), html parsing\'e yönlendiriliyor.');
+            }
+          }
+        } catch (e) {
+          _log('⚠️ Amazon görsel boyut kontrolü hatası: $e');
+        }
       } else {
         _log('⚠️ Amazon URL\'de ASIN bulunamadı: $targetUrl');
       }
@@ -254,13 +514,7 @@ class LinkPreviewService {
       _log('🔍 HTML parsing başlatılıyor: $url');
       final response = await http.get(
         Uri.parse(url),
-        headers: {
-          'User-Agent': _defaultUserAgent,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-          'Referer': 'https://www.google.com/',
-          'Accept-Encoding': 'gzip, deflate, br',
-        },
+        headers: _getHeadersForUrl(url),
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
@@ -274,6 +528,22 @@ class LinkPreviewService {
       final document = html_parser.parse(htmlContent);
       if (document == null) return null;
 
+      // Mağazaya özel scraper'lar ile görsel aramayı dene
+      for (final scraper in _scrapers) {
+        if (scraper.canHandle(url)) {
+          final imageUrl = scraper.scrape(
+            document: document,
+            url: url,
+            isLogoUrl: (img) => _isLogoUrl(img, url),
+            resolveImageUrl: _resolveImageUrl,
+            log: _log,
+          );
+          if (imageUrl != null) {
+            return imageUrl;
+          }
+        }
+      }
+
       // Önce JSON-LD schema'dan görsel bul (Hepsiburada için önemli)
       final jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
       for (final script in jsonLdScripts) {
@@ -282,6 +552,9 @@ class LinkPreviewService {
           final jsonData = jsonDecode(jsonContent);
           final imageUrl = _extractImageFromJson(jsonData);
           if (imageUrl != null && imageUrl.isNotEmpty) {
+            if (_isLogoUrl(imageUrl, url)) {
+              continue;
+            }
             final resolved = _resolveImageUrl(imageUrl, url);
             if (resolved != null) return resolved;
           }
@@ -295,6 +568,9 @@ class LinkPreviewService {
         // Open Graph
         'meta[property="og:image"]',
         'meta[name="og:image"]',
+        // Amazon özel ana görseli
+        'img#landingImage',
+        'img[id="landingImage"]',
         // Twitter Card
         'meta[name="twitter:image"]',
         'meta[property="twitter:image"]',
@@ -328,6 +604,11 @@ class LinkPreviewService {
             // Base64 veya data URL'leri atla
             if (imageUrl.startsWith('data:')) continue;
             
+            // Logo Filtresi (Merkezi kontrol)
+            if (_isLogoUrl(imageUrl, url)) {
+              continue;
+            }
+            
             // Relative URL'leri resolve et
             final resolved = _resolveImageUrl(imageUrl, url);
             if (resolved != null && resolved.isNotEmpty) {
@@ -337,128 +618,7 @@ class LinkPreviewService {
         }
       }
 
-      // Amazon özel kontrolleri
-      if (url.contains('amazon.') || url.contains('amazon.com.tr') || url.contains('amazon.com')) {
-        _log('🛒 Amazon URL tespit edildi, özel görsel çekme başlatılıyor...');
-        
-        // Amazon'un data-a-dynamic-image attribute'u (en güvenilir yöntem)
-        final amazonDynamicImages = document.querySelectorAll('[data-a-dynamic-image]');
-        for (final element in amazonDynamicImages) {
-          try {
-            final dynamicImageData = element.attributes['data-a-dynamic-image'];
-            if (dynamicImageData != null && dynamicImageData.isNotEmpty) {
-              final jsonData = jsonDecode(dynamicImageData);
-              if (jsonData is Map) {
-                // İlk görseli al (en büyük genellikle)
-                final firstKey = jsonData.keys.first;
-                if (firstKey != null && firstKey is String) {
-                  _log('✅ Amazon dynamic image bulundu: $firstKey');
-                  return firstKey;
-                }
-              }
-            }
-          } catch (e) {
-            _log('⚠️ Amazon dynamic image parse hatası: $e');
-          }
-        }
-        
-        // Amazon'un ürün görseli için özel selector'lar
-        final amazonSelectors = [
-          '#landingImage',
-          '#imgBlkFront',
-          '#main-image',
-          '#imageBlock_feature_div img',
-          '#imageBlock img',
-          '#altImages img',
-          '.a-dynamic-image',
-          '[id*="landingImage"]',
-          '[id*="main-image"]',
-        ];
-        
-        for (final selector in amazonSelectors) {
-          final images = document.querySelectorAll(selector);
-          for (final img in images) {
-            String? imageUrl = img.attributes['src'] ?? 
-                             img.attributes['data-src'] ?? 
-                             img.attributes['data-a-dynamic-image'] ??
-                             img.attributes['data-old-src'];
-            
-            if (imageUrl != null && imageUrl.isNotEmpty && !imageUrl.startsWith('data:')) {
-              // Amazon'un placeholder görsellerini atla
-              if (imageUrl.contains('pixel') || 
-                  imageUrl.contains('placeholder') ||
-                  imageUrl.contains('spinner') ||
-                  imageUrl.contains('loading')) {
-                continue;
-              }
-              
-              // Amazon CDN görsellerini tercih et
-              if (imageUrl.contains('images-na.ssl-images-amazon.com') ||
-                  imageUrl.contains('images-eu.ssl-images-amazon.com') ||
-                  imageUrl.contains('images-amazon.com')) {
-                final resolved = _resolveImageUrl(imageUrl, url);
-                if (resolved != null) {
-                  _log('✅ Amazon görsel bulundu: $resolved');
-                  return resolved;
-                }
-              }
-            }
-          }
-        }
-        
-        // Amazon JSON-LD schema'dan görsel çek
-        final amazonJsonLd = document.querySelectorAll('script[type="application/ld+json"]');
-        for (final script in amazonJsonLd) {
-          try {
-            final jsonContent = script.text;
-            if (jsonContent.contains('Product') || jsonContent.contains('image')) {
-              final jsonData = jsonDecode(jsonContent);
-              final imageUrl = _extractImageFromJson(jsonData);
-              if (imageUrl != null && imageUrl.isNotEmpty) {
-                final resolved = _resolveImageUrl(imageUrl, url);
-                if (resolved != null) {
-                  _log('✅ Amazon JSON-LD görsel bulundu: $resolved');
-                  return resolved;
-                }
-              }
-            }
-          } catch (e) {
-            // JSON parse hatası, devam et
-          }
-        }
-        
-        _log('⚠️ Amazon özel görsel çekme başarısız, genel yöntem deneniyor...');
-      }
-      
-      // Hepsiburada özel kontrolleri
-      if (url.contains('hepsiburada.com')) {
-        // Hepsiburada kampanya görselleri genellikle bu attribute'larda
-        final hepsiburadaImages = document.querySelectorAll('[data-image], [data-srcset], [data-original-src]');
-        for (final element in hepsiburadaImages) {
-          final imageUrl = element.attributes['data-image'] ?? 
-                          element.attributes['data-srcset']?.split(',').first.trim() ??
-                          element.attributes['data-original-src'];
-          if (imageUrl != null && imageUrl.isNotEmpty && !imageUrl.startsWith('data:')) {
-            final resolved = _resolveImageUrl(imageUrl, url);
-            if (resolved != null) return resolved;
-          }
-        }
 
-        // Hepsiburada banner görselleri
-        final banners = document.querySelectorAll('.banner-image, .campaign-image, [class*="banner"], [class*="campaign"]');
-        for (final banner in banners) {
-          final img = banner.querySelector('img');
-          if (img != null) {
-            final src = img.attributes['src'] ?? 
-                       img.attributes['data-src'] ?? 
-                       img.attributes['data-lazy-src'];
-            if (src != null && src.isNotEmpty && !src.startsWith('data:')) {
-              final resolved = _resolveImageUrl(src, url);
-              if (resolved != null) return resolved;
-            }
-          }
-        }
-      }
 
       // Son çare: tüm img tag'lerini kontrol et
       final allImages = document.querySelectorAll('img');

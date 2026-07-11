@@ -18,6 +18,7 @@ class AppUser {
   final int dealCount;
   final int totalLikes;
   final List<String> badges; // Rozet listesi (örn: ['gold', 'top_reviewer', 'helpful'])
+  final bool isBot;
 
   AppUser({
     required this.uid,
@@ -32,6 +33,7 @@ class AppUser {
     this.dealCount = 0,
     this.totalLikes = 0,
     this.badges = const [],
+    this.isBot = false,
   });
 
   // displayName getter (nickname varsa nickname, yoksa username)
@@ -71,6 +73,7 @@ class AppUser {
     int? dealCount,
     int? totalLikes,
     List<String>? badges,
+    bool? isBot,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -85,6 +88,7 @@ class AppUser {
       dealCount: dealCount ?? this.dealCount,
       totalLikes: totalLikes ?? this.totalLikes,
       badges: badges ?? this.badges,
+      isBot: isBot ?? this.isBot,
     );
   }
 
@@ -219,6 +223,7 @@ class AppUser {
         dealCount: parseInt(data['dealCount']),
         totalLikes: parseInt(data['totalLikes']),
         badges: badges,
+        isBot: data['isBot'] == true,
       );
     } catch (e, stackTrace) {
       _log('❌ AppUser.fromFirestore hatası: $e');
@@ -243,6 +248,7 @@ class AppUser {
         dealCount: 0,
         totalLikes: 0,
         badges: [],
+        isBot: dataMap['isBot'] == true,
     );
     }
   }
@@ -262,6 +268,7 @@ class AppUser {
       'dealCount': dealCount,
       'totalLikes': totalLikes,
       'badges': badges,
+      'isBot': isBot,
     };
   }
 }

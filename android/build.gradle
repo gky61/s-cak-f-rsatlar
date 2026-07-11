@@ -1,5 +1,5 @@
 buildscript {
-    ext.kotlin_version = '2.0.0'
+    ext.kotlin_version = '2.2.0'
     repositories {
         google()
         mavenCentral()
@@ -23,6 +23,32 @@ allprojects {
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                kotlinOptions {
+                    def target = project.android.compileOptions.targetCompatibility
+                    if (target != null) {
+                        def targetStr = target.toString()
+                        if (targetStr.contains("1.8") || targetStr.contains("VERSION_1_8")) {
+                            jvmTarget = "1.8"
+                        } else if (targetStr.contains("11") || targetStr.contains("VERSION_11")) {
+                            jvmTarget = "11"
+                        } else if (targetStr.contains("17") || targetStr.contains("VERSION_17")) {
+                            jvmTarget = "17"
+                        } else if (targetStr.contains("21") || targetStr.contains("VERSION_21")) {
+                            jvmTarget = "21"
+                        } else {
+                            jvmTarget = targetStr.replace("VERSION_", "").replace("_", ".")
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 tasks.register("clean", Delete) {

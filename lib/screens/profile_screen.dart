@@ -26,6 +26,9 @@ import 'messages_list_screen.dart';
 import 'admin_notifications_screen.dart';
 import 'following_users_screen.dart';
 import 'user_deals_screen.dart';
+import '../models/deal.dart';
+import '../widgets/deal_card.dart';
+import 'deal_detail_screen.dart';
 import 'package:flutter/services.dart';
 
 void _log(String message) {
@@ -921,8 +924,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   : Icon(Icons.person, size: 56, color: Colors.grey[400]),
                             ),
                         ),
-                          // Edit Button - Kendi profili veya admin görüntülüyorsa görünür
-                        if (_isOwnProfile || _isAdmin)
+                          // Edit Button - Sadece kendi profili ise görünür
+                        if (_isOwnProfile)
                         Positioned(
                             bottom: 2,
                             right: 2,
@@ -1594,51 +1597,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                 ],
                 if (!_isOwnProfile && _user != null) ...[
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('FIRSATLAR', textSub!),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: surfaceColor,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 20,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          _buildSettingItem(
-                            icon: Icons.local_offer,
-                            title: 'Paylaştığı Fırsatları Gör',
-                            iconBgColor: primaryColor.withValues(alpha: 0.1),
-                            iconColor: primaryColor,
-                            trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => UserDealsScreen(
-                                    userId: widget.userId!,
-                                    username: _user?.username ?? '',
-                                    isOwnProfile: false,
-                                  ),
-                                ),
-                              );
-                            },
-                            isDark: isDark,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  _buildLastDealsSection(context, _user!.uid),
                 ],
-                const SizedBox(height: 100), // Bottom nav padding
+                SizedBox(height: _isOwnProfile ? 100 : 24), // Bottom nav padding
               ],
             ),
           ),
@@ -1735,6 +1696,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
 
           // Bottom Navigation Bar (HTML Tasarımı)
+          if (_isOwnProfile)
           Positioned(
             bottom: 0,
             left: 0,
@@ -2296,4 +2258,106 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+
+  Widget _buildLastDealsSection(BuildContext context, String userId) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textSub = isDark ? Colors.grey[400] : const Color(0xFF5C5C4F);
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        _buildSectionHeader('SON PAYLAŞILAN FIRSATLAR', textSub!),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: StreamBuilder<List<Deal>>(
+            stream: _firestoreService.getUserLastDealsStream(userId),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: surfaceColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
+                  ),
+                  child: const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: surfaceColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'Fırsatlar yüklenirken bir hata oluştu',
+                      style: TextStyle(color: textSub),
+                    ),
+                  ),
+                );
+              }
+
+              final deals = snapshot.data ?? [];
+
+              if (deals.isEmpty) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: surfaceColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'Henüz hiçbir fırsat paylaşılmadı.',
+                      style: TextStyle(color: textSub, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: deals.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final deal = deals[index];
+                  return Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: DealCard(
+                      deal: deal,
+                      viewMode: CardViewMode.horizontal,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DealDetailScreen(dealId: deal.id),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
 }

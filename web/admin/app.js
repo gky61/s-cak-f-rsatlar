@@ -24,6 +24,70 @@ try {
     throw error;
 }
 
+// Categories and Subcategories Configuration mapping (synced with Category model)
+const categoriesConfig = {
+    elektronik: [
+        "Telefon & Aksesuarları",
+        "Bilgisayar & Tablet",
+        "TV & Ses Sistemleri",
+        "Beyaz Eşya & Küçük Ev Aletleri",
+        "Fotoğraf & Kamera"
+    ],
+    moda: [
+        "Kadın Giyim",
+        "Erkek Giyim",
+        "Ayakkabı & Çanta",
+        "Saat & Aksesuar",
+        "Çocuk Giyim"
+    ],
+    ev_yasam: [
+        "Mobilya",
+        "Ev Tekstili",
+        "Mutfak Gereçleri",
+        "Aydınlatma & Dekorasyon",
+        "Kırtasiye & Ofis Malzemeleri"
+    ],
+    anne_bebek: [
+        "Bebek Bezi & Islak Mendil",
+        "Bebek Arabası & Oto Koltuğu",
+        "Beslenme & Emzirme",
+        "Bebek Odası & Güvenlik",
+        "Bebek Oyuncakları"
+    ],
+    kozmetik: [
+        "Parfüm & Deodorant",
+        "Makyaj Ürünleri",
+        "Cilt & Yüz Bakımı",
+        "Saç Bakımı",
+        "Ağız & Diş Bakımı"
+    ],
+    spor_outdoor: [
+        "Spor Giyim & Ayakkabı",
+        "Fitness & Kondisyon",
+        "Kamp & Doğa Malzemeleri",
+        "Bisiklet & Ekipmanları"
+    ],
+    supermarket: [
+        "Gıda Ürünleri",
+        "Deterjan & Temizlik",
+        "Kağıt Ürünleri",
+        "Kedi & Köpek Ürünleri"
+    ],
+    yapi_oto: [
+        "Elektrikli Aletler & Hırdavat",
+        "Oto Aksesuar & Bakım",
+        "Banyo & Tesisat",
+        "Bahçe Malzemeleri"
+    ],
+    kitap_hobi: [
+        "Kitap & Dergi",
+        "Müzik Enstrümanları",
+        "Oyun Konsolları & Video Oyunları",
+        "Hobi & Sanat Malzemeleri"
+    ],
+    diger: []
+};
+
 // Global state
 let currentUser = null;
 let currentFilter = 'pending';
@@ -589,6 +653,16 @@ function initEventListeners() {
         });
     }
 
+    // Toggle Notifications switch (Settings View)
+    const settingsToggleNotificationsBtn = document.getElementById('settingsToggleNotificationsBtn');
+    if (settingsToggleNotificationsBtn) {
+        settingsToggleNotificationsBtn.addEventListener('change', async () => {
+            await toggleGlobalNotifications();
+        });
+    }
+
+
+
     // Save Bot & App Config Button (Settings View)
     const saveConfigBtn = document.getElementById('saveConfigBtn');
     if (saveConfigBtn) {
@@ -643,6 +717,20 @@ function initEventListeners() {
         console.warn('⚠️ Add Deal button NOT FOUND!');
     }
 
+    // Geliştirici & Test Araçları Butonları
+    const btnGenerateTestData = document.getElementById('btnGenerateTestData');
+    if (btnGenerateTestData) {
+        btnGenerateTestData.addEventListener('click', async () => {
+            await window.generateTestDataAdmin();
+        });
+    }
+    const btnClearTestData = document.getElementById('btnClearTestData');
+    if (btnClearTestData) {
+        btnClearTestData.addEventListener('click', async () => {
+            await window.cleanupTestDataAdmin();
+        });
+    }
+
     // Approve deal (old modal design)
     if (approveBtn) {
         approveBtn.addEventListener('click', async () => {
@@ -665,75 +753,77 @@ function initEventListeners() {
         });
     }
 
-    // Reject deal (old modal design)
+    // Permanent delete deal from modal (silBtn)
     if (rejectBtn) {
         rejectBtn.addEventListener('click', async () => {
             if (!currentDeal) return;
-            if (!confirm('Bu fırsatı reddetmek istediğinize emin misiniz?')) return;
+            if (!confirm('Bu fırsatı veritabanından kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve tüm platformlardan kaldırılacaktır.')) return;
             try {
-                await db.collection('deals').doc(currentDeal.id).update({
-                    isApproved: false,
-                    isRejected: true,
-                    status: 'rejected',
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                showSuccess('Fırsat reddedildi!');
+                await db.collection('deals').doc(currentDeal.id).delete();
+                showSuccess('Fırsat başarıyla kalıcı olarak silindi!');
                 closeDealModal();
                 loadDeals();
                 updateStats();
             } catch (error) {
-                showError('Reddetme hatası: ' + error.message);
+                showError('Silme hatası: ' + error.message);
             }
         });
     }
 
     // New modal design buttons (delegated event listeners)
     document.addEventListener('click', async (e) => {
-        const approveBtnNew = e.target.closest('#approveBtn');
-        const rejectBtnNew = e.target.closest('#rejectBtn');
         const saveBtnNew = e.target.closest('#saveBtn');
         const cancelBtnNew = e.target.closest('#cancelBtn');
+        const approveBtnRow = e.target.closest('.approve-btn');
+        const editBtnRow = e.target.closest('.edit-btn');
+        const rejectBtnRow = e.target.closest('.reject-btn');
 
-        if (approveBtnNew && currentDeal) {
+        if (approveBtnRow) {
             e.preventDefault();
-            try {
-                await db.collection('deals').doc(currentDeal.id).update({
-                    isApproved: true,
-                    approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                showSuccess('Fırsat onaylandı!');
-                closeDealModal();
-                loadDeals();
-                updateStats();
-            } catch (error) {
-                showError('Onaylama hatası: ' + error.message);
-            }
+            e.stopPropagation();
+            const dealId = approveBtnRow.dataset.dealId;
+            console.log('✅ Approved row button clicked (delegated):', dealId);
+            await approveDeal(dealId);
+            return;
         }
 
-        if (rejectBtnNew && currentDeal) {
+        if (editBtnRow) {
             e.preventDefault();
-            if (!confirm('Bu fırsatı reddetmek istediğinize emin misiniz?')) return;
-            try {
-                await db.collection('deals').doc(currentDeal.id).update({
-                    isApproved: false,
-                    isRejected: true,
-                    status: 'rejected',
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                showSuccess('Fırsat reddedildi!');
-                closeDealModal();
-                loadDeals();
-                updateStats();
-            } catch (error) {
-                showError('Reddetme hatası: ' + error.message);
+            e.stopPropagation();
+            const dealId = editBtnRow.dataset.dealId;
+            console.log('✏️ Edit row button clicked (delegated):', dealId);
+            const deal = deals.find(d => d.id === dealId);
+            if (deal) {
+                await showDealModal(deal);
+            } else {
+                console.warn('⚠️ Deal not found in memory, fetching from DB...');
+                try {
+                    const doc = await db.collection('deals').doc(dealId).get();
+                    if (doc.exists) {
+                        await showDealModal({ id: doc.id, ...doc.data() });
+                    }
+                } catch (err) {
+                    console.error('Error fetching deal for modal:', err);
+                }
             }
+            return;
+        }
+
+        if (rejectBtnRow) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dealId = rejectBtnRow.dataset.dealId;
+            console.log('🚫 Reject row button clicked (delegated):', dealId);
+            if (confirm('Bu fırsatı reddetmek istediğinize emin misiniz?')) {
+                await rejectDeal(dealId);
+            }
+            return;
         }
 
         if (saveBtnNew) {
             e.preventDefault();
             e.stopPropagation();
-            console.log('✅ Onayla butonu tıklandı (delegated)!', currentDeal?.id);
+            console.log('✅ Onayla/Kaydet butonu tıklandı (delegated)!', currentDeal?.id);
 
             if (!currentDeal) {
                 console.error('❌ No current deal!');
@@ -741,11 +831,21 @@ function initEventListeners() {
                 return;
             }
 
+            // Durumu güncelle: Eğer fırsat aktif değilse ve kullanıcı doğrudan "Onayla" butonuna tıkladıysa, durumu 'active' yap.
+            // Ama eğer kullanıcı durum dropdown'ından ('editStatus') bilerek başka bir durum (örn. 'rejected') seçtiyse, onu ezme!
+            const editStatusEl = document.getElementById('editStatus');
+            if (editStatusEl) {
+                const currentStatus = editStatusEl.value;
+                if (!currentDeal.isApproved && currentStatus === 'pending') {
+                    editStatusEl.value = 'active';
+                }
+            }
+
             // Butonu devre dışı bırak
             const btn = saveBtnNew;
             const originalHTML = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = '<span>Onaylanıyor...</span>';
+            btn.innerHTML = '<span>Kaydediliyor...</span>';
 
             try {
                 await saveDealChanges();
@@ -1044,7 +1144,7 @@ async function loadDeals() {
                 deals.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
                 console.log('📊 Total deals:', deals.length);
-                console.log('⏳ Pending deals:', deals.filter(d => !d.isApproved).length);
+                console.log('⏳ Pending deals:', deals.filter(d => !d.isApproved && d.isRejected !== true && d.isExpired !== true).length);
                 console.log('✅ Approved deals:', deals.filter(d => d.isApproved).length);
 
                 if (deals.length === 0) {
@@ -1094,7 +1194,7 @@ function renderDeals() {
     // 1. Filter by status (currentFilter)
     let filteredDeals = deals;
     if (currentFilter === 'pending') {
-        filteredDeals = deals.filter(d => d.isApproved === false);
+        filteredDeals = deals.filter(d => d.isApproved === false && d.isRejected !== true && d.isExpired !== true);
     } else if (currentFilter === 'approved') {
         filteredDeals = deals.filter(d => d.isApproved === true);
     }
@@ -1178,6 +1278,10 @@ function createDealRow(deal) {
     let statusBadge = '';
     if (isApproved) {
         statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Aktif</div>';
+    } else if (deal.isRejected === true || deal.status === 'rejected') {
+        statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-rose-500"></span>Reddedildi</div>';
+    } else if (deal.isExpired === true || deal.status === 'expired') {
+        statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-500"></span>Süresi Doldu</div>';
     } else {
         statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>Bekliyor</div>';
     }
@@ -1248,7 +1352,7 @@ function createDealRow(deal) {
             <div class="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                 ${!isApproved ? `<button class="approve-btn p-2 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400 transition-colors" title="Onayla" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">check</span></button>` : ''}
                 <button class="edit-btn p-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors" title="Düzenle" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">edit</span></button>
-                <button class="delete-btn p-2 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-400 transition-colors" title="Sil" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">delete</span></button>
+                <button class="reject-btn p-2 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-400 transition-colors" title="Reddet" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">block</span></button>
             </div>
         </td>
     `;
@@ -1259,24 +1363,7 @@ function createDealRow(deal) {
         await showDealModal(deal);
     });
 
-    // Button events
-    row.querySelectorAll('.approve-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const dealId = btn.dataset.dealId;
-            await approveDeal(dealId);
-        });
-    });
 
-    row.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const dealId = btn.dataset.dealId;
-            if (confirm('Bu fırsatı reddetmek istediğinize emin misiniz?')) {
-                await deleteDeal(dealId);
-            }
-        });
-    });
 
     return row;
 }
@@ -1371,7 +1458,7 @@ async function approveDeal(dealId) {
     }
 }
 
-async function deleteDeal(dealId) {
+async function rejectDeal(dealId) {
     try {
         await db.collection('deals').doc(dealId).update({
             isApproved: false,
@@ -1384,6 +1471,17 @@ async function deleteDeal(dealId) {
         updateStats();
     } catch (error) {
         showError('Reddetme hatası: ' + error.message);
+    }
+}
+
+async function deleteDeal(dealId) {
+    try {
+        await db.collection('deals').doc(dealId).delete();
+        showSuccess('Fırsat veritabanından başarıyla silindi!');
+        loadDeals();
+        updateStats();
+    } catch (error) {
+        showError('Silme hatası: ' + error.message);
     }
 }
 
@@ -1594,6 +1692,15 @@ async function showDealModal(deal) {
         statusValue = 'active';
     }
 
+    // Kategori ve alt kategori hazırlığı
+    const dealCategory = deal.category || 'elektronik';
+    const subcategories = categoriesConfig[dealCategory] || [];
+    let subcategoryOptionsHtml = '<option value="">Alt Kategori Yok</option>';
+    subcategories.forEach(sub => {
+        const isSelected = (deal.subCategory || deal.subcategory) === sub ? 'selected' : '';
+        subcategoryOptionsHtml += `<option value="${escapeHtml(sub)}" ${isSelected}>${escapeHtml(sub)}</option>`;
+    });
+
     // Görsel HTML - Web için optimize edilmiş, daha küçük ve net, tıklanabilir
     const mainImageHtml = mainImageUrl && mainImageUrl.trim() !== ''
         ? `<img alt="${escapeHtml(deal.title)}" class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 cursor-zoom-in" src="${escapeHtml(mainImageUrl)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" loading="lazy" style="object-position: center; max-width: 100%; max-height: 100%; pointer-events: auto;"><div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%); color:#999; font-size:32px;">📷</div>`
@@ -1736,11 +1843,11 @@ async function showDealModal(deal) {
                 <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Yayın Durumu</h3>
                 <div class="flex flex-col gap-4">
                     <label class="flex flex-col gap-2">
-                        <select id="editStatus" class="form-select w-full rounded-lg ${isApproved ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'} focus:ring-1 focus:ring-primary h-12 px-4 text-base font-semibold">
-                            <option value="pending" ${!isApproved ? 'selected' : ''}>Onay Bekliyor</option>
+                        <select id="editStatus" class="form-select w-full rounded-lg ${isApproved ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' : (deal.status === 'rejected' || deal.isRejected ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400')} focus:ring-1 focus:ring-primary h-12 px-4 text-base font-semibold">
+                            <option value="pending" ${(!isApproved && !deal.isRejected && deal.status !== 'rejected' && !deal.isExpired && deal.status !== 'expired') ? 'selected' : ''}>Onay Bekliyor</option>
                             <option value="active" ${isApproved ? 'selected' : ''}>Yayında</option>
-                            <option value="rejected">Reddedildi</option>
-                            <option value="expired">Süresi Doldu</option>
+                            <option value="rejected" ${(deal.isRejected || deal.status === 'rejected') ? 'selected' : ''}>Reddedildi</option>
+                            <option value="expired" ${(deal.isExpired || deal.status === 'expired') ? 'selected' : ''}>Süresi Doldu</option>
                         </select>
                     </label>
                     <div class="flex items-center justify-between text-sm py-2 border-t border-slate-200 dark:border-slate-700">
@@ -1754,11 +1861,11 @@ async function showDealModal(deal) {
                 
                 <!-- Action Buttons -->
                 <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 flex flex-col gap-2">
-                    <button id="saveBtn" onclick="handleApproveDeal(event)" class="w-full h-11 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2" type="button">
-                        <span class="material-symbols-outlined text-[18px]">check</span>
-                        <span>Onayla</span>
+                    <button id="saveBtn" class="w-full h-11 px-4 rounded-lg ${isApproved ? 'bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20' : 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm shadow-lg shadow-emerald-500/20'} transition-all flex items-center justify-center gap-2" type="button">
+                        <span class="material-symbols-outlined text-[18px]">${isApproved ? 'save' : 'check'}</span>
+                        <span>${isApproved ? 'Kaydet' : 'Onayla'}</span>
                     </button>
-                    <button id="cancelBtn" onclick="handleCancelDeal(event)" class="w-full h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 font-semibold text-sm transition-colors" type="button">
+                    <button id="cancelBtn" class="w-full h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 font-semibold text-sm transition-colors" type="button">
                         İptal
                     </button>
                 </div>
@@ -1773,19 +1880,22 @@ async function showDealModal(deal) {
                         <div class="relative">
                             <select id="editCategory" class="form-select w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-11 px-4 text-sm">
                                 <option value="elektronik" ${deal.category === 'elektronik' ? 'selected' : ''}>Elektronik</option>
-                                <option value="moda" ${deal.category === 'moda' ? 'selected' : ''}>Giyim & Moda</option>
-                                <option value="ev_yasam" ${deal.category === 'ev_yasam' ? 'selected' : ''}>Ev & Yaşam</option>
+                                <option value="moda" ${deal.category === 'moda' ? 'selected' : ''}>Moda & Giyim</option>
+                                <option value="ev_yasam" ${deal.category === 'ev_yasam' ? 'selected' : ''}>Ev, Yaşam & Ofis</option>
+                                <option value="anne_bebek" ${deal.category === 'anne_bebek' ? 'selected' : ''}>Anne & Bebek</option>
+                                <option value="kozmetik" ${deal.category === 'kozmetik' ? 'selected' : ''}>Kozmetik & Bakım</option>
+                                <option value="spor_outdoor" ${deal.category === 'spor_outdoor' ? 'selected' : ''}>Spor & Outdoor</option>
                                 <option value="supermarket" ${deal.category === 'supermarket' ? 'selected' : ''}>Süpermarket</option>
-                                <option value="oyun" ${deal.category === 'oyun' ? 'selected' : ''}>Oyun</option>
-                                <option value="diger" ${!deal.category || !['elektronik', 'moda', 'ev_yasam', 'supermarket', 'oyun'].includes(deal.category) ? 'selected' : ''}>Diğer</option>
+                                <option value="yapi_oto" ${deal.category === 'yapi_oto' ? 'selected' : ''}>Yapı Market & Oto</option>
+                                <option value="kitap_hobi" ${deal.category === 'kitap_hobi' ? 'selected' : ''}>Kitap, Müzik & Hobi</option>
+                                <option value="diger" ${!deal.category || !['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 'spor_outdoor', 'supermarket', 'yapi_oto', 'kitap_hobi', 'diger'].includes(deal.category) ? 'selected' : ''}>Diğer</option>
                             </select>
                         </div>
                     </label>
                     <label class="flex flex-col gap-2">
                         <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Alt Kategori</span>
                         <select id="editSubcategory" class="form-select w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-11 px-4 text-sm">
-                            <option value="">Seçiniz</option>
-                            <option value="${escapeHtml(deal.subcategory || '')}" selected>${escapeHtml(deal.subcategory || 'Alt kategori yok')}</option>
+                            ${subcategoryOptionsHtml}
                         </select>
                     </label>
                 </div>
@@ -1985,6 +2095,21 @@ async function showDealModal(deal) {
         };
         priceEl.addEventListener('input', updateDiscount);
         originalPriceEl.addEventListener('input', updateDiscount);
+    }
+
+    // Kategori değiştiğinde alt kategorileri dinamik olarak güncelle
+    const editCategoryEl = document.getElementById('editCategory');
+    const editSubcategoryEl = document.getElementById('editSubcategory');
+    if (editCategoryEl && editSubcategoryEl) {
+        editCategoryEl.addEventListener('change', () => {
+            const selectedCat = editCategoryEl.value;
+            const subs = categoriesConfig[selectedCat] || [];
+            let optionsHtml = '<option value="">Alt Kategori Yok</option>';
+            subs.forEach(sub => {
+                optionsHtml += `<option value="${escapeHtml(sub)}">${escapeHtml(sub)}</option>`;
+            });
+            editSubcategoryEl.innerHTML = optionsHtml;
+        });
     }
 
     // Show/hide buttons based on deal status
@@ -2238,7 +2363,7 @@ async function saveDealChanges() {
         const subcategoryEl = document.getElementById('editSubcategory');
         const subcategory = (subcategoryEl?.value && subcategoryEl.value !== 'none' && subcategoryEl.value !== 'Alt kategori yok')
             ? subcategoryEl.value
-            : (currentDeal.subcategory || null);
+            : (currentDeal.subCategory || currentDeal.subcategory || null);
         const status = document.getElementById('editStatus')?.value || (currentDeal.isApproved ? 'active' : 'pending');
         const isHot = document.getElementById('editIsHot')?.checked || false;
         const couponCode = document.getElementById('editCouponCode')?.value || '';
@@ -2270,12 +2395,26 @@ async function saveDealChanges() {
             return;
         }
 
+        // İndirim oranı hesaplama
+        const discountRate = (originalPrice > price && originalPrice > 0)
+            ? Math.round(((originalPrice - price) / originalPrice) * 100)
+            : null;
+
+        // Tarih dönüştürme ve doğrulama
+        let cleanCreatedAt = currentDeal.createdAt;
+        if (cleanCreatedAt && typeof cleanCreatedAt.toDate === 'function') {
+            cleanCreatedAt = cleanCreatedAt.toDate();
+        }
+        const createdAtDate = cleanCreatedAt ? new Date(cleanCreatedAt) : new Date();
+        const isCreatedAtValid = createdAtDate instanceof Date && !isNaN(createdAtDate.getTime());
+
         // Firestore undefined değerleri kabul etmez, bu yüzden sadece tanımlı alanları ekle
         const dealData = {
             title: title.trim(),
             description: description.trim() || '',
             price: price || 0,
             originalPrice: originalPrice || price || 0,
+            discountRate: discountRate,
             url: url.trim(),
             link: url.trim(), // link alanı da ekle (geriye dönük uyumluluk için)
             category: category,
@@ -2296,7 +2435,7 @@ async function saveDealChanges() {
             expiredVotes: isNewDeal ? 0 : (currentDeal.expiredVotes || 0),
             commentCount: isNewDeal ? 0 : (currentDeal.commentCount || 0),
             isUserSubmitted: isNewDeal ? false : (currentDeal.isUserSubmitted || false),
-            createdAt: isNewDeal ? firebase.firestore.FieldValue.serverTimestamp() : (currentDeal.createdAt ? firebase.firestore.Timestamp.fromDate(new Date(currentDeal.createdAt)) : firebase.firestore.FieldValue.serverTimestamp()),
+            createdAt: isNewDeal ? firebase.firestore.FieldValue.serverTimestamp() : (isCreatedAtValid ? firebase.firestore.Timestamp.fromDate(createdAtDate) : firebase.firestore.FieldValue.serverTimestamp()),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
@@ -2305,7 +2444,13 @@ async function saveDealChanges() {
         const previouslyApproved = !isNewDeal && currentDeal.isApproved === true;
         if (isApprovedNow) {
             if (previouslyApproved && currentDeal.approvedAt) {
-                dealData.approvedAt = currentDeal.approvedAt.toDate ? currentDeal.approvedAt : firebase.firestore.Timestamp.fromDate(new Date(currentDeal.approvedAt));
+                let cleanApprovedAt = currentDeal.approvedAt;
+                if (cleanApprovedAt && typeof cleanApprovedAt.toDate === 'function') {
+                    cleanApprovedAt = cleanApprovedAt.toDate();
+                }
+                const approvedAtDate = new Date(cleanApprovedAt);
+                const isApprovedAtValid = approvedAtDate instanceof Date && !isNaN(approvedAtDate.getTime());
+                dealData.approvedAt = isApprovedAtValid ? firebase.firestore.Timestamp.fromDate(approvedAtDate) : firebase.firestore.FieldValue.serverTimestamp();
             } else {
                 dealData.approvedAt = firebase.firestore.FieldValue.serverTimestamp();
             }
@@ -2313,12 +2458,12 @@ async function saveDealChanges() {
             dealData.approvedAt = null;
         }
 
-        // subcategory sadece değer varsa ekle (null veya undefined değilse)
+        // subCategory sadece değer varsa ekle (null veya undefined değilse)
         if (subcategory && subcategory !== 'none' && subcategory !== 'Alt kategori yok') {
-            dealData.subcategory = subcategory;
-        } else if (currentDeal.subcategory && !isNewDeal) {
-            // Mevcut subcategory varsa koru (sadece güncelleme durumunda)
-            dealData.subcategory = currentDeal.subcategory;
+            dealData.subCategory = subcategory;
+        } else if ((currentDeal.subCategory || currentDeal.subcategory) && !isNewDeal) {
+            // Mevcut subCategory varsa koru (sadece güncelleme durumunda)
+            dealData.subCategory = currentDeal.subCategory || currentDeal.subcategory;
         }
 
         if (isNewDeal) {
@@ -2402,7 +2547,7 @@ async function showAddDealModal() {
 async function updateStats() {
     try {
         console.log('Updating stats...');
-        const pending = deals.filter(d => d.isApproved === false).length;
+        const pending = deals.filter(d => d.isApproved === false && d.isRejected !== true && d.isExpired !== true).length;
         const approved = deals.filter(d => d.isApproved === true).length;
         const bot = deals.filter(d => !d.isUserSubmitted || d.isUserSubmitted === false).length;
         const user = deals.filter(d => d.isUserSubmitted === true).length;
@@ -2931,6 +3076,7 @@ async function loadUsers() {
                     followersWithNotifications: userData.followersWithNotifications || [],
                     badges: userData.badges || [],
                     email: userData.email || null,
+                    isAdmin: userData.isAdmin === true || userData.isadmin === true || userData.isAdmin === 'true' || userData.isadmin === 'true',
                     createdAt: userData.createdAt?.toDate ? userData.createdAt.toDate() : (userData.createdAt ? new Date(userData.createdAt) : null)
                 };
 
@@ -3342,7 +3488,21 @@ async function showUserDetail(userId) {
         console.warn('⚠️ Paylaşım engelleme durumu kontrol edilemedi:', error);
     }
 
-    currentUserDetail = { ...user, isBlocked, isCommentBanned, isDealBanned };
+    // Fetch active notification subscriptions from new system
+    let subsList = [];
+    try {
+        const subsSnap = await db.collection('notificationSubscriptions')
+            .where('uid', '==', userId)
+            .where('enabled', '==', true)
+            .get();
+        subsSnap.forEach(d => subsList.push(d.data()));
+    } catch (e) {
+        console.warn('⚠️ Error loading active subscriptions:', e);
+    }
+    const followedCategories = subsList.filter(s => s.type === 'category').map(s => s.displayValue || s.key);
+    const watchKeywords = subsList.filter(s => s.type === 'keyword').map(s => s.displayValue || s.key);
+
+    currentUserDetail = { ...user, isBlocked, isCommentBanned, isDealBanned, followedCategories, watchKeywords };
 
     const userDetailModal = document.getElementById('userDetailModal');
     const userModalBody = document.getElementById('userModalBody');
@@ -3453,9 +3613,9 @@ async function showUserDetail(userId) {
             <div class="space-y-4">
                 <div>
                     <p class="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">Takip Edilen Kategoriler</p>
-                    ${user.followedCategories && user.followedCategories.length > 0 ? `
+                    ${followedCategories && followedCategories.length > 0 ? `
                         <div class="flex flex-wrap gap-2">
-                            ${user.followedCategories.map(cat => `
+                            ${followedCategories.map(cat => `
                                 <span class="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">${escapeHtml(cat)}</span>
                             `).join('')}
                         </div>
@@ -3464,9 +3624,9 @@ async function showUserDetail(userId) {
                 
                 <div>
                     <p class="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">Takip Edilen Anahtar Kelimeler</p>
-                    ${user.watchKeywords && user.watchKeywords.length > 0 ? `
+                    ${watchKeywords && watchKeywords.length > 0 ? `
                         <div class="flex flex-wrap gap-2">
-                            ${user.watchKeywords.map(keyword => `
+                            ${watchKeywords.map(keyword => `
                                 <span class="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full text-sm font-medium">${escapeHtml(keyword)}</span>
                             `).join('')}
                         </div>
@@ -3643,6 +3803,12 @@ async function showUserDetail(userId) {
                         Paylaşımı Engelle
                     </button>
                 `}
+                
+                <div class="h-px bg-slate-200 dark:bg-slate-700/50 my-2"></div>
+                <button onclick="window.deleteUserAccountAdmin('${escapeHtml(user.uid || user.id)}')" class="w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-[18px]">delete_forever</span>
+                    Hesabı ve Tüm Verileri Sil
+                </button>
             </div>
         </div>
     `;
@@ -4338,6 +4504,52 @@ window.unbanUserDeals = async function (userId) {
     } catch (error) {
         console.error('❌ Paylaşım izni geri verme hatası:', error);
         showError('Paylaşım izni geri verilirken bir hata oluştu: ' + error.message);
+    }
+};
+
+// Delete user account and all Firestore data
+window.deleteUserAccountAdmin = async function (userId) {
+    console.log('🚨 deleteUserAccountAdmin called with userId:', userId);
+
+    if (!userId) {
+        console.error('❌ UserId is missing!');
+        showError('Kullanıcı ID bulunamadı!');
+        return;
+    }
+
+    const firstConfirm = confirm('⚠️ DİKKAT: Bu kullanıcının profilini, paylaştığı tüm fırsatları, yorumlarını, mesajlarını, cihazlarını ve giriş hesabını KALICI olarak silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz!');
+    if (!firstConfirm) return;
+
+    const secondConfirm = confirm('🚨 SON UYARI: Kullanıcıya ait tüm veriler veritabanından ve giriş sistemi (Auth) üzerinden tamamen yok edilecektir. Onaylıyor musunuz?');
+    if (!secondConfirm) return;
+
+    showLoading();
+    try {
+        console.log('📝 Deleting target user via Cloud Function:', userId);
+        const deleteFn = firebase.functions().httpsCallable('adminDeleteUser');
+        const res = await deleteFn({ targetUid: userId });
+
+        if (res.data && res.data.success) {
+            showSuccess('✅ Kullanıcı hesabı ve tüm ilişkili verileri başarıyla kalıcı olarak silindi!');
+            
+            // Modal'ı kapat
+            const userDetailModal = document.getElementById('userDetailModal');
+            if (userDetailModal) {
+                userDetailModal.classList.add('hidden');
+            }
+
+            // Eğer kullanıcılar listesi aktifse listeyi yenile
+            if (currentView === 'users') {
+                loadUsers();
+            }
+        } else {
+            throw new Error('Silme işlemi başarısız döndü.');
+        }
+    } catch (error) {
+        console.error('❌ Kullanıcı silme hatası:', error);
+        showError('Kullanıcı silinirken bir hata oluştu: ' + error.message);
+    } finally {
+        hideLoading();
     }
 };
 
@@ -5485,7 +5697,7 @@ async function loadDashboardData() {
         });
         const todayRejectedCount = todayRejectedDeals.length;
 
-        const pendingDealsCount = deals.filter(d => !d.isApproved).length;
+        const pendingDealsCount = deals.filter(d => !d.isApproved && d.isRejected !== true && d.isExpired !== true).length;
 
         // Average approval time
         let totalApprovalTimeMs = 0;
@@ -5874,12 +6086,25 @@ async function loadBotConfig() {
             }
         }
         
-        const appDoc = await db.collection('settings').doc('app').get();
-        if (appDoc.exists) {
-            const data = appDoc.data();
-            const limitInput = document.getElementById('settingsMaxNotificationLimit');
-            if (limitInput) {
-                limitInput.value = data.maxDailyNotificationLimit || 20;
+        const sysNotifDoc = await db.collection('systemConfig').doc('notifications').get();
+        if (sysNotifDoc.exists) {
+            const data = sysNotifDoc.data();
+            const hourlyInput = document.getElementById('settingsCategoryHourlyLimit');
+            const dailyInput = document.getElementById('settingsCategoryDailyLimit');
+            const minQualityInput = document.getElementById('settingsMinDealQualityScore');
+            const notifToggle = document.getElementById('settingsToggleNotificationsBtn');
+
+            if (hourlyInput) {
+                hourlyInput.value = data.categoryHourlyLimit || 3;
+            }
+            if (dailyInput) {
+                dailyInput.value = data.categoryDailyLimit || 8;
+            }
+            if (minQualityInput) {
+                minQualityInput.value = data.minimumDealQualityScore !== undefined ? data.minimumDealQualityScore : 0;
+            }
+            if (notifToggle) {
+                notifToggle.checked = data.enabled !== false;
             }
         }
     } catch (error) {
@@ -5905,6 +6130,27 @@ async function toggleBotStatus() {
     }
 }
 
+// Toggle Global Notifications status
+async function toggleGlobalNotifications() {
+    try {
+        const toggle = document.getElementById('settingsToggleNotificationsBtn');
+        const newStatus = toggle ? toggle.checked : true;
+        
+        await db.collection('systemConfig').doc('notifications').set({
+            enabled: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        
+        showSuccess(newStatus ? '✅ Tüm anlık push bildirimleri aktifleştirildi!' : '🚫 Tüm anlık push bildirimleri durduruldu!');
+    } catch (error) {
+        console.error('❌ Error toggling global notifications:', error);
+        showError('Bildirim durumu güncellenirken hata oluştu: ' + error.message);
+        // Reset toggle switch state on error
+        const toggle = document.getElementById('settingsToggleNotificationsBtn');
+        if (toggle) toggle.checked = !toggle.checked;
+    }
+}
+
 // Save Bot & App configuration
 async function saveBotConfig() {
     const saveBtn = document.getElementById('saveConfigBtn');
@@ -5915,10 +6161,16 @@ async function saveBotConfig() {
     
     try {
         const channelsInput = document.getElementById('settingsTelegramChannels');
-        const limitInput = document.getElementById('settingsMaxNotificationLimit');
+        const hourlyInput = document.getElementById('settingsCategoryHourlyLimit');
+        const dailyInput = document.getElementById('settingsCategoryDailyLimit');
+        const minQualityInput = document.getElementById('settingsMinDealQualityScore');
+        const notifToggle = document.getElementById('settingsToggleNotificationsBtn');
         
         const channelsText = channelsInput ? channelsInput.value.trim() : '';
-        const limitVal = limitInput ? parseInt(limitInput.value.trim()) : 20;
+        const hourlyVal = hourlyInput ? parseInt(hourlyInput.value.trim()) || 3 : 3;
+        const dailyVal = dailyInput ? parseInt(dailyInput.value.trim()) || 8 : 8;
+        const minQualityVal = minQualityInput ? parseInt(minQualityInput.value.trim()) || 0 : 0;
+        const notifEnabled = notifToggle ? notifToggle.checked : true;
         
         const monitoredChannels = channelsText
             .split(',')
@@ -5930,8 +6182,11 @@ async function saveBotConfig() {
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         
-        await db.collection('settings').doc('app').set({
-            maxDailyNotificationLimit: limitVal,
+        await db.collection('systemConfig').doc('notifications').set({
+            categoryHourlyLimit: hourlyVal,
+            categoryDailyLimit: dailyVal,
+            minimumDealQualityScore: minQualityVal,
+            enabled: notifEnabled,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         
@@ -6068,14 +6323,137 @@ function showNotificationsView() {
     updateMenuActiveState('notifications');
     loadNotificationLogs();
     loadNotificationStats();
+    loadDeviceStats();
+}
+
+async function loadDeviceStats() {
+    console.log('📱 Loading device stats...');
+    try {
+        const totalSnap = await db.collection('userDevices').get();
+        
+        const totalCount = totalSnap.size;
+        let activeCount = 0;
+        let androidCount = 0;
+        let iosCount = 0;
+
+        totalSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.active === true) {
+                activeCount++;
+            }
+            if (data.platform === 'android') {
+                androidCount++;
+            } else if (data.platform === 'ios') {
+                iosCount++;
+            }
+        });
+
+        const totalEl = document.getElementById('statTotalDevices');
+        const activeEl = document.getElementById('statActiveDevices');
+        const androidEl = document.getElementById('statAndroidDevices');
+        const iosEl = document.getElementById('statIosDevices');
+
+        if (totalEl) totalEl.textContent = totalCount;
+        if (activeEl) activeEl.textContent = activeCount;
+        if (androidEl) androidEl.textContent = androidCount;
+        if (iosEl) iosEl.textContent = iosCount;
+
+        console.log('📱 Device stats loaded successfully:', { totalCount, activeCount, androidCount, iosCount });
+    } catch (err) {
+        console.error('❌ Error loading device stats:', err);
+    }
 }
 
 function loadNotificationLogs() {
-    console.log('🔔 Loading notification logs...');
+    console.log('🔔 Loading notification logs (collectionGroup: notifications)...');
     if (notificationLogsUnsubscribe) {
         notificationLogsUnsubscribe();
     }
 
+    const tbody = document.getElementById('notifLogsTableBody');
+    if (!tbody) return;
+
+    // Use collectionGroup query for live notifications feed across all users
+    try {
+        notificationLogsUnsubscribe = db.collectionGroup('notifications')
+            .orderBy('createdAt', 'desc')
+            .limit(15)
+            .onSnapshot((snapshot) => {
+                if (snapshot.empty) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-8 text-center text-slate-400 dark:text-slate-600">Gönderilmiş bildirim bulunmuyor.</td></tr>`;
+                    return;
+                }
+                let html = '';
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const date = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toLocaleString('tr-TR') : new Date(data.createdAt).toLocaleString('tr-TR')) : '-';
+                    
+                    // Deriving user UID from path: users/{userId}/notifications/{notificationId}
+                    const userUid = doc.ref.parent.parent ? doc.ref.parent.parent.id : 'Bilinmeyen';
+                    const userDisplay = `<span class="font-mono text-xs select-all text-slate-600 dark:text-slate-400 cursor-pointer hover:text-primary hover:underline" onclick="showUserDetail('${userUid}')" title="Kullanıcı Detayını Göster">${userUid.substring(0, 8)}...</span>`;
+
+                    // Status styling mapping
+                    let statusBadge = '';
+                    const pushStatus = data.pushStatus || 'pending';
+                    if (pushStatus === 'success' || pushStatus === 'sent') {
+                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Gönderildi</span>`;
+                    } else if (pushStatus === 'pending') {
+                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse"></span>Bekliyor</span>`;
+                    } else if (pushStatus.startsWith('skipped_quiet_hours')) {
+                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400" title="Kullanıcının sessiz saat ayarı aktif"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Sessiz Saat</span>`;
+                    } else if (pushStatus.startsWith('skipped_category_limit')) {
+                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-950/30 dark:text-orange-400" title="Kullanıcının saatlik veya günlük kategori limiti aşıldı"><span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>Limit Aşıldı</span>`;
+                    } else if (pushStatus === 'disabled_by_user_master_switch' || pushStatus.startsWith('disabled_by_user_group')) {
+                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400" title="Kullanıcı bu bildirim grubunu kapatmış"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Tercih Kapalı</span>`;
+                    } else if (pushStatus === 'disabled_by_system_master_switch') {
+                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400" title="Sistem bildirim gönderim anahtarı kapalı"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Sistem Kapalı</span>`;
+                    } else if (pushStatus === 'skipped_no_active_devices') {
+                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400" title="Kullanıcının aktif cihaz kaydı bulunamadı"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>Cihaz Yok</span>`;
+                    } else {
+                        statusBadge = `<span title="${data.error || 'Bilinmeyen hata'}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400 cursor-help"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Hata</span>`;
+                    }
+
+                    // Reason display formatting
+                    const reason = data.reason || 'manual';
+                    let reasonBadge = '';
+                    if (reason === 'keyword') {
+                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-400">Anahtar Kelime</span>`;
+                    } else if (reason === 'category') {
+                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/30 dark:text-purple-400">Kategori</span>`;
+                    } else if (reason === 'author') {
+                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">Yazar</span>`;
+                    } else if (reason === 'comment' || reason === 'comment_reply') {
+                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-400">Yorum</span>`;
+                    } else {
+                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400">Manuel</span>`;
+                    }
+
+                    html += `
+                        <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50">
+                            <td class="px-3 py-3 whitespace-nowrap text-xs font-semibold text-slate-600 dark:text-slate-400">${date}</td>
+                            <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-900 dark:text-white">${userDisplay}</td>
+                            <td class="px-3 py-3 text-xs text-slate-900 dark:text-white">
+                                <div class="font-bold">${escapeHtml(data.title)}</div>
+                                <div class="text-slate-500 dark:text-slate-400 text-xs">${escapeHtml(data.body)}</div>
+                            </td>
+                            <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">${reasonBadge}</td>
+                            <td class="px-3 py-3 whitespace-nowrap text-xs">${statusBadge}</td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = html;
+            }, (error) => {
+                console.warn('⚠️ Collection group query failed (probably missing index), falling back to notificationLogs...', error);
+                loadNotificationLogsFallback();
+            });
+    } catch (err) {
+        console.warn('⚠️ Exception setting up collection group query, falling back...', err);
+        loadNotificationLogsFallback();
+    }
+}
+
+function loadNotificationLogsFallback() {
+    console.log('🔔 Loading fallback notification logs from root collection...');
     const tbody = document.getElementById('notifLogsTableBody');
     if (!tbody) return;
 
@@ -6084,43 +6462,44 @@ function loadNotificationLogs() {
         .limit(10)
         .onSnapshot((snapshot) => {
             if (snapshot.empty) {
-                tbody.innerHTML = `<tr><td colspan="4" class="px-3 py-8 text-center text-slate-400 dark:text-slate-600">Gönderilmiş bildirim bulunmuyor.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-8 text-center text-slate-400 dark:text-slate-600">Gönderilmiş bildirim bulunmuyor.</td></tr>`;
                 return;
-             }
-             let html = '';
-             snapshot.forEach(doc => {
-                 const data = doc.data();
-                 const date = data.sentAt ? (data.sentAt.toDate ? data.sentAt.toDate().toLocaleString('tr-TR') : new Date(data.sentAt).toLocaleString('tr-TR')) : '-';
-                 const statusBadge = data.status === 'success' 
-                     ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Başarılı</span>`
-                     : `<span title="${data.error || 'Bilinmeyen hata'}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 cursor-help"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Hata</span>`;
-                 
-                 let targetText = '-';
-                 if (data.targetType === 'all') {
-                     targetText = 'Tüm Kullanıcılar';
-                 } else if (data.targetType === 'uid') {
-                     targetText = `UID: ${data.targetValue.substring(0, 8)}...`;
-                 } else if (data.targetType === 'token') {
-                     targetText = `Token: ${data.targetValue.substring(0, 8)}...`;
-                 }
+            }
+            let html = '';
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const date = data.sentAt ? (data.sentAt.toDate ? data.sentAt.toDate().toLocaleString('tr-TR') : new Date(data.sentAt).toLocaleString('tr-TR')) : '-';
+                const statusBadge = data.status === 'success' 
+                    ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Başarılı</span>`
+                    : `<span title="${data.error || 'Bilinmeyen hata'}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 cursor-help"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Hata</span>`;
+                
+                let targetText = '-';
+                if (data.targetType === 'all') {
+                    targetText = 'Tüm Kullanıcılar';
+                } else if (data.targetType === 'uid') {
+                    targetText = `UID: ${data.targetValue.substring(0, 8)}...`;
+                } else if (data.targetType === 'token') {
+                    targetText = `Token: ${data.targetValue.substring(0, 8)}...`;
+                }
 
-                 html += `
-                     <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50">
-                         <td class="px-3 py-3 whitespace-nowrap text-xs font-semibold text-slate-600 dark:text-slate-400">${date}</td>
-                         <td class="px-3 py-3 text-xs text-slate-900 dark:text-white">
-                             <div class="font-bold">${data.title}</div>
-                             <div class="text-slate-500 dark:text-slate-400">${data.body}</div>
-                         </td>
-                         <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">${targetText}</td>
-                         <td class="px-3 py-3 whitespace-nowrap text-xs">${statusBadge}</td>
-                     </tr>
-                 `;
-             });
-             tbody.innerHTML = html;
-         }, (error) => {
-             console.error('❌ Error loading notification logs:', error);
-             tbody.innerHTML = `<tr><td colspan="4" class="px-3 py-8 text-center text-red-500">Loglar yüklenirken hata oluştu.</td></tr>`;
-         });
+                html += `
+                    <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50">
+                        <td class="px-3 py-3 whitespace-nowrap text-xs font-semibold text-slate-600 dark:text-slate-400">${date}</td>
+                        <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-900 dark:text-white">${targetText}</td>
+                        <td class="px-3 py-3 text-xs text-slate-900 dark:text-white">
+                            <div class="font-bold">${escapeHtml(data.title)}</div>
+                            <div class="text-slate-500 dark:text-slate-400 text-xs">${escapeHtml(data.body)}</div>
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400">Manuel</span></td>
+                        <td class="px-3 py-3 whitespace-nowrap text-xs">${statusBadge}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }, (error) => {
+            console.error('❌ Error loading fallback notification logs:', error);
+            tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-8 text-center text-red-500">Loglar yüklenirken hata oluştu.</td></tr>`;
+        });
 }
 
 async function loadNotificationStats() {
@@ -6582,5 +6961,138 @@ function initLogsEventListeners() {
 }
 
 window.showLogsView = showLogsView;
+
+// Geliştirici & Test Otomasyon Araçları Fonksiyonları
+window.generateTestDataAdmin = async function() {
+    const emailPrefixInput = document.getElementById('testUserEmail');
+    const displayNameInput = document.getElementById('testUserNick');
+    const dealsCountInput = document.getElementById('testDealsCount');
+    const logEl = document.getElementById('testResultLog');
+
+    const emailPrefix = emailPrefixInput ? emailPrefixInput.value.trim() : 'testuser';
+    const displayName = displayNameInput ? displayNameInput.value.trim() : 'Test Kullanıcı';
+    const dealsCount = dealsCountInput ? parseInt(dealsCountInput.value) : 3;
+
+    if (!emailPrefix) {
+        showError('Test kullanıcı adı prefix giriniz!');
+        return;
+    }
+
+    const btn = document.getElementById('btnGenerateTestData');
+    const originalHTML = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">sync</span><span>Oluşturuluyor...</span>';
+    }
+
+    if (logEl) {
+        logEl.classList.remove('hidden');
+        logEl.textContent = '🔄 Test verisi oluşturuluyor... Lütfen bekleyin...';
+        logEl.className = 'p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/50 rounded-lg text-purple-800 dark:text-purple-400 text-xs font-mono whitespace-pre-wrap';
+    }
+
+    try {
+        console.log('🧪 Calling generateTestData Cloud Function...');
+        const generateFunc = firebase.functions().httpsCallable('generateTestData');
+        const result = await generateFunc({
+            email: emailPrefix,
+            username: displayName,
+            dealsCount: dealsCount
+        });
+
+        console.log('✅ Test data creation result:', result.data);
+
+        if (result.data && result.data.success) {
+            showSuccess('Test kullanıcısı ve mock fırsatlar başarıyla oluşturuldu!');
+            if (logEl) {
+                let logText = `✅ BAŞARILI!\n`;
+                logText += `----------------------------------------\n`;
+                logText += `UID: ${result.data.uid}\n`;
+                logText += `E-posta: ${result.data.email}\n`;
+                logText += `Şifre: password123\n`;
+                logText += `Görünen Ad: ${result.data.username}\n`;
+                logText += `----------------------------------------\n`;
+                logText += `Oluşturulan Mock Fırsatlar:\n`;
+                if (result.data.dealsCreated && result.data.dealsCreated.length > 0) {
+                    result.data.dealsCreated.forEach((deal, idx) => {
+                        logText += ` ${idx + 1}. [ID: ${deal.id}] ${deal.title}\n`;
+                    });
+                } else {
+                    logText += ` (Hiç fırsat oluşturulmadı)\n`;
+                }
+                logEl.textContent = logText;
+                logEl.className = 'p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-emerald-800 dark:text-emerald-400 text-xs font-mono whitespace-pre-wrap';
+            }
+            // Yenile
+            await loadDeals();
+        } else {
+            throw new Error('Yanıt başarısız oldu.');
+        }
+    } catch (error) {
+        console.error('❌ Test verisi oluşturulurken hata:', error);
+        showError('Test verisi oluşturma hatası: ' + error.message);
+        if (logEl) {
+            logEl.textContent = `❌ HATA!\n${error.message}`;
+            logEl.className = 'p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/50 rounded-lg text-rose-800 dark:text-rose-400 text-xs font-mono whitespace-pre-wrap';
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+        }
+    }
+};
+
+window.cleanupTestDataAdmin = async function() {
+    if (!confirm('E-postası "@test.firsatkolik.com" ile biten TÜM test kullanıcılarını ve ilişkili verileri (fırsatlar, yorumlar, abonelikler vb.) kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) {
+        return;
+    }
+
+    const btn = document.getElementById('btnClearTestData');
+    const originalHTML = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">sync</span><span>Temizleniyor...</span>';
+    }
+
+    const logEl = document.getElementById('testResultLog');
+    if (logEl) {
+        logEl.classList.remove('hidden');
+        logEl.textContent = '🔄 Test verileri temizleniyor... Lütfen bekleyin...';
+        logEl.className = 'p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/50 rounded-lg text-purple-800 dark:text-purple-400 text-xs font-mono whitespace-pre-wrap';
+    }
+
+    try {
+        console.log('🧪 Calling cleanupTestData Cloud Function...');
+        const cleanupFunc = firebase.functions().httpsCallable('cleanupTestData');
+        const result = await cleanupFunc();
+
+        console.log('✅ Test data cleanup result:', result.data);
+
+        if (result.data && result.data.success) {
+            showSuccess(`Temizleme başarılı! Toplam ${result.data.cleanedCount} test hesabı ve tüm ilişkili verileri temizlendi.`);
+            if (logEl) {
+                logEl.textContent = `✅ TEMİZLEME BAŞARILI!\nSilinen Test Hesap Sayısı: ${result.data.cleanedCount}\nİlişkili veritabanı kayıtları (fırsatlar, cihazlar, abonelikler) onUserDeleted tetikleyicisi tarafından arka planda temizlendi.`;
+                logEl.className = 'p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-emerald-800 dark:text-emerald-400 text-xs font-mono whitespace-pre-wrap';
+            }
+            await loadDeals();
+        } else {
+            throw new Error('Yanıt başarısız oldu.');
+        }
+    } catch (error) {
+        console.error('❌ Test verileri temizlenirken hata:', error);
+        showError('Temizleme hatası: ' + error.message);
+        if (logEl) {
+            logEl.textContent = `❌ HATA!\n${error.message}`;
+            logEl.className = 'p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/50 rounded-lg text-rose-800 dark:text-rose-400 text-xs font-mono whitespace-pre-wrap';
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+        }
+    }
+};
+
 
 

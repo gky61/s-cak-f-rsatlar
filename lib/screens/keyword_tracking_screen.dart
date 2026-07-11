@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/firestore_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 
 void _log(String message) {
@@ -17,7 +17,7 @@ class KeywordTrackingScreen extends StatefulWidget {
 
 class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirestoreService _firestoreService = FirestoreService();
+  final NotificationService _notificationService = NotificationService();
   final TextEditingController _keywordController = TextEditingController();
   List<String> _watchKeywords = [];
   bool _isLoading = true;
@@ -36,14 +36,11 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
 
   Future<void> _loadKeywords() async {
     try {
-      final userId = _auth.currentUser?.uid;
-      if (userId != null) {
-        final keywords = await _firestoreService.getUserWatchKeywords(userId);
-        setState(() {
-          _watchKeywords = keywords;
-          _isLoading = false;
-        });
-      }
+      final keywords = await _notificationService.getNotificationKeywords();
+      setState(() {
+        _watchKeywords = keywords;
+        _isLoading = false;
+      });
     } catch (e) {
       _log('Anahtar kelime yükleme hatası: $e');
       setState(() => _isLoading = false);
@@ -51,7 +48,7 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   }
 
   Future<void> _addKeyword() async {
-    final keyword = _keywordController.text.trim().toLowerCase();
+    final keyword = _keywordController.text.trim();
     if (keyword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -63,7 +60,8 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
       return;
     }
 
-    if (_watchKeywords.contains(keyword)) {
+    final normalized = _notificationService.normalizeKeyword(keyword);
+    if (_watchKeywords.map((k) => _notificationService.normalizeKeyword(k)).contains(normalized)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Bu kelime zaten ekli'),
@@ -78,7 +76,7 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
     if (userId == null) return;
 
     try {
-      await _firestoreService.addWatchKeyword(userId, keyword);
+      await _notificationService.addKeywordSubscription(keyword);
       setState(() {
         _watchKeywords.add(keyword);
         _keywordController.clear();
@@ -112,7 +110,7 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
     if (userId == null) return;
 
     try {
-      await _firestoreService.removeWatchKeyword(userId, keyword);
+      await _notificationService.removeKeywordSubscription(keyword);
       setState(() {
         _watchKeywords.remove(keyword);
       });

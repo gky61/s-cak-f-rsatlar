@@ -8,6 +8,7 @@ import '../models/message.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import 'profile_screen.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -117,29 +118,40 @@ class _MessageScreenState extends State<MessageScreen> {
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
       appBar: AppBar(
-        title: Row(
-          children: [
-            ClipOval(
-              child: widget.otherUserImageUrl.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: widget.otherUserImageUrl,
-                      width: 32,
-                      height: 32,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
-                      errorWidget: (context, url, error) => const Icon(Icons.person, size: 32),
-                    )
-                  : const Icon(Icons.person, size: 32),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                widget.otherUserName,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
+        title: GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfileScreen(userId: widget.otherUserId),
               ),
-            ),
-          ],
+            );
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            children: [
+              ClipOval(
+                child: widget.otherUserImageUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: widget.otherUserImageUrl,
+                        width: 32,
+                        height: 32,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
+                        errorWidget: (context, url, error) => const Icon(Icons.person, size: 32),
+                      )
+                    : const Icon(Icons.person, size: 32),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  widget.otherUserName,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
         backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
         elevation: 0,
@@ -241,19 +253,29 @@ class _MessageScreenState extends State<MessageScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             if (!isMe) ...[
-                              ClipOval(
-                                child: message.senderImageUrl.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: message.senderImageUrl,
-                                        width: 32,
-                                        height: 32,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) =>
-                                            const CircularProgressIndicator(strokeWidth: 2),
-                                        errorWidget: (context, url, error) =>
-                                            const Icon(Icons.person, size: 32),
-                                      )
-                                    : const Icon(Icons.person, size: 32),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProfileScreen(userId: message.senderId),
+                                    ),
+                                  );
+                                },
+                                child: ClipOval(
+                                  child: message.senderImageUrl.isNotEmpty
+                                      ? CachedNetworkImage(
+                                          imageUrl: message.senderImageUrl,
+                                          width: 32,
+                                          height: 32,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              const CircularProgressIndicator(strokeWidth: 2),
+                                          errorWidget: (context, url, error) =>
+                                              const Icon(Icons.person, size: 32),
+                                        )
+                                      : const Icon(Icons.person, size: 32),
+                                ),
                               ),
                               const SizedBox(width: 8),
                             ],
@@ -304,19 +326,29 @@ class _MessageScreenState extends State<MessageScreen> {
                             ),
                             if (isMe) ...[
                               const SizedBox(width: 8),
-                              ClipOval(
-                                child: _authService.currentUser?.photoURL != null
-                                    ? CachedNetworkImage(
-                                        imageUrl: _authService.currentUser!.photoURL!,
-                                        width: 32,
-                                        height: 32,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) =>
-                                            const CircularProgressIndicator(strokeWidth: 2),
-                                        errorWidget: (context, url, error) =>
-                                            const Icon(Icons.person, size: 32),
-                                      )
-                                    : const Icon(Icons.person, size: 32),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProfileScreen(userId: message.senderId),
+                                    ),
+                                  );
+                                },
+                                child: ClipOval(
+                                  child: _authService.currentUser?.photoURL != null
+                                      ? CachedNetworkImage(
+                                          imageUrl: _authService.currentUser!.photoURL!,
+                                          width: 32,
+                                          height: 32,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              const CircularProgressIndicator(strokeWidth: 2),
+                                          errorWidget: (context, url, error) =>
+                                              const Icon(Icons.person, size: 32),
+                                        )
+                                      : const Icon(Icons.person, size: 32),
+                                ),
                               ),
                             ],
                           ],

@@ -22,6 +22,48 @@ class UserService {
     }
   }
 
+  Future<void> addLastSharedDeal(String userId, {
+    required String dealId,
+    required String title,
+    required double price,
+    required String store,
+    required String link,
+  }) async {
+    try {
+      final userDocRef = _firestore.collection('users').doc(userId);
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(userDocRef);
+        List<dynamic> list = [];
+        if (snapshot.exists) {
+          final data = snapshot.data();
+          list = List.from(data?['sonPaylasilanFirsatlar'] ?? []);
+        }
+        
+        // Mükerrer eklemeyi önle
+        list.removeWhere((item) => item['firsatId'] == dealId);
+        
+        list.insert(0, {
+          'firsatId': dealId,
+          'baslik': title,
+          'fiyat': price.toString(),
+          'link': link,
+          'magazaAdi': store,
+          'paylasilmaTarihi': Timestamp.now(),
+        });
+        
+        if (list.length > 5) {
+          list = list.sublist(0, 5);
+        }
+        
+        transaction.set(userDocRef, {
+          'sonPaylasilanFirsatlar': list,
+        }, SetOptions(merge: true));
+      });
+    } catch (e) {
+      _log('addLastSharedDeal hatası: $e');
+    }
+  }
+
   // Favori İşlemleri
   Future<bool> isFavorite(String userId, String dealId) async {
     try {
@@ -30,13 +72,36 @@ class UserService {
     } catch (e) { return false; }
   }
 
-  Future<bool> addToFavorites(String userId, String dealId) async {
+  Future<bool> addToFavorites(String userId, String dealId, {String? title, double? price, String? store, String? link}) async {
     try {
+      String finalTitle = title ?? '';
+      double finalPrice = price ?? 0.0;
+      String finalStore = store ?? '';
+      String finalLink = link ?? '';
+
+      if (finalTitle.isEmpty || finalLink.isEmpty) {
+        final doc = await _firestore.collection('deals').doc(dealId).get();
+        if (doc.exists) {
+          finalTitle = doc.data()?['title'] ?? '';
+          finalPrice = (doc.data()?['price'] as num?)?.toDouble() ?? 0.0;
+          finalStore = doc.data()?['store'] ?? '';
+          finalLink = doc.data()?['link'] ?? doc.data()?['url'] ?? '';
+        }
+      }
+
       await _firestore.collection('users').doc(userId).collection('favorites').doc(dealId).set({
-        'addedAt': FieldValue.serverTimestamp()
+        'favoriId': dealId,
+        'firsatId': dealId,
+        'baslik': finalTitle,
+        'fiyat': finalPrice.toString(),
+        'link': finalLink,
+        'magazaAdi': finalStore,
+        'eklenmeTarihi': FieldValue.serverTimestamp(),
       });
       return true;
-    } catch (e) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<bool> removeFromFavorites(String userId, String dealId) async {
@@ -51,13 +116,85 @@ class UserService {
         .collection('users')
         .doc(userId)
         .collection('favorites')
-        .orderBy('addedAt', descending: true)
         .snapshots()
         .asyncMap((snapshot) async {
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(hours: 48));
       List<Deal> deals = [];
-      for (var doc in snapshot.docs) {
-        final dealDoc = await _firestore.collection('deals').doc(doc.id).get();
-        if (dealDoc.exists) deals.add(Deal.fromFirestore(dealDoc));
+      
+      final docs = snapshot.docs.toList();
+      docs.sort((a, b) {
+        final aTime = (a.data()['eklenmeTarihi'] ?? a.data()['addedAt']) as Timestamp?;
+        final bTime = (b.data()['eklenmeTarihi'] ?? b.data()['addedAt']) as Timestamp?;
+        if (aTime == null || bTime == null) return 0;
+        return bTime.compareTo(aTime);
+      });
+
+      for (var doc in docs) {
+        final data = doc.data();
+        final dealId = doc.id;
+        final dealDoc = await _firestore.collection('deals').doc(dealId).get();
+        
+        final addedAtTimestamp = (data['eklenmeTarihi'] ?? data['addedAt']) as Timestamp?;
+        final addedAt = addedAtTimestamp?.toDate() ?? now;
+        final isOld = addedAt.isBefore(cutoffTime);
+        
+        if (dealDoc.exists) {
+          final deal = Deal.fromFirestore(dealDoc);
+          if (isOld || deal.isExpired || deal.createdAt.isBefore(cutoffTime)) {
+            deals.add(Deal(
+              id: deal.id,
+              title: deal.title,
+              description: deal.description,
+              price: deal.price,
+              originalPrice: deal.originalPrice,
+              discountRate: deal.discountRate,
+              store: deal.store,
+              category: deal.category,
+              subCategory: deal.subCategory,
+              link: deal.link,
+              imageUrl: deal.imageUrl,
+              hotVotes: deal.hotVotes,
+              coldVotes: deal.coldVotes,
+              expiredVotes: deal.expiredVotes,
+              commentCount: deal.commentCount,
+              postedBy: deal.postedBy,
+              createdAt: deal.createdAt,
+              isEditorPick: deal.isEditorPick,
+              isApproved: deal.isApproved,
+              isExpired: true,
+              isUserSubmitted: deal.isUserSubmitted,
+            ));
+          } else {
+            deals.add(deal);
+          }
+        } else {
+          final baslik = data['baslik'] ?? data['title'] ?? 'Süresi Dolan Fırsat';
+          final fiyatStr = data['fiyat'] ?? '0';
+          final fiyat = double.tryParse(fiyatStr) ?? 0.0;
+          final store = data['magazaAdi'] ?? data['store'] ?? 'Mağaza';
+          final link = data['link'] ?? '';
+          
+          deals.add(Deal(
+            id: dealId,
+            title: baslik,
+            description: 'Bu fırsatın süresi dolmuştur.',
+            price: fiyat,
+            store: store,
+            category: 'tumu',
+            link: link,
+            imageUrl: '',
+            hotVotes: 0,
+            coldVotes: 0,
+            commentCount: 0,
+            postedBy: '',
+            createdAt: addedAt,
+            isEditorPick: false,
+            isApproved: true,
+            isExpired: true,
+            isUserSubmitted: false,
+          ));
+        }
       }
       return deals;
     });
@@ -90,6 +227,11 @@ class UserService {
         'followersWithNotifications': FieldValue.arrayRemove([followerId]),
       });
       await batch.commit();
+
+      // Ayrıca yazar bildirim aboneliğini sil
+      final sanitizedKey = followingId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
+      final subId = '${followerId}_author_$sanitizedKey';
+      await _firestore.collection('notificationSubscriptions').doc(subId).delete();
     } catch (e) {
       _log('Takipten çıkma hatası: $e');
       rethrow;
@@ -107,21 +249,32 @@ class UserService {
   // EKLENDİ: Takip bildirim kontrolü
   Future<bool> isFollowNotificationEnabled(String followerId, String followingId) async {
     try {
-      final doc = await _firestore.collection('users').doc(followingId).get();
-      if (!doc.exists) return false;
-      final followersWithNotifications = List<String>.from(doc.data()?['followersWithNotifications'] ?? []);
-      return followersWithNotifications.contains(followerId);
+      final sanitizedKey = followingId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
+      final subId = '${followerId}_author_$sanitizedKey';
+      final doc = await _firestore.collection('notificationSubscriptions').doc(subId).get();
+      return doc.exists && (doc.data()?['enabled'] ?? false);
     } catch (e) { return false; }
   }
 
   // EKLENDİ: Takip bildirim aç/kapa
   Future<void> toggleFollowNotification(String followerId, String followingId, bool enable) async {
     try {
-      final followingRef = _firestore.collection('users').doc(followingId);
+      final sanitizedKey = followingId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
+      final subId = '${followerId}_author_$sanitizedKey';
       if (enable) {
-        await followingRef.update({'followersWithNotifications': FieldValue.arrayUnion([followerId])});
+        await _firestore.collection('notificationSubscriptions').doc(subId).set({
+          'uid': followerId,
+          'type': 'author',
+          'key': followingId,
+          'displayValue': followingId,
+          'normalizedValue': followingId.toLowerCase(),
+          'includeDescendants': true,
+          'enabled': true,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       } else {
-        await followingRef.update({'followersWithNotifications': FieldValue.arrayRemove([followerId])});
+        await _firestore.collection('notificationSubscriptions').doc(subId).delete();
       }
     } catch (e) { rethrow; }
   }

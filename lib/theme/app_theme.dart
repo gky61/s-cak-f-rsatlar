@@ -186,12 +186,12 @@ class AppTheme {
   static ThemeData get lightTheme => getLightTheme();
 
   // Dark Theme Renkleri - HTML tasarımından
-  static const Color darkBackground = Color(0xFF23220F); // Koyu zemin (#23220f)
-  static const Color darkSurface = Color(0xFF23231A); // Koyu Kart Zemini (#23231a)
-  static const Color darkSurfaceElevated = Color(0xFF2C2C1E); // Yükseltilmiş yüzeyler için
+  static const Color darkBackground = Colors.black; // Koyu zemin (Saf siyah)
+  static const Color darkSurface = Color(0xFF121212); // Koyu Kart Zemini
+  static const Color darkSurfaceElevated = Color(0xFF1E1E1E); // Yükseltilmiş yüzeyler için
   static const Color darkTextPrimary = Colors.white; // Daha açık metin
-  static const Color darkTextSecondary = Color(0xFF8C8B5F); // İkincil Metin
-  static const Color darkBorder = Color(0xFF333333); // Daha belirgin border
+  static const Color darkTextSecondary = Color(0xFF8E8E93); // İkincil Metin (Nötr Gri)
+  static const Color darkBorder = Color(0xFF2C2C2C); // Koyu Sınır Çizgisi
   static const Color darkDivider = Color(0xFF2A2A2A); // Divider rengi
 
   static ThemeData getDarkTheme() {

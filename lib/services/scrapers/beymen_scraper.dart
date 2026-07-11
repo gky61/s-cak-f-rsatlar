@@ -1,0 +1,162 @@
+import 'package:html/dom.dart' as dom;
+import 'base_scraper.dart';
+
+class BeymenScraper extends BaseProductScraper {
+  @override
+  String get domain => 'beymen.com';
+
+  @override
+  bool canHandle(String url) {
+    return url.toLowerCase().contains('beymen.com');
+  }
+
+  @override
+  String? scrape({
+    required dom.Document document,
+    required String url,
+    required bool Function(String urlString) isLogoUrl,
+    required String? Function(String? imageUrl, String pageUrl) resolveImageUrl,
+    required void Function(String message) log,
+  }) {
+    // 1. JSON-LD şemasından görsel çekmeyi dene (Öncelikli)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null && productJson['image'] != null) {
+      final imgLd = extractImageFromProductJson(productJson['image']);
+      if (imgLd != null && imgLd.isNotEmpty) {
+        final resolved = resolveImageUrl(imgLd, url);
+        if (resolved != null && !isLogoUrl(resolved)) {
+          log('✅ Beymen görseli JSON-LD ile bulundu: $resolved');
+          return resolved;
+        }
+      }
+    }
+
+    // 2. Open Graph meta tag'i dene (Fallback 1)
+    final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'];
+    if (ogImage != null && ogImage.isNotEmpty) {
+      final resolved = resolveImageUrl(ogImage, url);
+      if (resolved != null && !isLogoUrl(resolved)) {
+        log('✅ Beymen görseli og:image ile bulundu: $resolved');
+        return resolved;
+      }
+    }
+
+    // 3. DOM Seçicileri (Fallback 2)
+    final imgElements = document.querySelectorAll('.product-detail-images img, img[class*="product"]');
+    for (final img in imgElements) {
+      final src = img.attributes['src'] ?? img.attributes['data-src'];
+      if (src != null && src.isNotEmpty) {
+        final resolved = resolveImageUrl(src, url);
+        if (resolved != null && !isLogoUrl(resolved)) {
+          log('✅ Beymen görseli img etiketiyle bulundu: $resolved');
+          return resolved;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  @override
+  String? scrapeTitle(dom.Document document) {
+    // 1. Önce DOM seçicisini deneyelim çünkü HTML içerisinde inç (" gibi) işaretleri olsa dahi en temiz haliyle buradadır.
+    final titleEl = document.querySelector('.o-productDetail__description');
+    if (titleEl != null && titleEl.text.trim().isNotEmpty) {
+      return titleEl.text.trim();
+    }
+
+    // 2. Script BEYMEN.productMain displayName eşleşmesini dene
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('BEYMEN.productMain')) {
+        final match = RegExp(r'"displayName"\s*:\s*"((?:[^"\\]|\\.)*)"').firstMatch(text);
+        if (match != null) {
+          return match.group(1)!.replaceAll('\\"', '"').trim();
+        }
+      }
+    }
+
+    // 3. JSON-LD şemasından (Fallback 1)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null && productJson['name'] != null) {
+      return productJson['name'].toString().trim();
+    }
+
+    // 4. Genel H1 (Fallback 2)
+    final h1El = document.querySelector('h1.o-productDetail__title') ??
+                 document.querySelector('h1');
+    if (h1El != null) {
+      return h1El.text.trim();
+    }
+    return null;
+  }
+
+  @override
+  Future<double?> scrapePrice(dom.Document document) async {
+    // 1. Script BEYMEN.productMain promotedOrActualPrice değerinden (Öncelikli)
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('BEYMEN.productMain') || text.contains('promotedOrActualPrice')) {
+        final match = RegExp(r'"promotedOrActualPrice"\s*:\s*([0-9.]+)').firstMatch(text);
+        if (match != null) {
+          final val = double.tryParse(match.group(1)!);
+          if (val != null && val > 0) return val;
+        }
+      }
+    }
+
+    // 2. JSON-LD şemasından fiyat çekmeyi dene (Fallback 1)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final priceLd = extractPriceFromProductJson(productJson);
+      if (priceLd != null && priceLd > 0) {
+        return priceLd;
+      }
+    }
+
+    // 3. DOM Seçicileri (Fallback 2 - En ucuz sepette indirimli/Visa kampanya fiyatını seçer)
+    final priceSelectors = [
+      '.m-price__campaignPrice',
+      'ins.m-price__new',
+      '.m-price__new',
+      '.m-productDetail__newPrice',
+      '.o-productDetail__price',
+    ];
+    double? lowestPrice;
+    for (final selector in priceSelectors) {
+      final priceEl = document.querySelector(selector);
+      if (priceEl != null) {
+        final val = parsePriceText(priceEl.text);
+        if (val != null && val > 0) {
+          if (lowestPrice == null || val < lowestPrice) {
+            lowestPrice = val;
+          }
+        }
+      }
+    }
+
+    return lowestPrice;
+  }
+
+  @override
+  String? scrapeDescription(dom.Document document) {
+    // 1. JSON-LD şemasından (Öncelikli)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null && productJson['description'] != null) {
+      return productJson['description'].toString().trim();
+    }
+
+    // 2. og:description veya description meta tag
+    final descEl = document.querySelector('meta[name="description"]') ?? 
+                   document.querySelector('meta[property="og:description"]');
+    if (descEl != null) {
+      final content = descEl.attributes['content']?.trim();
+      if (content != null && content.isNotEmpty && content.toLowerCase() != 'null') {
+        return content;
+      }
+    }
+    return null;
+  }
+}

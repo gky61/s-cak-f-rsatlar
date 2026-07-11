@@ -25,8 +25,8 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF23220F) : const Color(0xFFF8F8F5);
-    final surfaceColor = isDark ? const Color(0xFF2E2D15) : Colors.white;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
     final primaryColor = Theme.of(context).colorScheme.primary;
     final textMain = isDark ? Colors.white : const Color(0xFF1C1C0D);
     final textSub = isDark ? Colors.grey[400] : const Color(0xFF5C5C4F);

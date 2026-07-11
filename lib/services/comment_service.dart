@@ -22,6 +22,7 @@ class CommentService {
     required String text,
     String? parentCommentId,
     String? replyToUserName,
+    String? quotedCommentText,
     String? userProfileImageUrl,
     List<String>? userBadges,
   }) async {
@@ -65,6 +66,7 @@ class CommentService {
         createdAt: DateTime.now(),
         parentCommentId: parentCommentId,
         replyToUserName: replyToUserName,
+        quotedCommentText: quotedCommentText,
         userBadges: userBadges ?? [],
       );
 

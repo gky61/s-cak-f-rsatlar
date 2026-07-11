@@ -5,6 +5,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'dart:async';
 import 'dart:ui';
 import '../services/firestore_service.dart';
+import '../services/deal_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/theme_service.dart';
@@ -15,6 +16,8 @@ import '../widgets/ad_deal_card.dart';
 import '../models/category.dart';
 import '../models/deal.dart';
 import '../theme/app_theme.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import '../services/connectivity_service.dart';
 import 'deal_detail_screen.dart';
 import 'submit_deal_screen.dart';
 import 'admin_screen.dart';
@@ -64,8 +67,10 @@ class _HomeScreenState extends State<HomeScreen> {
   int _displayLimit = 20;
   bool _isLoadingMore = false;
   bool _hasMore = true;
+  bool _hasServerData = false;
+  List<Deal> _rawDeals = [];
   
-  late Stream<List<Deal>> _dealsStream;
+  late Stream<DealsSnapshot> _dealsStream;
   
   // Engelleme kontrolü için
   StreamSubscription? _blockedUserListener;
@@ -75,6 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _unreadAdminMessageCount = 0;
   StreamSubscription? _messageCountSubscription;
   StreamSubscription? _adminMessageCountSubscription;
+  StreamSubscription? _intentSub;
 
   @override
   void initState() {
@@ -92,6 +98,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _themeService.addListener(_onThemeChanged);
     // Scroll listener ekle
     _scrollController.addListener(_onScroll);
+    // Share Intent dinleyici
+    _initShareIntentListener();
   }
   
   @override
@@ -99,12 +107,63 @@ class _HomeScreenState extends State<HomeScreen> {
     _blockedUserListener?.cancel();
     _messageCountSubscription?.cancel();
     _adminMessageCountSubscription?.cancel();
+    _intentSub?.cancel();
     _themeService.removeListener(_onThemeChanged);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _categoryScrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _initShareIntentListener() {
+    // 1. Uygulama açık veya arka plandayken gelen paylaşımları dinle
+    _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
+      if (value.isNotEmpty) {
+        _handleSharedMedia(value);
+      }
+    }, onError: (err) {
+      _log("getIntentSharingTextList Error: $err");
+    });
+
+    // 2. Uygulama tamamen kapalıyken paylaşımla açılırsa ilk paylaşımı al
+    ReceiveSharingIntent.instance.getInitialMedia().then((value) {
+      if (value.isNotEmpty) {
+        _handleSharedMedia(value);
+      }
+    });
+  }
+
+  void _handleSharedMedia(List<SharedMediaFile> files) {
+    if (files.isEmpty) return;
+    
+    final sharedText = files.first.path;
+    _log('📥 Paylaşılan veri alındı: $sharedText');
+    
+    final url = _extractUrl(sharedText);
+    if (url != null) {
+      _log('🎯 Ayıklanan URL: $url');
+      
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SubmitDealScreen(initialUrl: url),
+          ),
+        );
+      }
+    } else {
+      _log('⚠️ Paylaşılan metinde geçerli bir link bulunamadı.');
+    }
+  }
+
+  String? _extractUrl(String text) {
+    final RegExp urlRegex = RegExp(
+      r'(https?:\/\/[^\s]+)',
+      caseSensitive: false,
+    );
+    final match = urlRegex.firstMatch(text);
+    return match?.group(0);
   }
   
   // Okunmamış mesaj sayılarını yükle
@@ -126,27 +185,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Kullanıcı mesajları için stream
       _messageCountSubscription?.cancel();
-      _messageCountSubscription = _firestoreService.getUserMessagesStream(currentUserId).listen((messages) {
-        if (mounted) {
-          final unreadCount = messages
-              .where((m) => m.receiverId == currentUserId && !m.isRead)
-              .length;
-          setState(() {
-            _unreadMessageCount = unreadCount;
-          });
-        }
-      });
+      _messageCountSubscription = _firestoreService.getUserMessagesStream(currentUserId).listen(
+        (messages) {
+          if (mounted) {
+            final unreadCount = messages
+                .where((m) => m.receiverId == currentUserId && !m.isRead)
+                .length;
+            setState(() {
+              _unreadMessageCount = unreadCount;
+            });
+          }
+        },
+        onError: (err) => _log('⚠️ HomeScreen unread message count stream error: $err'),
+      );
 
       // Admin mesajları için stream
       _adminMessageCountSubscription?.cancel();
-      _adminMessageCountSubscription = _firestoreService.getAdminToUserMessagesStream(currentUserId).listen((messages) {
-        if (mounted) {
-          final unreadCount = messages.where((m) => !m.isRead).length;
-          setState(() {
-            _unreadAdminMessageCount = unreadCount;
-          });
-        }
-      });
+      _adminMessageCountSubscription = _firestoreService.getAdminToUserMessagesStream(currentUserId).listen(
+        (messages) {
+          if (mounted) {
+            final unreadCount = messages.where((m) => !m.isRead).length;
+            setState(() {
+              _unreadAdminMessageCount = unreadCount;
+            });
+          }
+        },
+        onError: (err) => _log('⚠️ HomeScreen unread admin message count stream error: $err'),
+      );
     } catch (e) {
       _log('❌ Okunmamış mesaj sayısı yükleme hatası: $e');
     }
@@ -273,7 +338,11 @@ class _HomeScreenState extends State<HomeScreen> {
           _log('✅ HomeScreen: Kullanıcı engeli kaldırıldı (real-time): $userId');
         }
       }, onError: (error) {
-        _log('❌ HomeScreen: Blocked user listener hatası: $error');
+        if (error.toString().contains('permission-denied')) {
+          _log('ℹ️ HomeScreen: Blocked user listener çıkış sırasında kapandı (beklenen)');
+        } else {
+          _log('❌ HomeScreen: Blocked user listener hatası: $error');
+        }
         _blockedUserListener = null; // Hata durumunda listener'ı sıfırla
       });
       _log('✅ HomeScreen: Real-time engelleme listener başarıyla başlatıldı: $userId');
@@ -327,11 +396,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _scrollToTop() {
-    _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 400), // Daha hızlı scroll
-      curve: Curves.easeOut, // Daha hızlı curve
-    );
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   void _onThemeChanged() {
@@ -774,7 +845,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const OfflineBanner(),
           // Liste
           Expanded(
-            child: StreamBuilder<List<Deal>>(
+            child: StreamBuilder<DealsSnapshot>(
               stream: _dealsStream,
               builder: (context, snapshot) {
                 // StreamBuilder optimizasyonu - sadece gerekli durumlarda rebuild
@@ -834,7 +905,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
 
                 // Veri yoksa boş liste kullan
-                final deals = snapshot.data ?? [];
+                if (snapshot.hasData) {
+                  final isFromCache = snapshot.data!.isFromCache;
+                  if (!isFromCache) {
+                    _hasServerData = true;
+                  }
+                }
+
+                List<Deal> deals = snapshot.data?.deals ?? [];
+                
+                // Çevrimiçi isek, sunucu verisi zaten geldiyse ve bu snapshot cache'ten ise,
+                // eski cache verisinin araya girip eski fırsatları tekrar göstermemesi için
+                // hafızadaki son güncel listeyi (_rawDeals) koruyoruz.
+                if (snapshot.hasData && snapshot.data!.isFromCache && _hasServerData && _rawDeals.isNotEmpty && ConnectivityService().isConnected) {
+                  deals = _rawDeals;
+                } else {
+                  _rawDeals = deals;
+                }
                 
                 // Filtreleme (İstemci tarafında) - Optimize edildi
                 // Bot'tan gelen kategori ID olarak saklanıyor ("elektronik", "moda" vb.)
@@ -897,16 +984,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     // Haptic feedback ekle
                     HapticFeedback.mediumImpact();
                     
-                    // Veriyi yenile
-                    await Future.delayed(const Duration(milliseconds: 500));
+                    // Reset server data indicators to force fresh server retrieval
+                    _hasServerData = false;
+                    _rawDeals = [];
                     
                     if (mounted) {
                       setState(() {
                         _displayLimit = 20;
-                        _hasMore = _allDeals.length > _displayLimit;
+                        _dealsStream = _firestoreService.getDealsStream();
+                        _hasMore = true;
                         _isLoadingMore = false;
                       });
                     }
+                    
+                    // Veriyi yenile
+                    await Future.delayed(const Duration(milliseconds: 500));
                   },
                   color: AppTheme.primary,
                   strokeWidth: 3.0,
@@ -1094,6 +1186,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 isSelected: true,
                 onTap: () {
                   final now = DateTime.now();
+                  
+                  // Her durumda listeyi en üste kaydır
+                  _scrollToTop();
+                  
                   if (_lastHomeButtonTap != null &&
                       now.difference(_lastHomeButtonTap!) < _doubleTapTimeLimit) {
                     // Çift tıklama algılandı - "Tümü" kategorisine geç

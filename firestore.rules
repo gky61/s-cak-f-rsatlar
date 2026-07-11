@@ -39,12 +39,19 @@ service cloud.firestore {
       // Herkes okuyabilir (profil bilgileri için)
       allow read: if isAuthenticated();
       
-      // Sadece kendi profilini oluşturabilir/güncelleyebilir
+      // Sadece kendi profilini oluşturabilir
       allow create: if isAuthenticated() && userId() == targetUserId;
-      allow update: if isAuthenticated() && (userId() == targetUserId || isAdmin());
       
-      // Sadece admin silebilir
-      allow delete: if isAdmin();
+      // Sadece kendi profilini veya admin güncelleyebilir.
+      // EK OLARAK: Başka bir kullanıcı sadece followersWithNotifications alanını güncelleyebilir (takip/zil için)
+      allow update: if isAuthenticated() && (
+        userId() == targetUserId || 
+        isAdmin() ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersWithNotifications']))
+      );
+      
+      // Sadece kendi profilini veya admin silebilir
+      allow delete: if isAuthenticated() && (userId() == targetUserId || isAdmin());
       
       // Favoriler subcollection
       match /favorites/{dealId} {
@@ -52,8 +59,14 @@ service cloud.firestore {
         allow write: if canWrite() && userId() == targetUserId;
       }
       
-      // Kullanıcı bildirimleri (yorum cevapları vb.)
+      // Kullanıcı bildirimleri (Bildirim Merkezi)
       match /notifications/{notificationId} {
+        allow read: if isAuthenticated() && userId() == targetUserId;
+        allow write: if isAuthenticated() && userId() == targetUserId;
+      }
+      
+      // Kullanıcı bildirim tercihleri
+      match /notificationPreferences/{documentId} {
         allow read, write: if isAuthenticated() && userId() == targetUserId;
       }
     }
@@ -210,6 +223,30 @@ service cloud.firestore {
     match /systemErrors/{errorId} {
       allow read, write: if isAdmin();
       allow create: if true; // Tüm servislerin hata logu yazabilmesi için
+    }
+
+    // ========================================
+    // NOTIFICATION SUBSCRIPTIONS
+    // ========================================
+    match /notificationSubscriptions/{subscriptionId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == userId());
+      allow write: if canWrite() && (request.resource == null || request.resource.data.uid == userId()) && (resource == null || resource.data.uid == userId());
+    }
+
+    // ========================================
+    // USER DEVICES
+    // ========================================
+    match /userDevices/{deviceId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == userId());
+      allow write: if canWrite() && (request.resource == null || request.resource.data.uid == userId()) && (resource == null || resource.data.uid == userId());
+    }
+
+    // ========================================
+    // SYSTEM CONFIG
+    // ========================================
+    match /systemConfig/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // ========================================

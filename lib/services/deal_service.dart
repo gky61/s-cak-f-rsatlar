@@ -10,20 +10,28 @@ void _log(String message) {
   if (kDebugMode) print(message);
 }
 
+class DealsSnapshot {
+  final List<Deal> deals;
+  final bool isFromCache;
+  DealsSnapshot({required this.deals, required this.isFromCache});
+}
+
 class DealService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
 
   // Deals koleksiyonunu dinleme
-  Stream<List<Deal>> getDealsStream() {
+  Stream<DealsSnapshot> getDealsStream() {
     return _firestore
         .collection('deals')
+        .where('isApproved', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
       final now = DateTime.now();
-      final cutoffTime = now.subtract(const Duration(days: 180));
+      final cutoffTime = now.subtract(const Duration(hours: 48));
       
-      return snapshot.docs
+      final deals = snapshot.docs
           .map((doc) {
             try {
               return Deal.fromFirestore(doc);
@@ -34,14 +42,13 @@ class DealService {
           })
           .where((deal) {
             if (deal == null) return false;
-            if (deal.isApproved != true) return false;
             if (deal.isExpired == true) return false;
             if (deal.createdAt.isBefore(cutoffTime)) return false;
             return true;
           })
           .cast<Deal>()
-          .toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          .toList();
+      return DealsSnapshot(deals: deals, isFromCache: snapshot.metadata.isFromCache);
     });
   }
 
@@ -69,7 +76,7 @@ class DealService {
 
       final snapshot = await query.get();
       final now = DateTime.now();
-      final cutoffTime = now.subtract(const Duration(days: 180));
+      final cutoffTime = now.subtract(const Duration(hours: 48));
       
       return snapshot.docs
           .map((doc) => Deal.fromFirestore(doc))
@@ -133,11 +140,13 @@ class DealService {
         .collection('deals')
         .snapshots()
         .map((snapshot) {
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(hours: 48));
       final deals = snapshot.docs
           .map((doc) {
             try { return Deal.fromFirestore(doc); } catch (e) { return null; }
           })
-          .where((deal) => deal != null && deal!.isApproved == true && deal.isExpired != true)
+          .where((deal) => deal != null && deal!.isApproved == true && deal.isExpired != true && !deal.createdAt.isBefore(cutoffTime))
           .cast<Deal>()
           .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -232,6 +241,16 @@ class DealService {
       // Kullanıcı puanını artır (UserService kullanımı)
       final userService = UserService();
       await userService.incrementUserPoints(userId, points: 5, dealCount: 1);
+      
+      // Profil geçmişine minimalist fırsat kartı ekle
+      await userService.addLastSharedDeal(
+        userId,
+        dealId: docRef.id,
+        title: title,
+        price: price,
+        store: store,
+        link: url,
+      );
       
       // Anahtar kelime kontrolü
       Future.delayed(Duration.zero, () async {

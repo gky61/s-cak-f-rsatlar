@@ -25,17 +25,6 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
-    // Mobil platformda otomatik Google Sign-In başlat
-    if (!kIsWeb) {
-      // Kısa bir gecikme ile Google Sign-In'i başlat (ekran render olsun)
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && !_isLoading) {
-            _signInWithGoogle();
-          }
-        });
-      });
-    }
   }
 
   @override

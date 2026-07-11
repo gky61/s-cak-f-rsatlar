@@ -31,7 +31,7 @@ class FirestoreService {
   // DEAL İŞLEMLERİ (DealService üzerinden)
   // ===========================================================================
   
-  Stream<List<Deal>> getDealsStream() => _dealService.getDealsStream();
+  Stream<DealsSnapshot> getDealsStream() => _dealService.getDealsStream();
   
   Future<List<Deal>> getDealsPaginated({
     int limit = 20,
@@ -124,15 +124,99 @@ class FirestoreService {
     // DealService tarafında implemente edilebilir veya burada kalabilir.
   }
 
-  Stream<List<Deal>> getUserDealsStream(String userId) {
+  Stream<List<Deal>> getUserDealsStream(String userId, {int? limit}) {
     return firestore.collection('deals')
         .where('postedBy', isEqualTo: userId)
         .snapshots()
         .map((s) {
           final list = s.docs.map((d) => Deal.fromFirestore(d)).toList();
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          if (limit != null) {
+            return list.take(limit).toList();
+          }
           return list;
         });
+  }
+
+  Stream<List<Deal>> getUserLastDealsStream(String userId, {int limit = 5}) {
+    return firestore.collection('users').doc(userId).snapshots().asyncMap((doc) async {
+      if (!doc.exists) return [];
+      
+      final data = doc.data();
+      final List<dynamic> rawList = data?['sonPaylasilanFirsatlar'] ?? [];
+      
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(hours: 48));
+      List<Deal> deals = [];
+      
+      for (var item in rawList) {
+        if (item is! Map) continue;
+        final dealId = item['firsatId']?.toString() ?? '';
+        if (dealId.isEmpty) continue;
+        
+        final title = item['baslik']?.toString() ?? '';
+        final priceStr = item['fiyat']?.toString() ?? '0';
+        final price = double.tryParse(priceStr) ?? 0.0;
+        final store = item['magazaAdi']?.toString() ?? '';
+        final link = item['link']?.toString() ?? '';
+        final paylasilmaTarihiTimestamp = item['paylasilmaTarihi'] as Timestamp?;
+        final paylasilmaTarihi = paylasilmaTarihiTimestamp?.toDate() ?? now;
+        final isOld = paylasilmaTarihi.isBefore(cutoffTime);
+        
+        final dealDoc = await firestore.collection('deals').doc(dealId).get();
+        if (dealDoc.exists) {
+          final deal = Deal.fromFirestore(dealDoc);
+          if (isOld || deal.isExpired || deal.createdAt.isBefore(cutoffTime)) {
+            deals.add(Deal(
+              id: deal.id,
+              title: deal.title,
+              description: deal.description,
+              price: deal.price,
+              originalPrice: deal.originalPrice,
+              discountRate: deal.discountRate,
+              store: deal.store,
+              category: deal.category,
+              subCategory: deal.subCategory,
+              link: deal.link,
+              imageUrl: deal.imageUrl,
+              hotVotes: deal.hotVotes,
+              coldVotes: deal.coldVotes,
+              expiredVotes: deal.expiredVotes,
+              commentCount: deal.commentCount,
+              postedBy: deal.postedBy,
+              createdAt: deal.createdAt,
+              isEditorPick: deal.isEditorPick,
+              isApproved: deal.isApproved,
+              isExpired: true,
+              isUserSubmitted: deal.isUserSubmitted,
+            ));
+          } else {
+            deals.add(deal);
+          }
+        } else {
+          deals.add(Deal(
+            id: dealId,
+            title: title,
+            description: 'Bu fırsatın süresi dolmuştur.',
+            price: price,
+            store: store,
+            category: 'tumu',
+            link: link,
+            imageUrl: '',
+            hotVotes: 0,
+            coldVotes: 0,
+            commentCount: 0,
+            postedBy: '',
+            createdAt: paylasilmaTarihi,
+            isEditorPick: false,
+            isApproved: true,
+            isExpired: true,
+            isUserSubmitted: false,
+          ));
+        }
+      }
+      return deals.take(limit).toList();
+    });
   }
 
   Stream<List<Deal>> getMostLikedDeals({int minLikes = 25}) {
@@ -188,9 +272,12 @@ class FirestoreService {
   // ===========================================================================
 
   Future<bool> isFavorite(String userId, String dealId) => _userService.isFavorite(userId, dealId);
-  Future<bool> addToFavorites(String userId, String dealId) => _userService.addToFavorites(userId, dealId);
+  Future<bool> addToFavorites(String userId, String dealId, {String? title, double? price, String? store, String? link}) =>
+      _userService.addToFavorites(userId, dealId, title: title, price: price, store: store, link: link);
   Future<bool> removeFromFavorites(String userId, String dealId) => _userService.removeFromFavorites(userId, dealId);
   Stream<List<Deal>> getFavoriteDeals(String userId) => _userService.getFavoriteDeals(userId);
+  Future<void> addLastSharedDeal(String userId, {required String dealId, required String title, required double price, required String store, required String link}) =>
+      _userService.addLastSharedDeal(userId, dealId: dealId, title: title, price: price, store: store, link: link);
   
   Future<void> followUser(String followerId, String followingId) => _userService.followUser(followerId, followingId);
   Future<void> unfollowUser(String followerId, String followingId) => _userService.unfollowUser(followerId, followingId);
@@ -214,19 +301,63 @@ class FirestoreService {
       _messageService.sendMessage(senderId: senderId, receiverId: receiverId, text: text);
       
   Stream<List<Message>> getUserMessagesStream(String userId) {
-    // İki yönlü stream birleştirme MessageService'e taşınabilir ama burada da kalabilir
-    final senderStream = firestore.collection('messages').where('senderId', isEqualTo: userId).snapshots();
-    final receiverStream = firestore.collection('messages').where('receiverId', isEqualTo: userId).snapshots();
-    
-    return Stream.multi((controller) {
-      List<Message> s = [], r = [];
-      void emit() {
-        final all = [...s, ...r]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        controller.add(all);
-      }
-      senderStream.listen((snap) { s = snap.docs.map((d) => Message.fromFirestore(d)).toList(); emit(); });
-      receiverStream.listen((snap) { r = snap.docs.map((d) => Message.fromFirestore(d)).toList(); emit(); });
-    });
+    late StreamController<List<Message>> controller;
+    StreamSubscription? senderSub;
+    StreamSubscription? receiverSub;
+
+    controller = StreamController<List<Message>>(
+      onListen: () {
+        List<Message> s = [], r = [];
+        void emit() {
+          if (!controller.isClosed) {
+            final all = [...s, ...r]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            controller.add(all);
+          }
+        }
+
+        senderSub = firestore
+            .collection('messages')
+            .where('senderId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            s = snap.docs.map((d) => Message.fromFirestore(d)).toList();
+            emit();
+          },
+          onError: (error) {
+            if (error.toString().contains('permission-denied')) {
+              _log('ℹ️ senderStream çıkış sırasında kapandı (beklenen)');
+            } else {
+              _log('⚠️ senderStream error: $error');
+            }
+          },
+        );
+
+        receiverSub = firestore
+            .collection('messages')
+            .where('receiverId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            r = snap.docs.map((d) => Message.fromFirestore(d)).toList();
+            emit();
+          },
+          onError: (error) {
+            if (error.toString().contains('permission-denied')) {
+              _log('ℹ️ receiverStream çıkış sırasında kapandı (beklenen)');
+            } else {
+              _log('⚠️ receiverStream error: $error');
+            }
+          },
+        );
+      },
+      onCancel: () {
+        senderSub?.cancel();
+        receiverSub?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
   
   Stream<List<Message>> getConversationStream(String u1, String u2) => _messageService.getConversationStream(u1, u2);
@@ -262,6 +393,7 @@ class FirestoreService {
     required String text,
     String? parentCommentId,
     String? replyToUserName,
+    String? quotedCommentText,
     String? userProfileImageUrl,
     List<String>? userBadges,
   }) => _commentService.addComment(
@@ -272,6 +404,7 @@ class FirestoreService {
         text: text,
         parentCommentId: parentCommentId,
         replyToUserName: replyToUserName,
+        quotedCommentText: quotedCommentText,
     userProfileImageUrl: userProfileImageUrl,
     userBadges: userBadges,
   );
@@ -288,6 +421,71 @@ class FirestoreService {
   Future<int> deleteAllCommentReplyNotifications(String userId) => 
       _commentService.deleteAllCommentReplyNotifications(userId);
 
+  // Unified Notification Center Methods
+  Stream<List<Map<String, dynamic>>> getUserNotificationsStream(String userId) {
+    return firestore
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        DateTime createdAt = DateTime.now();
+        if (data['createdAt'] is Timestamp) {
+          createdAt = (data['createdAt'] as Timestamp).toDate();
+        } else if (data['createdAt'] is String) {
+          createdAt = DateTime.tryParse(data['createdAt'] as String) ?? DateTime.now();
+        }
+        return {
+          'id': doc.id,
+          'type': data['type'] ?? 'deal',
+          'dealId': data['dealId'] ?? '',
+          'dealTitle': data['dealTitle'] ?? '',
+          'commentId': data['commentId'] ?? '',
+          'title': data['title'] ?? 'Yeni Fırsat',
+          'body': data['body'] ?? '',
+          'reason': data['reason'] ?? '',
+          'reasonDetail': data['reasonDetail'] ?? '',
+          'read': data['read'] ?? false,
+          'createdAt': createdAt,
+        };
+      }).toList();
+    });
+  }
+
+  Future<void> markNotificationAsRead(String userId, String notificationId) async {
+    await firestore
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .doc(notificationId)
+        .update({'read': true});
+  }
+
+  Future<void> deleteNotification(String userId, String notificationId) async {
+    await firestore
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .doc(notificationId)
+        .delete();
+  }
+
+  Future<void> deleteAllNotifications(String userId) async {
+    final snapshot = await firestore
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .get();
+    final batch = firestore.batch();
+    for (final doc in snapshot.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
   // ===========================================================================
   // AYARLAR VE DİĞERLERİ (DealService içinde)
   // ===========================================================================
@@ -301,5 +499,11 @@ class FirestoreService {
       final doc = await firestore.collection('settings').doc('app').get();
       return doc.data()?['commentSharingEnabled'] ?? true;
     } catch (e) { return true; }
+  }
+
+  void _log(String msg) {
+    if (kDebugMode) {
+      print('[FirestoreService] $msg');
+    }
   }
 }

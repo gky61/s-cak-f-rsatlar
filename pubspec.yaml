@@ -15,7 +15,7 @@ dependencies:
   # Firebase paketleri
   firebase_core: ^2.32.0
   cloud_firestore: ^4.17.5
-  firebase_auth: ^4.16.0
+  firebase_auth: ^4.20.0
   firebase_messaging: ^14.7.10
   firebase_app_check: ^0.2.1+15
   firebase_crashlytics: 3.5.7
@@ -37,6 +37,7 @@ dependencies:
   # Link ve URL işlemleri
   url_launcher: ^6.2.4
   http: ^1.2.0
+  receive_sharing_intent: 1.8.1
   
   # HTML parsing ve metadata
   html: ^0.15.4
@@ -54,6 +55,7 @@ dependencies:
   # AdMob - Reklamlar için
   google_mobile_ads: ^5.0.0
   firebase_performance: ^0.9.4+7
+  app_settings: ^7.0.0
 
 dev_dependencies:
   flutter_test:

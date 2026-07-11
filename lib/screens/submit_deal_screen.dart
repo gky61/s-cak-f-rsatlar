@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/category_detection_service.dart';
@@ -15,7 +16,8 @@ void _log(String message) {
 }
 
 class SubmitDealScreen extends StatefulWidget {
-  const SubmitDealScreen({super.key});
+  final String? initialUrl;
+  const SubmitDealScreen({super.key, this.initialUrl});
 
   @override
   State<SubmitDealScreen> createState() => _SubmitDealScreenState();
@@ -33,7 +35,125 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   final _storeController = TextEditingController();
   final _imageUrlController = TextEditingController();
   final _urlController = TextEditingController();
+  final _customStoreController = TextEditingController();
   
+  String? _selectedStore;
+  final List<String> _stores = [
+    'Trendyol',
+    'Hepsiburada',
+    'N11',
+    'Amazon',
+    'Pazarama',
+    'Vatan Bilgisayar',
+    'MediaMarkt',
+    'İtopya',
+    'İdefix',
+    'Teknosa',
+    'Mavi',
+    'DeFacto',
+    'Zara',
+    'Mango',
+    'Beymen',
+    'PttAVM',
+    'İncehesap',
+    'Diğer',
+  ];
+
+  String _getStoreAsset(String storeName) {
+    switch (storeName) {
+      case 'Trendyol':
+        return 'assets/trendyol.jpg';
+      case 'Hepsiburada':
+        return 'assets/hepsiburada.jpg';
+      case 'N11':
+        return 'assets/n11.jpg';
+      case 'Amazon':
+        return 'assets/amazon.jpg';
+      case 'Pazarama':
+        return 'assets/pazarama.jpg';
+      case 'Vatan Bilgisayar':
+        return 'assets/vatan.jpg';
+      case 'MediaMarkt':
+        return 'assets/mediamarkt.jpg';
+      case 'İtopya':
+        return 'assets/itopya.jpg';
+      case 'İdefix':
+        return 'assets/idefix.jpg';
+      case 'Teknosa':
+        return 'assets/teknosa.jpg';
+      case 'Mavi':
+        return 'assets/mavi.jpg';
+      case 'DeFacto':
+        return 'assets/defacto.jpg';
+      case 'Zara':
+        return 'assets/zara.jpg';
+      case 'Mango':
+        return 'assets/mango.jpg';
+      case 'Beymen':
+        return 'assets/beymen.jpg';
+      case 'PttAVM':
+        return 'assets/pttavm.jpg';
+      case 'İncehesap':
+        return 'assets/incehesap.jpg';
+      default:
+        return 'assets/store-icon.png';
+    }
+  }
+
+  void _updateStoreSelection(String storeName) {
+    if (!mounted) return;
+    
+    final lowerName = storeName.toLowerCase();
+    String? matchedStore;
+    
+    if (lowerName.contains('trendyol') || lowerName.contains('ty.gl')) {
+      matchedStore = 'Trendyol';
+    } else if (lowerName.contains('hepsiburada') || lowerName.contains('hb.biz')) {
+      matchedStore = 'Hepsiburada';
+    } else if (lowerName.contains('n11')) {
+      matchedStore = 'N11';
+    } else if (lowerName.contains('amazon') || lowerName.contains('amzn')) {
+      matchedStore = 'Amazon';
+    } else if (lowerName.contains('pazarama') || lowerName.contains('pzrm')) {
+      matchedStore = 'Pazarama';
+    } else if (lowerName.contains('vatan')) {
+      matchedStore = 'Vatan Bilgisayar';
+    } else if (lowerName.contains('mediamarkt') || lowerName.contains('media markt')) {
+      matchedStore = 'MediaMarkt';
+    } else if (lowerName.contains('itopya')) {
+      matchedStore = 'İtopya';
+    } else if (lowerName.contains('idefix')) {
+      matchedStore = 'İdefix';
+    } else if (lowerName.contains('teknosa')) {
+      matchedStore = 'Teknosa';
+    } else if (lowerName.contains('mavi')) {
+      matchedStore = 'Mavi';
+    } else if (lowerName.contains('defacto')) {
+      matchedStore = 'DeFacto';
+    } else if (lowerName.contains('zara')) {
+      matchedStore = 'Zara';
+    } else if (lowerName.contains('mango')) {
+      matchedStore = 'Mango';
+    } else if (lowerName.contains('beymen')) {
+      matchedStore = 'Beymen';
+    } else if (lowerName.contains('pttavm')) {
+      matchedStore = 'PttAVM';
+    } else if (lowerName.contains('incehesap')) {
+      matchedStore = 'İncehesap';
+    }
+    
+    setState(() {
+      if (matchedStore != null) {
+        _selectedStore = matchedStore;
+        _storeController.text = matchedStore;
+      } else {
+        _selectedStore = 'Diğer';
+        _customStoreController.text = storeName;
+        _storeController.text = storeName;
+      }
+    });
+  }
+
   String _selectedCategory = 'elektronik';
   String? _selectedSubCategory;
   bool _isLoading = false;
@@ -41,10 +161,18 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   bool _isLoadingImage = false;
   String? _previewImageUrl;
   bool _dealSharingEnabled = true;
+  Timer? _urlDebounceTimer;
+  Timer? _textDebounceTimer;
+  
+  String _lastProcessedUrl = '';
+  String _lastProcessedTitle = '';
+  String _lastProcessedDescription = '';
+  String _lastProcessedImageUrl = '';
 
   @override
   void initState() {
     super.initState();
+    
     // Başlık veya açıklama değiştiğinde kategori tespit et
     _titleController.addListener(_onTextChanged);
     _descriptionController.addListener(_onTextChanged);
@@ -54,6 +182,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     _imageUrlController.addListener(_onImageUrlChanged);
     // Deal paylaşım durumunu kontrol et
     _checkDealSharingStatus();
+
+    if (widget.initialUrl != null) {
+      _urlController.text = widget.initialUrl!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _autoFetchProductData(widget.initialUrl!);
+      });
+    }
   }
 
   Future<void> _checkDealSharingStatus() async {
@@ -65,14 +200,72 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     }
   }
 
+  void _showCustomSnackBar({
+    required String message,
+    required IconData icon,
+    required Color backgroundColor,
+    Duration duration = const Duration(seconds: 2),
+    SnackBarAction? action,
+  }) {
+    if (!mounted) return;
+    
+    // Clear any active SnackBars immediately so they don't pile up
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: backgroundColor,
+        duration: duration,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        margin: const EdgeInsets.all(12),
+        elevation: 4,
+        action: action,
+      ),
+    );
+  }
+
+  String? _cleanScrapedString(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    if (trimmed.toLowerCase() == 'null') return null;
+    return trimmed;
+  }
+
   void _onTextChanged() {
     final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
     
+    if (title == _lastProcessedTitle && description == _lastProcessedDescription) {
+      return; // Değişiklik yoksa boşuna tetikleme
+    }
+    
+    _lastProcessedTitle = title;
+    _lastProcessedDescription = description;
+    
     if (title.isEmpty && description.isEmpty) return;
     
-    // Kısa bir gecikme ile tespit yap (kullanıcı yazmayı bitirsin)
-    Future.delayed(const Duration(milliseconds: 800), () {
+    _textDebounceTimer?.cancel();
+    _textDebounceTimer = Timer(const Duration(milliseconds: 800), () {
       if (!mounted || _isAutoDetecting) return;
       _detectCategory();
     });
@@ -81,156 +274,240 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   Future<void> _onUrlChanged() async {
     final url = _urlController.text.trim();
     
+    if (url == _lastProcessedUrl) {
+      return; // Değişiklik yoksa boşuna tetikleme
+    }
+    
+    _lastProcessedUrl = url;
+    
     if (url.isEmpty || !url.startsWith('http')) {
-      // URL boşsa veya geçersizse, görsel URL'sini de temizle
-      if (_imageUrlController.text.trim().isEmpty || 
-          !_isValidImageUrl(_imageUrlController.text.trim())) {
-        setState(() {
-          _previewImageUrl = null;
-          _isLoadingImage = false;
-        });
-      }
+      // URL boşsa veya geçersizse, otomatik doldurulan tüm alanları temizle
+      setState(() {
+        _titleController.clear();
+        _descriptionController.clear();
+        _priceController.clear();
+        _storeController.clear();
+        _customStoreController.clear();
+        _selectedStore = null;
+        _imageUrlController.clear();
+        _previewImageUrl = null;
+        _selectedCategory = 'elektronik';
+        _selectedSubCategory = null;
+        _isLoadingImage = false;
+      });
       return;
     }
     
-    // --- AMAZON ÖZEL KONTROLÜ BAŞLANGIÇ ---
-    // Amazon linki mi? (Hem kısa hem uzun hem mobil linkleri kapsar)
+    // Debounce: Yazma bittikten 600ms sonra verileri otomatik çek
+    _urlDebounceTimer?.cancel();
+    _urlDebounceTimer = Timer(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      _autoFetchProductData(url);
+    });
+  }
+  
+  Future<void> _autoFetchProductData(String url) async {
+    if (_isAutoDetecting || _isLoadingImage) return;
+
+    // Yeni URL analizine başlamadan önce eski verileri temizle
+    setState(() {
+      _isAutoDetecting = true;
+      _isLoadingImage = true;
+      _previewImageUrl = null;
+      _titleController.clear();
+      _descriptionController.clear();
+      _priceController.clear();
+      _storeController.clear();
+      _customStoreController.clear();
+      _selectedStore = null;
+      _imageUrlController.clear();
+      _selectedCategory = 'elektronik';
+      _selectedSubCategory = null;
+    });
+
+    _log('🔄 Otomatik ürün bilgisi çekme başlatıldı: $url');
+
+    bool hasImage = false;
+    bool hasTitle = false;
+    bool hasStore = false;
+    bool hasCategory = false;
+    bool hasPrice = false;
+
+    // 1. AMAZON ÖZEL KONTROLÜ
+    String? amazonImage;
     if (url.contains("amazon") || url.contains("amzn")) {
-      setState(() {
-        _isLoadingImage = true;
-      });
-      
-      // Akıllı Amazon görsel çekme fonksiyonunu çağır
       try {
-        final amazonImage = await _linkPreviewService.getAmazonImageSmart(url);
-        
-        if (amazonImage != null && mounted) {
-          _log('✅ Amazon görsel bulundu (ASIN yöntemi), direkt atanıyor: $amazonImage');
-          setState(() {
-            _imageUrlController.text = amazonImage; // Görseli bulduk!
-            _previewImageUrl = amazonImage;
-            _isLoadingImage = false;
-          });
-          
-          // AI analizi yap (görsel zaten bulundu, sadece AI analizi gerekli)
-          Future.delayed(const Duration(milliseconds: 1500), () {
-            if (!mounted || _isAutoDetecting) return;
-            _analyzeProductWithAI();
-          });
-          return; // Amazon görseli bulundu, scraper'a gerek yok
-        } else {
-          // ASIN bulunamazsa, normal scraper yöntemi ile devam et
-          _log('⚠️ Amazon ASIN bulunamadı, normal scraper yöntemi deneniyor...');
+        amazonImage = await _linkPreviewService.getAmazonImageSmart(url);
+        if (amazonImage != null) {
+          _log('✅ Amazon görsel ASIN yöntemiyle bulundu: $amazonImage');
           if (mounted) {
             setState(() {
+              _imageUrlController.text = amazonImage!;
+              _previewImageUrl = amazonImage;
               _isLoadingImage = false;
             });
           }
+          hasImage = true;
         }
-      } catch (error) {
-        _log('❌ Amazon görsel çekme hatası: $error');
-        // Hata olursa normal scraper yöntemi ile devam et
-        if (mounted) {
-          setState(() {
-            _isLoadingImage = false;
-          });
-        }
+      } catch (e) {
+        _log('❌ Amazon görsel çekme hatası: $e');
       }
     }
-    // --- AMAZON ÖZEL KONTROLÜ BİTİŞ ---
-    
-    // URL girildiğinde otomatik görsel çek (debounce ile)
-    Future.delayed(const Duration(milliseconds: 1000), () {
-      if (!mounted) return;
-      final currentUrl = _urlController.text.trim();
-      if (currentUrl.isEmpty || !currentUrl.startsWith('http')) return;
-      
-      // Eğer görsel URL alanı boşsa veya geçersiz bir URL ise, ürün linkinden görsel çek
-      final currentImageUrl = _imageUrlController.text.trim();
-      if (currentImageUrl.isEmpty || !_isValidImageUrl(currentImageUrl)) {
-        _fetchImageFromProductUrl(currentUrl);
-      }
-    });
-    
-    // URL girildiğinde AI analizi yap (debounce ile)
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (!mounted || _isAutoDetecting) return;
-      _analyzeProductWithAI();
-    });
-  }
-  
-  Future<void> _fetchImageFromProductUrl(String productUrl) async {
-    if (_isLoadingImage) return;
-    
-    setState(() {
-      _isLoadingImage = true;
-      _previewImageUrl = null;
-    });
-    
+
+    // 2. LİNK PREVIEW (CLIENT-SIDE SCRAPING)
+    LinkPreviewResult? preview;
     try {
-      _log('🔄 Ürün linkinden görsel çekiliyor: $productUrl');
-      final preview = await _linkPreviewService.fetchMetadata(productUrl)
+      preview = await _linkPreviewService.fetchMetadata(url)
           .timeout(const Duration(seconds: 10), onTimeout: () {
-        _log('⏱️ Görsel çekme timeout (10 saniye)');
+        _log('⏱️ LinkPreview timeout');
         return null;
       });
       
-      if (mounted && preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
-        // Görsel URL'sinin geçerli olup olmadığını kontrol et
-        if (_isValidImageUrl(preview.imageUrl!)) {
+      if (preview != null && mounted) {
+        // Görseli al
+        final cleanImage = _cleanScrapedString(preview.imageUrl);
+        if (!hasImage && cleanImage != null && _isValidImageUrl(cleanImage)) {
           setState(() {
-            _previewImageUrl = preview.imageUrl;
-            _imageUrlController.text = preview.imageUrl!;
+            _imageUrlController.text = cleanImage;
+            _previewImageUrl = cleanImage;
             _isLoadingImage = false;
           });
-          _log('✅ Ürün linkinden görsel bulundu ve Resim Linki alanına yazıldı: ${preview.imageUrl}');
-          
-          // Kullanıcıya bilgi ver
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.white),
-                    SizedBox(width: 8),
-                    Text('Görsel otomatik olarak bulundu ve eklendi'),
-                  ],
-                ),
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 2),
-              ),
-            );
+          hasImage = true;
+        }
+        
+        // Başlığı al (boşsa)
+        final cleanTitle = _cleanScrapedString(preview.title);
+        if (_titleController.text.trim().isEmpty && cleanTitle != null) {
+          _titleController.text = cleanTitle;
+          hasTitle = true;
+        }
+
+        // Mağazayı al (boşsa)
+        final cleanProvider = _cleanScrapedString(preview.provider);
+        if (_storeController.text.trim().isEmpty && cleanProvider != null) {
+          _updateStoreSelection(cleanProvider);
+          hasStore = true;
+        }
+
+        // Fiyatı al (boşsa)
+        if (_priceController.text.trim().isEmpty && preview.price != null && preview.price! > 0) {
+          final doubleVal = preview.price!;
+          if (doubleVal == doubleVal.toInt()) {
+            _priceController.text = doubleVal.toInt().toString();
+          } else {
+            _priceController.text = doubleVal.toString();
           }
-        } else {
+          hasPrice = true;
+        }
+
+        // Açıklamayı al (boşsa)
+        final cleanDesc = _cleanScrapedString(preview.description);
+        if (_descriptionController.text.trim().isEmpty && cleanDesc != null) {
+          _descriptionController.text = cleanDesc;
+        }
+      }
+    } catch (e) {
+      _log('❌ LinkPreview metadata çekme hatası: $e');
+    }
+
+    // Görsel yükleniyor durumunu kapat
+    if (mounted) {
+      setState(() {
+        _isLoadingImage = false;
+      });
+    }
+
+    // 3. GEMINI AI ANALİZİ
+    try {
+      _log('🤖 Gemini AI ürün analizi başlatılıyor...');
+      final aiResult = await AIService.analyzeProduct(
+        url: url,
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+      );
+
+      if (aiResult['success'] == true && mounted) {
+        // AI'dan gelen verileri ata (eğer alanlar boşsa)
+        final aiTitle = _cleanScrapedString(aiResult['title']?.toString());
+        if (_titleController.text.trim().isEmpty && aiTitle != null) {
+          _titleController.text = aiTitle;
+          hasTitle = true;
+        }
+
+        if (_priceController.text.trim().isEmpty && aiResult['price'] != null && aiResult['price'] > 0) {
+          _priceController.text = aiResult['price'].toString();
+          hasPrice = true;
+        }
+
+        final aiStore = _cleanScrapedString(aiResult['store']?.toString());
+        if (_storeController.text.trim().isEmpty && aiStore != null) {
+          _updateStoreSelection(aiStore);
+          hasStore = true;
+        }
+
+        if (aiResult['category'] != null) {
           setState(() {
-            _previewImageUrl = null;
-            _isLoadingImage = false;
+            _selectedCategory = aiResult['category'];
           });
-          _log('⚠️ Bulunan URL geçerli bir görsel URL\'si değil: ${preview.imageUrl}');
+          hasCategory = true;
         }
       } else {
-        if (mounted) {
-          setState(() {
-            _previewImageUrl = null;
-            _isLoadingImage = false;
-          });
-        }
-        _log('⚠️ Ürün linkinden görsel bulunamadı');
+        _log('⚠️ AI Analiz başarısız veya proxy hatası verdi.');
       }
-    } catch (e, stackTrace) {
-      _log('❌ Ürün linkinden görsel çekme hatası: $e');
-      _log('❌ Stack trace: $stackTrace');
-      if (mounted) {
-        setState(() {
-          _previewImageUrl = null;
-          _isLoadingImage = false;
-        });
+    } catch (e) {
+      _log('❌ AI Analiz sırasında hata oluştu: $e');
+    }
+
+    // İşlem bitti
+    if (mounted) {
+      setState(() {
+        _isAutoDetecting = false;
+      });
+    }
+
+    // 4. KULLANICI BİLGİLENDİRME (SNACKBAR)
+    if (mounted) {
+      final anySuccess = hasImage || hasTitle || hasStore || hasCategory || hasPrice;
+      
+      if (anySuccess) {
+        final List<String> missingFields = [];
+        if (_imageUrlController.text.trim().isEmpty) missingFields.add('Görsel');
+        if (_titleController.text.trim().isEmpty) missingFields.add('Başlık');
+        if (_priceController.text.trim().isEmpty) missingFields.add('Fiyat');
+        if (_storeController.text.trim().isEmpty) missingFields.add('Mağaza');
+
+        String msg;
+        if (missingFields.isEmpty) {
+          msg = '✨ Ürün bilgileri otomatik olarak başarıyla çekildi!';
+        } else {
+          msg = '✨ Ürün bilgileri kısmen çekildi. Eksik alanları (${missingFields.join(", ")}) lütfen elle tamamlayın.';
+        }
+
+        _showCustomSnackBar(
+          message: msg,
+          icon: Icons.check_circle_rounded,
+          backgroundColor: const Color(0xFF2E7D32),
+          duration: const Duration(seconds: 3),
+        );
+      } else {
+        _showCustomSnackBar(
+          message: 'Ürün bilgileri otomatik çekilemedi, lütfen elle doldurun.',
+          icon: Icons.info_outline_rounded,
+          backgroundColor: const Color(0xFF546E7A),
+          duration: const Duration(seconds: 3),
+        );
       }
     }
   }
-  
+
   void _onImageUrlChanged() {
     final imageUrl = _imageUrlController.text.trim();
+    
+    if (imageUrl == _lastProcessedImageUrl) {
+      return; // Değişiklik yoksa boşuna tetikleme
+    }
+    
+    _lastProcessedImageUrl = imageUrl;
     
     // Eğer boşsa veya geçerli bir görsel URL'si ise, preview'ı güncelle
     if (imageUrl.isEmpty) {
@@ -311,152 +588,74 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   // URL'nin görsel URL'si olup olmadığını kontrol et
   bool _isValidImageUrl(String url) {
     if (url.isEmpty) return false;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
+    
     final lowerUrl = url.toLowerCase();
     
-    // Yaygın görsel uzantıları
-    final imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
-    if (imageExtensions.any((ext) => lowerUrl.contains(ext))) {
-      return true;
-    }
-    
-    // Görsel CDN'leri
+    // Görsel CDN'leri (Bu alan adlarından gelenler kesinlikle görseldir)
     final imageCdnPatterns = [
+      'assets.mmsrg.com',      // MediaMarkt CDN
+      'img.pzrmcdn.com',       // Pazarama CDN
+      'cdn.dsmcdn.com',        // Trendyol CDN
+      'hepsiburada.net',       // Hepsiburada CDN
+      'images-amazon.com',     // Amazon CDN
+      'images-na.ssl-images-amazon.com',
+      'n11scdn.akamaized.net',  // N11 CDN
+      'cdn.vatanbilgisayar.com', // Vatan Bilgisayar CDN
+      'idefix.com',             // Idefix CDN
+      'itopya.com',             // Itopya CDN
+      'yenieera22.com',          // Itopya Image CDN
+      'teknosa.com',            // Teknosa CDN
+      'teknosa-cloud-prod.mncdn.com', // Teknosa Image CDN
+      'sky-static.mavi.com',    // Mavi CDN
+      'mavi.com',               // Mavi Domain
+      'dfcdn.net',              // DeFacto CDN
+      'defacto.com.tr',         // DeFacto Domain
+      'static.zara.net',        // Zara CDN
+      'zara.com',               // Zara Domain
+      'st.mango.com',           // Mango CDN
+      'st-mango.mncdn.com',     // Mango Alternative CDN
+      'mango.com',              // Mango Domain
+      'cdn.beymen.com',         // Beymen CDN
+      'beymen.com',             // Beymen Domain
+      'cdn-s3.pttavm.com',      // PttAVM CDN
+      'pttavm.com',             // PttAVM Domain
+      'incehesap.com',          // İncehesap Domain
       'imgbb.co',
       'imgur.com',
       'i.ibb.co',
-      'cdn.dsmcdn.com',
       'images.unsplash.com',
       'i.imgur.com',
-      '/images/',
-      '/img/',
-      '/image/',
     ];
     if (imageCdnPatterns.any((pattern) => lowerUrl.contains(pattern))) {
       return true;
     }
     
+    // URI analizi ile uzantı kontrolü (Sorgu parametrelerini ayıklayarak)
+    try {
+      final uri = Uri.parse(url);
+      final path = uri.path.toLowerCase();
+      final imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+      if (imageExtensions.any((ext) => path.endsWith(ext) || path.contains(ext))) {
+        return true;
+      }
+    } catch (_) {}
+    
     // HTML sayfası pattern'leri
-    final htmlPagePatterns = ['/product/', '/urun/', '/p-', '/item/', '/detail/', '?', '#'];
+    final htmlPagePatterns = ['/product/', '/urun/', '/p-', '/item/', '/detail/'];
     if (htmlPagePatterns.any((pattern) => lowerUrl.contains(pattern))) {
       return false;
     }
     
-    // Uzun URL'ler genellikle HTML sayfasıdır
-    if (url.length > 100) {
+    // Genel uzunluk kontrolü (Daha esnek limit)
+    if (url.length > 250) {
       return false;
     }
     
     return true;
   }
 
-  Future<void> _analyzeProductWithAI() async {
-    final url = _urlController.text.trim();
-    if (url.isEmpty) return;
 
-    setState(() {
-      _isAutoDetecting = true;
-    });
-
-    try {
-      final result = await AIService.analyzeProduct(
-        url: url,
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim(),
-      );
-
-      if (result['success'] == true && mounted) {
-        // Başlık boşsa AI'dan geleni kullan
-        if (_titleController.text.trim().isEmpty && result['title'] != null) {
-          _titleController.text = result['title'];
-        }
-
-        // Fiyat boşsa AI'dan geleni kullan
-        if (_priceController.text.trim().isEmpty && result['price'] != null && result['price'] > 0) {
-          _priceController.text = result['price'].toString();
-        }
-
-        // Mağaza boşsa AI'dan geleni kullan
-        if (_storeController.text.trim().isEmpty && result['store'] != null) {
-          _storeController.text = result['store'];
-        }
-
-        // Kategoriyi ayarla
-        if (result['category'] != null) {
-          setState(() {
-            _selectedCategory = result['category'];
-          });
-        }
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.auto_awesome, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Text('🤖 AI ile otomatik tespit: ${result['category']} kategorisi'),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-      } else if (result['success'] == false && mounted) {
-        // Hata durumunda kullanıcıya bilgi ver
-        final errorMsg = result['error'] ?? 'Bilinmeyen hata';
-        _log('❌ AI Analiz Başarısız: $errorMsg');
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '⚠️ AI analizi başarısız: ${errorMsg.length > 50 ? errorMsg.substring(0, 50) + "..." : errorMsg}',
-                      maxLines: 2,
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
-      }
-    } catch (e, stackTrace) {
-      _log('❌ AI analiz hatası: $e');
-      _log('Stack trace: $stackTrace');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('❌ AI analizi sırasında hata oluştu: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e.toString()}'),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isAutoDetecting = false;
-        });
-      }
-    }
-  }
 
   void _detectCategory() {
     final title = _titleController.text.trim();
@@ -485,38 +684,14 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _isAutoDetecting = false;
         
         _log('✅ Kategori güncellendi: ${Category.getById(categoryId).name}');
-        
-        // Kullanıcıya bildirim göster
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Kategori otomatik tespit edildi: ${Category.getById(categoryId).name}${subCategory != null ? " > $subCategory" : ""}',
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
-              action: SnackBarAction(
-                label: 'Değiştir',
-                textColor: Colors.white,
-                onPressed: () => _showCategorySelector(),
-              ),
-            ),
-          );
-        }
       }
     }
   }
 
   @override
   void dispose() {
+    _urlDebounceTimer?.cancel();
+    _textDebounceTimer?.cancel();
     _titleController.removeListener(_onTextChanged);
     _descriptionController.removeListener(_onTextChanged);
     _imageUrlController.removeListener(_onImageUrlChanged);
@@ -524,6 +699,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     _descriptionController.dispose();
     _priceController.dispose();
     _storeController.dispose();
+    _customStoreController.dispose();
     _imageUrlController.dispose();
     _urlController.dispose();
     super.dispose();
@@ -557,14 +733,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           _log('✅ Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}');
           
           // Kullanıcıya bilgi ver (modal widget tarafından zaten kapatılıyor)
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}',
-              ),
-              duration: const Duration(seconds: 2),
-              backgroundColor: Colors.green,
-            ),
+          _showCustomSnackBar(
+            message: 'Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}',
+            icon: Icons.check_circle_rounded,
+            backgroundColor: const Color(0xFF2E7D32),
+            duration: const Duration(seconds: 2),
           );
         },
       ),
@@ -576,14 +749,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     final isEnabled = await _firestoreService.isDealSharingEnabled();
     if (!isEnabled) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Fırsat paylaşımı şu anda geçici olarak durdurulmuştur. Lütfen daha sonra tekrar deneyin.',
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 4),
-          ),
+        _showCustomSnackBar(
+          message: 'Fırsat paylaşımı şu anda geçici olarak durdurulmuştur. Lütfen daha sonra tekrar deneyin.',
+          icon: Icons.warning_amber_rounded,
+          backgroundColor: const Color(0xFFEF6C00),
+          duration: const Duration(seconds: 4),
         );
       }
       return;
@@ -594,11 +764,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
     final user = _authService.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Fırsat paylaşmak için giriş yapmalısınız'),
-          backgroundColor: Colors.red,
-        ),
+      _showCustomSnackBar(
+        message: 'Fırsat paylaşmak için giriş yapmalısınız',
+        icon: Icons.lock_outline_rounded,
+        backgroundColor: const Color(0xFFC62828),
       );
       return;
     }
@@ -675,33 +844,29 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Fırsat başarıyla paylaşıldı!'),
-              backgroundColor: Color(0xFFFF6B35),
-              behavior: SnackBarBehavior.floating,
-            ),
+          _showCustomSnackBar(
+            message: 'Fırsat başarıyla paylaşıldı!',
+            icon: Icons.check_circle_rounded,
+            backgroundColor: const Color(0xFFFF6B35), // Primary orange accent
           );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-              behavior: SnackBarBehavior.floating,
-            ),
+          _showCustomSnackBar(
+            message: e.toString().replaceAll('Exception: ', ''),
+            icon: Icons.error_outline_rounded,
+            backgroundColor: const Color(0xFFC62828),
+            duration: const Duration(seconds: 4),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-          ),
+        _showCustomSnackBar(
+          message: 'Hata: $e',
+          icon: Icons.error_outline_rounded,
+          backgroundColor: const Color(0xFFC62828),
+          duration: const Duration(seconds: 4),
         );
       }
     } finally {
@@ -755,6 +920,83 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                             'Fırsat paylaşımı şu anda geçici olarak durdurulmuştur.',
                             style: TextStyle(
                               color: Colors.orange[900],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Ürün URL (En üstte olması daha iyi bir kullanıcı deneyimi sağlar)
+                TextFormField(
+                  controller: _urlController,
+                  style: TextStyle(color: textColor),
+                  decoration: InputDecoration(
+                    labelText: 'Ürün Linki *',
+                    hintText: 'https://...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.link),
+                    suffixIcon: _urlController.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(
+                              Icons.close,
+                              color: Colors.grey[600],
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _urlController.clear();
+                              });
+                            },
+                            tooltip: 'Linki Temizle',
+                          )
+                        : null,
+                  ),
+                  onChanged: (value) {
+                    setState(() {}); // Clear butonu görünürlüğü için yeniden çiz
+                  },
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Ürün linki gerekli';
+                    }
+                    if (!value.startsWith('http')) {
+                      return 'Geçerli bir URL girin';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // AI Otomatik Doldurma Yükleniyor Durumu
+                if (_isAutoDetecting)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            '🤖 AI ile ürün detayları otomatik dolduruluyor...',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isDark ? Colors.blue[300] : Colors.blue[800],
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -855,25 +1097,86 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Mağaza
-            TextFormField(
-              controller: _storeController,
+            // Mağaza (Dropdown)
+            DropdownButtonFormField<String>(
+              value: _selectedStore,
+              menuMaxHeight: 250, // Limits menu height and makes it scrollable
+              dropdownColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
               style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 labelText: 'Mağaza *',
-                hintText: 'Örn: Trendyol, Hepsiburada',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 prefixIcon: const Icon(Icons.store),
               ),
+              items: _stores.map((store) {
+                return DropdownMenuItem<String>(
+                  value: store,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        _getStoreAsset(store),
+                        width: 20,
+                        height: 20,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(Icons.store, size: 20);
+                        },
+                      ),
+                      const SizedBox(width: 10),
+                      Text(store, style: TextStyle(color: textColor)),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedStore = value;
+                  if (value != 'Diğer') {
+                    _storeController.text = value ?? '';
+                  } else {
+                    _storeController.text = _customStoreController.text;
+                  }
+                });
+              },
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Mağaza gerekli';
                 }
+                if (value == 'Diğer' && _customStoreController.text.trim().isEmpty) {
+                  return 'Özel mağaza adı girilmelidir';
+                }
                 return null;
               },
             ),
+            
+            // Eğer "Diğer" seçildiyse, özel mağaza adı için input göster
+            if (_selectedStore == 'Diğer') ...[
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _customStoreController,
+                style: TextStyle(color: textColor),
+                decoration: InputDecoration(
+                  labelText: 'Özel Mağaza Adı *',
+                  hintText: 'Örn: CarrefourSA, MediaMarkt vb.',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.edit),
+                ),
+                onChanged: (value) {
+                  _storeController.text = value.trim();
+                },
+                validator: (value) {
+                  if (_selectedStore == 'Diğer' && (value == null || value.trim().isEmpty)) {
+                    return 'Mağaza adı boş bırakılamaz';
+                  }
+                  return null;
+                },
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Açıklama
@@ -898,47 +1201,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Ürün URL
-            TextFormField(
-              controller: _urlController,
-              style: TextStyle(color: textColor),
-              decoration: InputDecoration(
-                labelText: 'Ürün Linki *',
-                hintText: 'https://...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                prefixIcon: const Icon(Icons.link),
-                suffixIcon: _urlController.text.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(
-                          Icons.close,
-                          color: Colors.grey[600],
-                          size: 20,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _urlController.clear();
-                          });
-                        },
-                        tooltip: 'Linki Temizle',
-                      )
-                    : null,
-              ),
-              onChanged: (value) {
-                setState(() {}); // Trigger rebuild to show/hide clear button
-              },
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Ürün linki gerekli';
-                }
-                if (!value.startsWith('http')) {
-                  return 'Geçerli bir URL girin';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
+
 
             // Resim URL
             TextFormField(

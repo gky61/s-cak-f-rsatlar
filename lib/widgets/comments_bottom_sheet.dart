@@ -32,6 +32,7 @@ class CommentsBottomSheet extends StatefulWidget {
 
 class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
   final TextEditingController _commentController = TextEditingController();
+  final FocusNode _commentFocusNode = FocusNode();
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   bool _isSubmitting = false;
@@ -59,6 +60,7 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
   @override
   void dispose() {
     _commentController.dispose();
+    _commentFocusNode.dispose();
     super.dispose();
   }
 
@@ -122,6 +124,7 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
         text: _commentController.text.trim(),
         parentCommentId: _replyingTo?.id,
         replyToUserName: _replyingTo?.userName,
+        quotedCommentText: _replyingTo?.text,
         userProfileImageUrl: profileImageUrl,
         userBadges: userBadges,
       );
@@ -360,99 +363,140 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                   ),
                   child: SafeArea(
                     top: false,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _commentController,
-                            style: TextStyle(
-                              color: isDark ? AppTheme.darkTextPrimary : Colors.black,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: _replyingTo != null 
-                                  ? '@${_replyingTo!.userName} kullanıcısına cevap verin...' 
-                                  : 'Yorumunuzu yazın...',
-                              hintStyle: TextStyle(
-                                color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
-                              ),
-                              filled: true,
-                              fillColor: isDark ? AppTheme.darkBackground : Colors.white,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide(
-                                  color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide(
-                                  color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                borderSide: BorderSide(
-                                  color: primaryColor,
-                                  width: 2,
-                                ),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                            ),
-                            maxLines: null,
-                            minLines: 1,
-                            textInputAction: TextInputAction.newline,
-                            keyboardType: TextInputType.multiline,
-                            onSubmitted: (_) => _submitComment(),
-                          ),
-                        ),
                         if (_replyingTo != null) ...[
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _replyingTo = null;
-                                _commentController.clear();
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: isDark ? AppTheme.darkBorder : Colors.grey[200],
-                                borderRadius: BorderRadius.circular(8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: isDark 
+                                  ? Colors.white.withValues(alpha: 0.05) 
+                                  : Colors.grey[100],
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border(
+                                left: BorderSide(
+                                  color: primaryColor,
+                                  width: 4,
+                                ),
                               ),
-                              child: Icon(
-                                Icons.close,
-                                size: 20,
-                                color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
-                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _replyingTo!.userName,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                          color: primaryColor,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _replyingTo!.text,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 18),
+                                  onPressed: () {
+                                    setState(() {
+                                      _replyingTo = null;
+                                    });
+                                  },
+                                  constraints: const BoxConstraints(),
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ],
                             ),
                           ),
                         ],
-                        const SizedBox(width: 12),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: primaryColor,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: IconButton(
-                            icon: _isSubmitting
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                focusNode: _commentFocusNode,
+                                controller: _commentController,
+                                style: TextStyle(
+                                  color: isDark ? AppTheme.darkTextPrimary : Colors.black,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: _replyingTo != null 
+                                      ? '@${_replyingTo!.userName} kullanıcısına cevap verin...' 
+                                      : 'Yorumunuzu yazın...',
+                                  hintStyle: TextStyle(
+                                    color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
+                                  ),
+                                  filled: true,
+                                  fillColor: isDark ? AppTheme.darkBackground : Colors.white,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                    borderSide: BorderSide(
+                                      color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
                                     ),
-                                  )
-                                : const Icon(Icons.send_rounded, color: Colors.white),
-                            onPressed: _isSubmitting ? null : _submitComment,
-                          ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                    borderSide: BorderSide(
+                                      color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                    borderSide: BorderSide(
+                                      color: primaryColor,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                maxLines: null,
+                                minLines: 1,
+                                textInputAction: TextInputAction.newline,
+                                keyboardType: TextInputType.multiline,
+                                onSubmitted: (_) => _submitComment(),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: IconButton(
+                                icon: _isSubmitting
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(
+                                            Colors.white,
+                                          ),
+                                        ),
+                                      )
+                                    : const Icon(Icons.send_rounded, color: Colors.white),
+                                onPressed: _isSubmitting ? null : _submitComment,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -466,292 +510,348 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
     );
   }
 
+  void _scrollToComment(String commentId, List<Comment> allComments) {
+    final key = _commentKeys[commentId];
+    if (key != null && key.currentContext != null) {
+      Scrollable.ensureVisible(
+        key.currentContext!,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      final index = allComments.indexWhere((c) => c.id == commentId);
+      if (index != -1 && _scrollController != null && _scrollController!.hasClients) {
+        final double estimatedItemHeight = 90.0;
+        final double targetOffset = (index * estimatedItemHeight).clamp(
+          0.0,
+          _scrollController!.position.maxScrollExtent,
+        );
+        _scrollController!.animateTo(
+          targetOffset,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    }
+  }
+
+  String _getQuotedCommentText(Comment comment, List<Comment> allComments) {
+    if (comment.quotedCommentText != null && comment.quotedCommentText!.isNotEmpty) {
+      return comment.quotedCommentText!;
+    }
+    try {
+      final original = allComments.firstWhere((c) => c.id == comment.parentCommentId);
+      return original.text;
+    } catch (_) {
+      return 'Yoruma cevap verdi';
+    }
+  }
+
+  Widget _buildQuoteBox(BuildContext context, Comment comment, List<Comment> allComments, bool isDark, Color primaryColor) {
+    final quoteText = _getQuotedCommentText(comment, allComments);
+    return GestureDetector(
+      onTap: () => _scrollToComment(comment.parentCommentId!, allComments),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDark 
+              ? Colors.white.withValues(alpha: 0.04) 
+              : Colors.grey[50],
+          borderRadius: BorderRadius.circular(8),
+          border: Border(
+            left: BorderSide(
+              color: primaryColor,
+              width: 3.5,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              comment.replyToUserName!,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+                color: primaryColor,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              quoteText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCommentItem(Comment comment, bool isAdmin, List<Comment> allComments, ScrollController scrollController) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
     final isReply = comment.parentCommentId != null;
-    return Container(
-      margin: EdgeInsets.only(
-        bottom: 8,
-        left: isReply ? 32 : 0, // Cevaplar için sol margin
+    final key = _commentKeys.putIfAbsent(comment.id, () => GlobalKey());
+
+    return Dismissible(
+      key: Key('comment_${comment.id}'),
+      direction: DismissDirection.startToEnd,
+      confirmDismiss: (direction) async {
+        setState(() {
+          _replyingTo = comment;
+        });
+        _commentFocusNode.requestFocus();
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (scrollController.hasClients) {
+            scrollController.animateTo(
+              scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+        return false; // Prevent removing the item from list
+      },
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: primaryColor.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(Icons.reply_rounded, color: primaryColor),
       ),
-      padding: EdgeInsets.all(isReply ? 8 : 10),
-      decoration: BoxDecoration(
-        color: isReply
-            ? (isDark ? AppTheme.darkBackground : Colors.grey[50])
-            : (isDark ? AppTheme.darkSurface : Colors.white), // Cevaplar için farklı arka plan
-        borderRadius: BorderRadius.circular(12),
-        border: isReply
-            ? Border.all(
-                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                width: 1,
-              )
-            : null, // Cevaplar için border
-        boxShadow: isReply
-            ? null
-            : [
-                // Cevaplar için shadow yok
-                BoxShadow(
-                  color: isDark
-                      ? Colors.black.withValues(alpha: 0.3)
-                      : Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 6,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              // Cevap göstergesi
-              if (isReply) ...[
-                Icon(
-                  Icons.reply_rounded,
-                  size: 12,
-                  color: isDark ? AppTheme.darkTextSecondary : Colors.grey[400],
-                ),
-                const SizedBox(width: 6),
-              ],
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ProfileScreen(userId: comment.userId),
-                    ),
-                  );
-                },
-                child: comment.userProfileImageUrl.isNotEmpty
-                    ? CircleAvatar(
-                        radius: isReply ? 10 : 14,
-                        backgroundColor: primaryColor.withValues(alpha: 0.1),
-                        backgroundImage: comment.userProfileImageUrl.startsWith('assets/')
-                            ? AssetImage(comment.userProfileImageUrl) as ImageProvider
-                            : CachedNetworkImageProvider(comment.userProfileImageUrl),
-                        onBackgroundImageError: (exception, stackTrace) {
-                          // Hata durumunda harf göster
-                        },
-                      )
-                    : CircleAvatar(
-                        radius: isReply ? 10 : 14,
-                        backgroundColor: primaryColor.withValues(alpha: 0.1),
-                        child: Text(
-                          comment.userName.isNotEmpty
-                              ? comment.userName[0].toUpperCase()
-                              : 'U',
-                          style: TextStyle(
-                            color: primaryColor,
-                            fontWeight: FontWeight.w700,
-                            fontSize: isReply ? 11 : 13,
-                          ),
-                        ),
+      child: Container(
+        key: key,
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
+            width: 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.2)
+                  : Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProfileScreen(userId: comment.userId),
                       ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ProfileScreen(userId: comment.userId),
-                                ),
-                              );
-                            },
-                            child: Text(
-                              comment.userName.isNotEmpty
-                                  ? comment.userName
-                                  : 'Kullanıcı',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: isReply ? 12 : 13,
-                                color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                    );
+                  },
+                  child: comment.userProfileImageUrl.isNotEmpty
+                      ? CircleAvatar(
+                          radius: 14,
+                          backgroundColor: primaryColor.withValues(alpha: 0.1),
+                          backgroundImage: comment.userProfileImageUrl.startsWith('assets/')
+                              ? AssetImage(comment.userProfileImageUrl) as ImageProvider
+                              : CachedNetworkImageProvider(comment.userProfileImageUrl),
+                          onBackgroundImageError: (exception, stackTrace) {
+                            // Hata durumunda harf göster
+                          },
+                        )
+                      : CircleAvatar(
+                          radius: 14,
+                          backgroundColor: primaryColor.withValues(alpha: 0.1),
+                          child: Text(
+                            comment.userName.isNotEmpty
+                                ? comment.userName[0].toUpperCase()
+                                : 'U',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
                             ),
                           ),
                         ),
-                        // Rozetler
-                        if (comment.userBadges.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Builder(
-                            builder: (context) {
-                              _log('🔍 Yorumda rozetler gösteriliyor: ${comment.userBadges}');
-                              final badgeInfos = BadgeHelper.getBadgeInfos(comment.userBadges);
-                              _log('🔍 BadgeHelper.getBadgeInfos sonucu: ${badgeInfos.length} rozet');
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: badgeInfos.take(3).map(
-                                  (badge) => Padding(
-                                    padding: const EdgeInsets.only(left: 3),
-                                    child: Tooltip(
-                                      message: badge.name,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(2),
-                                        decoration: BoxDecoration(
-                                          color: badge.color.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          badge.icon,
-                                          style: TextStyle(fontSize: isReply ? 10 : 12),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ProfileScreen(userId: comment.userId),
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                comment.userName.isNotEmpty
+                                    ? comment.userName
+                                    : 'Kullanıcı',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          // Rozetler
+                          if (comment.userBadges.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Builder(
+                              builder: (context) {
+                                _log('🔍 Yorumda rozetler gösteriliyor: ${comment.userBadges}');
+                                final badgeInfos = BadgeHelper.getBadgeInfos(comment.userBadges);
+                                _log('🔍 BadgeHelper.getBadgeInfos sonucu: ${badgeInfos.length} rozet');
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: badgeInfos.take(3).map(
+                                    (badge) => Padding(
+                                      padding: const EdgeInsets.only(left: 3),
+                                      child: Tooltip(
+                                        message: badge.name,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: BoxDecoration(
+                                            color: badge.color.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            badge.icon,
+                                            style: const TextStyle(fontSize: 12),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ).toList(),
-                              );
-                            },
-                          ),
-                        ],
-                        if (isReply && comment.replyToUserName != null) ...[
-                          const SizedBox(width: 3),
-                          Icon(Icons.arrow_forward_rounded, size: 11, color: Colors.grey[500]),
-                          const SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              comment.replyToUserName!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: primaryColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                                  ).toList(),
+                                );
+                              },
                             ),
-                          ),
+                          ],
                         ],
-                      ],
-                    ),
-                    Text(
-                      _formatCommentTime(comment.createdAt),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
-                        fontWeight: FontWeight.w500,
                       ),
-                    ),
-                  ],
+                      Text(
+                        _formatCommentTime(comment.createdAt),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              // Admin butonları veya kullanıcının kendi yorumu
-              Builder(
-                builder: (context) {
-                  final currentUser = _authService.currentUser;
-                  final isOwnComment = currentUser != null && comment.userId == currentUser.uid;
-                  
-                  if (currentUser != null) {
-                    return PopupMenuButton<String>(
-                      icon: Icon(
-                        Icons.more_vert_rounded,
-                        color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
-                        size: 16,
-                      ),
-                      onSelected: (value) {
-                        if (value == 'delete') {
-                          _deleteComment(comment);
-                        } else if (value == 'block' && isAdmin) {
-                          _blockUser(comment.userId, comment.userName);
-                        } else if (value == 'report') {
-                          showReportDialog(
-                            context,
-                            reportedId: comment.id,
-                            type: 'comment',
-                          );
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        if (isOwnComment || isAdmin)
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                                SizedBox(width: 8),
-                                Text('Yorumu Sil'),
-                              ],
+                // Admin butonları veya kullanıcının kendi yorumu
+                Builder(
+                  builder: (context) {
+                    final currentUser = _authService.currentUser;
+                    final isOwnComment = currentUser != null && comment.userId == currentUser.uid;
+                    
+                    if (currentUser != null) {
+                      return PopupMenuButton<String>(
+                        icon: Icon(
+                          Icons.more_vert_rounded,
+                          color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
+                          size: 16,
+                        ),
+                        onSelected: (value) {
+                          if (value == 'delete') {
+                            _deleteComment(comment);
+                          } else if (value == 'block' && isAdmin) {
+                            _blockUser(comment.userId, comment.userName);
+                          } else if (value == 'report') {
+                            showReportDialog(
+                              context,
+                              reportedId: comment.id,
+                              type: 'comment',
+                            );
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          if (isOwnComment || isAdmin)
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Yorumu Sil'),
+                                ],
+                              ),
                             ),
-                          ),
-                        if (isAdmin)
-                          const PopupMenuItem(
-                            value: 'block',
-                            child: Row(
-                              children: [
-                                Icon(Icons.block_rounded, color: Colors.orange, size: 20),
-                                SizedBox(width: 8),
-                                Text('Kullanıcıyı Engelle'),
-                              ],
+                          if (isAdmin)
+                            const PopupMenuItem(
+                              value: 'block',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.block_rounded, color: Colors.orange, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Kullanıcıyı Engelle'),
+                                ],
+                              ),
                             ),
-                          ),
-                        if (!isOwnComment)
-                          const PopupMenuItem(
-                            value: 'report',
-                            child: Row(
-                              children: [
-                                Icon(Icons.flag_outlined, color: Colors.red, size: 20),
-                                SizedBox(width: 8),
-                                Text('Raporla'),
-                              ],
+                          if (!isOwnComment)
+                            const PopupMenuItem(
+                              value: 'report',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.flag_outlined, color: Colors.red, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Raporla'),
+                                ],
+                              ),
                             ),
-                          ),
-                      ],
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
+                        ],
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
+            ),
+            if (isReply && comment.replyToUserName != null) ...[
+              const SizedBox(height: 8),
+              _buildQuoteBox(context, comment, allComments, isDark, primaryColor),
             ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            comment.text,
-            style: TextStyle(
-              fontSize: isReply ? 13 : 14,
-              color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
-              fontWeight: FontWeight.w500,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 6),
-          // Cevap verme butonu (sadece ana yorumlar için)
-          if (!isReply)
-            TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _replyingTo = comment;
-                });
-                // TextField'a focus ver
-                FocusScope.of(context).requestFocus(FocusNode());
-                // Scroll'u en alta kaydır
-                Future.delayed(const Duration(milliseconds: 300), () {
-                  if (scrollController.hasClients) {
-                    scrollController.animateTo(
-                      scrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  }
-                });
-              },
-              icon: Icon(Icons.reply_rounded, size: 13, color: primaryColor),
-              label: Text(
-                'Cevap Ver',
-                style: TextStyle(color: primaryColor, fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            const SizedBox(height: 6),
+            Text(
+              comment.text,
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? AppTheme.darkTextPrimary : AppTheme.accent,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
