@@ -78,6 +78,8 @@ assets/ayı.jpg
 *.log
 **/node_modules/
 node_modules/
+documentation/project_secrets_and_credentials.md
+*.bak
 
 
 
