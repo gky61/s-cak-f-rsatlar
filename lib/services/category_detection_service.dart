@@ -453,9 +453,7 @@ class CategoryDetectionService {
         'playstation', 'ps4', 'ps5', 'xbox', 'xbox one', 'xbox series', 'nintendo', 'switch',
         'nintendo switch', 'oyun konsolu', 'oyun konsolu', 'game console', 'konsol', 'console',
         'oyun', 'game', 'video oyun', 'video game', 'oyun kumandası', 'oyun kumandasi', 'game controller',
-        'joystick', 'oyun koltuğu', 'oyun koltugu', 'gaming chair', 'gaming', 'oyun bilgisayarı',
-        'oyun bilgisayari', 'gaming pc', 'gaming laptop', 'gaming mouse', 'gaming klavye', 'gaming keyboard',
-        'gaming headset', 'oyun kulaklığı', 'oyun kulakligi', 'gaming monitor', 'oyun monitörü'
+        'joystick', 'oyun koltuğu', 'oyun koltugu', 'gaming chair', 'gaming'
       ],
       'Hobi & Sanat Malzemeleri': [
         'hobi', 'hobby', 'sanat', 'art', 'resim', 'painting', 'boya', 'paint', 'fırça', 'firca', 'brush',
