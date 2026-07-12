@@ -181,4 +181,50 @@ class ZaraScraper extends BaseProductScraper {
 
     return null;
   }
+
+  @override
+  List<String> scrapeBreadcrumbs(dom.Document document) {
+    final productTitle = scrapeTitle(document) ?? '';
+
+    // 1. Microdata / Schema.org BreadcrumbList
+    final breadcrumbElements = document.querySelectorAll(
+      '[itemprop="itemListElement"] [itemprop="name"], '
+      'ol[itemtype*="BreadcrumbList"] span[itemprop="name"], '
+      'ol[itemtype*="BreadcrumbList"] [itemprop="name"], '
+      '[itemtype*="BreadcrumbList"] [itemprop="name"], '
+      '.layout-footer-breadcrumbs__items [itemprop="name"]'
+    );
+
+    if (breadcrumbElements.isNotEmpty) {
+      final List<String> list = [];
+      for (final el in breadcrumbElements) {
+        final text = el.text.trim();
+        if (text.isNotEmpty) {
+          final lower = text.toLowerCase();
+          if (lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('zara') && lower != productTitle.toLowerCase().trim() && text.length < 50) {
+            list.add(text);
+          }
+        }
+      }
+      if (list.isNotEmpty) return list;
+    }
+
+    // 2. DOM Fallback
+    final fallbackElements = document.querySelectorAll('.breadcrumb a, .breadcrumbs a, .breadcrumb-item a, nav a, ol li a');
+    if (fallbackElements.isNotEmpty) {
+      final List<String> list = [];
+      for (final el in fallbackElements) {
+        final text = el.text.trim();
+        if (text.isNotEmpty) {
+          final lower = text.toLowerCase();
+          if (lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('zara') && lower != productTitle.toLowerCase().trim() && text.length < 50) {
+            list.add(text);
+          }
+        }
+      }
+      if (list.isNotEmpty) return list;
+    }
+
+    return [];
+  }
 }

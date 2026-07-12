@@ -120,6 +120,23 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
         return Icons.checkroom;
       case 'ev_yasam':
         return Icons.home;
+      case 'anne_bebek':
+        return Icons.child_care;
+      case 'kozmetik':
+        return Icons.face;
+      case 'spor_outdoor':
+        return Icons.directions_run;
+      case 'supermarket':
+        return Icons.shopping_cart;
+      case 'yapi_oto':
+        return Icons.construction;
+      case 'kitap_hobi':
+        return Icons.menu_book;
+      case 'dijital_hizmetler':
+        return Icons.language;
+      case 'finans_kampanyalar':
+        return Icons.credit_card;
+      // Legacy or fallback mappings
       case 'market':
         return Icons.shopping_cart;
       case 'seyahat':
@@ -147,6 +164,23 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
         return Colors.pink;
       case 'ev_yasam':
         return Colors.orange;
+      case 'anne_bebek':
+        return Colors.purple;
+      case 'kozmetik':
+        return Colors.redAccent;
+      case 'spor_outdoor':
+        return Colors.teal;
+      case 'supermarket':
+        return Colors.green;
+      case 'yapi_oto':
+        return Colors.blueGrey;
+      case 'kitap_hobi':
+        return Colors.indigo;
+      case 'dijital_hizmetler':
+        return Colors.cyan;
+      case 'finans_kampanyalar':
+        return Colors.amber;
+      // Legacy or fallback mappings
       case 'market':
         return Colors.green;
       case 'seyahat':

@@ -1,0 +1,3 @@
+pazarama:
+
+<script data-n-head="ssr" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"item":"https://www.pazarama.com","name":"Anasayfa"},{"@type":"ListItem","position":2,"item":"https://www.pazarama.com/elektronik-k-K04","name":"Elektronik"},{"@type":"ListItem","position":3,"item":"https://www.pazarama.com/televizyon-ve-ses-sistemleri-k-K04170","name":"Televizyon ve Ses Sistemleri"},{"@type":"ListItem","position":4,"item":"https://www.pazarama.com/televizyon-k-K04188","name":"Televizyon"},{"@type":"ListItem","position":5,"item":"https://www.pazarama.com/lg/televizyon-k-K04188","name":"LG Televizyon"}]}</script>

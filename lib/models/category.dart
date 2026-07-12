@@ -22,7 +22,8 @@ class Category {
         "Bilgisayar & Tablet",
         "TV & Ses Sistemleri",
         "Beyaz Eşya & Küçük Ev Aletleri",
-        "Fotoğraf & Kamera"
+        "Fotoğraf & Kamera",
+        "Akıllı Ev & Güvenlik"
       ],
     ),
     Category(
@@ -33,7 +34,7 @@ class Category {
         "Kadın Giyim",
         "Erkek Giyim",
         "Ayakkabı & Çanta",
-        "Saat & Aksesuar",
+        "Saat, Aksesuar & Takı",
         "Çocuk Giyim"
       ],
     ),
@@ -58,7 +59,7 @@ class Category {
         "Bebek Arabası & Oto Koltuğu",
         "Beslenme & Emzirme",
         "Bebek Odası & Güvenlik",
-        "Bebek Oyuncakları"
+        "Bebek & Çocuk Oyuncakları"
       ],
     ),
     Category(
@@ -81,7 +82,8 @@ class Category {
         "Spor Giyim & Ayakkabı",
         "Fitness & Kondisyon",
         "Kamp & Doğa Malzemeleri",
-        "Bisiklet & Ekipmanları"
+        "Bisiklet & Ekipmanları",
+        "Bireysel & Takım Sporları"
       ],
     ),
     Category(
@@ -100,9 +102,9 @@ class Category {
       name: 'Yapı Market & Oto',
       icon: '🔧',
       subcategories: [
-        "Elektrikli Aletler & Hırdavat",
+        "Elektrikli Aletler, Hırdavat & İş Güvenliği",
         "Oto Aksesuar & Bakım",
-        "Banyo & Tesisat",
+        "Banyo, Tesisat & Yapı",
         "Bahçe Malzemeleri"
       ],
     ),
@@ -114,7 +116,28 @@ class Category {
         "Kitap & Dergi",
         "Müzik Enstrümanları",
         "Oyun Konsolları & Video Oyunları",
-        "Hobi & Sanat Malzemeleri"
+        "Hobi & Sanat Malzemeleri",
+        "Kutu Oyunları & Oyuncaklar"
+      ],
+    ),
+    Category(
+      id: 'dijital_hizmetler',
+      name: 'Dijital & Hizmetler',
+      icon: '🌐',
+      subcategories: [
+        "Abonelik & Yazılım",
+        "Yemek & Restoran",
+        "Seyahat & Eğlence",
+        "Dijital Kod & Oyun Pinleri"
+      ],
+    ),
+    Category(
+      id: 'finans_kampanyalar',
+      name: 'Finans & Kampanyalar',
+      icon: '💳',
+      subcategories: [
+        "Banka Kampanyaları",
+        "Yatırım & Değerli Metaller"
       ],
     ),
     Category(

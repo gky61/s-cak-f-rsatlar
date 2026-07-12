@@ -245,27 +245,10 @@ class FirestoreService {
   Future<bool> addHotVote(String dealId, String userId) => _dealService.addHotVote(dealId, userId);
   Future<bool> addColdVote(String dealId, String userId) => _dealService.addColdVote(dealId, userId);
   Future<bool> addExpiredVote(String dealId, String userId) => _dealService.addExpiredVote(dealId, userId);
-  Future<bool> removeHotVote(String dealId, String userId) async {
-    try {
-      final batch = firestore.batch();
-      final voteRef = firestore.collection('deals').doc(dealId).collection('votes').doc(userId);
-      
-      // Önce mevcut oy'u kontrol et
-      final voteDoc = await voteRef.get();
-      if (voteDoc.exists && voteDoc.data()?['type'] == 'hot') {
-        // Oyu sil
-        batch.delete(voteRef);
-        // hotVotes sayısını azalt
-        batch.update(firestore.collection('deals').doc(dealId), {'hotVotes': FieldValue.increment(-1)});
-        await batch.commit();
-        return true;
-      }
-      return false;
-    } catch (e) {
-      if (kDebugMode) print('❌ removeHotVote hatası: $e');
-      return false;
-    }
-  }
+  Future<bool> removeVote(String dealId, String userId) => _dealService.removeVote(dealId, userId);
+  Future<bool> removeHotVote(String dealId, String userId) => _dealService.removeVote(dealId, userId);
+  Future<bool> removeColdVote(String dealId, String userId) => _dealService.removeVote(dealId, userId);
+  Future<bool> removeExpiredVote(String dealId, String userId) => _dealService.removeVote(dealId, userId);
       
   // ===========================================================================
   // KULLANICI İŞLEMLERİ (UserService üzerinden)

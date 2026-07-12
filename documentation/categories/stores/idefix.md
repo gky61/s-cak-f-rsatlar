@@ -1,0 +1,4 @@
+idefix:
+
+
+<script type="application/ld+json">{"@context":"https://schema.org/","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":0,"name":"Ana sayfa","item":"https://www.idefix.com/"},{"@type":"ListItem","position":1,"name":"Teknoloji","item":"https://www.idefix.com/teknoloji-c-23"},{"@type":"ListItem","position":2,"name":"Isıtma ve Soğutma","item":"https://www.idefix.com/isitma-ve-sogutma-c-2310"},{"@type":"ListItem","position":3,"name":"Klimalar","item":"https://www.idefix.com/klimalar-c-2310782580"},{"@type":"ListItem","position":4,"name":"Duvar Tipi Klimalar","item":"https://www.idefix.com/duvar-tipi-klimalar-c-231078694"}]}</script>

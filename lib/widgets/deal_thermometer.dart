@@ -23,9 +23,9 @@ class DealThermometer extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    // Yorum satırlarındaki düzeltmeler
-    final currentHotVotes = hotVotes > 0 ? hotVotes : deal.hotVotes;
-    final currentColdVotes = coldVotes > 0 ? coldVotes : deal.coldVotes;
+    // Oyları doğrudan kullan (0 değerine düşebilmeli)
+    final currentHotVotes = hotVotes;
+    final currentColdVotes = coldVotes;
     final totalVotes = currentHotVotes + currentColdVotes;
     
     // Sıcaklık yüzdesi hesapla (0-100)

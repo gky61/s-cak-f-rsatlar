@@ -116,18 +116,22 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
     if (_currentDeal == null) return;
 
-    // Eğer zaten hot vote verilmişse ve tekrar hot'a basılırsa, geri al
+    // Spam click önleme - herhangi bir oylama devam ediyorsa yeni tıklamayı engelle
+    if (_isHotVoting || _isColdVoting || _isExpiredVoting) {
+      return;
+    }
+
+    // Eğer zaten bu oyu vermişse ve tekrar aynı oya basarsa, geri al (toggle)
     if (isHot && _hasVotedHot) {
       await _removeHotVote();
       return;
     }
-    
-    // Eğer zaten cold vote verilmişse, işlem yapma
     if (!isHot && _hasVotedCold) {
+      await _removeColdVote();
       return;
     }
 
-    // Loading state
+    // Loading state set et
     setState(() {
       if (isHot) {
         _isHotVoting = true;
@@ -136,11 +140,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       }
     });
 
-    // Önceki oy durumunu kaydet
+    // Önceki durumları kaydet
     final previousHotVote = _hasVotedHot;
     final previousColdVote = _hasVotedCold;
+    final previousExpiredVote = _hasVotedExpired;
     final previousHotVotes = _hotVotes;
     final previousColdVotes = _coldVotes;
+    final previousExpiredVotes = _expiredVotes;
 
     // Optimistic UI update
     setState(() {
@@ -150,6 +156,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           _hasVotedCold = false;
           _coldVotes = _coldVotes > 0 ? _coldVotes - 1 : 0;
         }
+        // Eğer daha önce expired vermişse, expired'ı kaldır
+        if (_hasVotedExpired) {
+          _hasVotedExpired = false;
+          _expiredVotes = _expiredVotes > 0 ? _expiredVotes - 1 : 0;
+        }
         _hasVotedHot = true;
         _hotVotes += 1;
       } else {
@@ -157,6 +168,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         if (_hasVotedHot) {
           _hasVotedHot = false;
           _hotVotes = _hotVotes > 0 ? _hotVotes - 1 : 0;
+        }
+        // Eğer daha önce expired vermişse, expired'ı kaldır
+        if (_hasVotedExpired) {
+          _hasVotedExpired = false;
+          _expiredVotes = _expiredVotes > 0 ? _expiredVotes - 1 : 0;
         }
         _hasVotedCold = true;
         _coldVotes += 1;
@@ -173,13 +189,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       setState(() {
         _hasVotedHot = previousHotVote;
         _hasVotedCold = previousColdVote;
+        _hasVotedExpired = previousExpiredVote;
         _hotVotes = previousHotVotes;
         _coldVotes = previousColdVotes;
-        if (isHot) {
-          _isHotVoting = false;
-        } else {
-          _isColdVoting = false;
-        }
+        _expiredVotes = previousExpiredVotes;
+        _isHotVoting = false;
+        _isColdVoting = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -191,7 +206,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       return;
     }
 
-    // Eğer hot vote ise, favorilere de ekle
+    // Eğer hot vote ise ve işlem başarılıysa favorilere ekle
     if (isHot && success) {
       await _firestoreService.addToFavorites(
         user.uid,
@@ -201,7 +216,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         store: _currentDeal!.store,
         link: _currentDeal!.link,
       );
-      // Favori durumunu güncelle
       if (mounted) {
         setState(() {
           _isFavorite = true;
@@ -209,18 +223,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       }
     }
 
-    // Deal'i yeniden yükle
-    _loadDeal();
-    _checkUserVote();
-
     if (!mounted) return;
 
     setState(() {
-      if (isHot) {
-        _isHotVoting = false;
-      } else {
-        _isColdVoting = false;
-      }
+      _isHotVoting = false;
+      _isColdVoting = false;
     });
   }
 
@@ -238,8 +245,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
     if (_currentDeal == null) return;
 
-    // Eğer zaten expired vote verilmişse, işlem yapma
+    // Spam click önleme
+    if (_isHotVoting || _isColdVoting || _isExpiredVoting) {
+      return;
+    }
+
+    // Eğer zaten expired vermişse ve tekrar basarsa, geri al (toggle)
     if (_hasVotedExpired) {
+      await _removeExpiredVote();
       return;
     }
 
@@ -248,9 +261,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       _isExpiredVoting = true;
     });
 
-    // Önceki oy durumunu kaydet
+    // Önceki durumları kaydet
     final previousHotVote = _hasVotedHot;
     final previousColdVote = _hasVotedCold;
+    final previousExpiredVote = _hasVotedExpired;
     final previousHotVotes = _hotVotes;
     final previousColdVotes = _coldVotes;
     final previousExpiredVotes = _expiredVotes;
@@ -278,10 +292,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       setState(() {
         _hasVotedHot = previousHotVote;
         _hasVotedCold = previousColdVote;
+        _hasVotedExpired = previousExpiredVote;
         _hotVotes = previousHotVotes;
         _coldVotes = previousColdVotes;
         _expiredVotes = previousExpiredVotes;
-        _hasVotedExpired = false;
         _isExpiredVoting = false;
       });
 
@@ -293,10 +307,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       );
       return;
     }
-
-    // Deal'i yeniden yükle
-    _loadDeal();
-    _checkUserVote();
 
     if (!mounted) return;
 
@@ -320,27 +330,22 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     final user = _authService.currentUser;
     if (user == null || _currentDeal == null) return;
 
-    // Loading state
     setState(() {
       _isHotVoting = true;
     });
 
-    // Önceki durumu kaydet
     final previousHotVote = _hasVotedHot;
     final previousHotVotes = _hotVotes;
 
-    // Optimistic UI update
     setState(() {
       _hasVotedHot = false;
       _hotVotes = _hotVotes > 0 ? _hotVotes - 1 : 0;
       _isFavorite = false; // Favorilerden de çıkar
     });
 
-    // Firestore'dan geri al
     final success = await _firestoreService.removeHotVote(_currentDeal!.id, user.uid);
 
     if (!success && mounted) {
-      // Hata durumunda önceki duruma geri dön
       setState(() {
         _hasVotedHot = previousHotVote;
         _hotVotes = previousHotVotes;
@@ -356,19 +361,96 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       return;
     }
 
-    // Favorilerden çıkar
     if (success) {
       await _firestoreService.removeFromFavorites(user.uid, _currentDeal!.id);
     }
-
-    // Deal'i yeniden yükle
-    _loadDeal();
-    _checkUserVote();
 
     if (!mounted) return;
 
     setState(() {
       _isHotVoting = false;
+    });
+  }
+
+  Future<void> _removeColdVote() async {
+    final user = _authService.currentUser;
+    if (user == null || _currentDeal == null) return;
+
+    setState(() {
+      _isColdVoting = true;
+    });
+
+    final previousColdVote = _hasVotedCold;
+    final previousColdVotes = _coldVotes;
+
+    setState(() {
+      _hasVotedCold = false;
+      _coldVotes = _coldVotes > 0 ? _coldVotes - 1 : 0;
+    });
+
+    final success = await _firestoreService.removeColdVote(_currentDeal!.id, user.uid);
+
+    if (!success && mounted) {
+      setState(() {
+        _hasVotedCold = previousColdVote;
+        _coldVotes = previousColdVotes;
+        _isColdVoting = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Oy geri alınırken bir hata oluştu. Lütfen tekrar deneyin.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isColdVoting = false;
+    });
+  }
+
+  Future<void> _removeExpiredVote() async {
+    final user = _authService.currentUser;
+    if (user == null || _currentDeal == null) return;
+
+    setState(() {
+      _isExpiredVoting = true;
+    });
+
+    final previousExpiredVote = _hasVotedExpired;
+    final previousExpiredVotes = _expiredVotes;
+
+    setState(() {
+      _hasVotedExpired = false;
+      _expiredVotes = _expiredVotes > 0 ? _expiredVotes - 1 : 0;
+    });
+
+    final success = await _firestoreService.removeExpiredVote(_currentDeal!.id, user.uid);
+
+    if (!success && mounted) {
+      setState(() {
+        _hasVotedExpired = previousExpiredVote;
+        _expiredVotes = previousExpiredVotes;
+        _isExpiredVoting = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Oy geri alınırken bir hata oluştu. Lütfen tekrar deneyin.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isExpiredVoting = false;
     });
   }
 
@@ -1171,45 +1253,45 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     // Stats Grid (3 columns)
                                     Row(
                                     children: [
-                              Expanded(
-                                          child: _buildStatButton(
-                                            icon: Icons.favorite,
-                                            count: _hotVotes > 0 ? _hotVotes : deal.hotVotes,
-                                            label: 'Beğeni',
+                                      Expanded(
+                                        child: _buildStatButton(
+                                          icon: Icons.favorite,
+                                          count: _hotVotes,
+                                          label: 'Beğeni',
                                           color: Colors.red,
-                                            onTap: () => _handleVote(true),
-                                            isSelected: _hasVotedHot,
-                                            isDark: isDark,
-                                  ),
-                                ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: _buildStatButton(
-                                            icon: Icons.chat_bubble_outline,
-                                            count: deal.commentCount,
-                                            label: 'Yorum',
-                                            color: Colors.blue,
-                                            onTap: () => _showCommentsBottomSheet(
-                                              context, 
-                                              deal,
-                                              scrollToCommentId: widget.scrollToCommentId,
-                                            ),
-                                            isDark: isDark,
-                                          ),
+                                          onTap: () => _handleVote(true),
+                                          isSelected: _hasVotedHot,
+                                          isDark: isDark,
                                         ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: _buildStatButton(
-                                            icon: Icons.cancel_outlined,
-                                            count: _expiredVotes > 0 ? _expiredVotes : deal.expiredVotes,
-                                            label: 'Fırsat Bitti',
-                                            color: Colors.grey,
-                                            onTap: _handleExpiredVote,
-                                            isSelected: _hasVotedExpired,
-                                            isDark: isDark,
-                                            isLoading: _isExpiredVoting,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: _buildStatButton(
+                                          icon: Icons.chat_bubble_outline,
+                                          count: deal.commentCount,
+                                          label: 'Yorum',
+                                          color: Colors.blue,
+                                          onTap: () => _showCommentsBottomSheet(
+                                            context, 
+                                            deal,
+                                            scrollToCommentId: widget.scrollToCommentId,
                                           ),
+                                          isDark: isDark,
                                         ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: _buildStatButton(
+                                          icon: Icons.cancel_outlined,
+                                          count: _expiredVotes,
+                                          label: 'Fırsat Bitti',
+                                          color: Colors.grey,
+                                          onTap: _handleExpiredVote,
+                                          isSelected: _hasVotedExpired,
+                                          isDark: isDark,
+                                          isLoading: _isExpiredVoting,
+                                        ),
+                                      ),
                             ],
                           ),
                                     const SizedBox(height: 16),
@@ -1595,7 +1677,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         deal: deal,
         scrollToCommentId: scrollToCommentId,
       ),
-    );
+    ).then((_) {
+      _loadDeal();
+    });
   }
 
 

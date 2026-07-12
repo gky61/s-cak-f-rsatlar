@@ -243,4 +243,60 @@ class AmazonScraper extends BaseProductScraper {
     }
     return null;
   }
+
+  @override
+  List<String> scrapeBreadcrumbs(dom.Document document) {
+    final List<String> list = [];
+    final productTitle = scrapeTitle(document) ?? '';
+
+    // 1. Standart Amazon Breadcrumb Seçicileri (En güvenilir olandır)
+    final breadcrumbElements = document.querySelectorAll(
+      '#wayfinding-breadcrumbs_feature_div ul li a, '
+      '#wayfinding-breadcrumbs_container ul li a, '
+      '.a-breadcrumb a, '
+      '#wayfinding-breadcrumbs_feature_div li a, '
+      '#wayfinding-breadcrumbs_container li a'
+    );
+
+    for (final el in breadcrumbElements) {
+      final text = el.text.trim();
+      if (text.isNotEmpty) {
+        final lower = text.toLowerCase();
+        if (lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('amazon') && text != productTitle && text.length < 50) {
+          list.add(text);
+        }
+      }
+    }
+
+    if (list.isNotEmpty) return list;
+
+    // 2. Alt Menü Altındaki Aktif Öğe (#nav-subnav a.nav-b)
+    final activeSubnav = document.querySelector('#nav-subnav a.nav-b, #nav-subnav .nav-b, #nav-subnav a[class*="nav-b"]');
+    if (activeSubnav != null) {
+      final text = activeSubnav.text.trim();
+      if (text.isNotEmpty) {
+        final lower = text.toLowerCase();
+        if (lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('amazon') && text != productTitle && text.length < 50) {
+          return [text];
+        }
+      }
+    }
+
+    // 3. Alt Menü data-category Değeri veya İlk Öğe
+    final navSubnav = document.querySelector('#nav-subnav');
+    if (navSubnav != null) {
+      final dataCat = navSubnav.attributes['data-category'];
+      if (dataCat != null && dataCat.isNotEmpty) {
+        var friendlyName = dataCat.trim();
+        if (friendlyName.toLowerCase() == 'electronics') friendlyName = 'Elektronik';
+        else if (friendlyName.toLowerCase() == 'books') friendlyName = 'Kitap';
+        else if (friendlyName.toLowerCase() == 'fashion') friendlyName = 'Moda';
+        else if (friendlyName.toLowerCase() == 'home') friendlyName = 'Ev ve Yaşam';
+        
+        return [friendlyName];
+      }
+    }
+
+    return [];
+  }
 }

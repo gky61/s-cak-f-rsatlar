@@ -146,4 +146,7 @@ abstract class BaseProductScraper {
     }
     return null;
   }
+
+  /// Belgeyi analiz ederek ürünün kırıntı (breadcrumb) listesini döndürür
+  List<String> scrapeBreadcrumbs(dom.Document document) => [];
 }

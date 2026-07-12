@@ -663,4 +663,87 @@ class HepsiburadaScraper extends BaseProductScraper {
 
     return null;
   }
+
+  @override
+  List<String> scrapeBreadcrumbs(dom.Document document) {
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final type = script.attributes['type']?.trim().toLowerCase();
+      if (type == 'application/ld+json') {
+        try {
+          final sanitizedText = script.text.replaceAll('\r\n', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
+          final data = jsonDecode(sanitizedText);
+          final breadcrumbs = _extractBreadcrumbsFromJson(data);
+          if (breadcrumbs.isNotEmpty) {
+            return breadcrumbs;
+          }
+        } catch (_) {}
+      }
+    }
+
+    // DOM Fallback
+    final breadcrumbElements = document.querySelectorAll('.breadcrumbs span[itemprop="name"]') ??
+                              document.querySelectorAll('[data-test-id="breadcrumbs"] li');
+    if (breadcrumbElements.isNotEmpty) {
+      final List<String> list = [];
+      for (final el in breadcrumbElements) {
+        final text = el.text.trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'anasayfa') {
+          list.add(text);
+        }
+      }
+      if (list.isNotEmpty) return list;
+    }
+
+    return [];
+  }
+
+  List<String> _extractBreadcrumbsFromJson(dynamic json) {
+    if (json is Map) {
+      // 1. BreadcrumbList kontrolü
+      if (json['@type'] == 'BreadcrumbList' || json['@type'] == 'http://schema.org/BreadcrumbList') {
+        final items = json['itemListElement'];
+        if (items is List) {
+          final List<String> breadcrumbs = [];
+          for (final item in items) {
+            if (item is Map && item['name'] != null) {
+              final name = item['name'].toString().trim();
+              if (name.isNotEmpty && name.toLowerCase() != 'anasayfa') {
+                breadcrumbs.add(name);
+              }
+            }
+          }
+          if (breadcrumbs.isNotEmpty) return breadcrumbs;
+        }
+      }
+      
+      // 2. Product category kontrolü
+      if (json['@type'] == 'Product' || json['@type'] == 'http://schema.org/Product' ||
+          json['@type'] == 'ProductGroup' || json['@type'] == 'http://schema.org/ProductGroup') {
+        final categoryField = json['category'];
+        if (categoryField is String && categoryField.isNotEmpty) {
+          final parts = categoryField
+              .split(RegExp(r'\s*>\s*'))
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty && e.toLowerCase() != 'anasayfa')
+              .toList();
+          if (parts.isNotEmpty) return parts;
+        }
+      }
+
+      // Recursive arama
+      for (final value in json.values) {
+        if (value is Map || value is List) {
+          final res = _extractBreadcrumbsFromJson(value);
+          if (res.isNotEmpty) return res;
+        }
+      }
+    } else if (json is List) {
+      for (final item in json) {
+        final res = _extractBreadcrumbsFromJson(item);
+        if (res.isNotEmpty) return res;
+      }
+    }
+    return [];
+  }
 }

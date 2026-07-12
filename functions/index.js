@@ -668,6 +668,60 @@ exports.onCommentCreated = functions.firestore
       return null;
     }
 
+    // Yanıt bildirimi gönder (eğer bu yorum başka bir yoruma cevap ise)
+    const parentCommentId = comment.parentCommentId || null;
+    if (parentCommentId) {
+      try {
+        const parentCommentDoc = await admin.firestore()
+          .collection('deals')
+          .doc(dealId)
+          .collection('comments')
+          .doc(parentCommentId)
+          .get();
+
+        if (parentCommentDoc.exists) {
+          const parentComment = parentCommentDoc.data();
+          const recipientUserId = parentComment.userId;
+          const replierUserId = comment.userId;
+
+          // Kendine yanıt verildiyse bildirim gitmesin
+          if (recipientUserId && recipientUserId !== replierUserId) {
+            // Fırsat başlığını çek
+            const dealDoc = await admin.firestore().collection('deals').doc(dealId).get();
+            const dealTitle = dealDoc.exists ? (dealDoc.data().title || 'Fırsat') : 'Fırsat';
+
+            const notificationId = `reply_${commentId}_${recipientUserId}`;
+            const notificationRef = admin.firestore()
+              .collection('users')
+              .doc(recipientUserId)
+              .collection('notifications')
+              .doc(notificationId);
+
+            const replyUserName = comment.userName || 'Bir kullanıcı';
+            const replyText = commentText;
+
+            await notificationRef.set({
+              type: 'comment_reply',
+              title: `${replyUserName} yorumunuza cevap verdi`,
+              body: replyText.length > 100 ? `${replyText.substring(0, 100)}...` : replyText,
+              dealId: dealId,
+              dealTitle: dealTitle,
+              commentId: commentId,
+              parentCommentId: parentCommentId,
+              replyUserName: replyUserName,
+              replyText: replyText.length > 100 ? `${replyText.substring(0, 100)}...` : replyText,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              read: false
+            });
+
+            functions.logger.info(`✅ Yorum yanıt bildirimi Firestore'a yazıldı: ${recipientUserId}`);
+          }
+        }
+      } catch (err) {
+        functions.logger.error('❌ Yorum yanıt bildirimi oluşturulamadı:', err);
+      }
+    }
+
     return null;
   }));
 
@@ -888,6 +942,9 @@ exports.onNotificationCreated = functions.firestore
     const userId = context.params.userId;
     const notificationId = context.params.notificationId;
 
+    let title = notification.title || 'Yeni Bildirim';
+    let body = notification.body || '';
+
     functions.logger.info('🔔 onNotificationCreated tetiklendi:', { userId, notificationId, type: notification.type });
 
     // 0. Check global Master Switch for push notifications
@@ -936,55 +993,11 @@ exports.onNotificationCreated = functions.firestore
       functions.logger.error('⚠️ Tercih yüklenirken hata, varsayılanlar kullanılacak:', e);
     }
 
-    // 2. Master switch kontrolü
+    // 2. ADIM 2 - FİLTRE A: Sessiz Saatler kontrolü
     const isKeywordNotif = (notification.reason === 'keyword' || notification.type === 'keyword');
     const isCategoryNotif = (notification.reason === 'category');
-
-    if (!prefs.pushMasterEnabled) {
-      const bypass = (isKeywordNotif && prefs.keywordNotificationsEnabled !== false) || 
-                     (isCategoryNotif && prefs.categoryNotificationsEnabled !== false);
-                     
-      if (!bypass) {
-        functions.logger.info(`🚫 Kullanıcı ${userId} için tüm push bildirimleri kapalı.`);
-        await snap.ref.update({
-          pushEligible: false,
-          pushStatus: 'disabled_by_user_master_switch',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-        return null;
-      } else {
-        functions.logger.info(`⚡ Master Switch kapalı ancak ${isKeywordNotif ? 'Anahtar Kelime' : 'Kategori'} bildirimi bağımsız switch açık olduğu için gönderiliyor.`);
-      }
-    }
-
-    // 3. Bildirim Grubu switch kontrolü
-    let groupEnabled = true;
     const type = notification.type || '';
-    if (isKeywordNotif) {
-      groupEnabled = prefs.keywordNotificationsEnabled !== false;
-    } else if (isCategoryNotif) {
-      groupEnabled = prefs.categoryNotificationsEnabled !== false;
-    } else if (type === 'deal') {
-      groupEnabled = prefs.dealNotificationsEnabled;
-    } else if (type === 'comment_reply' || type === 'comment') {
-      groupEnabled = prefs.communityNotificationsEnabled;
-    } else if (type === 'submission_status') {
-      groupEnabled = prefs.submissionStatusNotificationsEnabled;
-    } else if (type === 'marketing') {
-      groupEnabled = prefs.marketingNotificationsEnabled;
-    }
 
-    if (!groupEnabled) {
-      functions.logger.info(`🚫 Kullanıcı ${userId} için bu bildirim grubu kapalı: ${type}`);
-      await snap.ref.update({
-        pushEligible: false,
-        pushStatus: `disabled_by_user_group_${type}`,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      return null;
-    }
-
-    // 4. Sessiz Saatler kontrolü
     if (prefs.quietHoursEnabled && (type === 'deal' || type === 'keyword' || type === 'marketing')) {
       const userTime = new Date().toLocaleTimeString('tr-TR', { timeZone: prefs.timezone, hour12: false });
       const currentHm = userTime.substring(0, 5); // "HH:MM"
@@ -1010,7 +1023,7 @@ exports.onNotificationCreated = functions.firestore
       }
     }
 
-    // 5. Kategori Limitleri kontrolü
+    // 3. ADIM 2 - FİLTRE B: Kategori Limitleri kontrolü
     const reason = notification.reason || '';
     if (reason === 'category') {
       try {
@@ -1058,6 +1071,123 @@ exports.onNotificationCreated = functions.firestore
       }
     }
 
+    // 4. ADIM 2 - FİLTRE C: Ana Şalter (Telefon Bildirimleri) kontrolü
+    if (!prefs.pushMasterEnabled) {
+      functions.logger.info(`🚫 Kullanıcı ${userId} için tüm push bildirimleri kapalı.`);
+      await snap.ref.update({
+        pushEligible: false,
+        pushStatus: 'disabled_by_user_master_switch',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return null;
+    }
+
+    // 5. ADIM 2 - FİLTRE D: Alt Kanal kontrolü
+    let groupEnabled = true;
+    const reasons = notification.reasons || {};
+    const hasReasons = Object.keys(reasons).length > 0;
+
+    if (hasReasons) {
+      // Hangi sebebin aktif olarak kullanılacağını belirleyelim.
+      // Öncelik: Eğer belgenin orijinal nedeni kullanıcının tercihlerinde açık ise, onu koru.
+      // Değilse, açık olan ilk eşleşen nedeni seç (Sıra: keyword > author > category).
+      let activeReason = null;
+      let activeDetail = '';
+
+      const originalReason = notification.reason;
+      let isOriginalReasonEnabled = false;
+      if (originalReason === 'keyword' && prefs.keywordNotificationsEnabled !== false) {
+        isOriginalReasonEnabled = true;
+      } else if (originalReason === 'author' && prefs.dealNotificationsEnabled !== false) {
+        isOriginalReasonEnabled = true;
+      } else if (originalReason === 'category' && prefs.categoryNotificationsEnabled !== false) {
+        isOriginalReasonEnabled = true;
+      }
+
+      if (isOriginalReasonEnabled) {
+        activeReason = originalReason;
+        activeDetail = notification.reasonDetail || '';
+      } else {
+        if (reasons.keyword && prefs.keywordNotificationsEnabled !== false) {
+          activeReason = 'keyword';
+          activeDetail = reasons.keyword;
+        } else if (reasons.author && prefs.dealNotificationsEnabled !== false) {
+          activeReason = 'author';
+          activeDetail = reasons.author;
+        } else if (reasons.category && prefs.categoryNotificationsEnabled !== false) {
+          activeReason = 'category';
+          activeDetail = reasons.category;
+        }
+      }
+
+      if (activeReason) {
+        groupEnabled = true;
+
+        // Eğer aktif olan sebep orijinal sebepten farklı ise bildirim başlığını ve içeriğini güncelle
+        if (activeReason !== originalReason) {
+          const dealTitle = notification.dealTitle || 'Fırsat';
+          let newTitle = notification.title;
+          let newBody = notification.body;
+
+          if (activeReason === 'keyword') {
+            newTitle = '🎯 İlginizi Çeken Kelime!';
+            newBody = `"${activeDetail}" içeren yeni fırsat: ${dealTitle}`;
+          } else if (activeReason === 'author') {
+            newTitle = '👤 Takip Ettiğiniz Kişi!';
+            newBody = `Takip ettiğiniz yazar yeni fırsat paylaştı: ${dealTitle}`;
+          } else if (activeReason === 'category') {
+            newTitle = '🎯 Yeni Fırsat!';
+            newBody = `${dealTitle}`;
+          }
+
+          title = newTitle;
+          body = newBody;
+
+          // Veritabanını güncelle ki bildirim geçmişi de doğru gözüksün
+          await snap.ref.update({
+            reason: activeReason,
+            reasonDetail: activeDetail,
+            title: newTitle,
+            body: newBody,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+
+          functions.logger.info(`🔄 Bildirim başlığı ve içeriği güncellenen nedene göre dinamik olarak değiştirildi:`, {
+            oldReason: originalReason,
+            newReason: activeReason,
+            newTitle,
+            newBody
+          });
+        }
+      } else {
+        groupEnabled = false;
+      }
+    } else {
+      if (isKeywordNotif) {
+        groupEnabled = prefs.keywordNotificationsEnabled !== false;
+      } else if (isCategoryNotif) {
+        groupEnabled = prefs.categoryNotificationsEnabled !== false;
+      } else if (type === 'deal') {
+        groupEnabled = prefs.dealNotificationsEnabled !== false;
+      } else if (type === 'comment_reply' || type === 'comment') {
+        groupEnabled = prefs.communityNotificationsEnabled !== false;
+      } else if (type === 'submission_status') {
+        groupEnabled = prefs.submissionStatusNotificationsEnabled !== false;
+      } else if (type === 'marketing') {
+        groupEnabled = prefs.marketingNotificationsEnabled !== false;
+      }
+    }
+
+    if (!groupEnabled) {
+      functions.logger.info(`🚫 Kullanıcı ${userId} için bu bildirim grubu kapalı: ${type || reason}`);
+      await snap.ref.update({
+        pushEligible: false,
+        pushStatus: `disabled_by_user_group_${type || reason}`,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return null;
+    }
+
     // 6. FCM Push Gönder
     const devices = await getUserDeviceTokens(userId);
     if (devices.length === 0) {
@@ -1070,8 +1200,7 @@ exports.onNotificationCreated = functions.firestore
       return null;
     }
 
-    const title = notification.title || 'Yeni Bildirim';
-    const body = notification.body || '';
+    // title and body are already declared and resolved at the top of the function
     const dealId = notification.dealId || '';
     const clickAction = 'FLUTTER_NOTIFICATION_CLICK';
 
@@ -1649,33 +1778,65 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
 
   try {
     functions.logger.info(`🤖 Manuel bildirim gönderiliyor. Hedef: ${targetType}`);
-    let responseId = 'topic_or_token_sent';
+    let responseId = 'written_to_notifications';
 
     if (targetType === 'all') {
-      message.topic = 'all_deals';
-      responseId = await admin.messaging().send(message);
+      const usersSnap = await admin.firestore().collection('users').get();
+      let batch = admin.firestore().batch();
+      let opCount = 0;
+      const notificationId = `manual_${logRef.id}`;
+
+      for (const userDoc of usersSnap.docs) {
+        const userId = userDoc.id;
+        const notificationRef = admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .doc(notificationId);
+
+        batch.set(notificationRef, {
+          type: 'marketing',
+          title: title,
+          body: body,
+          imageUrl: imageUrl || null,
+          read: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        opCount++;
+        if (opCount >= 400) {
+          await batch.commit();
+          batch = admin.firestore().batch();
+          opCount = 0;
+        }
+      }
+      if (opCount > 0) {
+        await batch.commit();
+      }
+      responseId = `written_to_notifications_of_${usersSnap.size}_users`;
+
     } else if (targetType === 'token') {
       message.token = targetValue;
       responseId = await admin.messaging().send(message);
+
     } else if (targetType === 'uid') {
-      const devices = await getUserDeviceTokens(targetValue);
-      if (devices.length === 0) {
-        throw new functions.https.HttpsError('not-found', 'Belirtilen kullanıcının aktif bildirim cihazı bulunamadı.');
-      }
-      
-      const sendPromises = devices.map(async (device) => {
-        const payload = { ...message, token: device.token };
-        try {
-          await admin.messaging().send(payload);
-        } catch (err) {
-          functions.logger.error(`❌ Manuel bildirim cihaza gönderilemedi: ${device.id}`, err);
-          if (device.id) {
-            await handleSendFailure(device.id, err);
-          }
-        }
+      const notificationId = `manual_${logRef.id}`;
+      const notificationRef = admin.firestore()
+        .collection('users')
+        .doc(targetValue)
+        .collection('notifications')
+        .doc(notificationId);
+
+      await notificationRef.set({
+        type: 'marketing',
+        title: title,
+        body: body,
+        imageUrl: imageUrl || null,
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      await Promise.all(sendPromises);
-      responseId = `sent_to_${devices.length}_devices`;
+      responseId = `written_to_notifications_of_${targetValue}`;
+
     } else {
       throw new functions.https.HttpsError('invalid-argument', 'Geçersiz hedef türü.');
     }

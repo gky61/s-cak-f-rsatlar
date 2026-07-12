@@ -2201,8 +2201,13 @@ async function showDealModal(deal) {
                     await saveDealChanges();
                 } catch (error) {
                     console.error('❌ Kayıt hatası:', error);
-                    newSaveBtn.disabled = false;
-                    newSaveBtn.innerHTML = originalHTML;
+                    showError('İşlem başarısız: ' + error.message);
+                } finally {
+                    // Hata veya doğrulama hatası durumunda butonu her zaman geri aç
+                    if (!dealModal.classList.contains('hidden')) {
+                        newSaveBtn.disabled = false;
+                        newSaveBtn.innerHTML = originalHTML;
+                    }
                 }
             });
         }
@@ -2377,22 +2382,22 @@ async function saveDealChanges() {
         // imageUrl'i de güncelle (ilk görsel)
         const imageUrl = imageUrls.length > 0 ? imageUrls[0] : (currentDeal.imageUrl || '');
 
-        // Validasyon
+        // Validasyon - hata varsa throw et ki buton geri açılsın
         if (!title.trim()) {
             showError('Başlık gereklidir!');
-            return;
+            throw new Error('Başlık gereklidir!');
         }
         if (price <= 0) {
             showError('Geçerli bir fiyat giriniz!');
-            return;
+            throw new Error('Geçerli bir fiyat giriniz!');
         }
         if (!url.trim()) {
             showError('Ürün linki gereklidir!');
-            return;
+            throw new Error('Ürün linki gereklidir!');
         }
         if (!category) {
             showError('Kategori seçiniz!');
-            return;
+            throw new Error('Kategori seçiniz!');
         }
 
         // İndirim oranı hesaplama
@@ -2469,8 +2474,17 @@ async function saveDealChanges() {
         if (isNewDeal) {
             // Yeni deal oluştur
             console.log('📝 Creating new deal:', dealData);
-            const docRef = await db.collection('deals').add(dealData);
-            console.log('✅ New deal created with ID:', docRef.id);
+            let newDealId;
+            if (currentDeal._isPreGeneratedId && currentDeal.id) {
+                // Görsel yükleme sırasında önceden oluşturulmuş ID varsa onu kullan
+                await db.collection('deals').doc(currentDeal.id).set(dealData);
+                newDealId = currentDeal.id;
+                console.log('✅ New deal created with pre-generated ID:', newDealId);
+            } else {
+                const docRef = await db.collection('deals').add(dealData);
+                newDealId = docRef.id;
+                console.log('✅ New deal created with ID:', newDealId);
+            }
             showSuccess('Fırsat başarıyla oluşturuldu!');
             await loadDeals();
             updateStats();
@@ -3221,9 +3235,17 @@ async function handleImageUpload(event) {
         return;
     }
 
-    if (!currentDeal || !currentDeal.id) {
+    // Yeni fırsat (id yoksa) için: görsel yükleme öncesinde geçici Firestore ID oluştur
+    if (!currentDeal) {
         showError('Fırsat bulunamadı!');
         return;
+    }
+    if (!currentDeal.id || currentDeal.id === '') {
+        // Yeni fırsat için geçici bir Firestore doküman referansı ve ID al
+        const newDocRef = db.collection('deals').doc();
+        currentDeal.id = newDocRef.id;
+        currentDeal._isPreGeneratedId = true;
+        console.log('🆔 Yeni fırsat için geçici ID oluşturuldu:', currentDeal.id);
     }
 
     try {

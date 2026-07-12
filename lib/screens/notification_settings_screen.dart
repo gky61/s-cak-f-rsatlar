@@ -328,9 +328,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         ),
                       ),
                       subtitle: Text(
-                        _preferences.pushMasterEnabled
-                            ? 'Cihazınıza push bildirimleri gönderilecek'
-                            : 'Push bildirimleri kapalı (Uygulama içinden okumaya devam edebilirsiniz)',
+                        'Kapatıldığında telefonunuza hiçbir anlık uyarı gelmez; ancak tüm bildirimleri uygulama içindeki Bildirim Kutusu\'ndan takip edebilirsiniz.',
                         style: TextStyle(color: textSub, fontSize: 12),
                       ),
                       value: _preferences.pushMasterEnabled,
@@ -380,8 +378,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                     child: Column(
                       children: [
                         SwitchListTile(
-                          title: const Text('Fırsat Bildirimleri'),
-                          subtitle: const Text('Takip edilen kelimeler, kategoriler ve yazarlar'),
+                          title: const Text('Takip Edilen Yazar Bildirimleri'),
+                          subtitle: const Text('Profillerinden bildirimlerini (zilini) açtığınız usta avcıların paylaştığı yeni fırsatlar.'),
                           value: _preferences.dealNotificationsEnabled,
                           activeColor: primaryColor,
                           onChanged: _preferences.pushMasterEnabled
@@ -406,7 +404,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         const Divider(height: 1),
                         SwitchListTile(
                           title: const Text('Topluluk Bildirimleri'),
-                          subtitle: const Text('Yorumlar, yanıtlar ve etiketlemeler'),
+                          subtitle: const Text('Paylaşımlarınıza gelen yorumlar, yanıtlar ve etiketlemeler.'),
                           value: _preferences.communityNotificationsEnabled,
                           activeColor: primaryColor,
                           onChanged: _preferences.pushMasterEnabled
@@ -431,7 +429,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         const Divider(height: 1),
                         SwitchListTile(
                           title: const Text('Paylaşım Durumu Bildirimleri'),
-                          subtitle: const Text('Fırsatlarınızın onay, red ve yayından kaldırılma durumları'),
+                          subtitle: const Text('Paylaştığınız fırsatların onaylanma, reddedilme veya yayından kaldırılma durumları.'),
                           value: _preferences.submissionStatusNotificationsEnabled,
                           activeColor: primaryColor,
                           onChanged: _preferences.pushMasterEnabled
@@ -456,7 +454,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         const Divider(height: 1),
                         SwitchListTile(
                           title: const Text('Kampanya Bildirimleri'),
-                          subtitle: const Text('Genel kampanyalar ve duyurular'),
+                          subtitle: const Text('Özel kampanyalar, hediye çekleri ve önemli sistem duyuruları'),
                           value: _preferences.marketingNotificationsEnabled,
                           activeColor: primaryColor,
                           onChanged: _preferences.pushMasterEnabled
@@ -481,48 +479,52 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         const Divider(height: 1),
                         SwitchListTile(
                           title: const Text('Kategori Bildirimleri'),
-                          subtitle: const Text('Takip ettiğiniz kategorilerdeki yeni fırsatlar (Master bildirim kapalıyken de çalışır)'),
+                          subtitle: const Text('Takip ettiğiniz alışveriş kategorilerine eklenen yeni fırsatlar'),
                           value: _preferences.categoryNotificationsEnabled,
                           activeColor: primaryColor,
-                          onChanged: (val) {
-                            _updatePrefs(NotificationPreferences(
-                              pushMasterEnabled: _preferences.pushMasterEnabled,
-                              dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-                              communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-                              submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-                              marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              categoryNotificationsEnabled: val,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
-                              quietHoursEnabled: _preferences.quietHoursEnabled,
-                              quietHoursStart: _preferences.quietHoursStart,
-                              quietHoursEnd: _preferences.quietHoursEnd,
-                              timezone: _preferences.timezone,
-                              updatedAt: DateTime.now(),
-                            ));
-                          },
+                          onChanged: _preferences.pushMasterEnabled
+                              ? (val) {
+                                  _updatePrefs(NotificationPreferences(
+                                    pushMasterEnabled: _preferences.pushMasterEnabled,
+                                    dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
+                                    communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
+                                    submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
+                                    marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
+                                    categoryNotificationsEnabled: val,
+                                    keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
+                                    quietHoursEnabled: _preferences.quietHoursEnabled,
+                                    quietHoursStart: _preferences.quietHoursStart,
+                                    quietHoursEnd: _preferences.quietHoursEnd,
+                                    timezone: _preferences.timezone,
+                                    updatedAt: DateTime.now(),
+                                  ));
+                                }
+                              : null,
                         ),
                         const Divider(height: 1),
                         SwitchListTile(
                           title: const Text('Anahtar Kelime Takibi Bildirimleri'),
-                          subtitle: const Text('Eklediğiniz anahtar kelimelerle eşleşen fırsatlar (Master bildirim kapalıyken de çalışır)'),
+                          subtitle: const Text('Takip listenizdeki kelimeleri içeren yeni fırsatlardan haberdar olun'),
                           value: _preferences.keywordNotificationsEnabled,
                           activeColor: primaryColor,
-                          onChanged: (val) {
-                            _updatePrefs(NotificationPreferences(
-                              pushMasterEnabled: _preferences.pushMasterEnabled,
-                              dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-                              communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-                              submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-                              marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: val,
-                              quietHoursEnabled: _preferences.quietHoursEnabled,
-                              quietHoursStart: _preferences.quietHoursStart,
-                              quietHoursEnd: _preferences.quietHoursEnd,
-                              timezone: _preferences.timezone,
-                              updatedAt: DateTime.now(),
-                            ));
-                          },
+                          onChanged: _preferences.pushMasterEnabled
+                              ? (val) {
+                                  _updatePrefs(NotificationPreferences(
+                                    pushMasterEnabled: _preferences.pushMasterEnabled,
+                                    dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
+                                    communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
+                                    submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
+                                    marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
+                                    categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
+                                    keywordNotificationsEnabled: val,
+                                    quietHoursEnabled: _preferences.quietHoursEnabled,
+                                    quietHoursStart: _preferences.quietHoursStart,
+                                    quietHoursEnd: _preferences.quietHoursEnd,
+                                    timezone: _preferences.timezone,
+                                    updatedAt: DateTime.now(),
+                                  ));
+                                }
+                              : null,
                         ),
                       ],
                     ),
@@ -554,8 +556,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                     child: Column(
                       children: [
                         SwitchListTile(
-                          title: const Text('Sessiz Saatler Aktif'),
-                          subtitle: const Text('Belirlenen saatlerde fırsat push bildirimleri gönderilmez'),
+                          title: const Text('Sessiz Saatler'),
+                          subtitle: const Text('Belirlediğiniz saat aralığında telefonunuza anlık sesli uyarı gelmez; bildirimler sessizce Bildirim Kutusu\'na kaydedilir.'),
                           value: _preferences.quietHoursEnabled,
                           activeColor: primaryColor,
                           onChanged: _preferences.pushMasterEnabled
@@ -628,15 +630,20 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       subtitle: const Text('Tercih ettiğiniz fırsat kategorilerini seçin'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const CategoryPreferencesScreen(),
-                          ),
-                        );
-                      },
+                      trailing: Icon(
+                        Icons.chevron_right,
+                        color: _preferences.pushMasterEnabled ? null : Colors.grey,
+                      ),
+                      onTap: _preferences.pushMasterEnabled
+                          ? () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const CategoryPreferencesScreen(),
+                                ),
+                              );
+                            }
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -672,6 +679,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                             Expanded(
                               child: TextField(
                                 controller: _keywordController,
+                                enabled: _preferences.pushMasterEnabled,
                                 decoration: InputDecoration(
                                   hintText: 'Kelime girin (örn: Dyson, Laptop)',
                                   hintStyle: TextStyle(color: textSub, fontSize: 14),
@@ -681,12 +689,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                 ),
                                 style: TextStyle(color: textMain, fontSize: 14),
-                                onSubmitted: (_) => _addKeyword(),
+                                onSubmitted: _preferences.pushMasterEnabled ? (_) => _addKeyword() : null,
                               ),
                             ),
                             const SizedBox(width: 12),
                             ElevatedButton(
-                              onPressed: _addKeyword,
+                              onPressed: _preferences.pushMasterEnabled ? _addKeyword : null,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: primaryColor,
                                 foregroundColor: Colors.white,
@@ -708,10 +716,19 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                               return Chip(
                                 label: Text(
                                   keyword,
-                                  style: TextStyle(color: textMain, fontSize: 13),
+                                  style: TextStyle(
+                                    color: _preferences.pushMasterEnabled 
+                                        ? textMain 
+                                        : textMain.withValues(alpha: 0.5),
+                                    fontSize: 13,
+                                  ),
                                 ),
-                                deleteIcon: Icon(Icons.close, size: 18, color: textMain),
-                                onDeleted: () => _removeKeyword(keyword),
+                                deleteIcon: Icon(
+                                  Icons.close, 
+                                  size: 18, 
+                                  color: _preferences.pushMasterEnabled ? textMain : Colors.grey,
+                                ),
+                                onDeleted: _preferences.pushMasterEnabled ? () => _removeKeyword(keyword) : null,
                                 backgroundColor: isDark 
                                     ? Colors.white.withValues(alpha: 0.1) 
                                     : Colors.black.withValues(alpha: 0.05),

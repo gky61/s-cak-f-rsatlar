@@ -290,89 +290,108 @@ class DealService {
   }
 
   // Vote İşlemleri
-  Future<bool> addHotVote(String dealId, String userId) async {
+  Future<bool> _updateVoteInternal(String dealId, String userId, String? newType) async {
     try {
-      final batch = _firestore.batch();
-      final voteRef = _firestore.collection('deals').doc(dealId).collection('votes').doc(userId);
-      
-      final voteDoc = await voteRef.get();
-      if (voteDoc.exists) {
-        final currentType = voteDoc.data()?['type'] as String?;
-        if (currentType == 'cold') {
-          batch.update(_firestore.collection('deals').doc(dealId), {'coldVotes': FieldValue.increment(-1)});
-        } else if (currentType == 'hot') {
+      final dealRef = _firestore.collection('deals').doc(dealId);
+      final voteRef = dealRef.collection('votes').doc(userId);
+
+      return await _firestore.runTransaction((transaction) async {
+        final dealSnapshot = await transaction.get(dealRef);
+        final voteSnapshot = await transaction.get(voteRef);
+
+        if (!dealSnapshot.exists) {
+          return false;
+        }
+
+        final dealData = dealSnapshot.data() as Map<String, dynamic>;
+        int hotVotes = dealData['hotVotes'] ?? 0;
+        int coldVotes = dealData['coldVotes'] ?? 0;
+        int expiredVotes = dealData['expiredVotes'] ?? 0;
+        bool isExpired = dealData['isExpired'] ?? false;
+        final String postedBy = dealData['postedBy'] ?? '';
+
+        String? oldType;
+        if (voteSnapshot.exists) {
+          oldType = voteSnapshot.data()?['type'] as String?;
+        }
+
+        // Eğer eski oy ile yeni oy aynı ise, hiçbir şey yapma
+        if (oldType == newType) {
           return true;
         }
-      }
-      
-      batch.set(voteRef, {'type': 'hot'}, SetOptions(merge: true));
-      batch.update(_firestore.collection('deals').doc(dealId), {'hotVotes': FieldValue.increment(1)});
-      await batch.commit();
-      
-      // Deal sahibine puan ver
-      final deal = await getDeal(dealId);
-      if (deal != null && !voteDoc.exists) {
-        final userService = UserService();
-        await userService.incrementUserPoints(deal.postedBy, points: 2, totalLikes: 1);
-      }
-      
-      return true;
+
+        // 1. Eski oyu çıkar ve sayaçları güncelle
+        if (oldType != null) {
+          if (oldType == 'hot') {
+            hotVotes = (hotVotes > 0) ? hotVotes - 1 : 0;
+          } else if (oldType == 'cold') {
+            coldVotes = (coldVotes > 0) ? coldVotes - 1 : 0;
+          } else if (oldType == 'expired') {
+            expiredVotes = (expiredVotes > 0) ? expiredVotes - 1 : 0;
+          }
+        }
+
+        // 2. Yeni oyu ekle ve sayaçları güncelle
+        if (newType != null) {
+          if (newType == 'hot') {
+            hotVotes += 1;
+          } else if (newType == 'cold') {
+            coldVotes += 1;
+          } else if (newType == 'expired') {
+            expiredVotes += 1;
+            // 15 veya daha fazla "fırsat bitti" oyu varsa fırsatı bitti olarak işaretle
+            if (expiredVotes >= 15) {
+              isExpired = true;
+            }
+          }
+        }
+
+        // 3. vote doc güncelle
+        if (newType == null) {
+          transaction.delete(voteRef);
+        } else {
+          transaction.set(voteRef, {'type': newType}, SetOptions(merge: true));
+        }
+
+        // 4. deal doc güncelle
+        transaction.update(dealRef, {
+          'hotVotes': hotVotes,
+          'coldVotes': coldVotes,
+          'expiredVotes': expiredVotes,
+          'isExpired': isExpired,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        // 5. Deal sahibine puan ver / geri al (exploit önleme)
+        // 'hot' oyu eklendiğinde +2 puan, kaldırıldığında/değiştirildiğinde -2 puan
+        final int oldPoints = (oldType == 'hot') ? 2 : 0;
+        final int newPoints = (newType == 'hot') ? 2 : 0;
+        final int diffPoints = newPoints - oldPoints;
+
+        final int oldLikes = (oldType == 'hot') ? 1 : 0;
+        final int newLikes = (newType == 'hot') ? 1 : 0;
+        final int diffLikes = newLikes - oldLikes;
+
+        if (postedBy.isNotEmpty && (diffPoints != 0 || diffLikes != 0)) {
+          final userService = UserService();
+          // Puan güncellemesini transaction sonrasında arka planda yap
+          Future.delayed(Duration.zero, () async {
+            await userService.incrementUserPoints(postedBy, points: diffPoints, totalLikes: diffLikes);
+          });
+        }
+
+        return true;
+      });
     } catch (e) {
+      _log('updateVoteInternal hatası: $e');
       return false;
     }
   }
 
-  Future<bool> addColdVote(String dealId, String userId) async {
-    try {
-      final batch = _firestore.batch();
-      final voteRef = _firestore.collection('deals').doc(dealId).collection('votes').doc(userId);
-      
-      final voteDoc = await voteRef.get();
-      if (voteDoc.exists) {
-        final currentType = voteDoc.data()?['type'] as String?;
-        if (currentType == 'hot') {
-          batch.update(_firestore.collection('deals').doc(dealId), {'hotVotes': FieldValue.increment(-1)});
-        } else if (currentType == 'cold') {
-          return true;
-        }
-      }
-      
-      batch.set(voteRef, {'type': 'cold'}, SetOptions(merge: true));
-      batch.update(_firestore.collection('deals').doc(dealId), {'coldVotes': FieldValue.increment(1)});
-      await batch.commit();
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  Future<bool> addExpiredVote(String dealId, String userId) async {
-    try {
-      final batch = _firestore.batch();
-      final voteRef = _firestore.collection('deals').doc(dealId).collection('votes').doc(userId);
-      
-      final voteDoc = await voteRef.get();
-      if (voteDoc.exists) {
-        if (voteDoc.data()?['type'] == 'expired') return true;
-        // Önceki oyları temizle mantığı buraya eklenebilir
-      }
-      
-      batch.set(voteRef, {'type': 'expired'}, SetOptions(merge: true));
-      batch.update(_firestore.collection('deals').doc(dealId), {'expiredVotes': FieldValue.increment(1)});
-      await batch.commit();
-      
-      // Otomatik expire kontrolü
-      final dealDoc = await _firestore.collection('deals').doc(dealId).get();
-      if (dealDoc.exists) {
-        if ((dealDoc.data()?['expiredVotes'] ?? 0) >= 15) {
-          await updateDeal(dealId, {'isExpired': true});
-        }
-      }
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
+  Future<bool> addHotVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, 'hot');
+  Future<bool> addColdVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, 'cold');
+  Future<bool> addExpiredVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, 'expired');
+  Future<bool> removeVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, null);
 
   Future<String?> getUserVote(String dealId, String userId) async {
     try {

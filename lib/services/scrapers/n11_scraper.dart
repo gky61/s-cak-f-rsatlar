@@ -232,4 +232,63 @@ class N11Scraper extends BaseProductScraper {
     }
     return null;
   }
+
+  @override
+  List<String> scrapeBreadcrumbs(dom.Document document) {
+    final productTitle = scrapeTitle(document) ?? '';
+
+    // window.model JSON'ından aramayı dene
+    final model = _getN11Model(document);
+    if (model != null) {
+      final categoryField = model['category'] ?? model['categories'];
+      if (categoryField is String && categoryField.isNotEmpty) {
+        final parts = categoryField
+            .split(RegExp(r'\s*>\s*|\s*/\s*'))
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .where((e) {
+              final lower = e.toLowerCase();
+              return lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('n11') && lower != productTitle.toLowerCase().trim() && e.length < 50;
+            })
+            .toList();
+        if (parts.isNotEmpty) return parts;
+      } else if (categoryField is List) {
+        final List<String> list = [];
+        for (final cat in categoryField) {
+          if (cat is Map && cat['name'] != null) {
+            final name = cat['name'].toString().trim();
+            final lower = name.toLowerCase();
+            if (lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('n11') && lower != productTitle.toLowerCase().trim() && name.length < 50) {
+              list.add(name);
+            }
+          } else if (cat is String) {
+            final name = cat.trim();
+            final lower = name.toLowerCase();
+            if (lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('n11') && lower != productTitle.toLowerCase().trim() && name.length < 50) {
+              list.add(name);
+            }
+          }
+        }
+        if (list.isNotEmpty) return list;
+      }
+    }
+
+    // DOM Fallback
+    final breadcrumbElements = document.querySelectorAll('.breadcrumb-item a, .breadcrumb a, .breadcrumb-group a');
+    if (breadcrumbElements.isNotEmpty) {
+      final List<String> list = [];
+      for (final el in breadcrumbElements) {
+        final text = el.text.trim();
+        if (text.isNotEmpty) {
+          final lower = text.toLowerCase();
+          if (lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('n11') && lower != productTitle.toLowerCase().trim() && text.length < 50) {
+            list.add(text);
+          }
+        }
+      }
+      if (list.isNotEmpty) return list;
+    }
+
+    return [];
+  }
 }

@@ -81,9 +81,14 @@ service cloud.firestore {
       // Giriş yapmış ve engellenmemiş kullanıcılar fırsat ekleyebilir
       allow create: if canWrite();
       
-      // Sahibi veya admin güncelleyebilir
-      allow update: if canWrite() && 
-                    (resource.data.postedBy == userId() || isAdmin());
+      // Sahibi veya admin tüm alanları güncelleyebilir.
+      // Herhangi bir giriş yapmış kullanıcı sadece oy/yorum sayacı alanlarını güncelleyebilir.
+      allow update: if canWrite() && (
+        resource.data.postedBy == userId() || 
+        isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['hotVotes', 'coldVotes', 'expiredVotes', 'isExpired', 'commentCount', 'updatedAt'])
+      );
       
       // Sahibi veya admin silebilir
       allow delete: if isAuthenticated() && 

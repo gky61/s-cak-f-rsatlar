@@ -716,25 +716,25 @@ function detectCategoryFromText(title, description) {
   const text = ((title || '') + ' ' + (description || '')).toLowerCase();
   
   // 1. Elektronik
-  const elektronikKeywords = ['telefon', 'bilgisayar', 'laptop', 'notebook', 'monitör', 'ekran', 'mouse', 'klavye', 'kulaklık', 'hoparlör', 'tv', 'televizyon', 'tablet', 'şarj', 'adaptör', 'kablo', 'ssd', 'ram', 'ekran kartı', 'işlemci', 'anakart', 'powerbank', 'yazıcı', 'kamera', 'süpürge', 'robot süpürge', 'airfryer', 'kettle', 'çay makinesi', 'kahve makinesi', 'tost makinesi', 'ütü', 'klima', 'kombi', 'vantilatör', 'fön', 'tıraş makinesi'];
+  const elektronikKeywords = ['telefon', 'bilgisayar', 'laptop', 'notebook', 'monitör', 'ekran', 'mouse', 'klavye', 'kulaklık', 'hoparlör', 'tv', 'televizyon', 'tablet', 'şarj', 'adaptör', 'kablo', 'ssd', 'ram', 'ekran kartı', 'işlemci', 'anakart', 'powerbank', 'yazıcı', 'kamera', 'süpürge', 'robot süpürge', 'airfryer', 'kettle', 'çay makinesi', 'kahve makinesi', 'tost makinesi', 'ütü', 'klima', 'kombi', 'vantilatör', 'fön', 'tıraş makinesi', 'akıllı priz', 'akıllı ampul', 'akıllı lamba', 'akıllı ev', 'güvenlik kamerası'];
   for (const kw of elektronikKeywords) {
     if (text.includes(kw)) return 'elektronik';
   }
   
   // 2. Moda & Giyim
-  const modaKeywords = ['elbise', 'ayakkabı', 'sneaker', 'bot', 'çizme', 'mont', 'ceket', 'kaban', 'hırka', 'tişör', 'tisort', 't-shirt', 'pantolon', 'sweatshirt', 'sweat', 'kazak', 'gömlek', 'yelek', 'çanta', 'cüzdan', 'saat', 'gözlük', 'çorap', 'iç giyim', 'pijama', 'şort', 'kemer', 'taki', 'kolye', 'küpe', 'yüzük'];
+  const modaKeywords = ['elbise', 'ayakkabı', 'sneaker', 'bot', 'çizme', 'mont', 'ceket', 'kaban', 'hırka', 'tişör', 'tisort', 't-shirt', 'pantolon', 'sweatshirt', 'sweat', 'kazak', 'gömlek', 'yelek', 'çanta', 'cüzdan', 'saat', 'gözlük', 'çorap', 'iç giyim', 'pijama', 'şort', 'kemer', 'taki', 'kolye', 'küpe', 'yüzük', 'bileklik', 'pırlanta', 'tektaş'];
   for (const kw of modaKeywords) {
     if (text.includes(kw)) return 'moda';
   }
   
   // 3. Süpermarket (Temizlik & Gıda)
-  const supermarketKeywords = ['deterjan', 'yumuşatıcı', 'şampuan', 'sabun', 'ıslak mendil', 'tuvalet kağıdı', 'kağıt havlu', 'deterjanı', 'omo', 'ariel', 'domestos', 'fairy', 'finish', 'gıda', 'yağ', 'zeytinyağı', 'sıvı yağ', 'pirinç', 'makarna', 'çay', 'kahve', 'şeker', 'tuz', 'çikolata', 'bisküvi', 'atıştırmalık', 'peynir', 'zeytin', 'süt', 'salça', 'un', 'pepsi', 'kola', 'cola', 'içecek', 'icecek', 'soda', 'gazoz', 'fanta', 'sprite', 'su', 'meyve suyu', 'nescafe', 'red bull', 'enerji içeceği', 'enerji icecegi'];
+  const supermarketKeywords = ['deterjan', 'yumuşatıcı', 'şampuan', 'sabun', 'ıslak mendil', 'tuvalet kağıdı', 'kağıt havlu', 'deterjanı', 'omo', 'ariel', 'domestos', 'fairy', 'finish', 'gıda', 'yağ', 'zeytinyağı', 'sıvı yağ', 'pirinç', 'makarna', 'çay', 'kahve', 'şeker', 'tuz', 'çikolata', 'bisküvi', 'atıştırmalık', 'peynir', 'zeytin', 'süt', 'salça', 'un', 'pepsi', 'kola', 'cola', 'içecek', 'icecek', 'soda', 'gazoz', 'fanta', 'sprite', 'su', 'meyve suyu', 'nescafe', 'red bull', 'enerji içeceği', 'enerji icecegi', 'kedi maması', 'köpek maması', 'kedi kumu'];
   for (const kw of supermarketKeywords) {
     if (text.includes(kw)) return 'supermarket';
   }
   
   // 4. Kozmetik & Bakım
-  const kozmetikKeywords = ['parfüm', 'parfum', 'deodorant', 'krem', 'nemlendirici', 'serum', 'makyaj', 'ruj', 'fondöten', 'rimel', 'maskara', 'cilt bakım', 'şampuan', 'duş jeli', 'saç kremi', 'güneş kremi', 'kolonya', 'diş macunu', 'diş fırçası'];
+  const kozmetikKeywords = ['parfüm', 'parfum', 'deodorant', 'krem', 'nemlendirici', 'serum', 'makyaj', 'ruj', 'fondöten', 'rimel', 'maskara', 'cilt bakım', 'şampuan', 'duş jeli', 'saç kremi', 'güneş kremi', 'kolonya', 'diş macunu', 'diş fırçası', 'epilatör', 'tıraş bıçağı'];
   for (const kw of kozmetikKeywords) {
     if (text.includes(kw)) return 'kozmetik';
   }
@@ -752,13 +752,13 @@ function detectCategoryFromText(title, description) {
   }
   
   // 7. Spor & Outdoor
-  const sporKeywords = ['spor', 'fitness', 'dambıl', 'pilates', 'mat', 'bisiklet', 'koşu', 'yürüyüş', 'kamp', 'çadır', 'uyku tulumu', 'termos', 'outdoor', 'forma', 'raket', 'top', 'futbol', 'basketbol', 'tenis', 'kask', 'bisikleti'];
+  const sporKeywords = ['spor', 'fitness', 'dambıl', 'pilates', 'mat', 'bisiklet', 'koşu', 'yürüyüş', 'kamp', 'çadır', 'uyku tulumu', 'termos', 'outdoor', 'forma', 'raket', 'top', 'futbol', 'basketbol', 'tenis', 'kask', 'bisikleti', 'mayo', 'bikini'];
   for (const kw of sporKeywords) {
     if (text.includes(kw)) return 'spor_outdoor';
   }
   
   // 8. Yapı Market & Oto
-  const yapiKeywords = ['matkap', 'tornavida', 'hırdavat', 'alet', 'pense', 'anahtar takımı', 'vida', 'boya', 'fırça', 'oto', 'araba', 'araç', 'lastik', 'motor yağı', 'antifriz', 'silecek', 'kılıf', 'aksesuar', 'ampul', 'şerit led'];
+  const yapiKeywords = ['matkap', 'tornavida', 'hırdavat', 'alet', 'pense', 'anahtar takımı', 'vida', 'boya', 'fırça', 'oto', 'araba', 'araç', 'lastik', 'motor yağı', 'antifriz', 'silecek', 'kılıf', 'aksesuar', 'ampul', 'şerit led', 'baret', 'iş ayakkabısı'];
   for (const kw of yapiKeywords) {
     if (text.includes(kw)) return 'yapi_oto';
   }
@@ -767,6 +767,18 @@ function detectCategoryFromText(title, description) {
   const kitapKeywords = ['kitap', 'roman', 'hikaye', 'dergi', 'kırtasiye', 'lego', 'yapboz', 'puzzle', 'kutu oyunu', 'oyun konsolu', 'playstation', 'ps5', 'xbox', 'nintendo', ' switch', 'gitar', 'saz', 'keman', 'piyano', 'enstrüman', 'org', 'hobi', 'boyama'];
   for (const kw of kitapKeywords) {
     if (text.includes(kw)) return 'kitap_hobi';
+  }
+
+  // 10. Dijital & Hizmetler
+  const dijitalKeywords = ['netflix', 'spotify', 'youtube premium', 'premium', 'blutv', 'gain', 'exxen', 'vpn', 'antivirüs', 'antivirus', 'lisans', 'yazılım', 'yazilim', 'yemeksepeti', 'getiryemek', 'dominos', 'burger king', 'starbucks', 'uçak bileti', 'ucak bileti', 'otobüs bileti', 'otobus bileti', 'otel', 'hotel', 'airbnb', 'tatil', 'seyahat', 'biletix', 'steam', 'valorant', 'vp', 'pubg uc', 'roblox', 'robux', 'cüzdan kodu', 'cuzdan kodu', 'game pass', 'xbox pass'];
+  for (const kw of dijitalKeywords) {
+    if (text.includes(kw)) return 'dijital_hizmetler';
+  }
+
+  // 11. Finans & Kampanyalar
+  const finansKeywords = ['banka', 'kredi kartı', 'kredi karti', 'chip-para', 'bonus', 'parafpara', 'maxipuan', 'worldpuan', 'hediye para', 'nakit iade', 'cashback', 'nays', 'akbank', 'garanti', 'yapı kredi', 'yapi kredi', 'iş bankası', 'is bankasi', 'faizsiz', 'masrafsız', 'masrafsiz', 'gram altın', 'gram altin', 'çeyrek altın', 'ceyrek altin', 'külçe altın', 'kulce altin', 'yarım altın', 'yarim altin', 'cumhuriyet altını', 'cumhuriyet altini', 'ata altın', 'ata altin', 'has altın', 'has altin', 'külçe gümüş', 'kulce gumus', 'sarrafiye'];
+  for (const kw of finansKeywords) {
+    if (text.includes(kw)) return 'finans_kampanyalar';
   }
   
   return 'diger';

@@ -1,0 +1,4 @@
+defacto:
+
+
+<script type="application/ld+json">{"@context":"https://schema.org/","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Ana Sayfa","item":"https://www.defacto.com.tr"},{"@type":"ListItem","position":2,"name":"Erkek","item":"https://www.defacto.com.tr/erkek"},{"@type":"ListItem","position":3,"name":"Giyim","item":"https://www.defacto.com.tr/erkek-giyim"},{"@type":"ListItem","position":4,"name":"Pantolon","item":"https://www.defacto.com.tr/erkek-pantolon"},{"@type":"ListItem","position":5,"name":"Yumuşak Dokulu Relax Fit Siyah Pantolon","item":"https://www.defacto.com.tr/yumusak-dokulu-relax-fit-bej-pantolon-3402850"}]}</script>

@@ -38,6 +38,7 @@ class LinkPreviewResult {
   final String? imageUrl;
   final String? provider;
   final double? price;
+  final List<String>? breadcrumbs;
 
   LinkPreviewResult({
     String? title,
@@ -45,6 +46,7 @@ class LinkPreviewResult {
     String? imageUrl,
     String? provider,
     this.price,
+    this.breadcrumbs,
   })  : title = (title == 'null' || title == 'NULL') ? null : title,
         description = (description == 'null' || description == 'NULL') ? null : description,
         imageUrl = (imageUrl == 'null' || imageUrl == 'NULL') ? null : imageUrl,
@@ -238,6 +240,7 @@ class LinkPreviewService {
                                   MetadataParser.parse(document, url: targetUrl)?.description;
                             
               final price = await matchedScraper.scrapePrice(document);
+              final breadcrumbs = matchedScraper.scrapeBreadcrumbs(document);
               
               final resolvedImage = _resolveImageUrl(imageUrl, targetUrl);
               final provider = _cleanHost(targetUrl);
@@ -247,6 +250,7 @@ class LinkPreviewService {
               _log('   - Açıklama: $description');
               _log('   - Görsel: $resolvedImage');
               _log('   - Fiyat: $price');
+              _log('   - Kırıntı (Breadcrumbs): $breadcrumbs');
               _log('   - Provider: $provider');
 
               return LinkPreviewResult(
@@ -255,6 +259,7 @@ class LinkPreviewService {
                 imageUrl: resolvedImage,
                 provider: provider,
                 price: price,
+                breadcrumbs: breadcrumbs,
               );
             }
           }

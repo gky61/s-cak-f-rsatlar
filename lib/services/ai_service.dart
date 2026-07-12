@@ -96,22 +96,26 @@ Görevlerin:
    
 3. Mağazayı bul (Linkten veya metinden).
 4. Kategoriyi belirle. Aşağıdaki listeden EN UYGUN olanı seç (ZORUNLU):
-   ['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 'spor_outdoor', 'kitap_hobi', 'yapi_oto', 'supermarket']
+   ['elektronik', 'moda', 'ev_yasam', 'anne_bebek', 'kozmetik', 'spor_outdoor', 'kitap_hobi', 'yapi_oto', 'supermarket', 'dijital_hizmetler', 'finans_kampanyalar']
    
    ÖNEMLİ KATEGORİ KURALLARI:
-   - 📱 'elektronik': Telefon, tablet, laptop, bilgisayar, TV, beyaz eşya, küçük ev aletleri, kulaklık, akıllı saat, konsol, oyun, kamera, drone, vantilatör, airfryer (TÜM ELEKTRONİK ÜRÜNLER).
-   - 👕 'moda': Kıyafet, ayakkabı, çanta, saat, gözlük, aksesuar, takı, bot, terlik, mont, kazak.
+   - 📱 'elektronik': Telefon, tablet, laptop, bilgisayar, TV, beyaz eşya, küçük ev aletleri, kulaklık, akıllı saat, konsol, oyun, kamera, drone, vantilatör, airfryer, akıllı ev sistemleri (TÜM ELEKTRONİK ÜRÜNLER).
+   - 👕 'moda': Kıyafet, ayakkabı, çanta, saat, gözlük, aksesuar, takı (kolye, bileklik, küpe, yüzük), bot, terlik, mont, kazak.
    - 🏠 'ev_yasam': Mobilya, ev tekstili, mutfak gereçleri, aydınlatma, dekorasyon, kırtasiye.
-   - 👶 'anne_bebek': Bebek bezi, mama, biberon, emzik, bebek arabası, oto koltuğu, bebek/çocuk oyuncakları, "Baby" geçen ürünler.
+   - 👶 'anne_bebek': Bebek bezi, mama, biberon, emzik, bebek arabası, oto koltuğu, bebek/çocuk oyuncakları.
    - 💄 'kozmetik': Krem, şampuan, parfüm, makyaj, tıraş, epilasyon, diş bakımı, cilt bakımı, saç bakımı.
-   - ⛺ 'spor_outdoor': Kamp malzemesi, spor aleti, bisiklet, fitness ekipmanları, yoga matı, dambıl, termos.
-   - 📚 'kitap_hobi': Kitap, roman, dergi, kırtasiye malzemeleri, müzik enstrümanları, sanat malzemeleri, puzzle, kutu oyunu.
-   - 🚗 'yapi_oto': Oto lastik, motor yağı, araç aksesuarları, matkap, tornavida, elektrik malzemeleri, bahçe aletleri, banyo/tesisat.
+   - ⛺ 'spor_outdoor': Kamp malzemesi, spor aleti, bisiklet, fitness ekipmanları, yoga matı, dambıl, termos, takım/bireysel spor ekipmanları.
+   - 📚 'kitap_hobi': Kitap, roman, dergi, kırtasiye malzemeleri, müzik enstrümanları, sanat malzemeleri, puzzle, kutu oyunu, oyuncaklar.
+   - 🚗 'yapi_oto': Oto lastik, motor yağı, araç aksesuarları, matkap, tornavida, elektrik malzemeleri, boyalar, yapı malzemeleri, bahçe aletleri, banyo/tesisat.
    - 🛒 'supermarket': Gıda, deterjan, temizlik ürünleri, kağıt ürünleri, yiyecek, içecek, kedi/köpek maması, kedi kumu.
+   - 🌐 'dijital_hizmetler': Netflix/Spotify/Premium abonelikleri, VPN, yazılımlar, Yemeksepeti/pizza yemek indirimleri, uçak/otobüs/otel seyahat biletleri, Steam cüzdan/Valorant VP oyun kodları ve pinleri.
+   - 💳 'finans_kampanyalar': Banka kredi kartı chip-para/nakit iade kampanyaları, faizsiz kredi/taksit kampanyaları, gram/çeyrek/külçe altın ve gümüş yatırımları.
 
 İPUCU: 
 - "Vantilatör", "Airfryer", "Kahve Makinesi" gibi küçük ev aletleri = 'elektronik'
-- Ürün adında "Baby", "Bebek", "Çocuk" geçiyorsa öncelikli olarak 'anne_bebek'
+- Ürün adında "Baby", "Bebek", "Çocuk" geçiyor ama kıyafet değilse = 'anne_bebek'
+- Banka hediye para/chip-para, faizsiz nakit ve yatırım altınları (çeyrek, gram vb.) = 'finans_kampanyalar'
+- Oyun pinleri, dijital kodlar, web/mobil abonelikler, uçak bileti, yemek siparişi = 'dijital_hizmetler'
 
 Girdi URL: $url
 ${title != null ? 'Başlık: $title' : ''}
@@ -210,18 +214,20 @@ ${description != null ? 'Açıklama: $description' : ''}
       final prompt = '''
 Aşağıdaki ürün adından kategoriyi tespit et. SADECE kategori kodunu yaz, başka hiçbir şey yazma.
 
-Kategoriler: elektronik, moda, ev_yasam, anne_bebek, kozmetik, spor_outdoor, kitap_hobi, yapi_oto, supermarket
+Kategoriler: elektronik, moda, ev_yasam, anne_bebek, kozmetik, spor_outdoor, kitap_hobi, yapi_oto, supermarket, dijital_hizmetler, finans_kampanyalar
 
 KURALLAR:
-- Telefon, laptop, TV, kulaklık, vantilatör, airfryer, konsol → elektronik
-- Kıyafet, ayakkabı, çanta → moda
+- Telefon, laptop, TV, kulaklık, vantilatör, airfryer, konsol, akıllı priz → elektronik
+- Kıyafet, ayakkabı, çanta, altın kolye/yüzük → moda
 - Mobilya, mutfak, dekorasyon → ev_yasam
-- Bebek ürünleri, oyuncak → anne_bebek
-- Krem, şampuan, makyaj → kozmetik
-- Spor aleti, kamp malzemesi → spor_outdoor
-- Kitap, müzik enstrümanı → kitap_hobi
-- Oto, hırdavat, elektrik → yapi_oto
-- Gıda, deterjan, temizlik → supermarket
+- Bebek ürünleri, bebek arabası → anne_bebek
+- Krem, şampuan, makyaj, tıraş makinesi → kozmetik
+- Spor aleti, kamp malzemesi, futbol/pilates → spor_outdoor
+- Kitap, müzik enstrümanı, lego, kutu oyunları → kitap_hobi
+- Oto, lastik, hırdavat, elektrik, boya, tesisat → yapi_oto
+- Gıda, deterjan, temizlik, kedi/köpek maması → supermarket
+- Abonelikler (netflix, spotify), yemek siparişleri, uçak/seyahat biletleri, oyun pinleri (steam, vp) → dijital_hizmetler
+- Banka chip-para/cashback kampanyaları, faizsiz krediler, gram/çeyrek/külçe altın yatırımları → finans_kampanyalar
 
 Ürün: $text
 
