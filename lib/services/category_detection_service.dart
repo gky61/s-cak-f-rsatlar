@@ -66,7 +66,7 @@ class CategoryDetectionService {
         'robot süpürge', 'robot supurge', 'robot vacuum', 'roomba', 'dyson', 'xiaomi robot',
         'süpürge', 'supurge',
         'ütü', 'utu', 'iron', 'buharlı ütü', 'buharli utu', 'steam iron',
-        'kahve makinesi', 'coffee maker', 'espresso', 'filtre kahve', 'turk kahvesi', 'turk kahvesi',
+        'kahve makinesi', 'coffee maker', 'espresso makinesi', 'espresso makine', 'filtre kahve makinesi', 'turk kahve makinesi', 'turk kahvesi makinesi',
         'su ısıtıcı', 'su isiticisi', 'kettle', 'electric kettle', 'çaydanlık', 'caydanlik',
         'tost makinesi', 'toaster', 'sandwich maker', 'tost', 'waffle maker', 'waffle makinesi',
         'mikser', 'mixer', 'hand mixer', 'el mikseri', 'stand mixer', 'ayaklı mikser', 'ayakli mikser',
