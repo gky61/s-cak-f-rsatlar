@@ -60,6 +60,8 @@ class VatanScraper extends BaseProductScraper {
     final vatanSelectors = [
       '#main-img',
       'img.swiper-lazy',
+      'a[data-fancybox="images"]',
+      'a[data-fancybox]',
       '.product-details-img img',
       '.gallery-image img',
       'img[id*="main-img"]',
@@ -68,8 +70,17 @@ class VatanScraper extends BaseProductScraper {
     for (final selector in vatanSelectors) {
       final elements = document.querySelectorAll(selector);
       for (final element in elements) {
-        final src = element.attributes['src'] ?? element.attributes['data-src'] ?? element.attributes['data-lazy-src'];
-        if (src != null && src.isNotEmpty && !src.startsWith('data:') && !isLogoUrl(src)) {
+        final src = element.attributes['data-zoom-image'] ??
+                    element.attributes['data-srcset'] ??
+                    element.attributes['data-src'] ??
+                    element.attributes['data-lazy-src'] ??
+                    element.attributes['href'] ??
+                    element.attributes['src'];
+        if (src != null && 
+            src.isNotEmpty && 
+            !src.startsWith('data:') && 
+            !src.contains('placeholder') && 
+            !isLogoUrl(src)) {
           final resolved = resolveImageUrl(src, url);
           if (resolved != null) {
             log('✅ Vatan Bilgisayar özel görseli bulundu: $resolved');
