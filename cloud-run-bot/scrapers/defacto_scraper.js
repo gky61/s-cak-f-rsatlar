@@ -53,7 +53,7 @@ class DefactoScraper extends BaseProductScraper {
                       text.match(/"?Name"?\s*:\s*"([^"]+)"/) ||
                       text.match(/"?name"?\s*:\s*"([^"]+)"/);
         if (match) {
-          return this._decodeUnicode(match[1]);
+          return this.unescapeHtml(this._decodeUnicode(match[1]));
         }
       }
     }
