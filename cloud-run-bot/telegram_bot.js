@@ -291,6 +291,72 @@ function extractPrice(text) {
 }
 
 /**
+ * Gemini AI ile metinden ürün bilgisi çıkar (Fallback olarak kullanılır)
+ */
+async function analyzeTextWithGemini(messageText) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn('⚠️ GEMINI_API_KEY bulunamadı, AI fallback atlanıyor.');
+    return null;
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `Aşağıdaki Telegram mesajından ürün adı, indirimli fiyatı, mağazası ve en uygun kategoriyi tespit et.
+Eğer mesajda fiyat belirtilmemişse veya birden fazla fiyat varsa, indirimli ana fiyatı seçmeye çalış.
+
+Mesaj:
+${messageText}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Ürün Adı (Marka Model)" },
+              price: { type: "number", description: "Ürünün indirimli fiyatı (Sadece sayı, para birimi yok)" },
+              category: {
+                type: "string",
+                description: "Ürünün kategorisi",
+                enum: ["Elektronik", "Moda", "Ev_Yasam", "Anne_Bebek", "Kozmetik", "Spor_Outdoor", "Supermarket", "Yapi_Oto", "Kitap_Hobi", "Diger"]
+              },
+              store: { type: "string", description: "Mağaza adı" }
+            },
+            required: ["title", "price", "category", "store"]
+          }
+        }
+      })
+    });
+
+    if (!response.ok) {
+      console.error(`❌ Gemini API HTTP Hatası: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (text) {
+      return JSON.parse(text.trim());
+    }
+  } catch (err) {
+    console.error('❌ analyzeTextWithGemini hatası:', err.message);
+  }
+  return null;
+}
+
+/**
  * Fırsat başlığını temizle ve sadeleştir
  */
 function cleanFallbackTitle(rawTitle) {
@@ -484,15 +550,58 @@ async function saveDealToFirebase(message, chatInfo) {
     // ========================================
     const scrapeResult = await linkScraperService.scrapeProductFromUrl(mainLink);
     
-    const cleanedTitle = cleanFallbackTitle(scrapeResult.title || messageText);
-    const finalPrice = scrapeResult.price || extractPrice(messageText) || 0;
-    
-    const categoryResult = categoryDetectionService.detectCategory(
-      cleanedTitle, 
-      scrapeResult.breadcrumbs || [], 
-      scrapeResult.url || mainLink
-    );
-    const finalCategory = categoryResult.categoryId || 'diger';
+    let title = scrapeResult.title;
+    let price = scrapeResult.price;
+    let finalCategory = 'diger';
+
+    // Eğer scraper başarısız olduysa (örneğin engellendiyse veya eksik veri döndürdüyse) Gemini AI ile metinden çıkarım yap
+    if ((!title || !price || price === 0) && process.env.GEMINI_API_KEY) {
+      console.log(`🤖 [${uniqueDocId}] Scraper engellenmiş veya eksik bilgi döndü. Gemini AI ile metin analizi deneniyor...`);
+      try {
+        const aiAnalysis = await analyzeTextWithGemini(messageText);
+        if (aiAnalysis) {
+          if (!title && aiAnalysis.title) {
+            title = aiAnalysis.title;
+          }
+          if ((!price || price === 0) && aiAnalysis.price) {
+            price = aiAnalysis.price;
+          }
+          
+          // Kategori mapping (AI -> App Category ID)
+          const categoryMapping = {
+            'Elektronik': 'elektronik',
+            'Moda': 'moda',
+            'Ev_Yasam': 'ev_yasam',
+            'Anne_Bebek': 'anne_bebek',
+            'Kozmetik': 'kozmetik',
+            'Spor_Outdoor': 'spor_outdoor',
+            'Supermarket': 'supermarket',
+            'Yapi_Oto': 'yapi_oto',
+            'Kitap_Hobi': 'kitap_hobi',
+            'Diger': 'diger'
+          };
+          if (aiAnalysis.category && categoryMapping[aiAnalysis.category]) {
+            finalCategory = categoryMapping[aiAnalysis.category];
+          }
+          console.log(`🤖 [${uniqueDocId}] Gemini AI analizi tamamlandı: Başlık="${title}", Fiyat=${price}, Kategori=${finalCategory}`);
+        }
+      } catch (aiError) {
+        console.error(`❌ [${uniqueDocId}] Gemini AI analiz hatası:`, aiError.message);
+      }
+    }
+
+    // Eğer hala kategori belirlenmediyse (veya scraper başarılı olduysa) yerel kural motoru ile tespit et
+    if (finalCategory === 'diger') {
+      const categoryResult = categoryDetectionService.detectCategory(
+        title || messageText, 
+        scrapeResult.breadcrumbs || [], 
+        scrapeResult.url || mainLink
+      );
+      finalCategory = categoryResult.categoryId || 'diger';
+    }
+
+    const cleanedTitle = cleanFallbackTitle(title || messageText);
+    const finalPrice = price || extractPrice(messageText) || 0;
     
     const storeFromLink = extractStoreFromLink(scrapeResult.url || mainLink, messageText);
     const finalDescription = getDescriptionWithoutLinks(messageText, links);
