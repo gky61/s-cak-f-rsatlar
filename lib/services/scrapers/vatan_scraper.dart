@@ -119,6 +119,15 @@ class VatanScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
+    // 0. İndirimli özel fiyat varsa (#priceSpecial) öncelikli olarak onu al
+    final specialPriceEl = document.querySelector('#priceSpecial');
+    if (specialPriceEl != null) {
+      final price = parsePriceText(specialPriceEl.text);
+      if (price != null && price > 0) {
+        return price;
+      }
+    }
+
     // 1. UpdateProductDetayItem scriptinden fiyat çekmeyi dene (Öncelikli)
     final detay = _parseUpdateProductDetayItem(document);
     if (detay != null && detay['ProductPrice'] != null) {
