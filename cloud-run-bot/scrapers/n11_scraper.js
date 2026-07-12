@@ -6,6 +6,10 @@ const BaseProductScraper = require('./base_scraper');
 class N11Scraper extends BaseProductScraper {
   get domain() { return 'n11.com'; }
 
+  canHandle(url) {
+    return url.toLowerCase().includes('n11.com');
+  }
+
   _getN11Model($) {
     const scripts = $('script');
     for (let i = 0; i < scripts.length; i++) {
@@ -45,6 +49,7 @@ class N11Scraper extends BaseProductScraper {
   }
 
   scrapeImage($, url) {
+    // 1. window.model
     const model = this._getN11Model($);
     if (model) {
       const images = model?.product?.images;
@@ -57,7 +62,15 @@ class N11Scraper extends BaseProductScraper {
         }
       }
     }
-    const selectors = ['.big-image-wrapper img', 'img.swiper-image', 'img.swiper-lazy', '#product-image img'];
+    // 2. DOM selectors
+    const selectors = [
+      '.big-image-wrapper img',
+      'img.swiper-image',
+      'img.swiper-lazy',
+      'img[class*="swiper"]',
+      '#product-image img',
+      '.product-images img'
+    ];
     for (const sel of selectors) {
       const el = $(sel).first();
       const src = el.attr('src') || el.attr('data-src') || el.attr('data-lazy-src');
@@ -70,15 +83,17 @@ class N11Scraper extends BaseProductScraper {
   }
 
   scrapeTitle($) {
+    // 1. window.model
     const model = this._getN11Model($);
     if (model) {
       const title = model?.product?.name || model?.seoMetaData?.title;
       if (title) return title.toString().trim();
     }
-    // Regex fallback
+    // 2. Regex fallback
     const html = $.html();
     const match = html.match(/"title"\s*:\s*"([^"]+)"/);
     if (match) return match[1].trim();
+    // 3. DOM
     const el = $('.titleArea h1.title, h1.title, h1.proName').first();
     if (el.length) return el.text().trim();
     const ogTitle = $('meta[property="og:title"]').attr('content');
@@ -87,6 +102,7 @@ class N11Scraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
+    // 1. window.model
     const model = this._getN11Model($);
     if (model) {
       for (const key of ['finalPriceFloat', 'finalPrice', 'priceFloat', 'price', 'displayPriceFloat', 'displayPrice']) {
@@ -97,19 +113,34 @@ class N11Scraper extends BaseProductScraper {
         }
       }
     }
-    // Regex fallback
+    // 2. Regex fallback
     const html = $.html();
     const fpMatch = html.match(/"finalPrice"\s*:\s*"([^"]+)"/);
     if (fpMatch) {
       const val = this.parsePriceText(fpMatch[1]);
       if (val && val > 0) return val;
     }
+    // 3. DOM
     const el = $('.newPrice ins, ins, .newPrice, meta[property="product:price:amount"]').first();
     if (el.length) {
       const text = el.is('meta') ? el.attr('content') : el.text();
       return this.parsePriceText(text || '');
     }
     return null;
+  }
+
+  scrapeDescription($) {
+    // 1. window.model
+    const model = this._getN11Model($);
+    if (model) {
+      const desc = model?.seoMetaData?.description;
+      if (desc && desc.toString().trim().length > 0) {
+        return desc.toString().trim();
+      }
+    }
+    // 2. DOM fallback
+    const descEl = $('meta[name="description"], meta[property="og:description"]').first();
+    return descEl.length ? descEl.attr('content')?.trim() : null;
   }
 
   scrapeBreadcrumbs($) {

@@ -1,11 +1,10 @@
 const { scrapeProductFromUrl } = require('./link_scraper_service');
 
 const urls = [
-  'https://www.vatanbilgisayar.com/amd-r5-5500-rx-7600-a520m-512gb-m-2-ssd-16gb-ram.html',
   'https://www.vatanbilgisayar.com/asus-vivobook-16-3-nesil-core-ultra-5-325-16gb-512gb-ssd-16inc-w11.html',
   'https://www.pazarama.com/kurukahveci-mehmet-efendi-turk-kahvesi-100-gr-x-25-adet-p-8690627021209-25?magaza=kaytika',
-  'https://app.hb.biz/XAHXjYKAfI2P',
-  'https://app.hb.biz/zidAXCDC1RFp'
+  'https://app.hb.biz/zidAXCDC1RFp',
+  'https://www.trendyol.com/havit/h652bt-anc-aktif-gurultu-engelleme-kulakustu-kablosuz-kulaklik-p-844976728'
 ];
 
 async function run() {

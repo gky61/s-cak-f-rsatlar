@@ -1,6 +1,5 @@
 /**
  * Trendyol Scraper (Node.js port)
- * Dart karşılığı: lib/services/scrapers/trendyol_scraper.dart
  */
 const BaseProductScraper = require('./base_scraper');
 
@@ -63,9 +62,28 @@ class TrendyolScraper extends BaseProductScraper {
     return null;
   }
 
+  scrapeDescription($) {
+    const descEl = $('meta[name="description"], meta[property="og:description"]').first();
+    return descEl.length ? descEl.attr('content')?.trim() : null;
+  }
+
   scrapeBreadcrumbs($) {
     const title = this.scrapeTitle($) || '';
-    return this.extractBreadcrumbsFromJsonLd($, title, 'trendyol');
+    const breadcrumbs = this.extractBreadcrumbsFromJsonLd($, title, 'trendyol');
+    if (breadcrumbs && breadcrumbs.length > 0) return breadcrumbs;
+
+    // DOM Fallback
+    const list = [];
+    $('.product-detail-breadcrumb a, .breadcrumb a, .breadcrumbs a').each((_, el) => {
+      const text = $(el).text().trim();
+      if (text) {
+        const lower = text.toLowerCase();
+        if (lower !== 'anasayfa' && lower !== 'trendyol' && text !== title && text.length < 50) {
+          list.push(text);
+        }
+      }
+    });
+    return list;
   }
 }
 

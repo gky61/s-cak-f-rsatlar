@@ -114,13 +114,23 @@ async function fetchHtml(url) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-    const headers = getHeadersForUrl(url);
+    let headers = getHeadersForUrl(url);
     console.log(`[FETCH-HTML] Giden İstek Başlıkları:`, JSON.stringify(headers));
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       headers: headers,
       signal: controller.signal
     });
+
+    // Cloudflare / Akamai 403/401 Bot Engeli Durumunda Alternatif User-Agent ile Yeniden Dene
+    if ((response.status === 403 || response.status === 401) && headers['User-Agent'].includes('WhatsApp')) {
+      console.warn(`[FETCH-HTML] ⚠️ ${response.status} Bot engeli algılandı (WhatsApp UA). Standart Tarayıcı User-Agent ile yeniden deneniyor...`);
+      headers['User-Agent'] = DEFAULT_USER_AGENT;
+      response = await fetch(url, {
+        headers: headers,
+        signal: controller.signal
+      });
+    }
 
     clearTimeout(timeoutId);
 

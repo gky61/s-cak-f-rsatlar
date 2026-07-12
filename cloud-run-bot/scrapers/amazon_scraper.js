@@ -27,18 +27,41 @@ class AmazonScraper extends BaseProductScraper {
         }
       } catch (_) {}
     }
+
     // 2. Amazon selectors
-    const selectors = ['#landingImage', '#imgBlkFront', '#main-image', '#imageBlock_feature_div img', '#imageBlock img', '.a-dynamic-image'];
+    const selectors = [
+      '#landingImage',
+      '#imgBlkFront',
+      '#main-image',
+      '#imageBlock_feature_div img',
+      '#imageBlock img',
+      '#altImages img',
+      '.a-dynamic-image',
+      '[id*="landingImage"]',
+      '[id*="main-image"]'
+    ];
+
     for (const sel of selectors) {
-      const el = $(sel).first();
-      const src = el.attr('src') || el.attr('data-src') || el.attr('data-old-src');
-      if (src && !src.startsWith('data:') && !src.includes('pixel') && !src.includes('placeholder') && !src.includes('spinner')) {
-        if (src.includes('images-amazon.com') || src.includes('ssl-images-amazon.com')) {
-          const resolved = this.resolveImageUrl(src, url);
-          if (resolved && !this.isLogoUrl(resolved)) return resolved;
+      const elements = $(sel);
+      for (let i = 0; i < elements.length; i++) {
+        const el = $(elements[i]);
+        const src = el.attr('src') || el.attr('data-src') || el.attr('data-a-dynamic-image') || el.attr('data-old-src');
+        if (src && !src.startsWith('data:')) {
+          // Amazon placeholder atlama
+          if (src.includes('pixel') || src.includes('placeholder') || src.includes('spinner') || src.includes('loading')) {
+            continue;
+          }
+          // CDN tercih et
+          if (src.includes('images-na.ssl-images-amazon.com') ||
+              src.includes('images-eu.ssl-images-amazon.com') ||
+              src.includes('images-amazon.com')) {
+            const resolved = this.resolveImageUrl(src, url);
+            if (resolved && !this.isLogoUrl(resolved)) return resolved;
+          }
         }
       }
     }
+
     // 3. JSON-LD
     const product = this.findProductJsonLd($);
     if (product && product['image']) {
@@ -81,7 +104,12 @@ class AmazonScraper extends BaseProductScraper {
     // 3. .a-price-whole
     const priceWhole = $('.a-price-whole').first();
     if (priceWhole.length) {
-      const val = this.parsePriceText(priceWhole.text());
+      const decimalEl = priceWhole.find('.a-price-decimal').first();
+      let text = priceWhole.text();
+      if (decimalEl.length) {
+        text = text.replace(decimalEl.text(), '');
+      }
+      const val = this.parsePriceText(text);
       if (val && val > 0) return val;
     }
     // 4. Alternative selectors
@@ -96,11 +124,16 @@ class AmazonScraper extends BaseProductScraper {
     return null;
   }
 
+  scrapeDescription($) {
+    const descEl = $('meta[name="description"], meta[property="og:description"], meta[property="twitter:description"]').first();
+    return descEl.length ? descEl.attr('content')?.trim() : null;
+  }
+
   scrapeBreadcrumbs($) {
     const title = this.scrapeTitle($) || '';
     const breadcrumbs = [];
-    // 1. Standard breadcrumb
-    const els = $('#wayfinding-breadcrumbs_feature_div ul li a, .a-breadcrumb a');
+    // 1. Standard breadcrumbs
+    const els = $('#wayfinding-breadcrumbs_feature_div ul li a, #wayfinding-breadcrumbs_container ul li a, .a-breadcrumb a, #wayfinding-breadcrumbs_feature_div li a, #wayfinding-breadcrumbs_container li a');
     els.each((_, el) => {
       const text = $(el).text().trim();
       if (text) {
@@ -112,7 +145,7 @@ class AmazonScraper extends BaseProductScraper {
     });
     if (breadcrumbs.length > 0) return breadcrumbs;
     // 2. nav-subnav
-    const subnav = $('#nav-subnav a.nav-b, #nav-subnav .nav-b').first();
+    const subnav = $('#nav-subnav a.nav-b, #nav-subnav .nav-b, #nav-subnav a[class*="nav-b"]').first();
     if (subnav.length) {
       const text = subnav.text().trim();
       if (text && text.length < 50) return [text];
