@@ -43,9 +43,28 @@ function getHeadersForUrl(url) {
   };
 }
 
+/** Adjust deep-link yönlendirmesinden gerçek fallback URL'ini çıkartır */
+function extractAdjustFallback(url) {
+  if (url.includes('adj.st') && url.includes('adj_fallback=')) {
+    try {
+      const parsedUrl = new URL(url);
+      const fallback = parsedUrl.searchParams.get('adj_fallback');
+      if (fallback) {
+        console.log(`[RESOLVE-REDIRECT] 🎯 Adjust URL tespit edildi, adj_fallback çözülüyor: ${fallback}`);
+        return decodeURIComponent(fallback);
+      }
+    } catch (err) {
+      console.warn(`[RESOLVE-REDIRECT] ⚠️ Adjust fallback çözme hatası: ${err.message}`);
+    }
+  }
+  return url;
+}
+
 /** URL yönlendirmelerini çözer ve nihai hedef URL'yi döndürür */
 async function resolveUrlRedirects(url) {
-  const lowerUrl = url.toLowerCase();
+  let targetUrl = extractAdjustFallback(url);
+  const lowerUrl = targetUrl.toLowerCase();
+  
   const isShortOrRedirect = lowerUrl.includes('amzn.eu') ||
                            lowerUrl.includes('amzn.to') ||
                            lowerUrl.includes('hb.biz') ||
@@ -57,17 +76,17 @@ async function resolveUrlRedirects(url) {
                            lowerUrl.includes('rdrtr.com') ||
                            lowerUrl.includes('ty.gl');
 
-  if (!isShortOrRedirect) return url;
+  if (!isShortOrRedirect) return targetUrl;
 
   try {
-    console.log(`[RESOLVE-REDIRECT] 🔗 Yönlendirme çözülüyor: ${url}`);
+    console.log(`[RESOLVE-REDIRECT] 🔗 Yönlendirme çözülüyor: ${targetUrl}`);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const headers = getHeadersForUrl(url);
+    const headers = getHeadersForUrl(targetUrl);
     console.log(`[RESOLVE-REDIRECT] Giden User-Agent: "${headers['User-Agent']}"`);
 
-    const response = await fetch(url, {
+    const response = await fetch(targetUrl, {
       method: 'GET',
       headers: headers,
       redirect: 'follow',
@@ -76,10 +95,14 @@ async function resolveUrlRedirects(url) {
 
     clearTimeout(timeoutId);
     console.log(`[RESOLVE-REDIRECT] ✅ Çözülen Hedef URL: ${response.url} (Durum: ${response.status} ${response.statusText})`);
-    return response.url || url;
+    
+    let resolvedUrl = response.url || targetUrl;
+    resolvedUrl = extractAdjustFallback(resolvedUrl);
+    
+    return resolvedUrl;
   } catch (err) {
-    console.warn(`[RESOLVE-REDIRECT] ⚠️ Yönlendirme çözülemedi (${err.message}), orijinal URL kullanılacak: ${url}`);
-    return url;
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ Yönlendirme çözülemedi (${err.message}), orijinal URL kullanılacak: ${targetUrl}`);
+    return targetUrl;
   }
 }
 
