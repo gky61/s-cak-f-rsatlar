@@ -70,15 +70,26 @@ class BaseProductScraper {
   /** JSON-LD şemasından Product nesnesini bulur */
   findProductJsonLd($) {
     const scripts = $('script[type="application/ld+json"]');
+    console.log(`   [JSON-LD] Sayfada ${scripts.length} adet ld+json script bloğu bulundu.`);
     for (let i = 0; i < scripts.length; i++) {
       try {
         const text = $(scripts[i]).text() || '';
+        console.log(`   [JSON-LD] Blok ${i + 1} uzunluğu: ${text.length} karakter.`);
+        
+        // Remove bad characters and parse
         const sanitized = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ');
         const data = JSON.parse(sanitized);
+        
         const product = this.findProductInJson(data);
-        if (product) return product;
-      } catch (_) {}
+        if (product) {
+          console.log(`   [JSON-LD] Başarılı! Eşleşen Product şeması bulundu: "${product.name || 'İsimsiz'}"`);
+          return product;
+        }
+      } catch (err) {
+        console.log(`   [JSON-LD] ⚠️ Blok ${i + 1} JSON parse veya arama hatası: ${err.message}`);
+      }
     }
+    console.log(`   [JSON-LD] Sayfadaki hiçbir blokta Product şeması bulunamadı.`);
     return null;
   }
 

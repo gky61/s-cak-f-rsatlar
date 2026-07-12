@@ -60,53 +60,112 @@ async function resolveUrlRedirects(url) {
   if (!isShortOrRedirect) return url;
 
   try {
-    console.log(`🔗 Yönlendirme çözülüyor: ${url}`);
+    console.log(`[RESOLVE-REDIRECT] 🔗 Yönlendirme çözülüyor: ${url}`);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
+    const headers = getHeadersForUrl(url);
+    console.log(`[RESOLVE-REDIRECT] Giden User-Agent: "${headers['User-Agent']}"`);
+
     const response = await fetch(url, {
       method: 'GET',
-      headers: getHeadersForUrl(url),
+      headers: headers,
       redirect: 'follow',
       signal: controller.signal
     });
 
     clearTimeout(timeoutId);
-    console.log(`✅ Çözülen URL: ${response.url}`);
+    console.log(`[RESOLVE-REDIRECT] ✅ Çözülen Hedef URL: ${response.url} (Durum: ${response.status} ${response.statusText})`);
     return response.url || url;
   } catch (err) {
-    console.warn(`⚠️ Yönlendirme çözülemedi (${err.message}), orijinal URL kullanılacak: ${url}`);
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ Yönlendirme çözülemedi (${err.message}), orijinal URL kullanılacak: ${url}`);
     return url;
   }
 }
 
 /** URL'den HTML çekerek Cheerio DOM nesnesi döndürür */
 async function fetchHtml(url) {
+  const fetchStartTime = Date.now();
+  console.log(`[FETCH-HTML] 📥 İstek başlatılıyor: ${url}`);
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
+    const headers = getHeadersForUrl(url);
+    console.log(`[FETCH-HTML] Giden İstek Başlıkları:`, JSON.stringify(headers));
+
     const response = await fetch(url, {
-      headers: getHeadersForUrl(url),
+      headers: headers,
       signal: controller.signal
     });
 
     clearTimeout(timeoutId);
 
+    const duration = Date.now() - fetchStartTime;
+    console.log(`[FETCH-HTML] ⚡ Cevap geldi! Süre: ${duration}ms, Durum Kodu: ${response.status} ${response.statusText}`);
+    
+    // Response Header'larını logla (Hata çözümü için kritik)
+    const respHeaders = {};
+    response.headers.forEach((val, key) => {
+      respHeaders[key] = val;
+    });
+    console.log(`[FETCH-HTML] Gelen Cevap Başlıkları:`, JSON.stringify(respHeaders));
+
     if (response.ok) {
-      return await response.text();
+      const htmlText = await response.text();
+      console.log(`[FETCH-HTML] Başarılı! Okunan HTML boyutu: ${htmlText.length} karakter.`);
+      
+      // Sayfa içeriğinde engelleyici imzaları ara
+      checkForBotBlockers(htmlText, url);
+      
+      return htmlText;
     } else {
-      console.error(`❌ HTTP hatası (${response.status}): ${url}`);
+      console.error(`[FETCH-HTML] ❌ Sunucu Hata Kodu Döndürdü (${response.status}): ${url}`);
       return null;
     }
   } catch (err) {
-    console.error(`❌ HTML çekme hatası: ${err.message}`);
+    console.error(`[FETCH-HTML] ❌ HTML Çekme Hatası: ${err.message}`);
     return null;
+  }
+}
+
+/** Sayfa içeriğinde bot engelleyici/Cloudflare imzası kontrolü */
+function checkForBotBlockers(htmlText, url) {
+  const lowerHtml = htmlText.toLowerCase();
+  
+  const blockSignatures = {
+    'Cloudflare Challenge': ['<title>just a moment...</title>', 'cf-challenge', 'checking your browser...'],
+    'PerimeterX/Human Challenge': ['px-captcha', 'captcha-delivery.net'],
+    'Distil Networks Blocker': ['blocked by distil', 'distil_ident_cookie'],
+    'Akamai Edge Shield': ['access denied', 'you don\'t have permission to access'],
+    'Generic Firewall Block': ['access forbidden', 'ip blocked', 'request blocked', 'unauthorized access']
+  };
+
+  for (const [blockType, keywords] of Object.entries(blockSignatures)) {
+    for (const keyword of keywords) {
+      if (lowerHtml.includes(keyword)) {
+        console.warn(`[BOT ENGELİ TESPİTİ] ⚠️⚠️⚠️ ENGEL ALGINLANDI! ⚠️⚠️⚠️`);
+        console.warn(`   Tip        : ${blockType}`);
+        console.warn(`   Anahtar Kelime: "${keyword}"`);
+        console.warn(`   Link       : ${url}`);
+        console.warn(`   Not        : Mağaza IP adresimizi engelledi veya Cloudflare/Akamai doğrulaması gösterdi. Bu yüzden DOM seçicileri çalışmayacaktır.`);
+        
+        // HTML içeriğinden bir kesit gösterelim (İlk 300 karakter)
+        const preview = htmlText.substring(0, 300).replace(/\s+/g, ' ').trim();
+        console.warn(`   HTML Kesit : "${preview}..."`);
+        return; // İlk eşleşmede dur
+      }
+    }
   }
 }
 
 /** Verilen URL için ürün bilgilerini çeker */
 async function scrapeProductFromUrl(url) {
+  const startTime = Date.now();
+  console.log(`\n============================================================`);
+  console.log(`[SCRAPE-SERVICE] 🚀 Ürün Scrape Başlatıldı: ${url}`);
+  console.log(`============================================================`);
+  
   try {
     // 1. Kısa veya yönlendirmeli linkleri çöz
     const targetUrl = await resolveUrlRedirects(url);
@@ -121,28 +180,49 @@ async function scrapeProductFromUrl(url) {
     }
 
     if (!matchedScraper) {
-      console.log(`ℹ️ Eşleşen scraper bulunamadı, genel Open Graph parser kullanılacak: ${targetUrl}`);
+      console.log(`[SCRAPE-SERVICE] ℹ️ Eşleşen özel scraper bulunamadı, genel Open Graph parser kullanılacak: ${targetUrl}`);
     } else {
-      console.log(`⚡ Özel Scraper eşleşti: ${matchedScraper.constructor.name} -> ${targetUrl}`);
+      console.log(`[SCRAPE-SERVICE] ⚡ Özel Scraper eşleşti: "${matchedScraper.constructor.name}" -> ${targetUrl}`);
     }
 
     // 3. HTML içeriğini çek
     const html = await fetchHtml(targetUrl);
     if (!html) {
+      console.error(`[SCRAPE-SERVICE] ❌ HTML içeriği boş veya çekilemedi! Boş veri döndürülüyor.`);
       return { url: targetUrl, title: null, price: null, imageUrl: null, breadcrumbs: [] };
     }
 
     const $ = cheerio.load(html);
 
     if (matchedScraper) {
-      // Özel Scraper akışı
+      console.log(`[SCRAPE-SERVICE] Özel Scraper akışı başlıyor...`);
+      
+      // 1. Başlık Çekimi
+      console.log(`[SCRAPE-SERVICE] [TITLE] Başlık çekiliyor...`);
       const title = matchedScraper.scrapeTitle($);
-      const price = await matchedScraper.scrapePrice($);
-      const rawImage = matchedScraper.scrapeImage($, targetUrl);
-      const breadcrumbs = matchedScraper.scrapeBreadcrumbs($) || [];
+      console.log(`[SCRAPE-SERVICE] [TITLE] Sonuç: "${title || 'BULUNAMADI'}"`);
 
-      // Image URL'yi mutlak hale getir
+      // 2. Fiyat Çekimi
+      console.log(`[SCRAPE-SERVICE] [PRICE] Fiyat çekiliyor...`);
+      const price = await matchedScraper.scrapePrice($);
+      console.log(`[SCRAPE-SERVICE] [PRICE] Sonuç: "${price != null ? price + ' TL' : 'BULUNAMADI'}"`);
+
+      // 3. Görsel Çekimi
+      console.log(`[SCRAPE-SERVICE] [IMAGE] Görsel çekiliyor...`);
+      const rawImage = matchedScraper.scrapeImage($, targetUrl);
+      console.log(`[SCRAPE-SERVICE] [IMAGE] Ham Görsel Alanı: "${rawImage || 'BULUNAMADI'}"`);
       const imageUrl = matchedScraper.resolveImageUrl(rawImage, targetUrl);
+      console.log(`[SCRAPE-SERVICE] [IMAGE] Mutlak Görsel URL'i: "${imageUrl || 'BULUNAMADI'}"`);
+
+      // 4. Kırıntı Çekimi (Breadcrumbs)
+      console.log(`[SCRAPE-SERVICE] [BREADCRUMBS] Kırıntı listesi çekiliyor...`);
+      const breadcrumbs = matchedScraper.scrapeBreadcrumbs($) || [];
+      console.log(`[SCRAPE-SERVICE] [BREADCRUMBS] Sonuç: ${JSON.stringify(breadcrumbs)}`);
+
+      const totalDuration = Date.now() - startTime;
+      console.log(`============================================================`);
+      console.log(`[SCRAPE-SERVICE] ✅ Scrape tamamlandı! Toplam süre: ${totalDuration}ms`);
+      console.log(`============================================================\n`);
 
       return {
         url: targetUrl,
@@ -152,24 +232,14 @@ async function scrapeProductFromUrl(url) {
         breadcrumbs: breadcrumbs
       };
     } else {
-      // Genel Fallback akışı (Open Graph ve standart meta etiketleri)
-      const title = $('meta[property="og:title"]').attr('content') || $('title').text();
-      const rawImage = $('meta[property="og:image"]').attr('content') || $('link[rel="image_src"]').attr('href');
-      const desc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content');
+      console.log(`[SCRAPE-SERVICE] Genel Fallback akışı (Open Graph) başlıyor...`);
       
-      // Fallback fiyat tespiti
-      let price = null;
-      const priceMeta = $('meta[property="product:price:amount"]').attr('content') || 
-                        $('meta[property="og:price:amount"]').attr('content') ||
-                        $('meta[name="twitter:data1"]').attr('content');
-      if (priceMeta) {
-        // Temizle ve parse et
-        const cleaned = priceMeta.replace(/[^0-9.,]/g, '').replace(',', '.');
-        const parsed = parseFloat(cleaned);
-        if (!isNaN(parsed)) price = parsed;
-      }
+      const title = $('meta[property="og:title"]').attr('content') || $('title').text();
+      console.log(`[SCRAPE-SERVICE] [TITLE] (Fallback) Sonuç: "${title ? title.trim() : 'BULUNAMADI'}"`);
 
-      // Image url resolve
+      const rawImage = $('meta[property="og:image"]').attr('content') || $('link[rel="image_src"]').attr('href');
+      console.log(`[SCRAPE-SERVICE] [IMAGE] (Fallback) Ham Görsel: "${rawImage || 'BULUNAMADI'}"`);
+
       let imageUrl = null;
       if (rawImage && !rawImage.startsWith('data:')) {
         if (rawImage.startsWith('http://') || rawImage.startsWith('https://')) {
@@ -181,6 +251,26 @@ async function scrapeProductFromUrl(url) {
           } catch (_) {}
         }
       }
+      console.log(`[SCRAPE-SERVICE] [IMAGE] (Fallback) Mutlak Görsel URL'i: "${imageUrl || 'BULUNAMADI'}"`);
+
+      // Fallback fiyat tespiti
+      let price = null;
+      const priceMeta = $('meta[property="product:price:amount"]').attr('content') || 
+                        $('meta[property="og:price:amount"]').attr('content') ||
+                        $('meta[name="twitter:data1"]').attr('content');
+      console.log(`[SCRAPE-SERVICE] [PRICE] (Fallback) Fiyat meta verisi: "${priceMeta || 'YOK'}"`);
+      
+      if (priceMeta) {
+        const cleaned = priceMeta.replace(/[^0-9.,]/g, '').replace(',', '.');
+        const parsed = parseFloat(cleaned);
+        if (!isNaN(parsed)) price = parsed;
+      }
+      console.log(`[SCRAPE-SERVICE] [PRICE] (Fallback) Parsed Fiyat: "${price != null ? price + ' TL' : 'BULUNAMADI'}"`);
+
+      const totalDuration = Date.now() - startTime;
+      console.log(`============================================================`);
+      console.log(`[SCRAPE-SERVICE] ✅ Fallback Scrape tamamlandı! Toplam süre: ${totalDuration}ms`);
+      console.log(`============================================================\n`);
 
       return {
         url: targetUrl,
@@ -191,7 +281,7 @@ async function scrapeProductFromUrl(url) {
       };
     }
   } catch (err) {
-    console.error(`❌ Scrape işleminde beklenmeyen hata: ${err.message}`);
+    console.error(`[SCRAPE-SERVICE] ❌ Scrape işleminde beklenmeyen hata: ${err.message}`, err.stack);
     return { url, title: null, price: null, imageUrl: null, breadcrumbs: [] };
   }
 }
