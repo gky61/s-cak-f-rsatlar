@@ -51,7 +51,8 @@ class CategoryDetectionService {
         'projeksiyon', 'projector', 'projeksiyon cihazı', 'projeksiyon cihazi', '4k projector',
         'anten', 'anten çanak', 'anten canak', 'uydu alıcı', 'uydu alici', 'satellite receiver',
         'tv kutusu', 'tv box', 'android tv box', 'chromecast', 'fire tv', 'apple tv', 'mi box',
-        'subwoofer', 'woofer', 'tweeter', 'amplifier', 'amplifikatör', 'receiver', 'alıcı', 'alici'
+        'subwoofer', 'woofer', 'tweeter', 'amplifier', 'amplifikatör', 'receiver', 'alıcı', 'alici',
+        'ses kayıt', 'ses kayit', 'ses kayıt cihazı', 'ses kayit cihazi', 'voice recorder'
       ],
       'Beyaz Eşya & Küçük Ev Aletleri': [
         'buzdolabı', 'buzdolabi', 'refrigerator', 'fridge', 'no frost', 'no-frost', 'derin dondurucu', 'freezer',
@@ -67,6 +68,7 @@ class CategoryDetectionService {
         'süpürge', 'supurge',
         'ütü', 'utu', 'iron', 'buharlı ütü', 'buharli utu', 'steam iron',
         'kahve makinesi', 'coffee maker', 'espresso makinesi', 'espresso makine', 'filtre kahve makinesi', 'turk kahve makinesi', 'turk kahvesi makinesi',
+        'kahve öğütücü', 'kahve ogutucu', 'kahve değirmeni', 'kahve degirmeni', 'coffee grinder', 'kahve ogutucusu', 'kahve öğütücüsü',
         'su ısıtıcı', 'su isiticisi', 'kettle', 'electric kettle', 'çaydanlık', 'caydanlik',
         'tost makinesi', 'toaster', 'sandwich maker', 'tost', 'waffle maker', 'waffle makinesi',
         'mikser', 'mixer', 'hand mixer', 'el mikseri', 'stand mixer', 'ayaklı mikser', 'ayakli mikser',
@@ -526,7 +528,8 @@ class CategoryDetectionService {
     'epilator', 'saç kurutma', 'sac kurutma', 'fön makinesi', 'fon makinesi', 'düzleştirici',
     'duzlestirici', 'akıllı priz', 'akilli priz', 'akıllı ampul', 'akilli ampul', 'lego', 'emzirme',
     'monopoly', 'tabu', 'jenga', 'catan', 'hava temizleyici', 'vantilatör', 'vantilator', 'prezervatif', 'durex',
-    'aptamil', 'devam sütü', 'devam sutu', 'bebek maması', 'bebek mamasi', 'modem', 'router', 'tp-link', 'keenetic', 'plak', 'vinyl', 'oyun hamuru', 'oyun hamurlari'
+    'aptamil', 'devam sütü', 'devam sutu', 'bebek maması', 'bebek mamasi', 'modem', 'router', 'tp-link', 'keenetic', 'plak', 'vinyl', 'oyun hamuru', 'oyun hamurlari',
+    'gimbal', 'sabitleyici', 'sabitleyiciler'
   ];
 
   // Zayıf anahtar kelimeler (Markalar, genel belirteçler, +2.0 puan)
@@ -831,7 +834,8 @@ class CategoryDetectionService {
                       words.contains('taki') ||
                       words.contains('takilar') ||
                       normalizedText.contains('zincir') ||
-                      normalizedText.contains('halka') ||
+                      normalizedText.contains('halka kupe') ||
+                      normalizedText.contains('halka küpe') ||
                       normalizedText.contains('tasli') ||
                       normalizedText.contains('pirlanta') ||
                       normalizedText.contains('tektas');
@@ -1084,12 +1088,17 @@ class CategoryDetectionService {
       }
     }
 
-    // 17. Çay/Kahve Makinesi vs Çay/Kahve Gıda Ürünü
+    // 17. Çay/Kahve Makinesi / Öğütücüsü vs Çay/Kahve Gıda Ürünü
     if (finalCategoryId == 'supermarket' && finalSubCategory == 'Gıda Ürünleri') {
       final hasMachineWord = normalizedText.contains('makinesi') ||
                              normalizedText.contains('makineleri') ||
                              normalizedText.contains('makine') ||
-                             normalizedText.contains('maker');
+                             normalizedText.contains('maker') ||
+                             normalizedText.contains('ogutucu') ||
+                             normalizedText.contains('öğütücü') ||
+                             normalizedText.contains('degirmen') ||
+                             normalizedText.contains('değirmen') ||
+                             normalizedText.contains('grinder');
       if (hasMachineWord && (normalizedText.contains('kahve') || normalizedText.contains('cay') || normalizedText.contains('çay') || normalizedText.contains('nespresso') || normalizedText.contains('espresso'))) {
         finalCategoryId = 'elektronik';
         finalSubCategory = 'Beyaz Eşya & Küçük Ev Aletleri';
@@ -1152,6 +1161,18 @@ class CategoryDetectionService {
           finalCategoryId = 'anne_bebek';
           finalSubCategory = 'Bebek Bezi & Islak Mendil';
         }
+      }
+    }
+
+    // 22. Gimbal / Sabitleyici -> Fotoğraf & Kamera
+    if (finalCategoryId != 'elektronik' || finalSubCategory != 'Fotoğraf & Kamera') {
+      final hasGimbal = normalizedText.contains('gimbal') ||
+                        normalizedText.contains('sabitleyici') ||
+                        normalizedText.contains('sabitleyiciler') ||
+                        normalizedText.contains('stabilizer');
+      if (hasGimbal && !normalizedText.contains('oyuncak')) {
+        finalCategoryId = 'elektronik';
+        finalSubCategory = 'Fotoğraf & Kamera';
       }
     }
 

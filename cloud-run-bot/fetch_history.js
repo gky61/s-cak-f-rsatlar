@@ -1,14 +1,16 @@
 /**
- * Real-Time Telegram Bot for Cloud Run
- * Sürekli çalışan, kanalları dinleyen bot
+ * Real-Time Telegram Bot for Cloud Run - History Fetcher
+ * Belirli sayıda geçmiş mesajı çekip Firestore'a kaydeden script
  */
 
 const { TelegramClient } = require('telegram');
 const { StringSession } = require('telegram/sessions');
-const { NewMessage } = require('telegram/events');
 const { Api } = require('telegram/tl');
 const admin = require('firebase-admin');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+// Scraper ve Kategori servisleri
+const linkScraperService = require('./link_scraper_service');
+const categoryDetectionService = require('./category_detection_service');
 
 // Firebase Admin başlat
 // Cloud Run'da otomatik authentication kullanır
@@ -31,17 +33,7 @@ const SESSION_STRING = rawSession;
 
 const CHANNELS = process.env.TELEGRAM_CHANNELS ? process.env.TELEGRAM_CHANNELS.split(',') : [];
 
-let rawGeminiKey = process.env.GEMINI_API_KEY || '';
-rawGeminiKey = rawGeminiKey.trim();
-if ((rawGeminiKey.startsWith('"') && rawGeminiKey.endsWith('"')) || (rawGeminiKey.startsWith("'") && rawGeminiKey.endsWith("'"))) {
-  rawGeminiKey = rawGeminiKey.substring(1, rawGeminiKey.length - 1);
-}
-const GEMINI_API_KEY = rawGeminiKey;
-
-// Gemini AI initialization
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-
-console.log('🤖 Telegram Bot başlatılıyor...');
+console.log('🤖 Telegram Bot (History Fetcher) başlatılıyor...');
 console.log('🔑 Environment Variables Kontrolü:');
 console.log(`   API_ID: ${API_ID ? 'Set ✅' : 'Missing ❌'}`);
 console.log(`   API_HASH: ${API_HASH ? 'Set ✅' : 'Missing ❌'}`);
@@ -91,7 +83,6 @@ function getAllLinks(message) {
   // 2. Text Entities (Metin içi gizli linkler [Link](url))
   if (message.entities) {
     message.entities.forEach(entity => {
-      // MessageEntityTextUrl kontrolü
       if (entity.url) {
         links.add(entity.url);
       }
@@ -103,7 +94,6 @@ function getAllLinks(message) {
     message.replyMarkup.rows.forEach(row => {
       if (row.buttons) {
         row.buttons.forEach(btn => {
-          // KeyboardButtonUrl kontrolü
           if (btn.url) {
             links.add(btn.url);
           }
@@ -114,7 +104,6 @@ function getAllLinks(message) {
 
   // 4. 🚫 ÜRÜN LİNKİ OLMAYAN LİNKLERİ FİLTRELE
   const excludedDomains = [
-    // Mesajlaşma uygulamaları
     'whatsapp.com',
     'wa.me',
     'api.whatsapp.com',
@@ -123,7 +112,6 @@ function getAllLinks(message) {
     'telegram.org',
     'discord.gg',
     'discord.com',
-    // Sosyal medya
     'twitter.com',
     'x.com',
     'facebook.com',
@@ -133,239 +121,20 @@ function getAllLinks(message) {
     'tiktok.com',
     'youtube.com',
     'youtu.be',
-    // Kısa link servisleri (ürün linki olabilir ama riskli)
-    // 'bit.ly', 'goo.gl', 'tinyurl.com' // bunları şimdilik tutuyoruz
   ];
 
   const filteredLinks = Array.from(links).filter(link => {
     const lowerLink = link.toLowerCase();
-
-    // Hariç tutulan domain'leri kontrol et
     for (const domain of excludedDomains) {
       if (lowerLink.includes(domain)) {
         console.log(`⏩ Filtrelendi (${domain}): ${link.substring(0, 50)}...`);
         return false;
       }
     }
-
     return true;
   });
 
   return filteredLinks;
-}
-
-/**
- * Gemini AI ile görsel analizi 🤖
- */
-async function analyzeImageWithGemini(imageBuffer, messageText) {
-  try {
-    console.log('🤖 Gemini AI görsel analizi başlıyor...');
-    const startTime = Date.now();
-
-    // Gemini 2.0 Flash (Hızlı ve Multimodal) ve responseSchema
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "object",
-          properties: {
-            title: { type: "string", description: "Ürün Adı (Marka Model)" },
-            price: { type: "number", description: "Ürünün indirimli fiyatı (Sadece sayı, para birimi yok)" },
-            category: {
-              type: "string",
-              description: "Ürünün ait olduğu en uygun kategori: " +
-                           "Elektronik (Telefon, Bilgisayar, TV, Kulaklık, Hoparlör, Beyaz Eşya, Ev Aletleri vb.); " +
-                           "Moda & Giyim (Kıyafet, Ayakkabı, Saat, Çanta, Gözlük vb.); " +
-                           "Ev, Yaşam & Ofis (Mobilya, Ev Tekstili, Mutfak Gereçleri, Aydınlatma, Kırtasiye vb.); " +
-                           "Anne & Bebek (Bebek Bezi, Oyuncak, Bebek Arabası, Beslenme vb.); " +
-                           "Kozmetik & Bakım (Parfüm, Makyaj, Cilt Bakımı, Şampuan, Diş Bakımı vb.); " +
-                           "Spor & Outdoor (Spor Giyim, Fitness, Kamp, Bisiklet vb.); " +
-                           "Süpermarket (Gıda, İçecek, Deterjan, Temizlik, Kağıt Ürünleri, Evcil Hayvan vb.); " +
-                           "Yapı Market & Oto (Hırdavat, Matkap, Oto Aksesuarı, Lastik vb.); " +
-                           "Kitap, Müzik & Hobi (Kitap, Oyun Konsolu, Oyunlar, Müzik Aletleri, Lego, Hobi vb.); " +
-                           "Diğer (Hiçbirine uymayanlar)",
-              enum: [
-                "Elektronik",
-                "Moda & Giyim",
-                "Ev, Yaşam & Ofis",
-                "Anne & Bebek",
-                "Kozmetik & Bakım",
-                "Spor & Outdoor",
-                "Süpermarket",
-                "Yapı Market & Oto",
-                "Kitap, Müzik & Hobi",
-                "Diğer"
-              ]
-            },
-            store: { type: "string", description: "Fırsatın satıldığı mağaza (Trendyol, Hepsiburada, Amazon, N11, Migros, Şok, A101, Bim vb.)" }
-          },
-          required: ["title", "price", "category", "store"]
-        }
-      }
-    });
-
-    const base64Image = imageBuffer.toString('base64');
-
-    // Prompt - Türkçe ve detaylı
-    const prompt = `
-    Sen uzman bir e-ticaret editörüsün. Bu görseli ve mesajı analiz et.
-    
-    MESAJ METNİ: "${messageText}"
-    
-    Lütfen şu bilgileri çıkar ve verilen JSON şemasına uygun olarak yanıtla:
-    - title: Ürün Adı (Marka Model)
-    - price: Sadece sayı (Para birimi yok)
-    - category: Kategori. Ürünün tipine göre en uygun olanı seç. Pepsi, yiyecek, içecek, temizlik malzemeleri "Süpermarket" kategorisindedir.
-    - store: Mağaza Adı
-    `;
-
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          mimeType: 'image/jpeg',
-          data: base64Image
-        }
-      }
-    ]);
-
-    const response = result.response;
-    const text = response.text();
-
-    const analysisTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`✅ Gemini analizi tamamlandı! Süre: ${analysisTime}s`);
-    console.log(`📊 Gemini yanıtı: ${text}`);
-
-    // JSON temizleme ve parse
-    let analysis;
-    try {
-      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      analysis = JSON.parse(cleanText);
-    } catch (e) {
-      console.warn('⚠️ JSON parse hatası, regex deneniyor...');
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        analysis = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('JSON bulunamadı');
-      }
-    }
-
-    console.log(`🎯 Analiz sonucu:`, analysis);
-
-    // Eski formatla uyumlu döndür
-    return {
-      fiyat: analysis.price,
-      kategori: analysis.category,
-      magaza: analysis.store,
-      urun: analysis.title
-    };
-
-  } catch (error) {
-    console.error('❌ Gemini analiz hatası:', error.message);
-    return null;
-  }
-}
-
-/**
- * Gemini AI ile metin analizi (Görsel yoksa) 📝
- */
-async function analyzeTextWithGemini(messageText) {
-  try {
-    console.log('🤖 Gemini AI metin analizi başlıyor...');
-    const startTime = Date.now();
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "object",
-          properties: {
-            title: { type: "string", description: "Ürün Adı (Marka Model)" },
-            price: { type: "number", description: "Ürünün indirimli fiyatı (Sadece sayı, para birimi yok)" },
-            category: {
-              type: "string",
-              description: "Ürünün ait olduğu en uygun kategori: " +
-                           "Elektronik (Telefon, Bilgisayar, TV, Kulaklık, Hoparlör, Beyaz Eşya, Ev Aletleri vb.); " +
-                           "Moda & Giyim (Kıyafet, Ayakkabı, Saat, Çanta, Gözlük vb.); " +
-                           "Ev, Yaşam & Ofis (Mobilya, Ev Tekstili, Mutfak Gereçleri, Aydınlatma, Kırtasiye vb.); " +
-                           "Anne & Bebek (Bebek Bezi, Oyuncak, Bebek Arabası, Beslenme vb.); " +
-                           "Kozmetik & Bakım (Parfüm, Makyaj, Cilt Bakımı, Şampuan, Diş Bakımı vb.); " +
-                           "Spor & Outdoor (Spor Giyim, Fitness, Kamp, Bisiklet vb.); " +
-                           "Süpermarket (Gıda, İçecek, Deterjan, Temizlik, Kağıt Ürünleri, Evcil Hayvan vb.); " +
-                           "Yapı Market & Oto (Hırdavat, Matkap, Oto Aksesuarı, Lastik vb.); " +
-                           "Kitap, Müzik & Hobi (Kitap, Oyun Konsolu, Oyunlar, Müzik Aletleri, Lego, Hobi vb.); " +
-                           "Diğer (Hiçbirine uymayanlar)",
-              enum: [
-                "Elektronik",
-                "Moda & Giyim",
-                "Ev, Yaşam & Ofis",
-                "Anne & Bebek",
-                "Kozmetik & Bakım",
-                "Spor & Outdoor",
-                "Süpermarket",
-                "Yapı Market & Oto",
-                "Kitap, Müzik & Hobi",
-                "Diğer"
-              ]
-            },
-            store: { type: "string", description: "Fırsatın satıldığı mağaza (Trendyol, Hepsiburada, Amazon, N11, Migros, Şok, A101, Bim vb.)" }
-          },
-          required: ["title", "price", "category", "store"]
-        }
-      }
-    });
-
-    const prompt = `
-    Sen uzman bir e-ticaret editörüsün. Bu mesaj metnini analiz et.
-    
-    MESAJ METNİ: "${messageText}"
-    
-    Lütfen şu bilgileri çıkar ve verilen JSON şemasına uygun olarak yanıtla:
-    - title: Ürün Adı (Marka Model)
-    - price: Sadece sayı (Para birimi yok). Fiyat yoksa 0 yaz.
-    - category: Kategori. Ürünün tipine göre en uygun olanı seç. Pepsi, yiyecek, içecek, temizlik malzemeleri "Süpermarket" kategorisindedir.
-    - store: Mağaza Adı
-    `;
-
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
-
-    const analysisTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`✅ Gemini metin analizi tamamlandı! Süre: ${analysisTime}s`);
-
-    // JSON temizleme ve parse
-    let analysis;
-    try {
-      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      analysis = JSON.parse(cleanText);
-    } catch (e) {
-      console.warn('⚠️ JSON parse hatası, regex deneniyor...');
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        analysis = JSON.parse(jsonMatch[0]);
-      } else {
-        console.warn('❌ JSON bulunamadı, varsayılanlar kullanılacak');
-        return null;
-      }
-    }
-
-    console.log(`🎯 Metin Analiz sonucu:`, analysis);
-
-    return {
-      fiyat: analysis.price,
-      kategori: analysis.category,
-      magaza: analysis.store,
-      urun: analysis.title
-    };
-
-  } catch (error) {
-    console.error('❌ Gemini metin analiz hatası:', error.message);
-    return null;
-  }
 }
 
 /**
@@ -374,39 +143,27 @@ async function analyzeTextWithGemini(messageText) {
 function extractPrice(text) {
   if (!text) return null;
 
-  // Türkçe fiyat formatları: 1.234,56 TL, 1234 TL veya ₺1.234,56, ₺1234
   const pricePatterns = [
-    // 1. Fiyat sonda, binlik noktalı: "1.234,56 TL"
     /(\d{1,3}(?:\.\d{3})+(?:,\d{2})?)\s*(?:TL|₺|Lira)/gi,
-    // 2. Fiyat sonda, düz saylı: "1234 TL" veya "1234,56 TL"
     /(\d+(?:,\d{2})?)\s*(?:TL|₺|Lira)/gi,
-    // 3. Fiyat başta, binlik noktalı: "₺1.234,56"
     /(?:TL|₺)\s*(\d{1,3}(?:\.\d{3})+(?:,\d{2})?)/gi,
-    // 4. Fiyat başta, düz saylı: "₺1234" veya "₺1234,56"
     /(?:TL|₺)\s*(\d+(?:,\d{2})?)/gi
   ];
 
   for (const pattern of pricePatterns) {
     const match = text.match(pattern);
     if (match) {
-      // Sayı dışındaki karakterleri temizle
       let cleanNum = match[0].replace(/[^\d,.]/g, '');
-      
-      // Eğer hem nokta hem virgül varsa (örn 1.234,56)
       if (cleanNum.includes('.') && cleanNum.includes(',')) {
         cleanNum = cleanNum.replace(/\./g, '').replace(',', '.');
       } else if (cleanNum.includes(',')) {
-        // Sadece virgül varsa (örn 1234,56 veya 12,50)
         cleanNum = cleanNum.replace(',', '.');
       } else if (cleanNum.includes('.')) {
-        // Sadece nokta varsa ve noktadan sonra tam 3 hane varsa (örn: 12.499 veya 3.450)
-        // Bu durum Türkçe formatta binlik ayracıdır.
         const parts = cleanNum.split('.');
         if (parts[parts.length - 1].length === 3) {
           cleanNum = cleanNum.replace(/\./g, '');
         }
       }
-      
       const parsed = parseFloat(cleanNum);
       if (!isNaN(parsed)) return parsed;
     }
@@ -510,81 +267,6 @@ function cleanFallbackTitle(rawTitle) {
 }
 
 /**
- * Başlık ve açıklamadan yerel olarak kategori tahmini yapar
- */
-function detectCategoryFromText(title, description) {
-  const text = ((title || '') + ' ' + (description || '')).toLowerCase();
-  
-  // 1. Elektronik
-  const elektronikKeywords = ['telefon', 'bilgisayar', 'laptop', 'notebook', 'monitör', 'ekran', 'mouse', 'klavye', 'kulaklık', 'hoparlör', 'tv', 'televizyon', 'tablet', 'şarj', 'adaptör', 'kablo', 'ssd', 'ram', 'ekran kartı', 'işlemci', 'anakart', 'powerbank', 'yazıcı', 'kamera', 'süpürge', 'robot süpürge', 'airfryer', 'kettle', 'çay makinesi', 'kahve makinesi', 'tost makinesi', 'ütü', 'klima', 'kombi', 'vantilatör', 'fön', 'tıraş makinesi', 'akıllı priz', 'akıllı ampul', 'akıllı lamba', 'akıllı ev', 'güvenlik kamerası'];
-  for (const kw of elektronikKeywords) {
-    if (text.includes(kw)) return 'elektronik';
-  }
-  
-  // 2. Moda & Giyim
-  const modaKeywords = ['elbise', 'ayakkabı', 'sneaker', 'bot', 'çizme', 'mont', 'ceket', 'kaban', 'hırka', 'tişör', 'tisort', 't-shirt', 'pantolon', 'sweatshirt', 'sweat', 'kazak', 'gömlek', 'yelek', 'çanta', 'cüzdan', 'saat', 'gözlük', 'çorap', 'iç giyim', 'pijama', 'şort', 'kemer', 'taki', 'kolye', 'küpe', 'yüzük', 'bileklik', 'pırlanta', 'tektaş'];
-  for (const kw of modaKeywords) {
-    if (text.includes(kw)) return 'moda';
-  }
-  
-  // 3. Süpermarket (Temizlik & Gıda)
-  const supermarketKeywords = ['deterjan', 'yumuşatıcı', 'şampuan', 'sabun', 'ıslak mendil', 'tuvalet kağıdı', 'kağıt havlu', 'deterjanı', 'omo', 'ariel', 'domestos', 'fairy', 'finish', 'gıda', 'yağ', 'zeytinyağı', 'sıvı yağ', 'pirinç', 'makarna', 'çay', 'kahve', 'şeker', 'tuz', 'çikolata', 'bisküvi', 'atıştırmalık', 'peynir', 'zeytin', 'süt', 'salça', 'un', 'pepsi', 'kola', 'cola', 'içecek', 'icecek', 'soda', 'gazoz', 'fanta', 'sprite', 'su', 'meyve suyu', 'nescafe', 'red bull', 'enerji içeceği', 'enerji icecegi', 'kedi maması', 'köpek maması', 'kedi kumu'];
-  for (const kw of supermarketKeywords) {
-    if (text.includes(kw)) return 'supermarket';
-  }
-  
-  // 4. Kozmetik & Bakım
-  const kozmetikKeywords = ['parfüm', 'parfum', 'deodorant', 'krem', 'nemlendirici', 'serum', 'makyaj', 'ruj', 'fondöten', 'rimel', 'maskara', 'cilt bakım', 'şampuan', 'duş jeli', 'saç kremi', 'güneş kremi', 'kolonya', 'diş macunu', 'diş fırçası', 'epilatör', 'tıraş bıçağı'];
-  for (const kw of kozmetikKeywords) {
-    if (text.includes(kw)) return 'kozmetik';
-  }
-  
-  // 5. Ev, Yaşam & Ofis
-  const evKeywords = ['tava', 'tencere', 'mutfak', 'tabak', 'çatal', 'kaşık', 'bıçak', 'kupa', 'bardak', 'yemek takımı', 'nevresim', 'perde', 'yastık', 'yorgan', 'çarşaf', 'halı', 'kilim', 'koltuk', 'sandalye', 'masa', 'sehpa', 'dolap', 'gardırop', 'yatak', 'ayna', 'avize', 'lamba', 'dekorasyon', 'tablo', 'saksı', 'ofis', 'kalem', 'defter'];
-  for (const kw of evKeywords) {
-    if (text.includes(kw)) return 'ev_yasam';
-  }
-  
-  // 6. Anne & Bebek
-  const bebekKeywords = ['bebek', 'oyuncak', 'bebek bezi', 'bez', 'mama', 'biberon', 'emzik', 'puset', 'bebek arabası', 'oto koltuğu', 'ıslak mendil', 'beşik', 'mama sandalyesi', 'çıngırak'];
-  for (const kw of bebekKeywords) {
-    if (text.includes(kw)) return 'anne_bebek';
-  }
-  
-  // 7. Spor & Outdoor
-  const sporKeywords = ['spor', 'fitness', 'dambıl', 'pilates', 'mat', 'bisiklet', 'koşu', 'yürüyüş', 'kamp', 'çadır', 'uyku tulumu', 'termos', 'outdoor', 'forma', 'raket', 'top', 'futbol', 'basketbol', 'tenis', 'kask', 'bisikleti', 'mayo', 'bikini'];
-  for (const kw of sporKeywords) {
-    if (text.includes(kw)) return 'spor_outdoor';
-  }
-  
-  // 8. Yapı Market & Oto
-  const yapiKeywords = ['matkap', 'tornavida', 'hırdavat', 'alet', 'pense', 'anahtar takımı', 'vida', 'boya', 'fırça', 'oto', 'araba', 'araç', 'lastik', 'motor yağı', 'antifriz', 'silecek', 'kılıf', 'aksesuar', 'ampul', 'şerit led', 'baret', 'iş ayakkabısı'];
-  for (const kw of yapiKeywords) {
-    if (text.includes(kw)) return 'yapi_oto';
-  }
-  
-  // 9. Kitap, Müzik & Hobi
-  const kitapKeywords = ['kitap', 'roman', 'hikaye', 'dergi', 'kırtasiye', 'lego', 'yapboz', 'puzzle', 'kutu oyunu', 'oyun konsolu', 'playstation', 'ps5', 'xbox', 'nintendo', ' switch', 'gitar', 'saz', 'keman', 'piyano', 'enstrüman', 'org', 'hobi', 'boyama'];
-  for (const kw of kitapKeywords) {
-    if (text.includes(kw)) return 'kitap_hobi';
-  }
-
-  // 10. Dijital & Hizmetler
-  const dijitalKeywords = ['netflix', 'spotify', 'youtube premium', 'premium', 'blutv', 'gain', 'exxen', 'vpn', 'antivirüs', 'antivirus', 'lisans', 'yazılım', 'yazilim', 'yemeksepeti', 'getiryemek', 'dominos', 'burger king', 'starbucks', 'uçak bileti', 'ucak bileti', 'otobüs bileti', 'otobus bileti', 'otel', 'hotel', 'airbnb', 'tatil', 'seyahat', 'biletix', 'steam', 'valorant', 'vp', 'pubg uc', 'roblox', 'robux', 'cüzdan kodu', 'cuzdan kodu', 'game pass', 'xbox pass'];
-  for (const kw of dijitalKeywords) {
-    if (text.includes(kw)) return 'dijital_hizmetler';
-  }
-
-  // 11. Finans & Kampanyalar
-  const finansKeywords = ['banka', 'kredi kartı', 'kredi karti', 'chip-para', 'bonus', 'parafpara', 'maxipuan', 'worldpuan', 'hediye para', 'nakit iade', 'cashback', 'nays', 'akbank', 'garanti', 'yapı kredi', 'yapi kredi', 'iş bankası', 'is bankasi', 'faizsiz', 'masrafsız', 'masrafsiz', 'gram altın', 'gram altin', 'çeyrek altın', 'ceyrek altin', 'külçe altın', 'kulce altin', 'yarım altın', 'yarim altin', 'cumhuriyet altını', 'cumhuriyet altini', 'ata altın', 'ata altin', 'has altın', 'has altin', 'külçe gümüş', 'kulce gumus', 'sarrafiye'];
-  for (const kw of finansKeywords) {
-    if (text.includes(kw)) return 'finans_kampanyalar';
-  }
-  
-  return 'diger';
-}
-
-/**
  * Fırsat linkinden mağaza platformunu bulur
  */
 function extractStoreFromLink(link, text) {
@@ -648,12 +330,23 @@ function extractStoreFromLink(link, text) {
 }
 
 /**
+ * Mesaj metninden linkleri çıkartarak temiz bir açıklama metni hazırlar
+ */
+function getDescriptionWithoutLinks(messageText, links) {
+  if (!messageText) return '';
+  let text = messageText;
+  for (const link of links) {
+    text = text.replace(link, '');
+  }
+  return text.trim().substring(0, 2000);
+}
+
+/**
  * Mesajı Firebase'e kaydet
  */
 async function saveDealToFirebase(message, chatInfo) {
   try {
     const messageText = message.message || '';
-    // GÜNCELLEME: Tüm link kaynaklarını tara (Text, Entity, Button)
     const links = getAllLinks(message);
 
     if (!links.length) {
@@ -666,180 +359,81 @@ async function saveDealToFirebase(message, chatInfo) {
     const chatIdentifier = chatInfo.username ? `@${chatInfo.username}` : chatInfo.id.toString();
     const uniqueDocId = `telegram_${chatInfo.id}_${messageId}`;
 
-    // Başlık ve açıklama
-    const lines = messageText.split('\n').filter(l => l.trim());
-    const title = lines[0] || 'Fırsat';
-
-    // Fiyat
-    const price = extractPrice(messageText);
+    console.log(`🚀 [${uniqueDocId}] Scrape işlemi başlatılıyor: ${mainLink}`);
+    
+    // ========================================
+    // ⚡ SCRAPING VE KATEGORİ TESPİTİ
+    // ========================================
+    const scrapeResult = await linkScraperService.scrapeProductFromUrl(mainLink);
+    
+    const cleanedTitle = cleanFallbackTitle(scrapeResult.title || messageText);
+    const finalPrice = scrapeResult.price || extractPrice(messageText) || 0;
+    
+    const categoryResult = categoryDetectionService.detectCategory(
+      cleanedTitle, 
+      scrapeResult.breadcrumbs || [], 
+      scrapeResult.url || mainLink
+    );
+    const finalCategory = categoryResult.categoryId || 'diger';
+    
+    const storeFromLink = extractStoreFromLink(scrapeResult.url || mainLink, messageText);
+    const finalDescription = getDescriptionWithoutLinks(messageText, links);
 
     // ========================================
-    // ÖNEMLİ: GÖRSELİ ÖNCE YÜKLEYECEĞİZ! 🎯
+    // 📷 GÖRSEL KONTROLÜ VE YÜKLEME
     // ========================================
-    let imageUrl = ''; // Başlangıçta boş
-    let aiAnalysis = null; // AI analizi sonucu (scope dışında tanımla!)
+    let imageUrl = scrapeResult.imageUrl || '';
 
-    // Görsel var mı kontrol et
+    // Görsel var mı kontrol et (Telegram mesajında)
     const hasPhoto = message.media && (
       message.media.photo ||
       (message.media.document && message.media.document.mimeType && message.media.document.mimeType.startsWith('image/'))
     );
 
-    if (hasPhoto) {
-      const mediaType = message.media.photo ? 'photo' : 'document';
-      console.log(`📷 [${uniqueDocId}] GÖRSEL VAR! Tip: ${mediaType}`);
-      console.log(`⚡ [${uniqueDocId}] ÖNCE GÖRSELI YÜKLEYECEĞİZ, SONRA DEAL OLUŞTURACAĞIZ!`);
-
+    // Eğer scraper görsel bulamadıysa fakat Telegram mesajında görsel varsa Telegram görselini kullan
+    if (!imageUrl && hasPhoto) {
+      console.log(`📷 [${uniqueDocId}] Scraper görsel bulamadı fakat Telegram'da görsel var. Yükleniyor...`);
       try {
-        // GÖRSEL İNDİR
-        console.log(`📥 [${uniqueDocId}] Telegram'dan görsel indiriliyor...`);
-        const downloadStartTime = Date.now();
         const buffer = await client.downloadMedia(message.media, {
-          workers: 4,
-          progressCallback: (downloaded, total) => {
-            const percent = Math.round((downloaded / total) * 100);
-            if (percent % 25 === 0) {
-              console.log(`📊 [${uniqueDocId}] İndirme: %${percent} (${downloaded}/${total})`);
-            }
-          }
+          workers: 4
         });
-        const downloadTime = ((Date.now() - downloadStartTime) / 1000).toFixed(2);
-        console.log(`✅ [${uniqueDocId}] Görsel indirildi! Süre: ${downloadTime}s, Boyut: ${buffer ? buffer.length : 0} bytes`);
 
-        if (!buffer || buffer.length === 0) {
-          console.error(`❌ [${uniqueDocId}] Buffer boş! Görsel indirilemedi.`);
-        } else {
-          // 🤖 AI ANALİZİ VE UPLOAD - TAM PARALEL! ⚡⚡⚡
-          // GCP ortamından veya fallback olarak prod projesinden bucket adını oluştur
+        if (buffer && buffer.length > 0) {
           const projectId = process.env.PROJECT_ID || process.env.GCP_PROJECT || process.env.GCLOUD_PROJECT || 'firsatkolik-prod-e6eae';
           const bucketName = `${projectId}.firebasestorage.app`;
           const bucket = admin.storage().bucket(bucketName);
           const filename = `deals/${chatInfo.id}_${messageId}.jpg`;
           const file = bucket.file(filename);
 
-          console.log(`🚀 [${uniqueDocId}] AI analizi ve upload paralel başlıyor!`);
-          const parallelStartTime = Date.now();
+          console.log(`📤 [${uniqueDocId}] Firebase Storage'a yükleniyor (${buffer.length} bytes)...`);
+          await file.save(buffer, {
+            metadata: {
+              contentType: 'image/jpeg',
+              cacheControl: 'public, max-age=31536000'
+            },
+            resumable: false,
+            public: false
+          });
 
-          // PARALEL: AI analizi + Upload
-          const [aiResult, uploadResult] = await Promise.all([
-            // AI Analizi
-            analyzeImageWithGemini(buffer, messageText).catch(err => {
-              console.error('❌ AI analiz hatası:', err.message);
-              return null;
-            }),
-            // Upload
-            (async () => {
-              const uploadStartTime = Date.now();
-              console.log(`📤 [${uniqueDocId}] Firebase Storage'a yükleniyor (${buffer.length} bytes)...`);
-              await file.save(buffer, {
-                metadata: {
-                  contentType: 'image/jpeg',
-                  cacheControl: 'public, max-age=31536000'
-                },
-                resumable: false,
-                public: false
-              });
-              const uploadTime = ((Date.now() - uploadStartTime) / 1000).toFixed(2);
-              console.log(`✅ [${uniqueDocId}] Storage'a yüklendi! Upload: ${uploadTime}s`);
-              return uploadTime;
-            })()
-          ]);
-
-          const parallelTime = ((Date.now() - parallelStartTime) / 1000).toFixed(2);
-          const totalTime = ((Date.now() - downloadStartTime) / 1000).toFixed(2);
-          console.log(`✅ [${uniqueDocId}] PARALEL İŞLEM TAMAM! AI+Upload: ${parallelTime}s, Toplam: ${totalTime}s`);
-
-          // AI sonucunu kaydet
-          aiAnalysis = aiResult;
-
-          // imageUrl HAZIR!
           imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(filename)}?alt=media`;
-          console.log(`🎉 [${uniqueDocId}] imageUrl HAZIR! ${imageUrl.substring(0, 80)}...`);
-
-          if (aiAnalysis) {
-            console.log(`✅ [${uniqueDocId}] AI analizi tamamlandı! Fiyat: ${aiAnalysis.fiyat}, Kategori: ${aiAnalysis.kategori}, Mağaza: ${aiAnalysis.magaza}`);
-          } else {
-            console.warn(`⚠️ [${uniqueDocId}] AI analizi başarısız, manuel veriler kullanılacak`);
-          }
+          console.log(`🎉 [${uniqueDocId}] Telegram görseli Storage'a yüklendi!`);
         }
       } catch (imageError) {
-        console.error(`❌ [${uniqueDocId}] Görsel yükleme hatası:`, imageError.message);
-      }
-    } else {
-      console.log(`ℹ️ [${uniqueDocId}] Mesajda görsel yok`);
-    }
-
-    // EĞER GÖRSEL ANALİZİ YOKSA VEYA BAŞARISIZSA METİN ANALİZİ YAP 📝
-    if (!aiAnalysis) {
-      console.log(`🤖 [${uniqueDocId}] Görsel analizi yok, metin analizi deneniyor...`);
-      // Eğer mesaj çok kısaysa (sadece link vs) analiz etmeye değmeyebilir ama yine de deneyelim
-      if (messageText && messageText.length > 5) {
-        aiAnalysis = await analyzeTextWithGemini(messageText);
+        console.error(`❌ [${uniqueDocId}] Telegram görsel yükleme hatası:`, imageError.message);
       }
     }
 
-    // 🤖 AI VERİLERİNİ KULLAN! ✨
-
-    // Kategori Mapping (AI Metni -> Uygulama ID'si)
-    const categoryMap = {
-      'Elektronik': 'elektronik',
-      'Moda & Giyim': 'moda',
-      'Ev, Yaşam & Ofis': 'ev_yasam',
-      'Anne & Bebek': 'anne_bebek',
-      'Kozmetik & Bakım': 'kozmetik',
-      'Spor & Outdoor': 'spor_outdoor',
-      'Süpermarket': 'supermarket',
-      'Yapı Market & Oto': 'yapi_oto',
-      'Kitap, Müzik & Hobi': 'kitap_hobi',
-      'Diğer': 'diger'
-    };
-
-    const rawAiCategory = aiAnalysis?.kategori || 'Diğer';
-
-    // Kategori eşleştirme - Daha esnek
-    let mappedCategory = 'diger';
-
-    // 1. Tam eşleşme
-    if (categoryMap[rawAiCategory]) {
-      mappedCategory = categoryMap[rawAiCategory];
-    } else {
-      // 2. İçeriyor mu? (Örn: "Elektronik Ürünler" -> "Elektronik")
-      const rawLower = rawAiCategory.toLowerCase();
-      // Tersine mapping yapıp kontrol et
-      for (const [key, val] of Object.entries(categoryMap)) {
-        // İlk kelimeyi al (noktalama işaretlerini temizle ve küçük harfe çevir)
-        const firstWord = key.split(/[\s,&]+/)[0].toLowerCase();
-        if (key !== 'Diğer' && rawLower.includes(firstWord)) {
-          mappedCategory = val;
-          break;
-        }
-      }
-    }
-
-    const aiPrice = aiAnalysis?.fiyat || price || 0;
-    const rawTitle = aiAnalysis?.urun || title;
-    const cleanedTitle = cleanFallbackTitle(rawTitle);
-
-    // Fırsat Mağazası: Linkten otomatik çıkartılır
-    const storeFromLink = extractStoreFromLink(mainLink, messageText);
-
-    // Fırsat Kategorisi: Eğer yapay zeka bulamadıysa veya 'diger' ise yerel analizle tahmin et
-    let finalCategory = mappedCategory;
-    if (finalCategory === 'diger') {
-      finalCategory = detectCategoryFromText(cleanedTitle, messageText);
-    }
-
-    // Deal objesi (GELİŞMİŞ VERİLERLE!)
+    // Deal objesi
     const deal = {
       title: cleanedTitle,
-      description: messageText.substring(0, 2000),
-      link: mainLink,
-      price: aiPrice,
-      originalPrice: aiPrice ? aiPrice * 1.2 : 0,
-      discount: aiPrice ? 20 : 0,
-      imageUrl: imageUrl, // ZATEN DOLU! 🎉
+      description: finalDescription || 'Fırsat Ürünü Detayları',
+      link: scrapeResult.url || mainLink,
+      price: finalPrice,
+      originalPrice: finalPrice ? finalPrice * 1.2 : 0,
+      discount: finalPrice ? 20 : 0,
+      imageUrl: imageUrl,
       store: storeFromLink,
-      category: finalCategory, // ARTIK ID OLARAK KAYDEDİLİYOR! ✅
+      category: finalCategory,
       isApproved: false,
       isUserSubmitted: false,
       isActive: true,
@@ -869,7 +463,7 @@ async function saveDealToFirebase(message, chatInfo) {
 
     // Direkt Firestore'a kaydet
     await dealRef.set(deal, { merge: true });
-    console.log(`✅ Deal kaydedildi: ${uniqueDocId} (imageUrl: ${imageUrl ? 'DOLU ✅' : 'BOŞ ❌'})`);
+    console.log(`✅ Deal kaydedildi: ${uniqueDocId}`);
 
     return true;
   } catch (error) {
@@ -879,7 +473,7 @@ async function saveDealToFirebase(message, chatInfo) {
 }
 
 /**
- * Telegram Client'ı başlat
+ * Telegram Client'ı başlat ve geçmişi çek
  */
 async function startBot() {
   if (isRunning || isStarting) {
@@ -891,11 +485,9 @@ async function startBot() {
   try {
     console.log('🔄 Telegram Client bağlanıyor...');
 
-    // ESKİ CLIENT'I TAMAMEN TEMİZLE! ⚡
     if (client) {
       try {
         console.log('🧹 Eski client temizleniyor...');
-        // Tüm event handler'ları kaldır
         client.removeEventHandler();
         await client.disconnect();
         client = null;
@@ -907,18 +499,17 @@ async function startBot() {
 
     const stringSession = new StringSession(SESSION_STRING);
     client = new TelegramClient(stringSession, parseInt(API_ID), API_HASH, {
-      connectionRetries: 100, // Daha fazla deneme
+      connectionRetries: 100,
       autoReconnect: true,
       useWSS: false,
-      timeout: 60, // 60 saniye timeout (önceden 30)
-      requestRetries: 10, // Request retry sayısı
-      floodSleepThreshold: 60, // Flood wait süresini otomatik bekle (60 saniye)
+      timeout: 60,
+      requestRetries: 10,
+      floodSleepThreshold: 60,
       deviceModel: 'Cloud Run Bot',
       systemVersion: '1.0',
       appVersion: '1.0',
     });
 
-    // Bağlantı koptuğunda logla
     client.on('disconnected', () => {
       console.warn('⚠️ Telegram bağlantısı koptu!');
       isRunning = false;
@@ -927,27 +518,21 @@ async function startBot() {
     await client.connect();
     console.log('✅ Telegram Client bağlandı!');
 
-    // Her kanal için event handler ekle
+    // Her kanal için geçmişi tara
     for (const channelUsername of CHANNELS) {
       try {
         const trimmedChannel = channelUsername.trim();
         let channel;
 
-        // Username ile mi yoksa ID ile mi?
         if (trimmedChannel.startsWith('@')) {
-          // Public kanal - username ile
           console.log(`🔍 Username ile aranıyor: ${trimmedChannel}`);
           channel = await client.getEntity(trimmedChannel);
         } else {
-          // Private kanal/grup - ID ile
           console.log(`🔍 ID ile aranıyor: ${trimmedChannel}`);
-
-          // Negatif ID'yi pozitife çevir
           const channelId = trimmedChannel.startsWith('-')
             ? trimmedChannel.substring(1)
             : trimmedChannel;
 
-          // PeerChannel ile dene
           try {
             const peer = new Api.PeerChannel({
               channelId: BigInt(channelId)
@@ -961,7 +546,6 @@ async function startBot() {
               console.log(`✅ BigInt ile bulundu: ${channelId}`);
             } catch (e2) {
               console.error(`❌ Kanal bulunamadı: ${trimmedChannel}`);
-              console.error(`   Hata: ${e2.message}`);
               continue;
             }
           }
@@ -969,7 +553,6 @@ async function startBot() {
 
         console.log(`✅ Kanal bulundu: ${channel.title} (${trimmedChannel})`);
 
-        // Kanal bilgilerini sakla (closure için)
         const channelInfo = {
           id: channel.id,
           title: channel.title,
@@ -984,9 +567,6 @@ async function startBot() {
         
         for (const message of messages) {
           const messageId = message.id;
-          const messageText = message.message || '';
-          
-          // Link kontrolü
           const links = getAllLinks(message);
           if (!links.length) {
             console.log(`⏩ [ID: ${messageId}] Link yok, atlanıyor.`);
