@@ -98,5 +98,10 @@ void main() {
       verifyMapping('Koza İç Giyim Erkek Pijama Takımı', 'moda', 'Erkek Giyim');
       verifyMapping('Kadın Pamuklu Pijama Takımı', 'moda', 'Kadın Giyim');
     });
+
+    test('5. Thermos Mappings', () {
+      verifyMapping('Schafer Kitchen House 2 Litre Çelik Termos Inox (Sıcak ve Soğuk İçecekler İçin 12 Saat Koruma)', 'ev_yasam', 'Mutfak Gereçleri');
+      verifyMapping('Stanley Klasik Vakumlu Çelik Kamp Termosu 1 L', 'spor_outdoor', 'Kamp & Doğa Malzemeleri');
+    });
   });
 }

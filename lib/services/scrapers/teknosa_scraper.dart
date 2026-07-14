@@ -73,7 +73,16 @@ class TeknosaScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. JSON-LD şemasından fiyat çekmeyi dene (Öncelikli)
+    // 1. DOM Seçicileri - Öncelikli: span.prc-third (Hem indirimli hem indirimsiz doğru fiyatı içerir)
+    final priceThirdEl = document.querySelector('span.prc-third');
+    if (priceThirdEl != null) {
+      final val = parsePriceText(priceThirdEl.text);
+      if (val != null && val > 0) {
+        return val;
+      }
+    }
+
+    // 2. JSON-LD şemasından fiyat çekmeyi dene (Yedek 1)
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
       final priceLd = extractPriceFromProductJson(productJson);
@@ -82,9 +91,8 @@ class TeknosaScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
+    // 3. Diğer DOM Seçicileri (Yedek 2)
     final priceEl = document.querySelector('span.prc') ??
-                    document.querySelector('span.prc-third') ??
                     document.querySelector('.price') ??
                     document.querySelector('.product-price');
     if (priceEl != null) {

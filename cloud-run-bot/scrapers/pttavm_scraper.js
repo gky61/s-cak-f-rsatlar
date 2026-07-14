@@ -44,11 +44,64 @@ class PttavmScraper extends BaseProductScraper {
     return null;
   }
 
+  findDataLayerYmProduct($) {
+    if (this._dataLayerYmCached !== undefined) {
+      return this._dataLayerYmCached;
+    }
+
+    let parsed = null;
+    $('script').each((_, el) => {
+      const text = $(el).html();
+      if (text && text.includes('dataLayerYM.push')) {
+        const match = text.match(/products:\s*\[\s*(\{[\s\S]*?\})\s*\]/);
+        if (match && match[1]) {
+          const productObjText = match[1];
+          const extractFieldValue = (fieldName) => {
+            const doubleQuoteRegex = new RegExp(`${fieldName}:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
+            const dqMatch = productObjText.match(doubleQuoteRegex);
+            if (dqMatch) return dqMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+
+            const singleQuoteRegex = new RegExp(`${fieldName}:\\s*'((?:[^'\\\\]|\\\\.)*)'`);
+            const sqMatch = productObjText.match(singleQuoteRegex);
+            if (sqMatch) return sqMatch[1].replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+
+            const unquotedRegex = new RegExp(`${fieldName}:\\s*([^,\\}\\s]+)`);
+            const uMatch = productObjText.match(unquotedRegex);
+            if (uMatch) return uMatch[1];
+
+            return null;
+          };
+
+          const id = extractFieldValue('id');
+          const name = extractFieldValue('name');
+          const priceStr = extractFieldValue('price');
+          const category = extractFieldValue('category');
+
+          parsed = {
+            id,
+            name,
+            price: priceStr ? parseFloat(priceStr) : null,
+            category
+          };
+          return false; // break cheerio each loop
+        }
+      }
+    });
+
+    this._dataLayerYmCached = parsed;
+    return parsed;
+  }
+
   scrapeTitle($) {
     // 1. JSON-LD
     const product = this.findProductJsonLd($);
     if (product && product['name']) return product['name'].toString().trim();
-    // 2. DOM
+    
+    // 2. dataLayerYM fallback
+    const ymData = this.findDataLayerYmProduct($);
+    if (ymData && ymData.name) return ymData.name.trim();
+
+    // 3. DOM
     const el = $('h1.product-title, .product-name').first();
     if (el.length) return el.text().trim();
     const og = $('meta[property="og:title"]').attr('content');
@@ -62,8 +115,17 @@ class PttavmScraper extends BaseProductScraper {
       const p = this.extractPriceFromProductJson(product);
       if (p && p > 0) return p;
     }
-    // 2. DOM
+
+    // 2. dataLayerYM fallback
+    const ymData = this.findDataLayerYmProduct($);
+    if (ymData && ymData.price && ymData.price > 0) return ymData.price;
+
+    // 3. DOM
     const priceSelectors = [
+      '[class*="specialPriceValue__HPhRC"]',
+      '.specialPriceValue__HPhRC',
+      '[class*="priceValue__D5sYV"]',
+      '.priceValue__D5sYV',
       '.product-price',
       '.price-box',
       '.discount-price',
@@ -105,6 +167,15 @@ class PttavmScraper extends BaseProductScraper {
     const title = this.scrapeTitle($) || '';
     const breadcrumbs = this.extractBreadcrumbsFromJsonLd($, title, 'pttavm');
     if (breadcrumbs && breadcrumbs.length > 0) return breadcrumbs;
+
+    // dataLayerYM category fallback
+    const ymData = this.findDataLayerYmProduct($);
+    if (ymData && ymData.category) {
+      const cleanCat = ymData.category.trim();
+      if (cleanCat && cleanCat.toLowerCase() !== 'null') {
+        return [cleanCat];
+      }
+    }
 
     // DOM Fallback
     const list = [];

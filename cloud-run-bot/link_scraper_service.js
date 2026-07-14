@@ -5,6 +5,7 @@
 
 const cheerio = require('cheerio');
 const scrapers = require('./scrapers');
+const { execSync, spawnSync } = require('child_process');
 
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36';
 
@@ -13,20 +14,20 @@ function getHeadersForUrl(url) {
   let userAgent = DEFAULT_USER_AGENT;
 
   if (lowerUrl.includes('n11.com') ||
-      lowerUrl.includes('teknosa.com') ||
-      lowerUrl.includes('amazon.') ||
-      lowerUrl.includes('amzn.') ||
-      lowerUrl.includes('hepsiburada.com') ||
-      lowerUrl.includes('mavi.com') ||
-      lowerUrl.includes('defacto.com.tr') ||
-      lowerUrl.includes('zara.com') ||
-      lowerUrl.includes('mango.com') ||
-      lowerUrl.includes('beymen.com') ||
-      lowerUrl.includes('hb.biz') ||
-      lowerUrl.includes('trendyol.com') ||
-      lowerUrl.includes('ty.gl') ||
-      lowerUrl.includes('pttavm.com') ||
-      lowerUrl.includes('incehesap.com')) {
+    lowerUrl.includes('teknosa.com') ||
+    lowerUrl.includes('amazon.') ||
+    lowerUrl.includes('amzn.') ||
+    lowerUrl.includes('hepsiburada.com') ||
+    lowerUrl.includes('mavi.com') ||
+    lowerUrl.includes('defacto.com.tr') ||
+    lowerUrl.includes('zara.com') ||
+    lowerUrl.includes('mango.com') ||
+    lowerUrl.includes('beymen.com') ||
+    lowerUrl.includes('hb.biz') ||
+    lowerUrl.includes('trendyol.com') ||
+    lowerUrl.includes('ty.gl') ||
+    lowerUrl.includes('pttavm.com') ||
+    lowerUrl.includes('incehesap.com')) {
     userAgent = 'WhatsApp/2.23.4.15 A';
   } else if (lowerUrl.includes('vatanbilgisayar.com') || lowerUrl.includes('pazarama.com')) {
     userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
@@ -45,17 +46,20 @@ function getHeadersForUrl(url) {
 
 /** Adjust deep-link yönlendirmesinden gerçek fallback URL'ini çıkartır */
 function extractAdjustFallback(url) {
-  if (url.includes('adj.st') && url.includes('adj_fallback=')) {
-    try {
-      const parsedUrl = new URL(url);
-      const fallback = parsedUrl.searchParams.get('adj_fallback');
-      if (fallback) {
-        console.log(`[RESOLVE-REDIRECT] 🎯 Adjust URL tespit edildi, adj_fallback çözülüyor: ${fallback}`);
-        return decodeURIComponent(fallback);
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname.includes('adj.st') || parsedUrl.hostname.includes('adjust.com')) {
+      const params = ['adjust_redirect', 'adj_redirect', 'adjust_fallback', 'adj_fallback', 'fallback'];
+      for (const param of params) {
+        const value = parsedUrl.searchParams.get(param);
+        if (value) {
+          console.log(`[RESOLVE-REDIRECT] 🎯 Adjust URL tespit edildi, ${param} çözülüyor: ${value}`);
+          return decodeURIComponent(value);
+        }
       }
-    } catch (err) {
-      console.warn(`[RESOLVE-REDIRECT] ⚠️ Adjust fallback çözme hatası: ${err.message}`);
     }
+  } catch (err) {
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ Adjust fallback çözme hatası: ${err.message}`);
   }
   return url;
 }
@@ -64,17 +68,17 @@ function extractAdjustFallback(url) {
 async function resolveUrlRedirects(url) {
   let targetUrl = extractAdjustFallback(url);
   const lowerUrl = targetUrl.toLowerCase();
-  
+
   const isShortOrRedirect = lowerUrl.includes('amzn.eu') ||
-                           lowerUrl.includes('amzn.to') ||
-                           lowerUrl.includes('hb.biz') ||
-                           lowerUrl.includes('publicis.link') ||
-                           lowerUrl.includes('bit.ly') ||
-                           lowerUrl.includes('tinyurl.com') ||
-                           lowerUrl.includes('t.co') ||
-                           lowerUrl.includes('rebrand.ly') ||
-                           lowerUrl.includes('rdrtr.com') ||
-                           lowerUrl.includes('ty.gl');
+    lowerUrl.includes('amzn.to') ||
+    lowerUrl.includes('hb.biz') ||
+    lowerUrl.includes('publicis.link') ||
+    lowerUrl.includes('bit.ly') ||
+    lowerUrl.includes('tinyurl.com') ||
+    lowerUrl.includes('t.co') ||
+    lowerUrl.includes('rebrand.ly') ||
+    lowerUrl.includes('rdrtr.com') ||
+    lowerUrl.includes('ty.gl');
 
   if (!isShortOrRedirect) return targetUrl;
 
@@ -95,10 +99,10 @@ async function resolveUrlRedirects(url) {
 
     clearTimeout(timeoutId);
     console.log(`[RESOLVE-REDIRECT] ✅ Çözülen Hedef URL: ${response.url} (Durum: ${response.status} ${response.statusText})`);
-    
+
     let resolvedUrl = response.url || targetUrl;
     resolvedUrl = extractAdjustFallback(resolvedUrl);
-    
+
     return resolvedUrl;
   } catch (err) {
     console.warn(`[RESOLVE-REDIRECT] ⚠️ Yönlendirme çözülemedi (${err.message}), orijinal URL kullanılacak: ${targetUrl}`);
@@ -106,27 +110,361 @@ async function resolveUrlRedirects(url) {
   }
 }
 
+/**
+ * Microlink API'si ile HTML çeker.
+ * Pttavm gibi hem Node.js fetch hem de curl isteklerini datacenter IP'sinden dolayı 403/WAF ile engellemektedir.
+ * Microlink premium proxy altyapısı sayesinde bu WAF engellerini aşabilir.
+ */
+async function microlinkFetchHtml(targetUrl, originalUrl, fetchStartTime) {
+  console.log(`[FETCH-HTML] 🔧 Microlink API ile çekiliyor: ${targetUrl}`);
+  try {
+    const microUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&prerender=true&data.html.selector=html&data.html.type=html`;
+    const r = await fetch(microUrl, { signal: AbortSignal.timeout(18000) });
+    const duration = Date.now() - fetchStartTime;
+    console.log(`[FETCH-HTML] ⚡ Microlink cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${r.status}`);
+    
+    if (r.ok) {
+      const data = await r.json();
+      const htmlText = data.data?.html || '';
+      console.log(`[FETCH-HTML] Microlink HTML boyutu: ${htmlText.length} karakter`);
+      if (htmlText.length > 1000) {
+        checkForBotBlockers(htmlText, originalUrl);
+        return htmlText;
+      }
+    }
+    console.error(`[FETCH-HTML] ❌ Microlink Başarısız. Durum Kodu: ${r.status}`);
+    return null;
+  } catch (e) {
+    console.error(`[FETCH-HTML] ❌ Microlink Hatası: ${e.message}`);
+    return null;
+  }
+}
+
+
+/**
+ * curl ile HTML çeker. Node.js fetch() TLS fingerprint'i (JA3/JA4) Cloudflare
+ * tarafından bot olarak algılanıyor. curl farklı bir TLS stack (libcurl/OpenSSL)
+ * kullandığı için Cloudflare WAF'ı aşabiliyor.
+ * Bu fonksiyon özellikle Teknosa gibi agresif Cloudflare koruması olan siteler için.
+ */
+function curlFetchHtml(targetUrl, originalUrl, fetchStartTime) {
+  const headers = getHeadersForUrl(originalUrl);
+  try {
+    console.log(`[FETCH-HTML] 🔧 curl ile çekiliyor: ${targetUrl}`);
+    const curlArgs = [
+      '-sL',
+      '-H', `User-Agent: ${headers['User-Agent']}`,
+      '-H', `Accept: ${headers['Accept']}`,
+      '-H', `Accept-Language: ${headers['Accept-Language']}`,
+      '-H', 'Accept-Encoding: gzip, deflate, br',
+      '-H', `Referer: ${headers['Referer']}`,
+      '-H', 'Connection: keep-alive',
+      '-H', 'Upgrade-Insecure-Requests: 1',
+      '-H', 'Sec-Fetch-Dest: document',
+      '-H', 'Sec-Fetch-Mode: navigate',
+      '-H', 'Sec-Fetch-Site: cross-site',
+      '--compressed',
+      '-w', '\n---CURL_HTTP_STATUS:%{http_code}---',
+      '--max-time', '12'
+    ];
+
+    // Trendyol ülke kısıtlamalı butik indirimlerini bypass etmek için TR çerezlerini ekle
+    if (targetUrl.includes('trendyol.com')) {
+      curlArgs.push('-H', 'Cookie: storefrontId=1; countryCode=TR; language=tr');
+    }
+
+    curlArgs.push(targetUrl);
+
+    const result = spawnSync('curl', curlArgs, {
+      encoding: 'utf-8',
+      timeout: 15000,
+      maxBuffer: 10 * 1024 * 1024
+    });
+
+    if (result.error) {
+      console.error(`[FETCH-HTML] ❌ curl spawnSync hatası: ${result.error.message}`);
+      return null;
+    }
+
+    const output = result.stdout || '';
+    const statusMatch = output.match(/---CURL_HTTP_STATUS:(\d+)---/);
+    const httpStatus = statusMatch ? parseInt(statusMatch[1]) : 0;
+    const htmlText = output.replace(/\n---CURL_HTTP_STATUS:\d+---$/, '');
+    const duration = Date.now() - fetchStartTime;
+
+    console.log(`[FETCH-HTML] ⚡ curl cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${httpStatus}`);
+    console.log(`[FETCH-HTML] curl HTML boyutu: ${htmlText.length} karakter`);
+
+    if (httpStatus === 200 && htmlText.length > 1000) {
+      checkForBotBlockers(htmlText, originalUrl);
+      return htmlText;
+    } else {
+      console.error(`[FETCH-HTML] ❌ curl Hata Kodu (${httpStatus}): ${originalUrl}`);
+      console.error(`[FETCH-HTML] curl Hata Cevap Gövdesi (ilk 500): ${htmlText.substring(0, 500).replace(/\s+/g, ' ')}`);
+      if (result.stderr) {
+        console.error(`[FETCH-HTML] curl stderr: ${result.stderr}`);
+      }
+      return null;
+    }
+  } catch (err) {
+    console.error(`[FETCH-HTML] ❌ curl Hatası: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Minimal header'larla curl ile HTML çeker.
+ * Google Translate Proxy ve bazı siteler sadece User-Agent header'ı ile 
+ * daha iyi çalışır. Fazla header (Sec-Fetch, WhatsApp UA vs.) 403'e sebep olabilir.
+ */
+function curlFetchHtmlMinimal(targetUrl, originalUrl, fetchStartTime) {
+  try {
+    console.log(`[FETCH-HTML] 🔧 curl (minimal headers) ile çekiliyor: ${targetUrl}`);
+    const curlArgs = [
+      '-sL',
+      '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      '-H', 'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+      '--compressed',
+      '-w', '\n---CURL_HTTP_STATUS:%{http_code}---',
+      '--max-time', '15',
+      targetUrl
+    ];
+
+    const result = spawnSync('curl', curlArgs, {
+      encoding: 'utf-8',
+      timeout: 18000,
+      maxBuffer: 10 * 1024 * 1024
+    });
+
+    if (result.error) {
+      console.error(`[FETCH-HTML] ❌ curl (minimal) spawnSync hatası: ${result.error.message}`);
+      return null;
+    }
+
+    const output = result.stdout || '';
+    const statusMatch = output.match(/---CURL_HTTP_STATUS:(\d+)---/);
+    const httpStatus = statusMatch ? parseInt(statusMatch[1]) : 0;
+    const htmlText = output.replace(/\n---CURL_HTTP_STATUS:\d+---$/, '');
+    const duration = Date.now() - fetchStartTime;
+
+    console.log(`[FETCH-HTML] ⚡ curl (minimal) cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${httpStatus}`);
+    console.log(`[FETCH-HTML] curl (minimal) HTML boyutu: ${htmlText.length} karakter`);
+
+    if (httpStatus === 200 && htmlText.length > 1000) {
+      checkForBotBlockers(htmlText, originalUrl);
+      return htmlText;
+    } else if (httpStatus === 403 && htmlText.length > 50000) {
+      // Google Translate Proxy bazen 403 döndürür ama gerçek sayfa içeriğini proxy'ler (80K+ karakter).
+      // Bu durumda HTML parse edilebilir. Gerçek engel sayfaları genellikle < 5000 karakter olur.
+      console.log(`[FETCH-HTML] ⚠️ curl (minimal) 403 ama büyük HTML (${htmlText.length} karakter) — gerçek sayfa olarak kabul ediliyor.`);
+      checkForBotBlockers(htmlText, originalUrl);
+      return htmlText;
+    } else {
+      console.error(`[FETCH-HTML] ❌ curl (minimal) Hata Kodu (${httpStatus}): ${originalUrl}`);
+      if (htmlText.length > 0) {
+        console.error(`[FETCH-HTML] curl (minimal) Hata Cevap Gövdesi (ilk 500): ${htmlText.substring(0, 500).replace(/\s+/g, ' ')}`);
+      }
+      if (result.stderr) {
+        console.error(`[FETCH-HTML] curl (minimal) stderr: ${result.stderr}`);
+      }
+      return null;
+    }
+  } catch (err) {
+    console.error(`[FETCH-HTML] ❌ curl (minimal) Hatası: ${err.message}`);
+    return null;
+  }
+}
+
 /** URL'den HTML çekerek Cheerio DOM nesnesi döndürür */
 async function fetchHtml(url) {
   const fetchStartTime = Date.now();
-  console.log(`[FETCH-HTML] 📥 İstek başlatılıyor: ${url}`);
+  let targetUrl = url;
+  let isProxy = false;
+  let isMediamarkt = false;
+  let isTeknosa = false;
+  let isMavi = false;
+  let isPttavm = false;
+  let isHepsiburada = false;
+  let isTrendyol = false;
+  let isAmazon = false;
+
+  try {
+    const parsed = new URL(url);
+
+    if (parsed.hostname.includes('hepsiburada.com')) {
+      // Hepsiburada Akamai koruması altında — Node.js fetch() TLS fingerprint'i
+      // Google Translate Proxy üzerinden bile 403 alıyor.
+      // curl farklı TLS stack (libcurl/OpenSSL) kullandığı için bu engeli aşabilir.
+      // Çok katmanlı fallback: curl+translate → curl+direct → Microlink
+      const keepParams = ['magaza'];
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      for (const key of keepParams) {
+        if (parsed.searchParams.has(key)) {
+          cleaned.searchParams.set(key, parsed.searchParams.get(key));
+        }
+      }
+      const proxyHostname = cleaned.hostname.replace(/\./g, '-') + '.translate.goog';
+      cleaned.hostname = proxyHostname;
+      cleaned.searchParams.set('_x_tr_sl', 'auto');
+      cleaned.searchParams.set('_x_tr_tl', 'tr');
+      cleaned.searchParams.set('_x_tr_hl', 'tr');
+      targetUrl = cleaned.toString();
+      isHepsiburada = true;
+      console.log(`[FETCH-HTML] 🔄 Hepsiburada linki tespit edildi. Tracking params temizlendi. curl + Google Translate Proxy ile çekilecek: ${targetUrl}`);
+
+    } else if (parsed.hostname.includes('trendyol.com')) {
+      // Tracking/affiliate parametrelerini temizle — bu parametreler Trendyol'un
+      // farklı (hafif/mobil) sayfa sunmasına neden oluyor ve JSON-LD kalkmış oluyor.
+      // Sadece ürün/kampanya ile ilgili parametreleri koru.
+      const keepParams = ['boutiqueId', 'merchantId', 'storefrontId'];
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      for (const key of keepParams) {
+        if (parsed.searchParams.has(key)) {
+          cleaned.searchParams.set(key, parsed.searchParams.get(key));
+        }
+      }
+      targetUrl = cleaned.toString();
+      isTrendyol = true;
+      console.log(`[FETCH-HTML] 🔄 Trendyol linki tespit edildi. Tracking params temizlendi. curl ile doğrudan çekilecek: ${targetUrl}`);
+
+    } else if (parsed.hostname.includes('n11.com')) {
+      // N11 de Cloudflare bot koruması altında — aynı Google Translate proxy yaklaşımı.
+      // Sadece mağaza bilgisi olan 'magaza' parametresini koru, geri kalanları temizle.
+      const keepParams = ['magaza'];
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      for (const key of keepParams) {
+        if (parsed.searchParams.has(key)) {
+          cleaned.searchParams.set(key, parsed.searchParams.get(key));
+        }
+      }
+      const proxyHostname = cleaned.hostname.replace(/\./g, '-') + '.translate.goog';
+      cleaned.hostname = proxyHostname;
+      cleaned.searchParams.set('_x_tr_sl', 'auto');
+      cleaned.searchParams.set('_x_tr_tl', 'tr');
+      cleaned.searchParams.set('_x_tr_hl', 'tr');
+      targetUrl = cleaned.toString();
+      isProxy = true;
+      console.log(`[FETCH-HTML] 🔄 N11 linki tespit edildi. Tracking params temizlendi. Google Translate Proxy kullanılıyor: ${targetUrl}`);
+
+    } else if (parsed.hostname.includes('mediamarkt.com.tr')) {
+      // MediaMarkt Cloudflare, Googlebot UA'ya izin veriyor.
+      // Tracking parametrelerini temizle, URL'yi sadeleştir.
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      targetUrl = cleaned.toString();
+      isMediamarkt = true;
+      console.log(`[FETCH-HTML] 🔄 MediaMarkt linki tespit edildi. Tracking params temizlendi. Googlebot UA kullanılacak: ${targetUrl}`);
+    } else if (parsed.hostname.includes('vatanbilgisayar.com')) {
+      // Vatan Bilgisayar da Cloudflare bot koruması altında — aynı Google Translate proxy yaklaşımı.
+      // Tracking parametrelerini temizle, URL'yi sadeleştir.
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      const proxyHostname = cleaned.hostname.replace(/\./g, '-') + '.translate.goog';
+      cleaned.hostname = proxyHostname;
+      cleaned.searchParams.set('_x_tr_sl', 'auto');
+      cleaned.searchParams.set('_x_tr_tl', 'tr');
+      cleaned.searchParams.set('_x_tr_hl', 'tr');
+      targetUrl = cleaned.toString();
+      isProxy = true;
+      console.log(`[FETCH-HTML] 🔄 Vatan Bilgisayar linki tespit edildi. Tracking params temizlendi. Google Translate Proxy kullanılıyor: ${targetUrl}`);
+    } else if (parsed.hostname.includes('teknosa.com')) {
+      // Teknosa Cloudflare, Node.js fetch TLS fingerprint'ini engelliyor.
+      // curl farklı TLS stack kullandığı için Cloudflare'i geçebiliyor.
+      // Tracking parametrelerini temizle, URL'yi sadeleştir.
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      targetUrl = cleaned.toString();
+      isTeknosa = true;
+      console.log(`[FETCH-HTML] 🔄 Teknosa linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
+    } else if (parsed.hostname.includes('mavi.com')) {
+      // Mavi Cloudflare, Node.js fetch TLS fingerprint'ini engelliyor.
+      // curl ile doğrudan çekim 200 OK alıyor.
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      targetUrl = cleaned.toString();
+      isMavi = true;
+      console.log(`[FETCH-HTML] 🔄 Mavi linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
+    } else if (parsed.hostname.includes('pttavm.com')) {
+      // Pttavm Cloudflare, Node.js fetch TLS fingerprint'ini engelliyor.
+      // curl ile doğrudan çekim 200 OK alıyor.
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      targetUrl = cleaned.toString();
+      isPttavm = true;
+      console.log(`[FETCH-HTML] 🔄 Pttavm linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
+    } else if (parsed.hostname.includes('amazon.')) {
+      // Amazon ABD sunucumuzdan çekildiğinde teslimat adresini ABD seçer
+      // ve bu durum indirimli buybox TR fiyatını gizler.
+      // Microlink API'si sayesinde TR/genel proxy üzerinden çekim yapılarak indirimli fiyat başarıyla alınır.
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      targetUrl = cleaned.toString();
+      isAmazon = true;
+      console.log(`[FETCH-HTML] 🔄 Amazon linki tespit edildi. Microlink API ile çekilecek: ${targetUrl}`);
+    }
+  } catch (e) {
+    console.error(`[FETCH-HTML] URL parse hatası: ${e.message}`);
+  }
+
+  console.log(`[FETCH-HTML] 📥 İstek başlatılıyor: ${targetUrl}`);
+
+  // ── Hepsiburada: Microlink API birincil, curl fallback ──
+  // Hepsiburada Akamai Bot Manager: Google Translate Proxy + curl bile sadece güvenlik sayfası döndürüyor
+  // (80K HTML ama reduxStore/ld+json YOK). Microlink prerender=true ile gerçek sayfa geliyor (reduxStore VAR).
+  if (isHepsiburada) {
+    // Katman 1: Microlink API (prerender=true, gerçek sayfa — reduxStore dahil)
+    try {
+      const parsed = new URL(url);
+      const microClean = new URL(parsed.pathname, parsed.origin);
+      const microUrl = microClean.toString();
+      console.log(`[FETCH-HTML] 🔄 [Hepsiburada Katman 1/2] Microlink API deneniyor: ${microUrl}`);
+      const microResult = await microlinkFetchHtml(microUrl, url, fetchStartTime);
+      if (microResult) return microResult;
+    } catch (e) {
+      console.error(`[FETCH-HTML] ❌ Hepsiburada Katman 1 hatası: ${e.message}`);
+    }
+
+    // Katman 2: curl (minimal headers) + Google Translate Proxy (yedek)
+    console.log(`[FETCH-HTML] 🔄 [Hepsiburada Katman 2/2] curl (minimal) + Google Translate Proxy deneniyor...`);
+    const translateResult = curlFetchHtmlMinimal(targetUrl, url, Date.now());
+    if (translateResult) return translateResult;
+
+    console.error(`[FETCH-HTML] ❌ Hepsiburada: Tüm katmanlar başarısız oldu!`);
+    return null;
+  }
+
+  // ── Trendyol, Teknosa & Mavi: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
+  if (isTrendyol || isTeknosa || isMavi) {
+    return curlFetchHtml(targetUrl, url, fetchStartTime);
+  }
+
+  // ── Amazon & Pttavm: Microlink API ile çek (Cloud Run IP engeline / Teslimat lokasyonu sorununa takıldığı için) ──
+  if (isAmazon || isPttavm) {
+    return microlinkFetchHtml(targetUrl, url, fetchStartTime);
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-    let headers = getHeadersForUrl(url);
+    let headers = getHeadersForUrl(targetUrl);
+    // MediaMarkt: Cloudflare Googlebot UA'ya izin veriyor
+    if (isMediamarkt) {
+      headers['User-Agent'] = 'Googlebot/2.1 (+http://www.google.com/bot.html)';
+    }
+    // Google Translate Proxy istekleri için sadece minimal headers gönderilmeli (Akamai/Cloudflare 403 engeli almamak için)
+    if (isProxy) {
+      headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+      };
+    }
     console.log(`[FETCH-HTML] Giden İstek Başlıkları:`, JSON.stringify(headers));
 
-    let response = await fetch(url, {
+    let response = await fetch(targetUrl, {
       headers: headers,
       signal: controller.signal
     });
 
     // Cloudflare / Akamai 403/401 Bot Engeli Durumunda Alternatif User-Agent ile Yeniden Dene
-    if ((response.status === 403 || response.status === 401) && headers['User-Agent'].includes('WhatsApp')) {
+    if (!isProxy && (response.status === 403 || response.status === 401) && headers['User-Agent'].includes('WhatsApp')) {
       console.warn(`[FETCH-HTML] ⚠️ ${response.status} Bot engeli algılandı (WhatsApp UA). Standart Tarayıcı User-Agent ile yeniden deneniyor...`);
       headers['User-Agent'] = DEFAULT_USER_AGENT;
-      response = await fetch(url, {
+      response = await fetch(targetUrl, {
         headers: headers,
         signal: controller.signal
       });
@@ -136,7 +474,7 @@ async function fetchHtml(url) {
 
     const duration = Date.now() - fetchStartTime;
     console.log(`[FETCH-HTML] ⚡ Cevap geldi! Süre: ${duration}ms, Durum Kodu: ${response.status} ${response.statusText}`);
-    
+
     // Response Header'larını logla (Hata çözümü için kritik)
     const respHeaders = {};
     response.headers.forEach((val, key) => {
@@ -147,10 +485,10 @@ async function fetchHtml(url) {
     if (response.ok) {
       const htmlText = await response.text();
       console.log(`[FETCH-HTML] Başarılı! Okunan HTML boyutu: ${htmlText.length} karakter.`);
-      
+
       // Sayfa içeriğinde engelleyici imzaları ara
       checkForBotBlockers(htmlText, url);
-      
+
       return htmlText;
     } else {
       console.error(`[FETCH-HTML] ❌ Sunucu Hata Kodu Döndürdü (${response.status}): ${url}`);
@@ -165,7 +503,7 @@ async function fetchHtml(url) {
 /** Sayfa içeriğinde bot engelleyici/Cloudflare imzası kontrolü */
 function checkForBotBlockers(htmlText, url) {
   const lowerHtml = htmlText.toLowerCase();
-  
+
   const blockSignatures = {
     'Cloudflare Challenge': ['<title>just a moment...</title>', 'cf-challenge', 'checking your browser...'],
     'PerimeterX/Human Challenge': ['px-captcha', 'captcha-delivery.net'],
@@ -182,7 +520,7 @@ function checkForBotBlockers(htmlText, url) {
         console.warn(`   Anahtar Kelime: "${keyword}"`);
         console.warn(`   Link       : ${url}`);
         console.warn(`   Not        : Mağaza IP adresimizi engelledi veya Cloudflare/Akamai doğrulaması gösterdi. Bu yüzden DOM seçicileri çalışmayacaktır.`);
-        
+
         // HTML içeriğinden bir kesit gösterelim (İlk 300 karakter)
         const preview = htmlText.substring(0, 300).replace(/\s+/g, ' ').trim();
         console.warn(`   HTML Kesit : "${preview}..."`);
@@ -198,7 +536,7 @@ async function scrapeProductFromUrl(url) {
   console.log(`\n============================================================`);
   console.log(`[SCRAPE-SERVICE] 🚀 Ürün Scrape Başlatıldı: ${url}`);
   console.log(`============================================================`);
-  
+
   try {
     // 1. Kısa veya yönlendirmeli linkleri çöz
     const targetUrl = await resolveUrlRedirects(url);
@@ -229,7 +567,7 @@ async function scrapeProductFromUrl(url) {
 
     if (matchedScraper) {
       console.log(`[SCRAPE-SERVICE] Özel Scraper akışı başlıyor...`);
-      
+
       // 1. Başlık Çekimi
       console.log(`[SCRAPE-SERVICE] [TITLE] Başlık çekiliyor...`);
       const title = matchedScraper.scrapeTitle($);
@@ -266,7 +604,7 @@ async function scrapeProductFromUrl(url) {
       };
     } else {
       console.log(`[SCRAPE-SERVICE] Genel Fallback akışı (Open Graph) başlıyor...`);
-      
+
       const title = $('meta[property="og:title"]').attr('content') || $('title').text();
       console.log(`[SCRAPE-SERVICE] [TITLE] (Fallback) Sonuç: "${title ? title.trim() : 'BULUNAMADI'}"`);
 
@@ -281,18 +619,18 @@ async function scrapeProductFromUrl(url) {
           try {
             const base = new URL(targetUrl);
             imageUrl = new URL(rawImage, base).toString();
-          } catch (_) {}
+          } catch (_) { }
         }
       }
       console.log(`[SCRAPE-SERVICE] [IMAGE] (Fallback) Mutlak Görsel URL'i: "${imageUrl || 'BULUNAMADI'}"`);
 
       // Fallback fiyat tespiti
       let price = null;
-      const priceMeta = $('meta[property="product:price:amount"]').attr('content') || 
-                        $('meta[property="og:price:amount"]').attr('content') ||
-                        $('meta[name="twitter:data1"]').attr('content');
+      const priceMeta = $('meta[property="product:price:amount"]').attr('content') ||
+        $('meta[property="og:price:amount"]').attr('content') ||
+        $('meta[name="twitter:data1"]').attr('content');
       console.log(`[SCRAPE-SERVICE] [PRICE] (Fallback) Fiyat meta verisi: "${priceMeta || 'YOK'}"`);
-      
+
       if (priceMeta) {
         const cleaned = priceMeta.replace(/[^0-9.,]/g, '').replace(',', '.');
         const parsed = parseFloat(cleaned);

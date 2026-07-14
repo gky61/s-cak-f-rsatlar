@@ -616,7 +616,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   Widget _buildDealDetail(BuildContext context, Deal deal) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
+    final currencyFormat = DynamicCurrencyFormatter();
     // Bot'tan gelen kategori ID olarak geliyor ("elektronik", "moda" vb.)
     // Önce ID olarak kontrol et, bulunamazsa name olarak dene
     Category category;

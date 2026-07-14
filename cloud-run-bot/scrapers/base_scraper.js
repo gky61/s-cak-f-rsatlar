@@ -32,8 +32,9 @@ class BaseProductScraper {
   /** Fiyat metnini temizleyip float değere dönüştürür */
   parsePriceText(priceText) {
     if (!priceText) return null;
+    // Dart birebir eşdeğeri: replaceAll case-sensitive, tüm virgüller global replace
     let cleaned = priceText
-      .replace(/TL/gi, '')
+      .replace(/TL/g, '')     // Dart: replaceAll('TL', '') — case-sensitive
       .replace(/₺/g, '')
       .replace(/\$/g, '')
       .replace(/€/g, '')
@@ -43,9 +44,11 @@ class BaseProductScraper {
     if (!cleaned) return null;
 
     if (cleaned.includes('.') && cleaned.includes(',')) {
-      cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+      // Dart: replaceAll('.','').replaceAll(',','.') — tüm nokta ve virgüller
+      cleaned = cleaned.replace(/\./g, '').replace(/,/g, '.');
     } else if (cleaned.includes(',')) {
-      cleaned = cleaned.replace(',', '.');
+      // Dart: replaceAll(',','.') — tüm virgüller
+      cleaned = cleaned.replace(/,/g, '.');
     } else if (cleaned.includes('.')) {
       const parts = cleaned.split('.');
       if (parts.length === 2 && parts[1].length === 3) {

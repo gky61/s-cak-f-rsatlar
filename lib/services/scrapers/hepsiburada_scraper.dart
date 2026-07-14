@@ -44,7 +44,30 @@ class HepsiburadaScraper extends BaseProductScraper {
       }
     }
 
-    // 3. Klasik img etiketlerinden ürün görsellerini ara (Fallback 2)
+    // 3. reduxStore'dan media alanından görsel çek (Fallback 2)
+    // Microlink prerender HTML'inde JSON-LD ve og:image yok ama reduxStore.productState.product.media var.
+    // URL formatı: https://productimages.hepsiburada.net/s/777/{size}/110000671504006.jpg
+    // {size} parametresini 500 ile değiştiriyoruz.
+    final reduxScript = document.getElementById('reduxStore');
+    if (reduxScript != null) {
+      try {
+        final Map<String, dynamic> reduxData = jsonDecode(reduxScript.text);
+        final reduxProduct = reduxData['productState']?['product'];
+        final media = reduxProduct?['media'];
+        if (media is List && media.isNotEmpty) {
+          final mediaUrl = media[0]['url']?.toString();
+          if (mediaUrl != null && mediaUrl.isNotEmpty) {
+            final resolvedMediaUrl = mediaUrl.replaceAll('{size}', '500');
+            if (!isLogoUrl(resolvedMediaUrl)) {
+              log('✅ Hepsiburada görseli reduxStore media ile bulundu: $resolvedMediaUrl');
+              return resolvedMediaUrl;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 4. Klasik img etiketlerinden ürün görsellerini ara (Fallback 3)
     final productImg = document.querySelector('img[class*="hb-HbImage-view__image"]') ??
                        document.querySelector('.hb-HbImage-view img') ??
                        document.querySelector('img[alt*="ürün"]') ??
@@ -60,7 +83,7 @@ class HepsiburadaScraper extends BaseProductScraper {
       }
     }
 
-    // 4. data-image attribute'larını dene (Eski akış fallback)
+    // 5. data-image attribute'larını dene (Eski akış fallback)
     final hepsiburadaImages = document.querySelectorAll('[data-image], [data-srcset], [data-original-src]');
     for (final element in hepsiburadaImages) {
       final imageUrl = element.attributes['data-image'] ?? 

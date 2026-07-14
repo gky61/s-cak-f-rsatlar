@@ -12,7 +12,7 @@ class HepsiburadaScraper extends BaseProductScraper {
   }
 
   scrapeImage($, url) {
-    // 1. JSON-LD
+    // 1. JSON-LD şemasından görsel çekmeyi dene (Öncelikli)
     const product = this.findProductJsonLd($);
     if (product && product['image']) {
       const img = this.extractImageFromProductJson(product['image']);
@@ -21,116 +21,165 @@ class HepsiburadaScraper extends BaseProductScraper {
         if (resolved) return resolved;
       }
     }
-    // 2. og:image
+    // 2. Open Graph meta tag'i dene (Fallback 1)
     const ogImg = $('meta[property="og:image"]').attr('content');
     if (ogImg && !this.isLogoUrl(ogImg)) {
       const resolved = this.resolveImageUrl(ogImg, url);
       if (resolved) return resolved;
     }
-    // 3. DOM
-    const selectors = ['img[class*="hb-HbImage-view__image"]', '.hb-HbImage-view img', 'img[alt*="ürün"]', 'img[alt*="Ürün"]'];
-    for (const sel of selectors) {
-      const el = $(sel).first();
-      const src = el.attr('src') || el.attr('data-src');
+    // 3. reduxStore'dan media alanından görsel çek (Fallback 2)
+    // Microlink prerender HTML'inde JSON-LD ve og:image yok ama reduxStore.productState.product.media var.
+    // URL formatı: https://productimages.hepsiburada.net/s/777/{size}/110000671504006.jpg
+    // {size} parametresini 500 ile değiştiriyoruz.
+    const reduxScript = $('#reduxStore');
+    if (reduxScript.length) {
+      try {
+        const reduxData = JSON.parse(reduxScript.text());
+        const reduxProduct = reduxData?.productState?.product;
+        if (reduxProduct?.media && Array.isArray(reduxProduct.media) && reduxProduct.media.length > 0) {
+          const mediaUrl = reduxProduct.media[0].url;
+          if (mediaUrl && typeof mediaUrl === 'string') {
+            const resolvedMediaUrl = mediaUrl.replace('{size}', '500');
+            if (resolvedMediaUrl && !this.isLogoUrl(resolvedMediaUrl)) {
+              console.log(`[HepsiburadaScraper] ✅ reduxStore media'dan görsel bulundu: ${resolvedMediaUrl}`);
+              return resolvedMediaUrl;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+    // 4. Klasik img etiketlerinden ürün görsellerini ara (Fallback 3)
+    const productImg = $('img[class*="hb-HbImage-view__image"], .hb-HbImage-view img, img[alt*="ürün"], img[alt*="Ürün"]').first();
+    if (productImg.length) {
+      const src = productImg.attr('src') || productImg.attr('data-src');
       if (src && !this.isLogoUrl(src)) {
         const resolved = this.resolveImageUrl(src, url);
         if (resolved) return resolved;
       }
     }
-    // 4. data-image attributes
-    $('[data-image], [data-srcset], [data-original-src]').each((_, el) => {
+    // 5. data-image attribute'larını dene (Eski akış fallback)
+    // Not: .each() callback'ten return döngüyü kırmaz; Dart'taki for döngüsüyle birebir eşit for...of kullanıyoruz
+    const dataImgEls = $('[data-image], [data-srcset], [data-original-src]').toArray();
+    for (const el of dataImgEls) {
       const imgUrl = $(el).attr('data-image') || ($(el).attr('data-srcset') || '').split(',')[0]?.trim() || $(el).attr('data-original-src');
       if (imgUrl && !imgUrl.startsWith('data:') && !this.isLogoUrl(imgUrl)) {
         const resolved = this.resolveImageUrl(imgUrl, url);
         if (resolved) return resolved;
       }
-    });
+    }
     return null;
   }
 
   scrapeTitle($) {
+    // 1. JSON-LD şemasından (Öncelikli)
     const product = this.findProductJsonLd($);
     if (product && product['name']) return product['name'].toString().trim();
+    // 2. DOM Seçicileri (Fallback 1)
     const el = $('h1[data-test-id="title"], h1.xeL9CQ3JILmYoQPCgDcl').first();
     if (el.length) return el.text().trim();
+    // 3. reduxStore'dan başlık çek (Fallback 2)
+    // Microlink prerender HTML'inde JSON-LD yok ama reduxStore.productState.product.name var.
+    const reduxScript = $('#reduxStore');
+    if (reduxScript.length) {
+      try {
+        const reduxData = JSON.parse(reduxScript.text());
+        const reduxProduct = reduxData?.productState?.product;
+        if (reduxProduct?.name) {
+          const brand = reduxProduct.brand || '';
+          const name = reduxProduct.name;
+          // Dart scraper'daki gibi brand + name birleştir
+          const fullTitle = brand ? `${brand} ${name}` : name;
+          console.log(`[HepsiburadaScraper] ✅ reduxStore'dan başlık bulundu: ${fullTitle}`);
+          return fullTitle.trim();
+        }
+      } catch (_) {}
+    }
     return null;
   }
 
   async scrapePrice($) {
-    // 1. Premium Fiyat (DOM Kontrolü)
+    // 1. Hepsiburada Premium Fiyat Kontrolü (Premium indirimli fiyat önceliklidir - DOM Eşleşmesi)
     const spans = $('span');
     for (let i = 0; i < spans.length; i++) {
-      const text = $(spans[i]).text().trim();
-      if (text.startsWith('Premium ile') || text.startsWith("Premium'la") || text.startsWith('Premium’la')) {
-        const bElement = $(spans[i]).find('b').first();
+      const span = $(spans[i]);
+      const text = span.text().trim();
+      if (text.startsWith('Premium ile') || text.startsWith('Premium\'la') || text.startsWith('Premium’la')) {
+        const bElement = span.find('b').first();
         if (bElement.length) {
           const parsed = this.parsePriceText(bElement.text());
-          if (parsed && parsed > 0) return parsed;
+          if (parsed !== null && parsed > 0) return parsed;
         }
         const cleanText = text
-          .replace('Premium ile', '')
-          .replace("Premium'la", '')
-          .replace('Premium’la', '')
-          .trim();
+            .replace('Premium ile', '')
+            .replace('Premium\'la', '')
+            .replace('Premium’la', '')
+            .trim();
         const parsed = this.parsePriceText(cleanText);
-        if (parsed && parsed > 0) return parsed;
+        if (parsed !== null && parsed > 0) return parsed;
       }
     }
 
-    // 2. Canlı API Çağrıları (Dinamik Fiyat Sorguları - ReduxStore üzerinden)
+    // 2. Canlı API Çağrıları (Dinamik Fiyat Sorguları - DOM'da Premium fiyat bulunamadıysa)
+    let lowestApiPrice = null;
     const script = $('#reduxStore');
-    let reduxData = null;
     if (script.length) {
       try {
-        reduxData = JSON.parse(script.text());
+        const reduxData = JSON.parse(script.text());
         const productState = reduxData['productState'];
-        const product = productState?.['product'];
+        const product = productState ? productState['product'] : null;
         if (productState && product) {
           const results = await Promise.all([
             this._fetchWithoutAffordabilityPrice(reduxData),
-            this._fetchOtherMerchantsPrice(reduxData)
+            this._fetchOtherMerchantsPrice(reduxData),
           ]);
+
           const withoutAffordabilityPrice = results[0];
           const otherMerchantsPrice = results[1];
 
-          let lowestApiPrice = null;
-          if (withoutAffordabilityPrice && withoutAffordabilityPrice > 0) {
+          if (withoutAffordabilityPrice !== null && withoutAffordabilityPrice > 0) {
             lowestApiPrice = withoutAffordabilityPrice;
           }
-          if (otherMerchantsPrice && otherMerchantsPrice > 0) {
+          if (otherMerchantsPrice !== null && otherMerchantsPrice > 0) {
             if (lowestApiPrice === null || otherMerchantsPrice < lowestApiPrice) {
               lowestApiPrice = otherMerchantsPrice;
             }
           }
-          if (lowestApiPrice && lowestApiPrice > 0) {
-            console.log(`   [HEPSIBURADA] Canlı API'lerden alınan en düşük fiyat: ${lowestApiPrice} TL`);
-            return lowestApiPrice;
-          }
         }
-      } catch (err) {
-        console.warn(`   [HEPSIBURADA] Redux store veya API sorgu hatası: ${err.message}`);
-      }
+      } catch (_) {}
     } else {
-      console.log(`   [HEPSIBURADA] #reduxStore script bloğu bulunamadı.`);
-    }
-
-    // 3. JSON-LD şemasından (Normal Fiyat)
-    const product = this.findProductJsonLd($);
-    if (product) {
-      const p = this.extractPriceFromProductJson(product);
-      if (p && p > 0) return p;
-    }
-
-    // 4. Redux Store Fiyat Listesi Fallback
-    if (reduxData) {
+      // reduxStore bulunamadıysa fallback olarak withoutAffordability API'sini doğrudan dene
       try {
+        const withoutAffordabilityPrice = await this._fetchWithoutAffordabilityPrice({});
+        if (withoutAffordabilityPrice !== null && withoutAffordabilityPrice > 0) {
+          lowestApiPrice = withoutAffordabilityPrice;
+        }
+      } catch (_) {}
+    }
+
+    if (lowestApiPrice !== null && lowestApiPrice > 0) {
+      return lowestApiPrice;
+    }
+
+    // 3. JSON-LD şemasından (Öncelikli normal fiyat)
+    const productJson = this.findProductJsonLd($);
+    if (productJson) {
+      const priceVal = this.extractPriceFromProductJson(productJson);
+      if (priceVal !== null && priceVal > 0) {
+        return priceVal;
+      }
+    }
+
+    // 4. HTML Redux Fiyatları Fallback
+    if (script.length) {
+      try {
+        const reduxData = JSON.parse(script.text());
         const product = reduxData['productState']?.['product'];
-        const pricesList = product?.['prices'] || [];
-        if (pricesList.length > 0) {
+        const pricesList = product ? product['prices'] : null;
+        if (Array.isArray(pricesList) && pricesList.length > 0) {
           let minPrice = null;
           for (const priceObj of pricesList) {
             if (priceObj && typeof priceObj === 'object') {
-              const val = parseFloat(priceObj['value']);
+              const val = parseFloat(priceObj['value']?.toString() || '');
               if (!isNaN(val) && val > 0) {
                 if (minPrice === null || val < minPrice) {
                   minPrice = val;
@@ -139,7 +188,6 @@ class HepsiburadaScraper extends BaseProductScraper {
             }
           }
           if (minPrice !== null) {
-            console.log(`   [HEPSIBURADA] Redux store prices listesinden fiyat bulundu: ${minPrice} TL`);
             return minPrice;
           }
         }
@@ -157,7 +205,7 @@ class HepsiburadaScraper extends BaseProductScraper {
       const priceEl = $(selector).first();
       if (priceEl.length) {
         const parsed = this.parsePriceText(priceEl.text());
-        if (parsed && parsed > 0) return parsed;
+        if (parsed !== null && parsed > 0) return parsed;
       }
     }
 
@@ -165,29 +213,22 @@ class HepsiburadaScraper extends BaseProductScraper {
   }
 
   scrapeBreadcrumbs($) {
-    // ReduxStore breadcrumbs kontrolü
-    const script = $('#reduxStore');
-    if (script.length) {
-      try {
-        const reduxData = JSON.parse(script.text());
-        const product = reduxData['productState']?.['product'];
-        if (product && product['rootCategoryList']) {
-          const breadcrumbs = [];
-          for (const item of product['rootCategoryList']) {
-            if (item && item['name']) {
-              const name = this.unescapeHtml(item['name'].toString().trim());
-              if (name && name.toLowerCase() !== 'anasayfa') {
-                breadcrumbs.push(name);
-              }
-            }
-          }
-          if (breadcrumbs.length > 0) return breadcrumbs;
-        }
-      } catch (_) {}
-    }
-
     const title = this.scrapeTitle($) || '';
-    return this.extractBreadcrumbsFromJsonLd($, title, 'hepsiburada');
+    const breadcrumbs = this.extractBreadcrumbsFromJsonLd($, title, 'hepsiburada');
+    if (breadcrumbs && breadcrumbs.length > 0) return breadcrumbs;
+
+    // DOM Fallback
+    const list = [];
+    $('.breadcrumbs span[itemprop="name"], [data-test-id="breadcrumbs"] li').each((_, el) => {
+      const text = $(el).text().trim();
+      if (text) {
+        const lower = text.toLowerCase();
+        if (lower !== 'anasayfa') {
+          list.push(text);
+        }
+      }
+    });
+    return list;
   }
 
   // --- Private Helper Methods for API Calls ---

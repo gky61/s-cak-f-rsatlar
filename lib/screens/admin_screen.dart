@@ -489,7 +489,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final bool isUserSubmitted = type == _AdminListType.userSubmitted;
     final bool isPublished = type == _AdminListType.published;
     final bool isExpiredCard = type == _AdminListType.expired;
-    final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
+    final currencyFormat = DynamicCurrencyFormatter();
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Card(
@@ -1127,9 +1127,17 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   Future<void> _showEditDialog(Deal deal) async {
     final titleController = TextEditingController(text: deal.title);
     final descriptionController = TextEditingController(text: deal.description);
-    final priceController = TextEditingController(text: deal.price.toStringAsFixed(2));
+    final priceController = TextEditingController(
+      text: deal.price == deal.price.toInt()
+          ? deal.price.toInt().toString()
+          : deal.price.toStringAsFixed(2),
+    );
     final originalPriceController = TextEditingController(
-      text: deal.originalPrice?.toStringAsFixed(2) ?? '',
+      text: deal.originalPrice != null
+          ? (deal.originalPrice == deal.originalPrice!.toInt()
+              ? deal.originalPrice!.toInt().toString()
+              : deal.originalPrice!.toStringAsFixed(2))
+          : '',
     );
     final storeController = TextEditingController(text: deal.store);
     final linkController = TextEditingController(text: deal.link);

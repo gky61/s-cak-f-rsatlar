@@ -180,8 +180,8 @@ class LinkPreviewService {
   Future<LinkPreviewResult?> fetchMetadata(String url) async {
     try {
       // Kısa linkler veya yönlendirme/takip linkleri için nihai uzun linki bul
-      String targetUrl = url;
-      final lowerUrl = url.toLowerCase();
+      String targetUrl = extractAdjustFallback(url);
+      final lowerUrl = targetUrl.toLowerCase();
       final isShortOrRedirect = lowerUrl.contains('amzn.eu') || 
                                lowerUrl.contains('amzn.to') || 
                                lowerUrl.contains('hb.biz') ||
@@ -190,10 +190,11 @@ class LinkPreviewService {
                                lowerUrl.contains('tinyurl.com') ||
                                lowerUrl.contains('t.co') ||
                                lowerUrl.contains('rebrand.ly') ||
-                               lowerUrl.contains('rdrtr.com');
+                               lowerUrl.contains('rdrtr.com') ||
+                               lowerUrl.contains('ty.gl');
 
       if (isShortOrRedirect) {
-        final resolved = await resolveUrlRedirects(url);
+        final resolved = await resolveUrlRedirects(targetUrl);
         if (resolved.isNotEmpty) {
           targetUrl = resolved;
         }
@@ -394,13 +395,37 @@ class LinkPreviewService {
     }
   }
 
+  String extractAdjustFallback(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (uri.host.contains('adj.st') || uri.host.contains('adjust.com')) {
+        final params = ['adjust_redirect', 'adj_redirect', 'adjust_fallback', 'adj_fallback', 'fallback'];
+        for (final param in params) {
+          final value = uri.queryParameters[param];
+          if (value != null && value.isNotEmpty) {
+            _log('🎯 Adjust URL tespit edildi, $param çözülüyor: $value');
+            return value;
+          }
+        }
+      }
+    } catch (e) {
+      _log('⚠️ Adjust fallback çözme hatası: $e');
+    }
+    return url;
+  }
+
+
   // Amazon kısa linkini (amzn.eu) uzun linke (amazon.com.tr/dp/...) çevir
   // Herhangi bir URL'nin yönlendirmelerini (redirects) takip ederek nihai adresi bulur
   Future<String> resolveUrlRedirects(String url) async {
     try {
-      _log('🔗 Yönlendirmeler çözülüyor: $url');
+      var currentUrl = extractAdjustFallback(url);
+      if (currentUrl != url) {
+        _log('🎯 Adjust yönlendirmesi hemen çözüldü: $currentUrl');
+        return currentUrl;
+      }
+      _log('🔗 Yönlendirmeler çözülüyor: $currentUrl');
       final client = http.Client();
-      var currentUrl = url;
       var redirectCount = 0;
       const maxRedirects = 8; // Amazon/Publicis zinciri 4-5 adımı bulabiliyor
 
@@ -429,6 +454,7 @@ class LinkPreviewService {
         }
       }
       client.close();
+      currentUrl = extractAdjustFallback(currentUrl);
       _log('✅ Yönlendirme zinciri çözüldü. Nihai URL: $currentUrl');
       return currentUrl;
     } catch (e) {

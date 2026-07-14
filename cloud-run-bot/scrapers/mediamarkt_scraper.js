@@ -83,6 +83,10 @@ class MediaMarktScraper extends BaseProductScraper {
   }
 
   scrapeDescription($) {
+    // 1. JSON-LD şemasından açıklama çekmeyi dene (Öncelikli) — Dart ile aynı
+    const product = this.findProductJsonLd($);
+    if (product && product['description']) return product['description'].toString().trim();
+    // 2. DOM Seçicileri (Fallback)
     const descEl = $('meta[name="description"], meta[property="og:description"]').first();
     return descEl.length ? descEl.attr('content')?.trim() : null;
   }

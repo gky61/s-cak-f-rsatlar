@@ -29,9 +29,17 @@ class DealAdminDialogs {
     final descriptionController = TextEditingController(text: deal.description);
     final storeController = TextEditingController(text: deal.store);
     final linkController = TextEditingController(text: deal.link);
-    final priceController = TextEditingController(text: deal.price.toStringAsFixed(0));
+    final priceController = TextEditingController(
+      text: deal.price == deal.price.toInt()
+          ? deal.price.toInt().toString()
+          : deal.price.toStringAsFixed(2),
+    );
     final originalPriceController = TextEditingController(
-      text: deal.originalPrice != null ? deal.originalPrice!.toStringAsFixed(0) : '',
+      text: deal.originalPrice != null
+          ? (deal.originalPrice == deal.originalPrice!.toInt()
+              ? deal.originalPrice!.toInt().toString()
+              : deal.originalPrice!.toStringAsFixed(2))
+          : '',
     );
     final discountController = TextEditingController(
       text: deal.discountRate != null ? deal.discountRate!.toString() : '',
@@ -761,9 +769,17 @@ class DealAdminDialogs {
   }) async {
     final titleController = TextEditingController(text: deal.title);
     final descriptionController = TextEditingController(text: deal.description);
-    final priceController = TextEditingController(text: deal.price.toStringAsFixed(2));
+    final priceController = TextEditingController(
+      text: deal.price == deal.price.toInt()
+          ? deal.price.toInt().toString()
+          : deal.price.toStringAsFixed(2),
+    );
     final originalPriceController = TextEditingController(
-      text: deal.originalPrice?.toStringAsFixed(2) ?? '',
+      text: deal.originalPrice != null
+          ? (deal.originalPrice == deal.originalPrice!.toInt()
+              ? deal.originalPrice!.toInt().toString()
+              : deal.originalPrice!.toStringAsFixed(2))
+          : '',
     );
     final linkController = TextEditingController(text: deal.link);
 
@@ -1212,9 +1228,17 @@ class DealAdminDialogs {
     required FirestoreService firestoreService,
     required VoidCallback onDealUpdated,
   }) async {
-    final priceController = TextEditingController(text: deal.price.toStringAsFixed(2));
+    final priceController = TextEditingController(
+      text: deal.price == deal.price.toInt()
+          ? deal.price.toInt().toString()
+          : deal.price.toStringAsFixed(2),
+    );
     final originalPriceController = TextEditingController(
-      text: deal.originalPrice?.toStringAsFixed(2) ?? '',
+      text: deal.originalPrice != null
+          ? (deal.originalPrice == deal.originalPrice!.toInt()
+              ? deal.originalPrice!.toInt().toString()
+              : deal.originalPrice!.toStringAsFixed(2))
+          : '',
     );
 
     final isDark = Theme.of(context).brightness == Brightness.dark;

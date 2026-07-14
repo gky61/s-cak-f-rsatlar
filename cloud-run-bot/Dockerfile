@@ -12,6 +12,8 @@ RUN npm ci --only=production
 # Final stage
 FROM node:22-alpine
 
+RUN apk add --no-cache curl
+
 WORKDIR /app
 
 # Copy dependencies from builder

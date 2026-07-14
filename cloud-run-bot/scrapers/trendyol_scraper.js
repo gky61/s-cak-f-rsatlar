@@ -12,7 +12,7 @@ class TrendyolScraper extends BaseProductScraper {
   }
 
   scrapeImage($, url) {
-    // 1. JSON-LD
+    // 1. JSON-LD şemasından görsel çekmeyi dene (Öncelikli)
     const product = this.findProductJsonLd($);
     if (product && product['image']) {
       const img = this.extractImageFromProductJson(product['image']);
@@ -21,16 +21,18 @@ class TrendyolScraper extends BaseProductScraper {
         if (resolved) return resolved;
       }
     }
-    // 2. og:image
+    
+    // 2. Open Graph (Fallback 1)
     const ogImg = $('meta[property="og:image"]').attr('content');
     if (ogImg && !this.isLogoUrl(ogImg)) {
       const resolved = this.resolveImageUrl(ogImg, url);
       if (resolved) return resolved;
     }
-    // 3. DOM
-    const selectors = ['.product-image-container img', '.detail-main-img img', 'img.main-img'];
-    for (const sel of selectors) {
-      const el = $(sel).first();
+    
+    // 3. Main Product Image (Fallback 2)
+    const imgElements = $('.product-image-container img, .detail-main-img img, img.main-img');
+    for (let i = 0; i < imgElements.length; i++) {
+      const el = $(imgElements[i]);
       const src = el.attr('src') || el.attr('data-src');
       if (src && !this.isLogoUrl(src)) {
         const resolved = this.resolveImageUrl(src, url);
@@ -41,24 +43,35 @@ class TrendyolScraper extends BaseProductScraper {
   }
 
   scrapeTitle($) {
+    // 1. JSON-LD şemasından (Öncelikli)
     const product = this.findProductJsonLd($);
     if (product && product['name']) return product['name'].toString().trim();
+    
+    // 2. DOM Seçicileri (Fallback)
     const el = $('[data-testid="product-title"], .product-title, h1.product-title').first();
     if (el.length) return el.text().trim();
     return null;
   }
 
   scrapePrice($) {
-    const product = this.findProductJsonLd($);
-    if (product) {
-      const p = this.extractPriceFromProductJson(product);
-      if (p && p > 0) return p;
+    // 1. JSON-LD şemasından (Öncelikli)
+    const productJson = this.findProductJsonLd($);
+    if (productJson) {
+      const priceLd = this.extractPriceFromProductJson(productJson);
+      if (priceLd && priceLd > 0) {
+        return priceLd;
+      }
     }
-    const el = $('.discounted, .prc-dsc, .price-container span').first();
-    if (el.length) {
-      const val = this.parsePriceText(el.text());
-      if (val && val > 0) return val;
+
+    // 2. DOM Seçicileri (Fallback)
+    const priceEl = $('.discounted, .prc-dsc, .price-container span').first();
+    if (priceEl.length) {
+      const val = this.parsePriceText(priceEl.text());
+      if (val !== null && val > 0) {
+        return val;
+      }
     }
+
     return null;
   }
 

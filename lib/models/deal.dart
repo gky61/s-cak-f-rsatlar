@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:intl/intl.dart';
 
 import 'category.dart';
 
@@ -184,6 +185,18 @@ class Deal {
       'isExpired': isExpired,
       'isUserSubmitted': isUserSubmitted,
     };
+  }
+}
+
+class DynamicCurrencyFormatter {
+  final String symbol;
+  DynamicCurrencyFormatter({this.symbol = '₺'});
+
+  String format(num? value) {
+    if (value == null) return '';
+    final dValue = value.toDouble();
+    final decimalDigits = dValue == dValue.toInt() ? 0 : 2;
+    return NumberFormat.currency(symbol: symbol, decimalDigits: decimalDigits).format(value);
   }
 }
 

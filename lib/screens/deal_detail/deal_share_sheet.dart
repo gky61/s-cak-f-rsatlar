@@ -21,7 +21,10 @@ class DealShareSheet {
     }
 
     // Zengin paylaşım metni
-    final priceText = deal.price > 0 ? '💰 ${deal.price.toStringAsFixed(0)} TL' : '';
+    final priceValText = deal.price == deal.price.toInt() 
+        ? deal.price.toInt().toString() 
+        : deal.price.toStringAsFixed(2);
+    final priceText = deal.price > 0 ? '💰 $priceValText TL' : '';
     final discountText = deal.discountRate != null && deal.discountRate! > 0 
         ? ' (-%${deal.discountRate})' 
         : '';

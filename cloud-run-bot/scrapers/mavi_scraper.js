@@ -99,7 +99,7 @@ class MaviScraper extends BaseProductScraper {
       const text = $(el).text().trim();
       if (text) {
         const lower = text.toLowerCase();
-        if (lower !== 'anasayfa' && lower !== 'ana sayfa' && !lower.contains('mavi') && lower !== title.toLowerCase().trim() && text.length < 50) {
+        if (lower !== 'anasayfa' && lower !== 'ana sayfa' && !lower.includes('mavi') && lower !== title.toLowerCase().trim() && text.length < 50) {
           list.push(text);
         }
       }

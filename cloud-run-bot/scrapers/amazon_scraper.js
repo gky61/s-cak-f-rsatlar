@@ -51,24 +51,59 @@ class AmazonScraper extends BaseProductScraper {
           if (src.includes('pixel') || src.includes('placeholder') || src.includes('spinner') || src.includes('loading')) {
             continue;
           }
-          // CDN tercih et
-          if (src.includes('images-na.ssl-images-amazon.com') ||
-              src.includes('images-eu.ssl-images-amazon.com') ||
-              src.includes('images-amazon.com')) {
-            const resolved = this.resolveImageUrl(src, url);
-            if (resolved && !this.isLogoUrl(resolved)) return resolved;
-          }
+          // Geçerli görseli çöz ve dön
+          const resolved = this.resolveImageUrl(src, url);
+          if (resolved && !this.isLogoUrl(resolved)) return resolved;
         }
       }
     }
 
-    // 3. JSON-LD
-    const product = this.findProductJsonLd($);
-    if (product && product['image']) {
-      const img = this.extractImageFromProductJson(product['image']);
-      if (img && !this.isLogoUrl(img)) {
-        const resolved = this.resolveImageUrl(img, url);
-        if (resolved) return resolved;
+    // 3. JSON-LD — Dart'taki _extractImageFromJson ile birebir eşit özel recursive arama
+    const scripts = $('script[type="application/ld+json"]');
+    for (let i = 0; i < scripts.length; i++) {
+      try {
+        const jsonContent = $(scripts[i]).text();
+        if (jsonContent.includes('Product') || jsonContent.includes('image')) {
+          const jsonData = JSON.parse(jsonContent);
+          const imageUrl = this._extractImageFromJson(jsonData);
+          if (imageUrl && !this.isLogoUrl(imageUrl)) {
+            const resolved = this.resolveImageUrl(imageUrl, url);
+            if (resolved) return resolved;
+          }
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  _extractImageFromJson(jsonData) {
+    if (jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData)) {
+      if (jsonData['image'] != null) {
+        if (typeof jsonData['image'] === 'string') {
+          return jsonData['image'];
+        } else if (typeof jsonData['image'] === 'object' && !Array.isArray(jsonData['image']) && jsonData['image']['url'] != null) {
+          return jsonData['image']['url'];
+        } else if (Array.isArray(jsonData['image']) && jsonData['image'].length > 0) {
+          const firstImage = jsonData['image'][0];
+          if (typeof firstImage === 'string') return firstImage;
+          if (firstImage && typeof firstImage === 'object' && firstImage['url'] != null) return firstImage['url'];
+        }
+      }
+      if (Array.isArray(jsonData['@graph'])) {
+        for (const item of jsonData['@graph']) {
+          const image = this._extractImageFromJson(item);
+          if (image) return image;
+        }
+      }
+      if (Array.isArray(jsonData['itemListElement'])) {
+        for (const item of jsonData['itemListElement']) {
+          const image = this._extractImageFromJson(item);
+          if (image) return image;
+        }
+      }
+      for (const value of Object.values(jsonData)) {
+        const image = this._extractImageFromJson(value);
+        if (image) return image;
       }
     }
     return null;
@@ -81,46 +116,80 @@ class AmazonScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // 1. twister-plus-buying-options-price-data
-    const twister = $('.twister-plus-buying-options-price-data').first();
-    if (twister.length) {
+    // 1. En öncelikli yeni yapı: twister-plus-buying-options-price-data JSON kutusunu çöz
+    const twisterEl = $('.twister-plus-buying-options-price-data').first();
+    if (twisterEl.length) {
       try {
-        const data = JSON.parse(twister.text().trim());
-        for (const key of Object.keys(data)) {
-          const list = data[key];
-          if (Array.isArray(list) && list.length > 0 && list[0].priceAmount) {
-            const parsed = parseFloat(list[0].priceAmount);
-            if (!isNaN(parsed) && parsed > 0) return parsed;
+        const jsonStr = twisterEl.text().trim();
+        const data = JSON.parse(jsonStr);
+        if (data && typeof data === 'object') {
+          for (const key of Object.keys(data)) {
+            const list = data[key];
+            if (Array.isArray(list) && list.length > 0) {
+              const firstObj = list[0];
+              if (firstObj && typeof firstObj === 'object') {
+                const priceAmount = firstObj['priceAmount'];
+                if (priceAmount !== undefined && priceAmount !== null) {
+                  const parsed = parseFloat(priceAmount.toString());
+                  if (!isNaN(parsed) && parsed > 0) {
+                    return parsed;
+                  }
+                }
+              }
+            }
           }
         }
       } catch (_) {}
     }
-    // 2. .a-price .a-offscreen
-    const offscreen = $('.a-price .a-offscreen').first();
-    if (offscreen.length) {
-      const val = this.parsePriceText(offscreen.text());
-      if (val && val > 0) return val;
-    }
-    // 3. .a-price-whole
-    const priceWhole = $('.a-price-whole').first();
-    if (priceWhole.length) {
-      const decimalEl = priceWhole.find('.a-price-decimal').first();
-      let text = priceWhole.text();
-      if (decimalEl.length) {
-        text = text.replace(decimalEl.text(), '');
-      }
-      const val = this.parsePriceText(text);
-      if (val && val > 0) return val;
-    }
-    // 4. Alternative selectors
-    const altSels = ['#price_inside_buybox', '#priceBlock_ourPrice', '#priceBlock_dealPrice', '.apexPriceToPay'];
-    for (const sel of altSels) {
+
+    // 2. Birincil Satış Fiyatı Seçicileri (Örn: İndirimli ana fiyat alanları)
+    const primarySelectors = [
+      '#corePrice_feature_div .a-price .a-offscreen',
+      '.apexPriceToPay .a-offscreen',
+      '.priceToPay .a-offscreen',
+      '#price_inside_buybox',
+      '#priceBlock_dealPrice',
+      '#priceBlock_ourPrice'
+    ];
+
+    for (const sel of primarySelectors) {
       const el = $(sel).first();
       if (el.length) {
-        const val = this.parsePriceText(el.text());
-        if (val && val > 0) return val;
+        if (el.closest('.a-text-price').length === 0) { // Üstü çizili değilse
+          const val = this.parsePriceText(el.text());
+          if (val !== null && val > 0) {
+            return val;
+          }
+        }
       }
     }
+
+    // 3. Genel .a-price .a-offscreen etiketlerinden üstü çizili olmayan en düşük fiyatı seç
+    const offscreenEls = $('.a-price .a-offscreen');
+    let bestPrice = null;
+    for (let i = 0; i < offscreenEls.length; i++) {
+      const el = $(offscreenEls[i]);
+      if (el.closest('.a-text-price').length > 0) {
+        continue; // Üstü çizili liste fiyatını atla
+      }
+      const val = this.parsePriceText(el.text());
+      if (val !== null && val > 0) {
+        if (bestPrice === null || val < bestPrice) {
+          bestPrice = val;
+        }
+      }
+    }
+    if (bestPrice !== null) return bestPrice;
+
+    // 4. Fallback: Eğer üstü çizili olmayan bulunamadıysa, ilk geçerli fiyatı dön
+    for (let i = 0; i < offscreenEls.length; i++) {
+      const el = $(offscreenEls[i]);
+      const val = this.parsePriceText(el.text());
+      if (val !== null && val > 0) {
+        return val;
+      }
+    }
+
     return null;
   }
 
@@ -148,7 +217,12 @@ class AmazonScraper extends BaseProductScraper {
     const subnav = $('#nav-subnav a.nav-b, #nav-subnav .nav-b, #nav-subnav a[class*="nav-b"]').first();
     if (subnav.length) {
       const text = subnav.text().trim();
-      if (text && text.length < 50) return [text];
+      if (text) {
+        const lower = text.toLowerCase();
+        if (lower !== 'anasayfa' && lower !== 'ana sayfa' && !lower.includes('amazon') && text !== title && text.length < 50) {
+          return [text];
+        }
+      }
     }
     // 3. data-category
     const navSubnav = $('#nav-subnav');

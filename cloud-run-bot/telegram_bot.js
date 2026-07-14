@@ -8,6 +8,7 @@ const { StringSession } = require('telegram/sessions');
 const { NewMessage } = require('telegram/events');
 const { Api } = require('telegram/tl');
 const admin = require('firebase-admin');
+const { spawnSync } = require('child_process');
 
 // Scraper ve Kategori servisleri
 const linkScraperService = require('./link_scraper_service');
@@ -46,6 +47,7 @@ console.log(`📡 Dinlenecek kanallar:`, CHANNELS.join(', '));
 let client = null;
 let isRunning = false;
 let isStarting = false;
+let isShuttingDown = false;
 
 // Sayaçlar ve Durum Değişkenleri
 let msgCount = 0;
@@ -73,11 +75,11 @@ async function loadCountersFromFirestore() {
     console.log('🔄 Firestore\'dan günlük sayaçlar yükleniyor...');
     const statusRef = db.collection('settings').doc('telegramBot');
     const doc = await statusRef.get();
-    
+
     if (doc.exists) {
       const data = doc.data();
       const todayStr = new Date().toDateString();
-      
+
       // Eğer Firestore'daki countersDate bugünün tarihi ise sayaçları oradan yükle
       if (data.countersDate === todayStr) {
         msgCount = data.msgCount || 0;
@@ -134,19 +136,19 @@ function initSettingsListener() {
   if (settingsUnsubscribe) {
     settingsUnsubscribe();
   }
-  
+
   settingsUnsubscribe = db.collection('settings').doc('telegramBot').onSnapshot(async (snapshot) => {
     if (snapshot.exists) {
       const data = snapshot.data();
       botEnabled = data.botEnabled !== false;
       console.log(`⚙️ Firestore Ayarları: botEnabled = ${botEnabled}`);
-      
+
       // Dinamik Kanal Yönetimi Kontrolü
       if (data.monitoredChannels && Array.isArray(data.monitoredChannels)) {
         const newChannels = data.monitoredChannels.map(c => c.trim()).filter(Boolean);
         const currentChannelsStr = JSON.stringify([...CHANNELS].sort());
         const newChannelsStr = JSON.stringify([...newChannels].sort());
-        
+
         if (currentChannelsStr !== newChannelsStr) {
           console.log(`🔄 Monitored channels listesi değişti:`, newChannels);
           CHANNELS = newChannels;
@@ -242,9 +244,16 @@ function getAllLinks(message) {
   ];
 
   const filteredLinks = Array.from(links).filter(link => {
-    const lowerLink = link.toLowerCase();
+    let hostname;
+    try {
+      hostname = new URL(link).hostname.toLowerCase();
+    } catch (_) {
+      hostname = link.toLowerCase();
+    }
     for (const domain of excludedDomains) {
-      if (lowerLink.includes(domain)) {
+      // hostname'in tam olarak domain ile eşleşmesini ya da .domain ile bitmesini kontrol et
+      // Bu sayede 'idefix.com' içindeki 'x.com' yanlış eşleşmez
+      if (hostname === domain || hostname.endsWith('.' + domain)) {
         console.log(`⏩ Filtrelendi (${domain}): ${link.substring(0, 50)}...`);
         return false;
       }
@@ -262,16 +271,27 @@ function extractPrice(text) {
   if (!text) return null;
 
   const pricePatterns = [
-    /(\d{1,3}(?:\.\d{3})+(?:,\d{2})?)\s*(?:TL|₺|Lira)/gi,
+    /(\d+(?:\.\d{3})+(?:,\d{2})?)\s*(?:TL|₺|Lira)/gi,
     /(\d+(?:,\d{2})?)\s*(?:TL|₺|Lira)/gi,
-    /(?:TL|₺)\s*(\d{1,3}(?:\.\d{3})+(?:,\d{2})?)/gi,
-    /(?:TL|₺)\s*(\d+(?:,\d{2})?)/gi
+    /(?:TL|₺)\s*(\d+(?:\.\d{3})+(?:,\d{2})?)/gi,
+    /(?:TL|₺)\s*(\d+(?:,\d{2})?)/gi,
+    /(?:fiyat|fiyatı|fiyat bilgisi)\s*(?:bilgisi)?\s*(?::|is|=)?\s*(\d+(?:\.\d{3})*(?:,\d{2})?)/gi
   ];
 
   for (const pattern of pricePatterns) {
     const match = text.match(pattern);
     if (match) {
-      let cleanNum = match[0].replace(/[^\d,.]/g, '');
+      pattern.lastIndex = 0;
+      const cleanMatch = pattern.exec(text);
+      let cleanNum = '';
+      if (cleanMatch && cleanMatch[1]) {
+        cleanNum = cleanMatch[1];
+      } else {
+        cleanNum = match[0].replace(/[^\d,.]/g, '');
+      }
+
+      pattern.lastIndex = 0; // reset index
+
       if (cleanNum.includes('.') && cleanNum.includes(',')) {
         cleanNum = cleanNum.replace(/\./g, '').replace(',', '.');
       } else if (cleanNum.includes(',')) {
@@ -291,83 +311,17 @@ function extractPrice(text) {
 }
 
 /**
- * Gemini AI ile metinden ürün bilgisi çıkar (Fallback olarak kullanılır)
- */
-async function analyzeTextWithGemini(messageText) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn('⚠️ GEMINI_API_KEY bulunamadı, AI fallback atlanıyor.');
-    return null;
-  }
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-  const prompt = `Aşağıdaki Telegram mesajından ürün adı, indirimli fiyatı, mağazası ve en uygun kategoriyi tespit et.
-Eğer mesajda fiyat belirtilmemişse veya birden fazla fiyat varsa, indirimli ana fiyatı seçmeye çalış.
-
-Mesaj:
-${messageText}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: prompt
-          }]
-        }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "object",
-            properties: {
-              title: { type: "string", description: "Ürün Adı (Marka Model)" },
-              price: { type: "number", description: "Ürünün indirimli fiyatı (Sadece sayı, para birimi yok)" },
-              category: {
-                type: "string",
-                description: "Ürünün kategorisi",
-                enum: ["Elektronik", "Moda", "Ev_Yasam", "Anne_Bebek", "Kozmetik", "Spor_Outdoor", "Supermarket", "Yapi_Oto", "Kitap_Hobi", "Diger"]
-              },
-              store: { type: "string", description: "Mağaza adı" }
-            },
-            required: ["title", "price", "category", "store"]
-          }
-        }
-      })
-    });
-
-    if (!response.ok) {
-      console.error(`❌ Gemini API HTTP Hatası: ${response.status} ${response.statusText}`);
-      return null;
-    }
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (text) {
-      return JSON.parse(text.trim());
-    }
-  } catch (err) {
-    console.error('❌ analyzeTextWithGemini hatası:', err.message);
-  }
-  return null;
-}
-
-/**
  * Fırsat başlığını temizle ve sadeleştir
  */
 function cleanFallbackTitle(rawTitle) {
   if (!rawTitle) return 'Fırsat';
-  
+
   let title = rawTitle.trim();
-  
+
   // 1. Emojileri ve UTF-8 dışı sembolleri temizle
   title = title.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2700}-\u{27BF}]|[\u{2600}-\u{26FF}]/gu, '');
   title = title.replace(/[^\x00-\x7F\u00C0-\u017F]/g, '');
-  
+
   // 2. Slaş karakterlerini boşlukla değiştir
   title = title.replace(/\//g, ' ');
 
@@ -376,10 +330,10 @@ function cleanFallbackTitle(rawTitle) {
   title = title.replace(/\b\d+\s*(?:TL|₺)/gi, '');
   title = title.replace(/\b\d+\s*lira/gi, '');
   title = title.replace(/₺\s*\d+(?:\.\d{3})*(?:,\d{2})?/g, '');
-  
+
   // 4. Yüzdelik indirimleri temizle
   title = title.replace(/%\d+\s*(?:indirim)?/gi, '');
-  
+
   // 5. Ortak reklam ve mağaza kelimelerini temizle
   const promoWords = [
     /hepsiburada(?:'da|da)?/gi,
@@ -412,7 +366,7 @@ function cleanFallbackTitle(rawTitle) {
     /fiyatıyla/gi,
     /fiyat/gi
   ];
-  
+
   for (const regex of promoWords) {
     title = title.replace(regex, '');
   }
@@ -456,7 +410,7 @@ function cleanFallbackTitle(rawTitle) {
 function extractStoreFromLink(link, text) {
   let store = 'Diğer';
   const lowerLink = link ? link.toLowerCase() : '';
-  
+
   if (lowerLink.includes('trendyol.com') || lowerLink.includes('ty.gl')) store = 'Trendyol';
   else if (lowerLink.includes('hepsiburada.com') || lowerLink.includes('hb.biz')) store = 'Hepsiburada';
   else if (lowerLink.includes('amazon.') || lowerLink.includes('amzn.to') || lowerLink.includes('/amzn')) store = 'Amazon';
@@ -474,7 +428,7 @@ function extractStoreFromLink(link, text) {
   else if (lowerLink.includes('mediamarkt.com') || lowerLink.includes('mediamarkt')) store = 'MediaMarkt';
   else if (lowerLink.includes('vatanbilgisayar') || lowerLink.includes('vatan')) store = 'Vatan Bilgisayar';
   else if (lowerLink.includes('teknosa.com') || lowerLink.includes('teknosa')) store = 'Teknosa';
-  
+
   // Eğer linkten bulunamadıysa veya Google gibi arama linkiyse, metinden aramaya çalış
   if ((store === 'Diğer' || lowerLink.includes('google.')) && text) {
     const lowerText = text.toLowerCase();
@@ -496,7 +450,7 @@ function extractStoreFromLink(link, text) {
     if (lowerText.includes('vatan')) return 'Vatan Bilgisayar';
     if (lowerText.includes('teknosa')) return 'Teknosa';
   }
-  
+
   // Eğer hala Diğer ise ve link varsa, host ismini kullan
   if (store === 'Diğer' && link) {
     try {
@@ -507,9 +461,9 @@ function extractStoreFromLink(link, text) {
         const name = parts[0];
         return name.charAt(0).toUpperCase() + name.slice(1);
       }
-    } catch (e) {}
+    } catch (e) { }
   }
-  
+
   return store === 'Diğer' ? 'Telegram' : store;
 }
 
@@ -544,65 +498,104 @@ async function saveDealToFirebase(message, chatInfo) {
     const uniqueDocId = `telegram_${chatInfo.id}_${messageId}`;
 
     console.log(`🚀 [${uniqueDocId}] Scrape işlemi başlatılıyor: ${mainLink}`);
-    
+
     // ========================================
     // ⚡ SCRAPING VE KATEGORİ TESPİTİ
     // ========================================
     const scrapeResult = await linkScraperService.scrapeProductFromUrl(mainLink);
-    
-    let title = scrapeResult.title;
-    let price = scrapeResult.price;
-    let finalCategory = 'diger';
 
-    // Eğer scraper başarısız olduysa (örneğin engellendiyse veya eksik veri döndürdüyse) Gemini AI ile metinden çıkarım yap
-    if ((!title || !price || price === 0) && process.env.GEMINI_API_KEY) {
-      console.log(`🤖 [${uniqueDocId}] Scraper engellenmiş veya eksik bilgi döndü. Gemini AI ile metin analizi deneniyor...`);
+    // Telegram WebPage Link Önizlemesini (Akamai Bypass) kontrol et
+    let currentMessage = message;
+    const hasWebpageMedia = (msg) => msg && msg.media && (msg.media.className === 'MessageMediaWebpage' || msg.media.className === 'MessageMediaWebPage') && msg.media.webpage;
+
+    if (!hasWebpageMedia(currentMessage)) {
+      console.log(`⏱️ [${uniqueDocId}] Mesajda link önizlemesi bulunamadı. Telegram sunucularının önizleme üretmesi için 2.5 saniye bekleniyor...`);
+      await new Promise(resolve => setTimeout(resolve, 2500));
       try {
-        const aiAnalysis = await analyzeTextWithGemini(messageText);
-        if (aiAnalysis) {
-          if (!title && aiAnalysis.title) {
-            title = aiAnalysis.title;
-          }
-          if ((!price || price === 0) && aiAnalysis.price) {
-            price = aiAnalysis.price;
-          }
-          
-          // Kategori mapping (AI -> App Category ID)
-          const categoryMapping = {
-            'Elektronik': 'elektronik',
-            'Moda': 'moda',
-            'Ev_Yasam': 'ev_yasam',
-            'Anne_Bebek': 'anne_bebek',
-            'Kozmetik': 'kozmetik',
-            'Spor_Outdoor': 'spor_outdoor',
-            'Supermarket': 'supermarket',
-            'Yapi_Oto': 'yapi_oto',
-            'Kitap_Hobi': 'kitap_hobi',
-            'Diger': 'diger'
-          };
-          if (aiAnalysis.category && categoryMapping[aiAnalysis.category]) {
-            finalCategory = categoryMapping[aiAnalysis.category];
-          }
-          console.log(`🤖 [${uniqueDocId}] Gemini AI analizi tamamlandı: Başlık="${title}", Fiyat=${price}, Kategori=${finalCategory}`);
+        const refreshedMsgs = await client.getMessages(chatInfo.id, { ids: messageId });
+        if (refreshedMsgs && refreshedMsgs.length > 0 && refreshedMsgs[0]) {
+          currentMessage = refreshedMsgs[0];
+          console.log(`🔄 [${uniqueDocId}] Mesaj yeniden çekildi. Yeni medya durumu: ${currentMessage.media ? currentMessage.media.className : 'Yok'}`);
         }
-      } catch (aiError) {
-        console.error(`❌ [${uniqueDocId}] Gemini AI analiz hatası:`, aiError.message);
+      } catch (err) {
+        console.warn(`⚠️ [${uniqueDocId}] Mesaj yeniden çekilemedi: ${err.message}`);
       }
     }
 
-    // Eğer hala kategori belirlenmediyse (veya scraper başarılı olduysa) yerel kural motoru ile tespit et
-    if (finalCategory === 'diger') {
-      const categoryResult = categoryDetectionService.detectCategory(
-        title || messageText, 
-        scrapeResult.breadcrumbs || [], 
-        scrapeResult.url || mainLink
-      );
-      finalCategory = categoryResult.categoryId || 'diger';
+    let webpageTitle = '';
+    let webpageDescription = '';
+    let webpageHasPhoto = false;
+    let webpagePhotoObj = null;
+
+    if (currentMessage.media && (currentMessage.media.className === 'MessageMediaWebpage' || currentMessage.media.className === 'MessageMediaWebPage') && currentMessage.media.webpage) {
+      const wp = currentMessage.media.webpage;
+      if (wp.className === 'WebPage') {
+        webpageTitle = wp.title || '';
+        webpageDescription = wp.description || '';
+        if (wp.photo) {
+          webpageHasPhoto = true;
+          webpagePhotoObj = wp.photo;
+        }
+        console.log(`🤖 [Telegram Link Preview] Başlık: "${webpageTitle}"`);
+        console.log(`🤖 [Telegram Link Preview] Açıklama: "${webpageDescription}"`);
+      }
     }
 
-    const cleanedTitle = cleanFallbackTitle(title || messageText);
-    const finalPrice = price || extractPrice(messageText) || 0;
-    
+    let titleSource = "Mesaj Metni";
+    let descSource = "Mesaj Metni";
+    let priceSource = "Bulunamadı (0)";
+
+    if (scrapeResult.title) {
+      titleSource = "Scraper (Siteden)";
+    }
+    if (scrapeResult.description) {
+      descSource = "Scraper (Siteden)";
+    }
+    if (scrapeResult.price) {
+      priceSource = "Scraper (Siteden)";
+    } else if (extractPrice(messageText)) {
+      priceSource = "Mesaj Metni";
+    }
+
+    if (!scrapeResult.title && webpageTitle) {
+      console.log(`💡 [${uniqueDocId}] Scraper başlık çekemedi (Akamai 403 vb.). Telegram önizleme başlığı kullanılıyor: ${webpageTitle}`);
+      scrapeResult.title = webpageTitle;
+      titleSource = "Telegram Link Önizleme";
+    }
+    if (!scrapeResult.description && webpageDescription) {
+      console.log(`💡 [${uniqueDocId}] Scraper açıklama çekemedi. Telegram önizleme açıklaması kullanılıyor`);
+      scrapeResult.description = webpageDescription;
+      descSource = "Telegram Link Önizleme";
+    }
+
+    const cleanedTitle = cleanFallbackTitle(scrapeResult.title || messageText);
+    let finalPrice = scrapeResult.price || extractPrice(messageText) || 0;
+
+    // Eğer fiyat hala bulunamadıysa (sadece link atılmış ve scraper engellenmiş olabilir),
+    // Telegram önizlemesindeki açıklama veya başlıktan fiyat çıkarmayı deneyelim
+    if (finalPrice === 0 && (webpageTitle || webpageDescription)) {
+      const priceFromWpDesc = extractPrice(webpageDescription);
+      if (priceFromWpDesc && priceFromWpDesc > 0) {
+        console.log(`💡 [${uniqueDocId}] Fiyat Telegram önizleme açıklamasından çıkarıldı: ${priceFromWpDesc} TL`);
+        finalPrice = priceFromWpDesc;
+        priceSource = "Telegram Link Önizleme (Açıklama)";
+      } else {
+        const priceFromWpTitle = extractPrice(webpageTitle);
+        if (priceFromWpTitle && priceFromWpTitle > 0) {
+          console.log(`💡 [${uniqueDocId}] Fiyat Telegram önizleme başlığından çıkarıldı: ${priceFromWpTitle} TL`);
+          finalPrice = priceFromWpTitle;
+          priceSource = "Telegram Link Önizleme (Başlık)";
+        }
+      }
+    }
+
+    const categoryResult = categoryDetectionService.detectCategory(
+      cleanedTitle,
+      scrapeResult.breadcrumbs || [],
+      scrapeResult.url || mainLink
+    );
+    const finalCategory = categoryResult.categoryId || 'diger';
+
     const storeFromLink = extractStoreFromLink(scrapeResult.url || mainLink, messageText);
     const finalDescription = getDescriptionWithoutLinks(messageText, links);
 
@@ -610,18 +603,34 @@ async function saveDealToFirebase(message, chatInfo) {
     // 📷 GÖRSEL KONTROLÜ VE YÜKLEME
     // ========================================
     let imageUrl = scrapeResult.imageUrl || '';
+    let photoSource = "Bulunamadı";
 
-    // Görsel var mı kontrol et (Telegram mesajında)
-    const hasPhoto = message.media && (
-      message.media.photo ||
-      (message.media.document && message.media.document.mimeType && message.media.document.mimeType.startsWith('image/'))
-    );
+    if (imageUrl) {
+      photoSource = "Scraper (Siteden)";
+    }
 
-    // Eğer scraper görsel bulamadıysa fakat Telegram mesajında görsel varsa Telegram görselini kullan
+    // Görsel var mı kontrol et (Telegram mesajında veya Link önizlemesinde)
+    const hasPhoto = (currentMessage.media && (
+      currentMessage.media.photo ||
+      (currentMessage.media.document && currentMessage.media.document.mimeType && currentMessage.media.document.mimeType.startsWith('image/'))
+    )) || webpageHasPhoto;
+
+    // Eğer scraper görsel bulamadıysa fakat Telegram mesajında/önizlemesinde görsel varsa Telegram görselini kullan
     if (!imageUrl && hasPhoto) {
-      console.log(`📷 [${uniqueDocId}] Scraper görsel bulamadı fakat Telegram'da görsel var. Yükleniyor...`);
+      if (currentMessage.media && currentMessage.media.photo) {
+        photoSource = "Mesaj Görseli";
+      } else if (webpageHasPhoto) {
+        photoSource = "Telegram Link Önizleme Görseli (Storage'a Yüklendi)";
+      }
+
+      console.log(`📷 [${uniqueDocId}] Scraper görsel bulamadı fakat Telegram'da görsel/önizleme var. Yükleniyor...`);
       try {
-        const buffer = await client.downloadMedia(message.media, {
+        let mediaToDownload = currentMessage.media;
+        if (!currentMessage.media.photo && webpagePhotoObj) {
+          mediaToDownload = webpagePhotoObj;
+        }
+
+        const buffer = await client.downloadMedia(mediaToDownload, {
           workers: 4,
           progressCallback: (downloaded, total) => {
             const percent = Math.round((downloaded / total) * 100);
@@ -655,6 +664,28 @@ async function saveDealToFirebase(message, chatInfo) {
         console.error(`❌ [${uniqueDocId}] Telegram görsel yükleme hatası:`, imageError.message);
       }
     }
+
+    // ========================================
+    // 📊 VERİ ÇEKME RAPORU (LOGLAMA)
+    // ========================================
+    console.log(`
+🎯 ====================================================
+🎯 [VERİ ÇEKME RAPORU] - [${uniqueDocId}]
+🎯 ====================================================
+🔗 Link: ${mainLink}
+🔍 Detaylar:
+   - Başlık: "${cleanedTitle}"
+     ↳ [Kaynak: ${titleSource}]
+   - Fiyat: ${finalPrice} TL
+     ↳ [Kaynak: ${priceSource}]
+   - Açıklama: "${finalDescription.substring(0, 60)}${finalDescription.length > 60 ? '...' : ''}"
+     ↳ [Kaynak: ${descSource}]
+   - Görsel: ${imageUrl ? imageUrl.substring(0, 85) + '...' : 'Yok'}
+     ↳ [Kaynak: ${photoSource}]
+   - Kategori: ${finalCategory}
+     ↳ [Kategori Tespit Servisi]
+🎯 ====================================================
+    `);
 
     // Deal objesi
     const deal = {
@@ -707,21 +738,21 @@ async function saveDealToFirebase(message, chatInfo) {
 
 async function subscribeToChannels() {
   if (!client) return;
-  
+
   console.log('🧹 Tüm event handler\'lar kaldırılıyor...');
   try {
     client.removeEventHandler();
   } catch (e) {
     console.warn('⚠️ Event handler kaldırma hatası:', e.message);
   }
-  
+
   console.log(`🔊 ${CHANNELS.length} kanal için dinleyiciler başlatılıyor...`);
-  
+
   for (const channelUsername of CHANNELS) {
     try {
       const trimmedChannel = channelUsername.trim();
       if (!trimmedChannel) continue;
-      
+
       let channel;
       if (trimmedChannel.startsWith('@')) {
         console.log(`🔍 Username ile aranıyor: ${trimmedChannel}`);
@@ -731,7 +762,7 @@ async function subscribeToChannels() {
         const channelId = trimmedChannel.startsWith('-100')
           ? trimmedChannel.substring(4)
           : (trimmedChannel.startsWith('-') ? trimmedChannel.substring(1) : trimmedChannel);
-          
+
         try {
           const peer = new Api.PeerChannel({ channelId: BigInt(channelId) });
           channel = await client.getEntity(peer);
@@ -744,46 +775,46 @@ async function subscribeToChannels() {
           }
         }
       }
-      
+
       console.log(`✅ Kanal bulundu: ${channel.title} (${trimmedChannel})`);
-      
+
       const channelInfo = {
         id: channel.id,
         title: channel.title,
         username: channel.username,
         broadcast: channel.broadcast,
       };
-      
+
       client.addEventHandler(async (event) => {
         try {
           checkDateAndResetCounters();
-          
+
           if (!botEnabled) {
             console.log('⏸️ Bot pasif durumda, mesaj atlandı.');
             return;
           }
-          
+
           const message = event.message;
           if (!message) return;
-          
+
           msgCount++;
           lastMessageTime = new Date();
-          
+
           const links = getAllLinks(message);
           if (!links.length) {
             console.log(`⏩ [${channelInfo.title}] Mesajda link yok, atlanıyor.`);
             return;
           }
-          
+
           const mainLink = links[0];
-          
+
           // MÜKERRER (DUPLICATE) KONTROLÜ
           console.log(`🔍 [${channelInfo.title}] Mükerrer link kontrolü yapılıyor: ${mainLink}`);
           const dupCheckLink = await db.collection('deals')
             .where('link', '==', mainLink)
             .limit(1)
             .get();
-          
+
           let dupCheckUrl = { empty: true };
           if (dupCheckLink.empty) {
             dupCheckUrl = await db.collection('deals')
@@ -791,15 +822,15 @@ async function subscribeToChannels() {
               .limit(1)
               .get();
           }
-          
+
           if (!dupCheckLink.empty || !dupCheckUrl.empty) {
             console.log(`⏩ [${channelInfo.title}] Aynı link zaten kayıtlı, mükerrer atlanıyor: ${mainLink}`);
             dupCount++;
             return;
           }
-          
+
           console.log(`📝 Mesaj içeriği: ${message.message?.substring(0, 100)}...`);
-          
+
           const success = await saveDealToFirebase(message, channelInfo);
           if (success) {
             dealCount++;
@@ -809,7 +840,7 @@ async function subscribeToChannels() {
           console.error(`❌ Mesaj işleme hatası (${channelInfo.title}):`, error.message);
         }
       }, new NewMessage({ chats: [channel.id] }));
-      
+
       console.log(`👂 ${channel.title} dinleniyor...`);
     } catch (error) {
       errCount++;
@@ -856,6 +887,10 @@ async function startBot() {
     client.on('disconnected', () => {
       console.warn('⚠️ Telegram bağlantısı koptu!');
       isRunning = false;
+      if (!isShuttingDown) {
+        console.log('🔄 10 saniye sonra yeniden bağlanmaya çalışılacak...');
+        setTimeout(startBot, 10000);
+      }
     });
 
     await client.connect();
@@ -896,12 +931,14 @@ async function stopBot() {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('⚠️ SIGTERM alındı, bot kapatılıyor...');
+  isShuttingDown = true;
   await stopBot();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('⚠️ SIGINT alındı, bot kapatılıyor...');
+  isShuttingDown = true;
   await stopBot();
   process.exit(0);
 });
@@ -912,7 +949,7 @@ process.on('SIGINT', async () => {
   if (!isDbOk) {
     console.warn('⚠️ Firestore testi başarısız oldu, ancak bot başlatılmaya çalışılıyor...');
   }
-  
+
   await loadCountersFromFirestore();
   await startBot();
   await sendHeartbeat();
@@ -924,8 +961,10 @@ process.on('SIGINT', async () => {
 const http = require('http');
 const PORT = process.env.PORT || 8080;
 
-const server = http.createServer((req, res) => {
-  if (req.url === '/health' || req.url === '/') {
+const server = http.createServer(async (req, res) => {
+  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  
+  if (parsedUrl.pathname === '/health' || parsedUrl.pathname === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'ok',
@@ -934,6 +973,146 @@ const server = http.createServer((req, res) => {
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     }));
+  } else if (parsedUrl.pathname === '/test-bypass') {
+    const targetUrl = parsedUrl.searchParams.get('url') || 'https://www.hepsiburada.com/gamepower-skadi-round-240-argb-240mm-sivi-islemci-sogutucu-am5-ve-lga1700-uyumlu-p-HBCV000064LQCT';
+    const results = {};
+    
+    // 1. Direct Curl
+    try {
+      const curl = spawnSync('curl', [
+        '-sL',
+        '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
+        '--compressed',
+        '-w', '\n---STATUS:%{http_code}---',
+        targetUrl
+      ], { encoding: 'utf-8', timeout: 8000 });
+      const output = curl.stdout || '';
+      const statusMatch = output.match(/---STATUS:(\d+)---/);
+      const status = statusMatch ? parseInt(statusMatch[1]) : 0;
+      results.direct_curl = { status, size: output.replace(/\n---STATUS:\d+---$/, '').length };
+    } catch(e) { results.direct_curl = { error: e.message }; }
+
+    // 2. Translate Proxy
+    try {
+      const parsed = new URL(targetUrl);
+      const baseUrl = 'https://' + parsed.hostname.replace(/\./g, '-') + '.translate.goog' + parsed.pathname;
+      const ua = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' };
+
+      // Test 1: No params
+      const r1 = await fetch(baseUrl + '?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr', { headers: ua });
+      const size1 = r1.ok ? (await r1.text()).length : 0;
+
+      // Test 2: magaza=incehesap
+      const r2 = await fetch(baseUrl + '?magaza=incehesap&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr', { headers: ua });
+      const size2 = r2.ok ? (await r2.text()).length : 0;
+
+      // Test 3: magaza=İncehesap
+      const r3 = await fetch(baseUrl + '?magaza=İncehesap&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr', { headers: ua });
+      const size3 = r3.ok ? (await r3.text()).length : 0;
+
+      // Test 4: magaza=%C4%B0ncehesap
+      const r4 = await fetch(baseUrl + '?magaza=%C4%B0ncehesap&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr', { headers: ua });
+      const size4 = r4.ok ? (await r4.text()).length : 0;
+
+      results.translate_proxy = {
+        test1_no_param: { status: r1.status, size: size1 },
+        test2_incehesap: { status: r2.status, size: size2 },
+        test3_raw_incehesap: { status: r3.status, size: size3 },
+        test4_encoded_incehesap: { status: r4.status, size: size4 }
+      };
+    } catch(e) { results.translate_proxy = { error: e.message }; }
+    
+    // 3. Microlink HTML
+    try {
+      const microUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
+      const r = await fetch(microUrl);
+      if (r.ok) {
+        const data = await r.json();
+        const html = data.data?.html || '';
+        results.microlink = {
+          status: r.status,
+          size: html.length
+        };
+      } else {
+        results.microlink = { status: r.status };
+      }
+    } catch(e) { results.microlink = { error: e.message }; }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(results, null, 2));
+    return;
+  } else if (parsedUrl.pathname === '/simulate') {
+    const urlToScrape = parsedUrl.searchParams.get('url');
+    const customText = parsedUrl.searchParams.get('text');
+    if (!urlToScrape) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'url parameter is required' }));
+      return;
+    }
+    
+    if (!isRunning || !client) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Telegram bot is not running or client is not connected' }));
+      return;
+    }
+    
+    try {
+      console.log(`[SIMULATE] Simüle edilen url işleniyor: ${urlToScrape}${customText ? ` ile mesaj metni: "${customText}"` : ''}`);
+      
+      // 1. Telegram'dan link önizlemesini doğrudan isteyelim
+      let previewMedia = null;
+      try {
+        console.log(`[SIMULATE] Telegram'dan web sayfası önizlemesi alınıyor...`);
+        previewMedia = await client.invoke(
+          new Api.messages.GetWebPagePreview({
+            message: urlToScrape,
+          })
+        );
+        console.log(`[SIMULATE] Telegram önizleme sonucu: ${previewMedia ? previewMedia.className : 'Yok'}`);
+      } catch (previewErr) {
+        console.warn(`[SIMULATE] Telegram önizleme alma hatası: ${previewErr.message}`);
+      }
+      
+      // 2. Dummy mesaj ve chatInfo nesnesi oluşturalım
+      const mockMessageId = Math.floor(Math.random() * 1000000);
+      const dummyMessage = {
+        id: mockMessageId,
+        message: customText || urlToScrape,
+        entities: [],
+        media: previewMedia ? previewMedia.media : null
+      };
+      
+      const dummyChatInfo = {
+        id: 3423704050, // Test kanalımızın temiz ID'si
+        title: 'Simulation Test Channel',
+        username: 'simulation_test',
+        broadcast: true
+      };
+      
+      const docId = `telegram_${dummyChatInfo.id}_${mockMessageId}`;
+      console.log(`[SIMULATE] saveDealToFirebase çağrılıyor. Beklenen Belge ID: ${docId}`);
+      
+      const success = await saveDealToFirebase(dummyMessage, dummyChatInfo);
+      
+      if (success) {
+        // Firestore'dan belgenin güncel halini okuyalım
+        const docRef = db.collection('deals').doc(docId);
+        const docSnap = await docRef.get();
+        if (docSnap.exists) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, docId, data: docSnap.data() }));
+          return;
+        }
+      }
+      
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Failed to process deal or save to Firestore', docId }));
+      
+    } catch (err) {
+      console.error('[SIMULATE] Simülasyon hatası:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message, stack: err.stack }));
+    }
   } else {
     res.writeHead(404);
     res.end('Not Found');
@@ -983,7 +1162,7 @@ process.on('unhandledRejection', async (reason, promise) => {
   console.error('🔥 Bot Unhandled Rejection:', reason);
   const msg = reason instanceof Error ? reason.message : String(reason);
   const stack = reason instanceof Error ? reason.stack : null;
-  
+
   const exitTimer = setTimeout(() => {
     process.exit(1);
   }, 3000);

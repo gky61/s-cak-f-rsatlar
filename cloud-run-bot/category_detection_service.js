@@ -578,6 +578,27 @@ function _applyNegativeExclusions(normalizedText, categoryId, subCategory) {
   let finalCategoryId = categoryId;
   let finalSubCategory = subCategory;
 
+  // 0. Termos Yönlendirmesi (Sağlık/gıda veya takı yerine Mutfak Gereçleri veya Kamp Malzemelerine gitmeli)
+  if (normalizedText.includes('termos') || normalizedText.includes('thermos')) {
+    const isOutdoor = normalizedText.includes('kamp') || 
+                      normalizedText.includes('outdoor') || 
+                      normalizedText.includes('doga') || 
+                      normalizedText.includes('doğa') || 
+                      normalizedText.includes('stanley') ||
+                      normalizedText.includes('dag') || 
+                      normalizedText.includes('dağ') ||
+                      normalizedText.includes('trekking') ||
+                      normalizedText.includes('hiking') ||
+                      categoryId === 'spor_outdoor';
+    if (isOutdoor) {
+      finalCategoryId = 'spor_outdoor';
+      finalSubCategory = 'Kamp & Doğa Malzemeleri';
+    } else {
+      finalCategoryId = 'ev_yasam';
+      finalSubCategory = 'Mutfak Gereçleri';
+    }
+  }
+
   // 1. Yastık/Yorgan Kılıfı
   if (normalizedText.includes('kilif')) {
     const isBedding = normalizedText.includes('yastik') ||

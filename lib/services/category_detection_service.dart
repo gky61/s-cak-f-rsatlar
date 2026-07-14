@@ -708,6 +708,27 @@ class CategoryDetectionService {
     String? finalCategoryId = categoryId;
     String? finalSubCategory = subCategory;
 
+    // 0. Termos Yönlendirmesi (Sağlık/gıda veya takı yerine Mutfak Gereçleri veya Kamp Malzemelerine gitmeli)
+    if (normalizedText.contains('termos') || normalizedText.contains('thermos')) {
+      final isOutdoor = normalizedText.contains('kamp') || 
+                        normalizedText.contains('outdoor') || 
+                        normalizedText.contains('doga') || 
+                        normalizedText.contains('doğa') || 
+                        normalizedText.contains('stanley') ||
+                        normalizedText.contains('dag') || 
+                        normalizedText.contains('dağ') ||
+                        normalizedText.contains('trekking') ||
+                        normalizedText.contains('hiking') ||
+                        categoryId == 'spor_outdoor';
+      if (isOutdoor) {
+        finalCategoryId = 'spor_outdoor';
+        finalSubCategory = 'Kamp & Doğa Malzemeleri';
+      } else {
+        finalCategoryId = 'ev_yasam';
+        finalSubCategory = 'Mutfak Gereçleri';
+      }
+    }
+
     // 1. Yastık/Yorgan Kılıfı (Ev Tekstili olmalı, Telefon Kılıfı / Elektronik değil)
     if (normalizedText.contains('kilif')) {
       final isBedding = normalizedText.contains('yastik') ||

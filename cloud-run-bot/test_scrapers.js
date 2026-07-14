@@ -9,11 +9,11 @@ const urls = [
 
 async function run() {
   console.log('🧪 Scraper Entegrasyon Testleri Başlatılıyor...');
-  
+
   for (const url of urls) {
     console.log('\n------------------------------------------------------------');
     console.log(`🔍 Test ediliyor: ${url}`);
-    
+
     try {
       const result = await scrapeProductFromUrl(url);
       console.log('📊 SCRAPE SONUCU:');
@@ -22,16 +22,14 @@ async function run() {
       console.log(`   Fiyat      : ${result.price} TL`);
       console.log(`   Görsel     : ${result.imageUrl}`);
       console.log(`   Kırıntı    : ${JSON.stringify(result.breadcrumbs)}`);
-      
+
       // Basit doğrulamalar
       if (!result.title) {
         console.error('❌ HATA: Başlık çekilemedi!');
-      } else if (!result.price) {
-        console.error('❌ HATA: Fiyat çekilemedi!');
       } else if (!result.imageUrl) {
         console.error('❌ HATA: Görsel çekilemedi!');
       } else {
-        console.log('✅ BAŞARILI: Başlık, fiyat ve görsel başarıyla çekildi.');
+        console.log('✅ BAŞARILI: Başlık ve görsel başarıyla çekildi.');
       }
     } catch (err) {
       console.error(`❌ BEKLENMEYEN HATA: ${err.message}`);

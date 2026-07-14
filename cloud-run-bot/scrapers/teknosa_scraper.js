@@ -33,11 +33,14 @@ class TeknosaScraper extends BaseProductScraper {
       'img[class*="product"]'
     ];
     for (const sel of imgSelectors) {
-      const el = $(sel).first();
-      const src = el.attr('src') || el.attr('data-src');
-      if (src && !this.isLogoUrl(src)) {
-        const r = this.resolveImageUrl(src, url);
-        if (r) return r;
+      const elements = $(sel);
+      for (let i = 0; i < elements.length; i++) {
+        const el = $(elements[i]);
+        const src = el.attr('src') || el.attr('data-src');
+        if (src && !this.isLogoUrl(src)) {
+          const r = this.resolveImageUrl(src, url);
+          if (r) return r;
+        }
       }
     }
     return null;
@@ -54,14 +57,22 @@ class TeknosaScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // 1. JSON-LD
+    // 1. DOM Seçicileri - Öncelikli: span.prc-third (Hem indirimli hem indirimsiz doğru fiyatı içerir)
+    const priceThirdEl = $('span.prc-third').first();
+    if (priceThirdEl.length) {
+      const v = this.parsePriceText(priceThirdEl.text());
+      if (v && v > 0) return v;
+    }
+
+    // 2. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
       const p = this.extractPriceFromProductJson(product);
       if (p && p > 0) return p;
     }
-    // 2. DOM
-    const el = $('span.prc, span.prc-third, .price, .product-price').first();
+
+    // 3. Diğer DOM Seçicileri (Yedek)
+    const el = $('span.prc, .price, .product-price').first();
     if (el.length) {
       const v = this.parsePriceText(el.text());
       if (v && v > 0) return v;

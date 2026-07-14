@@ -327,7 +327,7 @@ class _DealCardState extends State<DealCard> {
   @override
   Widget build(BuildContext context) {
     final deal = widget.deal;
-    final currencyFormat = NumberFormat.currency(symbol: '₺', decimalDigits: 0);
+    final currencyFormat = DynamicCurrencyFormatter();
     final isExpired = deal.isExpired;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
@@ -945,7 +945,7 @@ class _DealCardState extends State<DealCard> {
   }
 
   // Horizontal kart layout'u (HTML'deki yeni tasarım)
-  Widget _buildHorizontalCard(BuildContext context, Deal deal, NumberFormat currencyFormat, bool isExpired, bool isDark) {
+  Widget _buildHorizontalCard(BuildContext context, Deal deal, DynamicCurrencyFormatter currencyFormat, bool isExpired, bool isDark) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),

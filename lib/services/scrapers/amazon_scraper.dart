@@ -189,20 +189,34 @@ class AmazonScraper extends BaseProductScraper {
       } catch (_) {}
     }
 
-    // 2. Birinci öncelik: .a-price içindeki .a-offscreen (Genelde en temiz fiyattır: "₺39.972,00")
-    final offscreenEl = document.querySelector('.a-price .a-offscreen');
-    if (offscreenEl != null) {
-      final val = parsePriceText(offscreenEl.text);
+    // 2. Birinci öncelik: .a-price içindeki .a-offscreen (Üstü çizili olmayan gerçek fiyatlar)
+    final offscreenEls = document.querySelectorAll('.a-price .a-offscreen');
+    for (final el in offscreenEls) {
+      if (_hasAncestorWithClass(el, 'a-text-price')) {
+        continue; // Üstü çizili liste fiyatını atla
+      }
+      final val = parsePriceText(el.text);
       if (val != null && val > 0) {
         return val;
       }
     }
 
-    // 3. İkinci öncelik: Klasik .a-price-whole
-    final priceEl = document.querySelector('.a-price-whole');
-    if (priceEl != null) {
-      final decimalEl = priceEl.querySelector('.a-price-decimal');
-      String text = priceEl.text;
+    // 2b. Fallback: Eğer üstü çizili olmayan bulunamadıysa, üstü çizili olanı da kabul et
+    for (final el in offscreenEls) {
+      final val = parsePriceText(el.text);
+      if (val != null && val > 0) {
+        return val;
+      }
+    }
+
+    // 3. İkinci öncelik: Klasik .a-price-whole (Üstü çizili olmayan)
+    final priceEls = document.querySelectorAll('.a-price-whole');
+    for (final el in priceEls) {
+      if (_hasAncestorWithClass(el, 'a-text-price')) {
+        continue;
+      }
+      final decimalEl = el.querySelector('.a-price-decimal');
+      String text = el.text;
       if (decimalEl != null) {
         text = text.replaceAll(decimalEl.text, '');
       }
@@ -298,5 +312,16 @@ class AmazonScraper extends BaseProductScraper {
     }
 
     return [];
+  }
+
+  bool _hasAncestorWithClass(dom.Element element, String className) {
+    dom.Element? current = element.parent;
+    while (current != null) {
+      if (current.classes.contains(className)) {
+        return true;
+      }
+      current = current.parent;
+    }
+    return false;
   }
 }
