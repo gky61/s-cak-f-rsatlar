@@ -142,11 +142,15 @@ class AmazonScraper extends BaseProductScraper {
       } catch (_) {}
     }
 
-    // 2. Birincil Satış Fiyatı Seçicileri (Örn: İndirimli ana fiyat alanları)
+    // 2. Birincil Satış Fiyatı Seçicileri (Sadece ana ürün alanları olan #rightCol veya #centerCol altındakiler)
     const primarySelectors = [
+      '#rightCol #tp_price_block_total_price_ww .a-offscreen',
       '#corePrice_feature_div .a-price .a-offscreen',
-      '.apexPriceToPay .a-offscreen',
-      '.priceToPay .a-offscreen',
+      '#rightCol .priceToPay .a-offscreen',
+      '#centerCol .priceToPay .a-offscreen',
+      '#rightCol .apexPriceToPay .a-offscreen',
+      '#centerCol .apexPriceToPay .a-offscreen',
+      '#rightCol #aod-ingress-link .a-price .a-offscreen',
       '#price_inside_buybox',
       '#priceBlock_dealPrice',
       '#priceBlock_ourPrice'
@@ -164,13 +168,17 @@ class AmazonScraper extends BaseProductScraper {
       }
     }
 
-    // 3. Genel .a-price .a-offscreen etiketlerinden üstü çizili olmayan en düşük fiyatı seç
+    // 3. Genel .a-price .a-offscreen etiketlerinden (sadece ana alanlardaki) üstü çizili olmayan en düşük fiyatı seç
     const offscreenEls = $('.a-price .a-offscreen');
     let bestPrice = null;
     for (let i = 0; i < offscreenEls.length; i++) {
       const el = $(offscreenEls[i]);
       if (el.closest('.a-text-price').length > 0) {
         continue; // Üstü çizili liste fiyatını atla
+      }
+      // Sim/reklam karusellerindeki fiyatları engellemek için sadece #rightCol veya #centerCol içindekileri al
+      if (el.closest('#rightCol, #centerCol').length === 0) {
+        continue;
       }
       const val = this.parsePriceText(el.text());
       if (val !== null && val > 0) {
@@ -181,7 +189,7 @@ class AmazonScraper extends BaseProductScraper {
     }
     if (bestPrice !== null) return bestPrice;
 
-    // 4. Fallback: Eğer üstü çizili olmayan bulunamadıysa, ilk geçerli fiyatı dön
+    // 4. Fallback: Eğer yukarıdakiler bulunamadıysa, sayfa genelindeki ilk geçerli fiyatı dön
     for (let i = 0; i < offscreenEls.length; i++) {
       const el = $(offscreenEls[i]);
       const val = this.parsePriceText(el.text());

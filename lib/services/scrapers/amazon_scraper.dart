@@ -189,57 +189,57 @@ class AmazonScraper extends BaseProductScraper {
       } catch (_) {}
     }
 
-    // 2. Birinci öncelik: .a-price içindeki .a-offscreen (Üstü çizili olmayan gerçek fiyatlar)
-    final offscreenEls = document.querySelectorAll('.a-price .a-offscreen');
+    // 2. Birincil Satış Fiyatı Seçicileri (Sadece ana ürün alanları olan #rightCol veya #centerCol altındakiler)
+    final primarySelectors = [
+      '#rightCol #tp_price_block_total_price_ww .a-offscreen',
+      '#corePrice_feature_div .a-price .a-offscreen',
+      '#rightCol .priceToPay .a-offscreen',
+      '#centerCol .priceToPay .a-offscreen',
+      '#rightCol .apexPriceToPay .a-offscreen',
+      '#centerCol .apexPriceToPay .a-offscreen',
+      '#rightCol #aod-ingress-link .a-price .a-offscreen',
+      '#price_inside_buybox',
+      '#priceBlock_dealPrice',
+      '#priceBlock_ourPrice'
+    ];
+
+    for (final selector in primarySelectors) {
+      final el = document.querySelector(selector);
+      if (el != null) {
+        if (!_hasAncestorWithClass(el, 'a-text-price')) { // Üstü çizili değilse
+          final val = parsePriceText(el.text);
+          if (val != null && val > 0) {
+            return val;
+          }
+        }
+      }
+    }
+
+    // 3. Genel .a-price .a-offscreen etiketlerinden (sadece ana alanlardaki) üstü çizili olmayan en düşük fiyatı seç
+    final offscreenEls = document.querySelectorAll(
+      '#rightCol .a-price .a-offscreen, '
+      '#centerCol .a-price .a-offscreen'
+    );
+    double? bestPrice;
     for (final el in offscreenEls) {
       if (_hasAncestorWithClass(el, 'a-text-price')) {
         continue; // Üstü çizili liste fiyatını atla
       }
       final val = parsePriceText(el.text);
       if (val != null && val > 0) {
-        return val;
+        if (bestPrice == null || val < bestPrice) {
+          bestPrice = val;
+        }
       }
     }
+    if (bestPrice != null) return bestPrice;
 
-    // 2b. Fallback: Eğer üstü çizili olmayan bulunamadıysa, üstü çizili olanı da kabul et
-    for (final el in offscreenEls) {
+    // 4. Fallback: Eğer yukarıdakiler bulunamadıysa, sayfa genelindeki ilk geçerli fiyatı dön
+    final allOffscreenEls = document.querySelectorAll('.a-price .a-offscreen');
+    for (final el in allOffscreenEls) {
       final val = parsePriceText(el.text);
       if (val != null && val > 0) {
         return val;
-      }
-    }
-
-    // 3. İkinci öncelik: Klasik .a-price-whole (Üstü çizili olmayan)
-    final priceEls = document.querySelectorAll('.a-price-whole');
-    for (final el in priceEls) {
-      if (_hasAncestorWithClass(el, 'a-text-price')) {
-        continue;
-      }
-      final decimalEl = el.querySelector('.a-price-decimal');
-      String text = el.text;
-      if (decimalEl != null) {
-        text = text.replaceAll(decimalEl.text, '');
-      }
-      final val = parsePriceText(text);
-      if (val != null && val > 0) {
-        return val;
-      }
-    }
-
-    // 4. Üçüncü öncelik: Buybox veya diğer bilinen fiyat kimlikleri
-    final alternativeSelectors = [
-      '#price_inside_buybox',
-      '#priceBlock_ourPrice',
-      '#priceBlock_dealPrice',
-      '.apexPriceToPay',
-    ];
-    for (final selector in alternativeSelectors) {
-      final el = document.querySelector(selector);
-      if (el != null) {
-        final val = parsePriceText(el.text);
-        if (val != null && val > 0) {
-          return val;
-        }
       }
     }
 
