@@ -1,46 +1,42 @@
-**FırsatKolik Uygulaması Yeni Geliştirmeler Listesi**
-Aşağıda uygulamaya eklenecek yeni özellikler, mantık güncellemeleri ve çözülmesi gereken hatalar yer almaktadır:
+**FırsatKolik Uygulaması Geliştirme Listesi (Yeni Seri)**
+Aşağıda uygulamaya eklenecek yeni özellikler ve altyapı değişiklikleri yer almaktadır:
 
-**1. Mesajlaşma Ekranından Profil Sayfasına Geçiş (Yeni Özellik)**
- * **Amaç:** Mesajlar (Chat) ekranında, kullanıcıların birbirlerinin profillerini kolayca ziyaret edebilmesi.
- * **İstenen Aksiyon:** Mesajlaşma arayüzünde görünen "gönderici ismi" ve "profil görseli" bileşenlerine InkWell veya GestureDetector eklenmeli. Bu alanlara tıklandığında, ilgili kullanıcının userId bilgisiyle birlikte profil sayfasına navigasyon (yönlendirme) yapılmalı.
-
-**2. Hesap Silme İşleminde Yetki Hatası (Hata Giderme)**
- * **ALINAN NET HATA METNİ:**
-## Hesap silinirken bir hata oluştu: [cloud_firestore/permission-denied] The caller does not have permission to execute the specified operation.
- * **Sorun:** Kullanıcı uygulama içerisinden hesabını silmek istediğinde yukarıdaki hatayı alıyor ve silme işlemi yarıda kalıyor.
- * **İstenen Aksiyon:** * Firebase Firestore Güvenlik Kuralları (Security Rules) incelenmeli; kullanıcıların kendi verilerini içeren koleksiyonlarda (özellikle kullanıcı dokümanlarında) delete (silme) izninin (request.auth.uid == userId) eksik olup olmadığı kontrol edilmeli.
-   * Flutter tarafındaki kodun çalışma sırası (execution order) kontrol edilmeli. İşlem sırası "Önce Firestore verilerini sil, en son Auth hesabını sil" şeklinde olmalıdır.
-
-**3. Gelişmiş Bildirim Ayarları ve Bağımsız Kontrol (Yeni Özellik / Mantık Güncellemesi)**
- * **Amaç:** Kullanıcıların bildirimleri daha esnek bir şekilde yönetebilmesi, genel bildirimleri kapatsalar bile kritik takipleri almaya devam edebilmesi.
+**1. Telegram Gruplarından Link Bazlı Veri Çekme ve Yapay Zeka ile Açıklama Optimizasyonu (Altyapı / AI Entegrasyonu)**
+ * **Amaç:** Veri toplama sisteminin kaynak mantığını değiştirmek; Telegram'dan doğrudan ham veri çekmek yerine, gruplarda paylaşılan linkleri yakalamak ve bu fırsatların açıklamalarını yapay zeka ile daha anlaşılır hale getirmek.
  * **İstenen Aksiyon:**
-   * Bildirimler sekmesine **"Kategori Bildirimleri"** ve **"Anahtar Kelime Takibi Bildirimleri"** için ayrı, bağımsız kontrol butonları (Switch/Toggle) eklenmeli.
-   * **Mantık Kuralları:** Uygulamada genel veya "Tüm Bildirimler" seçeneği kapatıldığında normal şartlarda bildirim akışı kesilmeli; ancak "Kategori" ve "Anahtar Kelime Takibi" bildirim butonları bu genel durumdan bağımsız çalışabilmeli. Kullanıcı genel bildirimleri kapatmış olsa bile, bu iki özel butondan istediklerini açabilmeli ve ilgili bildirimleri almaya devam edebilmeli.
+   * **Veri Çekme (Scraping) Güncellemesi:** Telegram botunun/sisteminin çalışma mantığı, Telegram gruplarında paylaşılan e-ticaret ve fırsat linklerini tarayacak, tespit edecek ve bu linkler üzerinden veri toplayacak şekilde güncellenmeli.
+   * **Yapay Zeka (AI) ile Metin Düzenleme:** Telegram gruplarından linkle birlikte gelen ham, düzensiz veya karmaşık fırsat açıklamaları doğrudan sisteme kaydedilmemeli. Bu metinler arka planda bir Yapay Zeka API'sine gönderilerek; daha net, imla kurallarına uygun, kullanıcı dostu ve akıcı bir fırsat açıklamasına dönüştürüldükten sonra uygulamaya aktarılmalı.
 
-**4. Fırsatların 2 Gün Sonra Tamamen Kaldırılması (Zaman Aşımı / Mantık Güncellemesi)**
- * **Amaç:** Uygulamanın her zaman dinamik ve güncel kalması için, paylaşılan fırsatların ömür boyu listede kalmasının engellenmesi.
+**2. Profil Resmi Güncellemesinin Tüm Uygulamada Eşzamanlı Olması (Veri Senkronizasyonu / Hata Giderme)**
+ * **Amaç:** Kullanıcı profil fotoğrafını değiştirdiğinde, eski fotoğrafın uygulama içindeki diğer alanlarda (yorumlar, eski paylaşımlar, mesajlaşma ekranı vb.) kalmaması ve her yerde aynı anda güncellenmesi.
  * **İstenen Aksiyon:**
-   * Hem **Ana Ekrandaki** (akıştaki) fırsatlar hem de kullanıcının **"Beğendiklerim"** bölümünde yer alan fırsatlar, paylaşıldığı tarihten itibaren **2. günün sonunda (48 saat dolduğunda) tamamen kalkmalı** ve görünmez olmalıdır.
-   * **Teknik Detay:** Veri tabanı sorgularına (Firebase Queries) gönderinin oluşturulma zamanı baz alınarak Oluşturulma Tarihi >= Son 48 Saat filtresi eklenmeli ya da süresi dolan gönderileri iki taraftan da otomatik gizleyecek/temizleyecek bir mantık kurulmalıdır.
+   * Kullanıcı profil resmini güncellediğinde, yeni görsel URL'sinin veri tabanında kullanıcının ana dokümanına işlenmesi sağlanmalı.
+   * Uygulama genelinde (yorum satırları, chat ekranı, gönderi kartları vb.) profil resimleri listelenirken, bu verilerin statik/eski dokümanlardan okunması yerine dinamik olarak güncel kullanıcı verisinden (Stream/Real-time Listener ile) çekilmesi sağlanmalı.
+   * Eğer performans amacıyla veriler geçmiş dokümanlara gömülü (denormalized) kaydediliyorsa, profil resmi değiştiğinde kullanıcının eski yorum ve mesajlarındaki eski resim URL'lerini toplu olarak güncelleyecek bir arka plan mekanizması (Batch Write veya Cloud Function) kurgulanmalı.
 
-**5. Profil Ekranında "Paylaştığı Fırsatları Gör" Butonunun Dinamik Gösterimi (Arayüz / Mantık Güncellemesi)**
- * **Amaç:** Butonun sadece ihtiyaç duyulan yerde (kullanıcının kendi profilinde) görünür olması, diğer kullanıcıların profilleri ziyaret edildiğinde arayüzde kalabalık yapmaması.
- * **İstenen Aksiyon:** * Arayüzdeki "Paylaştığım Fırsatları Gör" butonuna dinamik bir görünürlük (visibility) kuralı eklenmeli.
-   * Kullanıcı **kendi profiline** girdiğinde bu buton görünmeye devam etmeli ve tıklandığında son paylaştığı 5 fırsatı görebilmeli.
-   * Kullanıcı **başka bir kişinin profiline** girdiğinde ise bu butona gerek olmadığı için arayüzden (UI) tamamen gizlenmeli (Bu profillerde son 5 paylaşım doğrudan listelenecektir).
-
-**6. Yorumlarda "Cevap Ver" Butonunun Kaldırılması ve Sağa Çekerek Yanıtlama (UX / Yeni Özellik)**
- * **Amaç:** Yorumlar bölümündeki klasik "Cevap Ver" butonunu kaldırarak, modern mesajlaşma uygulamalarındaki gibi daha pratik bir "kaydırarak alıntılama" mekanizması kurmak.
+**3. Profil İçi Bildirim Merkezinin İncelenmesi ve Uygulama İçi (In-App) Bildirim Ayrımı (UX / Mantık Güncellemesi)**
+ * **Amaç:** Profildeki bildirimler sekmesinin çalışma mantığının detaylıca analiz edilmesi, mevcut hataların giderilmesi ve cihaz bildirimleri (Push Notification) ile uygulama içi bildirimler arasındaki ayrımın doğru kurgulanması.
  * **İstenen Aksiyon:**
-   * Yorumlar alanındaki mevcut sabit "Cevap Ver" seçeneği/butonu arayüzden tamamen kaldırılmalı.
-   * Her bir yorum satırı (comment card/widget) **sağa doğru kaydırılabilir** (swipeable) hale getirilmeli.
-   * Kullanıcı ilgili yorumu sağa çektiğinde, o yorumu otomatik olarak "alıntılayarak" cevap verme modu açılmalı; yorum yazma alanının hemen üstünde alıntılanan mesaj görünmeli ve kullanıcı bu şekilde yanıt verebilmelidir.
+   * Bildirimler sekmesinin arka plan mantığına odaklanılarak, hangi bildirimlerin doğru tetiklendiği ve nelerin çalışmadığı detaylıca test edilmeli.
+   * **Sessiz / Uygulama İçi Bildirim Mantığı Kurulmalı:** Her olay için telefona üstten düşen bildirim (Push Notification) gönderilmemeli. Örneğin; kullanıcının paylaştığı bir fırsatın Admin tarafından reddedilmesi veya onaylanması gibi sistemsel geri bildirimler cihazı titretmemeli veya ana ekrana düşmemeli.
+   * Bu tür bilgilendirmeler sadece kullanıcı uygulamaya girip profilindeki "Bildirimler" sekmesine baktığında liste halinde (In-App Notification olarak) görünmeli.
 
-**7. Dışa Paylaşımlarda Uygulamaya Geri Yönlendiren Link (Deep Link) Eklenmesi (Büyüme / Kullanıcı Kazanımı)**
- * **Sorun/Amaç:** FırsatKolik uygulamasındaki bir fırsat "Paylaş" butonuyla WhatsApp, Telegram gibi dış platformlara gönderildiğinde, mesajın sonundaki "📱 FIRSATKOLİK ile keşfet!" kısmı sadece düz metin olarak gidiyor. Bu durum, paylaşımı gören yeni kişilerin FırsatKolik uygulamasına kolayca ulaşmasını engelliyor.
+**4. Kupon Kodu Bölümü ve 2. El Depo Ürünü İbaresi (Yeni Özellikler / UI-UX Güncellemesi)**
+ * **Amaç:** Uygulamanın kullanım alanını genişletmek amacıyla kupon kodları için özel bir alan oluşturmak ve fırsat paylaşımlarında "2. El Depo Ürünü" olanları diğerlerinden şık bir şekilde ayırmak.
  * **İstenen Aksiyon:**
-   * Dışa aktarılan paylaşım metninin sonuna, kullanıcıları doğrudan uygulamaya (veya uygulama yüklü değilse uygulama mağazasına) yönlendirecek dinamik bir bağlantı (**Firebase Dynamic Links**, **App Links** veya standart bir indirme linki) eklenmeli.
-   * Metin şablonu şu şekilde güncellenmeli:
-     📱 FIRSATKOLİK ile keşfet: [Buraya Uygulama veya Fırsat Linki Gelecek]
-     *(Örn: https://firsatkolik.app.link/indirme)*
+   * **Kupon Kodu Paylaşımı (Yeni Alan):** Uygulama içine, standart fırsat akışından bağımsız, kullanıcıların veya botların indirim kuponlarını paylaşabileceği ve kopyalayabileceği ayrı bir "Kuponlar" sekmesi/bölümü tasarlanıp eklenmeli.
+   * **2. El Depo Ürünü İbaresi (Etiket):** Fırsat paylaşım ekranına "2. El Depo Ürünü" seçeneği (Checkbox/Toggle) eklenmeli. Bu seçenek işaretlenerek paylaşılan ürünlerin ana akıştaki kartlarında, o ürünün ikinci el depo ürünü olduğunu belirten, tasarım bütünlüğünü bozmayan şık ve belirgin bir etiket (Badge/İbare) yer almalı.
+
+**5. Fırsat Paylaşımlarında Admin Onay Süreci (İş Akışı ve Güvenlik Güncellemesi)**
+ * **Amaç:** Kullanıcıların paylaştığı fırsatların kontrolsüz bir şekilde doğrudan yayınlanmasını engellemek ve tüm içeriklerin ana akışa düşmeden önce bir admin onay süzgecinden geçmesini sağlamak.
+ * **İstenen Aksiyon:**
+   * **Beklemede (Pending) Statüsü:** Kullanıcı bir fırsat paylaştığında, veri tabanındaki gönderi statüsü varsayılan olarak "Beklemede" atanmalı ve bu statüdeki gönderiler ana akışta listelenmemelidir. Sadece Admin onay verdiğinde statü "Aktif"e dönmeli ve gönderi görünür olmalıdır.
+   * **Sessiz Ret Bildirimi:** Paylaşılan fırsat Admin tarafından reddedilirse, 3. maddedeki kurguya uygun olarak kullanıcıya kesinlikle üstten cihaz bildirimi (Push Notification) gitmemelidir. Bunun yerine, ret detayı doğrudan uygulama içi "Bildirimler" sekmesine sessiz bir mesaj ("Paylaştığınız fırsat onaylanmadı" vb.) olarak düşmelidir.
+
+**6. Mükerrer Link Paylaşımı Engeline Süre Sınırı (Cooldown) Getirilmesi (Mantık Güncellemesi)**
+ * **Amaç:** Aynı ürün linkinin üst üste paylaşılarak spam oluşturmasını engellemek (mevcut iyi özellik), ancak aynı ürünün gün içinde tekrar indirime girme ihtimaline karşı bu engeli belirli bir zaman aşımına (cooldown) bağlamak.
+ * **İstenen Aksiyon:**
+   * Sistemdeki "aynı linki engelleme" mantığına bir zaman damgası (timestamp) kontrolü eklenmeli.
+   * Kullanıcı veya bot bir link paylaştığında, veri tabanında bu linkin **en son ne zaman paylaşıldığı** kontrol edilmeli.
+   * Eğer aynı link örneğin **son 24 saat** (veya belirlenecek makul bir süre) içinde paylaşılmışsa, yeni gönderi reddedilmeli.
+   * Ancak önceki paylaşımın üzerinden belirlenen süre geçmişse, ürün fiyatının/kampanyasının yenilenmiş olabileceği varsayılarak linkin tekrar paylaşılmasına izin verilmelidir.

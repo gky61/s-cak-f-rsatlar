@@ -57,6 +57,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     'Beymen',
     'PttAVM',
     'İncehesap',
+    'Havit',
     'Diğer',
   ];
 
@@ -96,6 +97,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         return 'assets/pttavm.jpg';
       case 'İncehesap':
         return 'assets/incehesap.jpg';
+      case 'Havit':
+        return 'assets/havit.jpg';
       default:
         return 'assets/store-icon.png';
     }
@@ -141,6 +144,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       matchedStore = 'PttAVM';
     } else if (lowerName.contains('incehesap')) {
       matchedStore = 'İncehesap';
+    } else if (lowerName.contains('havit')) {
+      matchedStore = 'Havit';
     }
     
     setState(() {

@@ -1035,6 +1035,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       if (hostname.contains('n11.com')) return 'N11';
       if (hostname.contains('amazon.com')) return 'Amazon';
       if (hostname.contains('gittigidiyor.com')) return 'GittiGidiyor';
+      if (hostname.contains('havitstore.com.tr')) return 'Havit';
 
       return 'Bilinmeyen';
     } catch (e) {

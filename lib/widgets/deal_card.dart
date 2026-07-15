@@ -62,6 +62,7 @@ class _DealCardState extends State<DealCard> {
     if (lower.contains('defacto')) return 'assets/defacto.jpg';
     if (lower.contains('beymen')) return 'assets/beymen.jpg';
     if (lower.contains('idefix')) return 'assets/idefix.jpg';
+    if (lower.contains('havit')) return 'assets/havit.jpg';
     return 'assets/logo.jpg';
   }
   void _handleOnTap() {
