@@ -124,6 +124,19 @@ Bot üzerinde bir kod değişikliği yapıldığında deployment şu adımlarla 
     *   Port yönlendirmesi (`8081:8080` veya `8082:8080`) yapılarak ayağa kaldırılır.
     *   Eski imajlar disk alanı kaplamaması için otomatik temizlenir (`docker image prune -a -f || true`).
 
+> [!IMPORTANT]
+> **GCR Registry Eşitleme Gecikmesi (Tag Latency Warning):**
+> Google Cloud Build imajı başarıyla derleyip `gcr.io` üzerine `latest` etiketiyle push etse dahi, GCP registry'nin edge sunucularındaki tag metaverisinin güncellenmesi **30 ila 90 saniye arasında sürebilir (eventual consistency)**.
+> 
+> Betik biter bitmez VM üzerinde çalıştırılan `docker pull` komutu bazen bu gecikmeden ötürü eski imajı çekip `Status: Image is up to date` yanıtı verebilir. Bu durumda VM'in eski kodları çalıştırmaya devam etme riski oluşur.
+> 
+> **Güvenli Canlıya Alma Çözümü:**
+> Betik tamamlandıktan yaklaşık 1-2 dakika sonra VM'e SSH bağlantısı kurularak `docker inspect [dev-bot|prod-bot]` ile çalışan konteynerin imaj hash'inin güncel GCP derleme hash'iyle eşleşip eşleşmediği kontrol edilmelidir. Eğer eski imaj çalışıyorsa sırasıyla:
+> 1. `docker pull gcr.io/firsatkolik-prod-e6eae/telegram-bot:latest` ile yeni imaj çekilmeye zorlanır.
+> 2. `docker stop [dev-bot|prod-bot]` ve `docker rm [dev-bot|prod-bot]` komutları koşturulur.
+> 3. İlgili port ve env dosyası parametreleriyle `docker run` yapılarak konteyner taze katmanlarla yeniden başlatılır.
+
+
 ### B. Firebase Cloud Functions Deployment:
 1.  Yerel terminalde `functions` dizinine gidilir.
 2.  Ortam seçimi yapılır (`firebase use sicak-firsatlar-e6eae` veya `firebase use firsatkolik-prod-e6eae`).

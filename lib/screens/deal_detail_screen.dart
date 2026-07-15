@@ -1346,18 +1346,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Expanded(
-                                        child: Text(
-                                                  deal.description.isNotEmpty ? deal.description : 'Açıklama eklemek için tıklayın',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                                    color: deal.description.isNotEmpty 
-                                                        ? (isDark ? Colors.grey[300] : AppTheme.textSecondary)
-                                                        : (isDark ? Colors.grey[500] : Colors.grey[400]),
-                                          height: 1.6,
-                                                    fontStyle: deal.description.isEmpty ? FontStyle.italic : FontStyle.normal,
-                                                  ),
-                                        ),
+                                        child: _buildDescriptionWidget(deal.description, isDark, primaryColor),
                                       ),
                                               if (_isAdmin) ...[
                                                 const SizedBox(width: 8),
@@ -1693,6 +1682,18 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     firestoreService: _firestoreService, onDealUpdated: _loadDeal,
   );
 
+
+
+  Future<void> _showAdminEditDialog(Deal deal) => DealAdminDialogs.showAdminEditDialog(
+    context: context, deal: deal, dealId: widget.dealId,
+    firestoreService: _firestoreService, onDealUpdated: _loadDeal,
+  );
+
+  Future<void> _showEditDescriptionDialog(Deal deal) => DealAdminDialogs.showEditDescriptionDialog(
+    context: context, deal: deal, dealId: widget.dealId,
+    firestoreService: _firestoreService, onDealUpdated: _loadDeal,
+  );
+
   Future<void> _showCategoryEditDialog(Deal deal) => DealAdminDialogs.showCategoryEditDialog(
     context: context, deal: deal, dealId: widget.dealId,
     firestoreService: _firestoreService, onDealUpdated: _loadDeal,
@@ -1700,5 +1701,62 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
   void _showFullScreenImage(String imageUrl) =>
       DealDetailImage.showFullScreenImage(context, imageUrl);
-}
 
+  Widget _buildDescriptionWidget(String text, bool isDark, Color primaryColor) {
+    if (text.isEmpty) {
+      return Text(
+        'Açıklama eklemek için tıklayın',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: isDark ? Colors.grey[500] : Colors.grey[400],
+          fontStyle: FontStyle.italic,
+        ),
+      );
+    }
+
+    final List<InlineSpan> spans = [];
+    final regex = RegExp(r'\*\*(.*?)\*\*');
+    int lastMatchEnd = 0;
+
+    final baseStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
+      color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+      height: 1.6,
+    );
+
+    for (final match in regex.allMatches(text)) {
+      if (match.start > lastMatchEnd) {
+        spans.add(TextSpan(
+          text: text.substring(lastMatchEnd, match.start),
+          style: baseStyle,
+        ));
+      }
+      final matchText = match.group(1) ?? '';
+      spans.add(TextSpan(
+        text: matchText,
+        style: baseStyle.copyWith(
+          fontWeight: FontWeight.bold,
+          fontStyle: FontStyle.italic,
+          fontSize: 15,
+          color: isDark ? Colors.amber[300] : const Color(0xFFFF7F00),
+        ),
+      ));
+      lastMatchEnd = match.end;
+    }
+
+    if (lastMatchEnd < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastMatchEnd),
+        style: baseStyle,
+      ));
+    }
+
+    return Text.rich(
+      TextSpan(
+        children: spans,
+      ),
+    );
+  }
+}
