@@ -1339,14 +1339,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             borderRadius: BorderRadius.circular(8),
                                             border: Border.all(
                                               color: primaryColor.withValues(alpha: 0.3),
-                                              width: 1,
+                                         width: 1,
                                             ),
                                           ) : null,
                                   child: Row(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Expanded(
-                                        child: _buildDescriptionWidget(deal.description, isDark, primaryColor),
+                                        child: _buildDescriptionWidget(deal.description, isDark, primaryColor, deal.store),
                                       ),
                                               if (_isAdmin) ...[
                                                 const SizedBox(width: 8),
@@ -1691,7 +1691,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   void _showFullScreenImage(String imageUrl) =>
       DealDetailImage.showFullScreenImage(context, imageUrl);
 
-  Widget _buildDescriptionWidget(String text, bool isDark, Color primaryColor) {
+  Widget _buildDescriptionWidget(String text, bool isDark, Color primaryColor, String store) {
     if (text.isEmpty) {
       return Text(
         'Açıklama eklemek için tıklayın',
@@ -1704,7 +1704,50 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       );
     }
 
-    final List<InlineSpan> spans = [];
+    // Eğer Migros fırsatıysa ve açıklama birden fazla satırdan oluşuyorsa ilk satırı CRM etiketi olarak biçimlendir
+    if (store.toLowerCase() == 'migros') {
+      final parts = text.split('\n\n');
+      if (parts.isNotEmpty) {
+        final firstLine = parts[0].trim();
+        final rest = parts.skip(1).join('\n\n');
+
+        // Temizlik koruması (HTML tagları ve yıldızları temizle)
+        final cleanFirstLine = firstLine
+            .replaceAll(RegExp(r'<[^>]*>'), '')
+            .replaceAll('**', '');
+
+        final List<InlineSpan> spans = [];
+        spans.add(TextSpan(
+          text: cleanFirstLine,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontStyle: FontStyle.italic,
+            fontSize: 16,
+            color: isDark ? Colors.amber[300] : const Color(0xFFFF7F00),
+          ),
+        ));
+
+        if (rest.isNotEmpty) {
+          spans.add(const TextSpan(text: '\n\n'));
+          spans.add(TextSpan(
+            text: rest.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll('**', ''),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+              height: 1.6,
+            ),
+          ));
+        }
+
+        return Text.rich(
+          TextSpan(
+            children: spans,
+          ),
+        );
+      }
+    }
+
     final baseStyle = TextStyle(
       fontSize: 14,
       fontWeight: FontWeight.w500,
@@ -1712,45 +1755,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       height: 1.6,
     );
 
-    final lines = text.split('\n');
-    if (lines.isNotEmpty) {
-      final firstLine = lines[0];
-      final isCrmTag = firstLine.trim().isNotEmpty &&
-          firstLine == firstLine.toUpperCase() &&
-          firstLine.length < 80 &&
-          (firstLine.contains(RegExp(r'\d')) || 
-           firstLine.contains('TL') || 
-           firstLine.contains('SEPETTE') || 
-           firstLine.contains('İNDİRİM') ||
-           firstLine.contains('HEMEN') ||
-           firstLine.contains('%'));
-
-      if (isCrmTag) {
-        spans.add(TextSpan(
-          text: firstLine,
-          style: baseStyle.copyWith(
-            fontWeight: FontWeight.bold,
-            fontStyle: FontStyle.italic,
-            fontSize: 15,
-            color: isDark ? Colors.amber[300] : const Color(0xFFFF7F00),
-          ),
-        ));
-
-        if (lines.length > 1) {
-          final restText = '\n' + lines.sublist(1).join('\n');
-          spans.add(TextSpan(text: restText, style: baseStyle));
-        }
-      } else {
-        spans.add(TextSpan(text: text, style: baseStyle));
-      }
-    } else {
-      spans.add(TextSpan(text: text, style: baseStyle));
-    }
-
-    return Text.rich(
-      TextSpan(
-        children: spans,
-      ),
+    // Diğer mağazalar için düz metin olarak render et
+    return Text(
+      text,
+      style: baseStyle,
     );
   }
 }

@@ -23,7 +23,6 @@ import 'message_screen.dart';
 import '../widgets/admin_reports_list.dart';
 import 'notification_debug_screen.dart';
 import '../widgets/test_automation_widget.dart';
-import '../widgets/description_text_editing_controller.dart';
 import '../utils/test_logger.dart';
 import '../services/link_preview_service.dart';
 import '../services/category_detection_service.dart';
@@ -1155,7 +1154,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
   Future<void> _showEditDialog(Deal deal) async {
     final titleController = TextEditingController(text: deal.title);
-    final descriptionController = DescriptionTextEditingController(text: deal.description);
+    final descriptionController = TextEditingController(text: deal.description);
     final priceController = TextEditingController(
       text: deal.price == deal.price.toInt()
           ? deal.price.toInt().toString()

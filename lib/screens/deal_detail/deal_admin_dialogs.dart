@@ -8,7 +8,6 @@ import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/category_selector_widget.dart';
-import '../../widgets/description_text_editing_controller.dart';
 import 'deal_link_utils.dart';
 
 void _log(String message) {
@@ -27,7 +26,7 @@ class DealAdminDialogs {
     required VoidCallback onDealUpdated,
   }) {
     final titleController = TextEditingController(text: deal.title);
-    final descriptionController = DescriptionTextEditingController(text: deal.description);
+    final descriptionController = TextEditingController(text: deal.description);
     final storeController = TextEditingController(text: deal.store);
     final linkController = TextEditingController(text: deal.link);
     final priceController = TextEditingController(
@@ -769,7 +768,7 @@ class DealAdminDialogs {
     required VoidCallback onDealUpdated,
   }) async {
     final titleController = TextEditingController(text: deal.title);
-    final descriptionController = DescriptionTextEditingController(text: deal.description);
+    final descriptionController = TextEditingController(text: deal.description);
     final priceController = TextEditingController(
       text: deal.price == deal.price.toInt()
           ? deal.price.toInt().toString()
@@ -1352,7 +1351,7 @@ class DealAdminDialogs {
     required FirestoreService firestoreService,
     required VoidCallback onDealUpdated,
   }) async {
-    final descriptionController = DescriptionTextEditingController(text: deal.description);
+    final descriptionController = TextEditingController(text: deal.description);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     await showDialog(

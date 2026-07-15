@@ -11,7 +11,6 @@ import '../services/link_preview_service.dart';
 import '../models/category.dart';
 import '../widgets/category_selector_widget.dart';
 import '../theme/app_theme.dart';
-import '../widgets/description_text_editing_controller.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -32,7 +31,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
   
   final _titleController = TextEditingController();
-  final _descriptionController = DescriptionTextEditingController();
+  final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
   final _storeController = TextEditingController();
   final _imageUrlController = TextEditingController();
