@@ -1683,17 +1683,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   );
 
 
-
-  Future<void> _showAdminEditDialog(Deal deal) => DealAdminDialogs.showAdminEditDialog(
-    context: context, deal: deal, dealId: widget.dealId,
-    firestoreService: _firestoreService, onDealUpdated: _loadDeal,
-  );
-
-  Future<void> _showEditDescriptionDialog(Deal deal) => DealAdminDialogs.showEditDescriptionDialog(
-    context: context, deal: deal, dealId: widget.dealId,
-    firestoreService: _firestoreService, onDealUpdated: _loadDeal,
-  );
-
   Future<void> _showCategoryEditDialog(Deal deal) => DealAdminDialogs.showCategoryEditDialog(
     context: context, deal: deal, dealId: widget.dealId,
     firestoreService: _firestoreService, onDealUpdated: _loadDeal,
