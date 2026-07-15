@@ -30,6 +30,7 @@ class Deal {
   final bool? isApproved; // Nullable: Bot'un yazdığı verilerde olmayabilir
   final bool isExpired;
   final bool isUserSubmitted; // Kullanıcı tarafından paylaşıldı mı?
+  final bool isTest; // Test verisi mi?
 
   Deal({
     required this.id,
@@ -45,14 +46,15 @@ class Deal {
     required this.imageUrl,
     required this.hotVotes,
     required this.coldVotes,
-      this.expiredVotes = 0,
+    this.expiredVotes = 0,
     required this.commentCount,
     required this.postedBy,
     required this.createdAt,
-        required this.isEditorPick,
-        this.isApproved,
-        this.isExpired = false,
-        this.isUserSubmitted = false,
+    required this.isEditorPick,
+    this.isApproved,
+    this.isExpired = false,
+    this.isUserSubmitted = false,
+    this.isTest = false,
   });
 
   // Firestore'dan Deal oluşturma
@@ -158,6 +160,7 @@ class Deal {
       isApproved: data.containsKey('isApproved') ? data['isApproved'] as bool? : null, // Alan yoksa null, varsa değerini al
       isExpired: data['isExpired'] == true,
       isUserSubmitted: data['isUserSubmitted'] == true,
+      isTest: data['isTest'] == true,
     );
   }
 
@@ -184,6 +187,7 @@ class Deal {
       'isApproved': isApproved,
       'isExpired': isExpired,
       'isUserSubmitted': isUserSubmitted,
+      'isTest': isTest,
     };
   }
 }

@@ -27,9 +27,10 @@ import 'scrapers/mango_scraper.dart';
 import 'scrapers/beymen_scraper.dart';
 import 'scrapers/pttavm_scraper.dart';
 import 'scrapers/incehesap_scraper.dart';
+import '../utils/test_logger.dart';
 
 void _log(String message) {
-  if (kDebugMode) print(message);
+  LinkPreviewLogger.log(message);
 }
 
 class LinkPreviewResult {

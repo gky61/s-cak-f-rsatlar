@@ -42,6 +42,7 @@ class DealService {
           })
           .where((deal) {
             if (deal == null) return false;
+            if (deal.isTest == true) return false;
             if (deal.isExpired == true) return false;
             if (deal.createdAt.isBefore(cutoffTime)) return false;
             return true;
@@ -81,6 +82,7 @@ class DealService {
       return snapshot.docs
           .map((doc) => Deal.fromFirestore(doc))
           .where((deal) {
+            if (deal.isTest == true) return false;
             if (deal.isExpired) return false;
             if (deal.createdAt.isBefore(cutoffTime)) return false;
             return true;
@@ -105,7 +107,7 @@ class DealService {
           .map((doc) {
             try { return Deal.fromFirestore(doc); } catch (e) { return null; }
           })
-          .where((deal) => deal != null)
+          .where((deal) => deal != null && deal.isTest != true)
           .cast<Deal>()
           .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -126,7 +128,7 @@ class DealService {
           .map((doc) {
             try { return Deal.fromFirestore(doc); } catch (e) { return null; }
           })
-          .where((deal) => deal != null && deal!.isApproved != true)
+          .where((deal) => deal != null && deal!.isApproved != true && deal.isTest != true)
           .cast<Deal>()
           .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -146,7 +148,7 @@ class DealService {
           .map((doc) {
             try { return Deal.fromFirestore(doc); } catch (e) { return null; }
           })
-          .where((deal) => deal != null && deal!.isApproved == true && deal.isExpired != true && !deal.createdAt.isBefore(cutoffTime))
+          .where((deal) => deal != null && deal!.isApproved == true && deal.isExpired != true && !deal.createdAt.isBefore(cutoffTime) && deal.isTest != true)
           .cast<Deal>()
           .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -161,7 +163,10 @@ class DealService {
         .where('isExpired', isEqualTo: true)
         .snapshots()
         .map((snapshot) {
-      final deals = snapshot.docs.map((doc) => Deal.fromFirestore(doc)).toList();
+      final deals = snapshot.docs
+          .map((doc) => Deal.fromFirestore(doc))
+          .where((deal) => deal.isTest != true)
+          .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return deals;
     });
@@ -424,6 +429,40 @@ class DealService {
       }, SetOptions(merge: true));
       return true;
     } catch (e) {
+      return false;
+    }
+  }
+
+  // Test deals dinleme stream'i
+  Stream<List<Deal>> getTestDealsStream() {
+    return _firestore
+        .collection('deals')
+        .where('isTest', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
+      final deals = snapshot.docs
+          .map((doc) {
+            try { return Deal.fromFirestore(doc); } catch (e) { return null; }
+          })
+          .where((deal) => deal != null)
+          .cast<Deal>()
+          .toList();
+      deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return deals;
+    });
+  }
+
+  // Toplu deal silme
+  Future<bool> deleteDealsBatch(List<String> dealIds) async {
+    try {
+      final batch = _firestore.batch();
+      for (final id in dealIds) {
+        batch.delete(_firestore.collection('deals').doc(id));
+      }
+      await batch.commit();
+      return true;
+    } catch (e) {
+      _log('Batch silme hatası: $e');
       return false;
     }
   }

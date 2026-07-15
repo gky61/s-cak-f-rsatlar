@@ -111,14 +111,33 @@ async function resolveUrlRedirects(url) {
 }
 
 /**
+ * Bot engelleyici ve WAF block sayfalarını kontrol eder.
+ */
+function isBotBlocked(htmlText) {
+  if (!htmlText || htmlText.length < 100) return false;
+  const lowerHtml = htmlText.toLowerCase();
+  const blockSignatures = [
+    '<title>just a moment...</title>', 'cf-challenge', 'checking your browser...',
+    'px-captcha', 'captcha-delivery.net',
+    'blocked by distil', 'distil_ident_cookie',
+    'access denied', "you don't have permission to access",
+    'access forbidden', 'ip blocked', 'request blocked', 'unauthorized access'
+  ];
+  return blockSignatures.some(sig => lowerHtml.includes(sig));
+}
+
+/**
  * Microlink API'si ile HTML çeker.
  * Pttavm gibi hem Node.js fetch hem de curl isteklerini datacenter IP'sinden dolayı 403/WAF ile engellemektedir.
  * Microlink premium proxy altyapısı sayesinde bu WAF engellerini aşabilir.
  */
-async function microlinkFetchHtml(targetUrl, originalUrl, fetchStartTime) {
-  console.log(`[FETCH-HTML] 🔧 Microlink API ile çekiliyor: ${targetUrl}`);
+async function microlinkFetchHtml(targetUrl, originalUrl, fetchStartTime, prerender = false) {
+  console.log(`[FETCH-HTML] 🔧 Microlink API ile çekiliyor: ${targetUrl} (Prerender: ${prerender})`);
   try {
-    const microUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&prerender=true&data.html.selector=html&data.html.type=html`;
+    let microUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
+    if (prerender) {
+      microUrl += '&prerender=true';
+    }
     const r = await fetch(microUrl, { signal: AbortSignal.timeout(18000) });
     const duration = Date.now() - fetchStartTime;
     console.log(`[FETCH-HTML] ⚡ Microlink cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${r.status}`);
@@ -128,6 +147,11 @@ async function microlinkFetchHtml(targetUrl, originalUrl, fetchStartTime) {
       const htmlText = data.data?.html || '';
       console.log(`[FETCH-HTML] Microlink HTML boyutu: ${htmlText.length} karakter`);
       if (htmlText.length > 1000) {
+        if (isBotBlocked(htmlText)) {
+          console.warn(`[FETCH-HTML] ❌ Microlink cevabı bot engelleyici/WAF sayfası içeriyor: ${originalUrl}`);
+          checkForBotBlockers(htmlText, originalUrl);
+          return null;
+        }
         checkForBotBlockers(htmlText, originalUrl);
         return htmlText;
       }
@@ -196,6 +220,11 @@ function curlFetchHtml(targetUrl, originalUrl, fetchStartTime) {
     console.log(`[FETCH-HTML] curl HTML boyutu: ${htmlText.length} karakter`);
 
     if (httpStatus === 200 && htmlText.length > 1000) {
+      if (isBotBlocked(htmlText)) {
+        console.warn(`[FETCH-HTML] ❌ curl cevabı bot engelleyici/WAF sayfası içeriyor: ${originalUrl}`);
+        checkForBotBlockers(htmlText, originalUrl);
+        return null;
+      }
       checkForBotBlockers(htmlText, originalUrl);
       return htmlText;
     } else {
@@ -213,8 +242,8 @@ function curlFetchHtml(targetUrl, originalUrl, fetchStartTime) {
 }
 
 /**
- * Minimal header'larla curl ile HTML çeker.
- * Google Translate Proxy ve bazı siteler sadece User-Agent header'ı ile 
+ * Minimal headers ile curl üzerinden çekim yapar. Google Translate Proxy
+ * gibi harici proxy servisleri üzerinden istek atarken boş veya minimal header seti
  * daha iyi çalışır. Fazla header (Sec-Fetch, WhatsApp UA vs.) 403'e sebep olabilir.
  */
 function curlFetchHtmlMinimal(targetUrl, originalUrl, fetchStartTime) {
@@ -252,9 +281,14 @@ function curlFetchHtmlMinimal(targetUrl, originalUrl, fetchStartTime) {
     console.log(`[FETCH-HTML] curl (minimal) HTML boyutu: ${htmlText.length} karakter`);
 
     if (httpStatus === 200 && htmlText.length > 1000) {
+      if (isBotBlocked(htmlText)) {
+        console.warn(`[FETCH-HTML] ❌ curl (minimal) cevabı bot engelleyici/WAF sayfası içeriyor: ${originalUrl}`);
+        checkForBotBlockers(htmlText, originalUrl);
+        return null;
+      }
       checkForBotBlockers(htmlText, originalUrl);
       return htmlText;
-    } else if (httpStatus === 403 && htmlText.length > 50000) {
+    } else if (httpStatus === 403 && htmlText.length > 50000 && !isBotBlocked(htmlText)) {
       // Google Translate Proxy bazen 403 döndürür ama gerçek sayfa içeriğini proxy'ler (80K+ karakter).
       // Bu durumda HTML parse edilebilir. Gerçek engel sayfaları genellikle < 5000 karakter olur.
       console.log(`[FETCH-HTML] ⚠️ curl (minimal) 403 ama büyük HTML (${htmlText.length} karakter) — gerçek sayfa olarak kabul ediliyor.`);
@@ -293,10 +327,8 @@ async function fetchHtml(url) {
     const parsed = new URL(url);
 
     if (parsed.hostname.includes('hepsiburada.com')) {
-      // Hepsiburada Akamai koruması altında — Node.js fetch() TLS fingerprint'i
-      // Google Translate Proxy üzerinden bile 403 alıyor.
-      // curl farklı TLS stack (libcurl/OpenSSL) kullandığı için bu engeli aşabilir.
-      // Çok katmanlı fallback: curl+translate → curl+direct → Microlink
+      // Hepsiburada Akamai koruması altında — Node.js fetch() TLS fingerprint'i engelleniyor.
+      // curl farklı TLS stack (libcurl/OpenSSL) kullandığı için ve WhatsApp User-Agent taklidiyle doğrudan çekebiliyoruz.
       const keepParams = ['magaza'];
       const cleaned = new URL(parsed.pathname, parsed.origin);
       for (const key of keepParams) {
@@ -304,14 +336,9 @@ async function fetchHtml(url) {
           cleaned.searchParams.set(key, parsed.searchParams.get(key));
         }
       }
-      const proxyHostname = cleaned.hostname.replace(/\./g, '-') + '.translate.goog';
-      cleaned.hostname = proxyHostname;
-      cleaned.searchParams.set('_x_tr_sl', 'auto');
-      cleaned.searchParams.set('_x_tr_tl', 'tr');
-      cleaned.searchParams.set('_x_tr_hl', 'tr');
       targetUrl = cleaned.toString();
       isHepsiburada = true;
-      console.log(`[FETCH-HTML] 🔄 Hepsiburada linki tespit edildi. Tracking params temizlendi. curl + Google Translate Proxy ile çekilecek: ${targetUrl}`);
+      console.log(`[FETCH-HTML] 🔄 Hepsiburada linki tespit edildi. Tracking params temizlendi. curl ile doğrudan çekilecek: ${targetUrl}`);
 
     } else if (parsed.hostname.includes('trendyol.com')) {
       // Tracking/affiliate parametrelerini temizle — bu parametreler Trendyol'un
@@ -354,6 +381,17 @@ async function fetchHtml(url) {
       targetUrl = cleaned.toString();
       isMediamarkt = true;
       console.log(`[FETCH-HTML] 🔄 MediaMarkt linki tespit edildi. Tracking params temizlendi. Googlebot UA kullanılacak: ${targetUrl}`);
+    } else if (parsed.hostname.includes('itopya.com')) {
+      // Itopya da Cloudflare bot koruması altında — aynı Google Translate proxy yaklaşımı.
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      const proxyHostname = cleaned.hostname.replace(/\./g, '-') + '.translate.goog';
+      cleaned.hostname = proxyHostname;
+      cleaned.searchParams.set('_x_tr_sl', 'auto');
+      cleaned.searchParams.set('_x_tr_tl', 'tr');
+      cleaned.searchParams.set('_x_tr_hl', 'tr');
+      targetUrl = cleaned.toString();
+      isProxy = true;
+      console.log(`[FETCH-HTML] 🔄 Itopya linki tespit edildi. Tracking params temizlendi. Google Translate Proxy kullanılıyor: ${targetUrl}`);
     } else if (parsed.hostname.includes('vatanbilgisayar.com')) {
       // Vatan Bilgisayar da Cloudflare bot koruması altında — aynı Google Translate proxy yaklaşımı.
       // Tracking parametrelerini temizle, URL'yi sadeleştir.
@@ -403,39 +441,15 @@ async function fetchHtml(url) {
 
   console.log(`[FETCH-HTML] 📥 İstek başlatılıyor: ${targetUrl}`);
 
-  // ── Hepsiburada: Microlink API birincil, curl fallback ──
-  // Hepsiburada Akamai Bot Manager: Google Translate Proxy + curl bile sadece güvenlik sayfası döndürüyor
-  // (80K HTML ama reduxStore/ld+json YOK). Microlink prerender=true ile gerçek sayfa geliyor (reduxStore VAR).
-  if (isHepsiburada) {
-    // Katman 1: Microlink API (prerender=true, gerçek sayfa — reduxStore dahil)
-    try {
-      const parsed = new URL(url);
-      const microClean = new URL(parsed.pathname, parsed.origin);
-      const microUrl = microClean.toString();
-      console.log(`[FETCH-HTML] 🔄 [Hepsiburada Katman 1/2] Microlink API deneniyor: ${microUrl}`);
-      const microResult = await microlinkFetchHtml(microUrl, url, fetchStartTime);
-      if (microResult) return microResult;
-    } catch (e) {
-      console.error(`[FETCH-HTML] ❌ Hepsiburada Katman 1 hatası: ${e.message}`);
-    }
-
-    // Katman 2: curl (minimal headers) + Google Translate Proxy (yedek)
-    console.log(`[FETCH-HTML] 🔄 [Hepsiburada Katman 2/2] curl (minimal) + Google Translate Proxy deneniyor...`);
-    const translateResult = curlFetchHtmlMinimal(targetUrl, url, Date.now());
-    if (translateResult) return translateResult;
-
-    console.error(`[FETCH-HTML] ❌ Hepsiburada: Tüm katmanlar başarısız oldu!`);
-    return null;
-  }
-
-  // ── Trendyol, Teknosa & Mavi: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
-  if (isTrendyol || isTeknosa || isMavi) {
+  // ── Hepsiburada, Trendyol, Teknosa & Mavi: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
+  if (isHepsiburada || isTrendyol || isTeknosa || isMavi) {
     return curlFetchHtml(targetUrl, url, fetchStartTime);
   }
 
   // ── Amazon & Pttavm: Microlink API ile çek (Cloud Run IP engeline / Teslimat lokasyonu sorununa takıldığı için) ──
+  // Amazon ve Pttavm de statik HTML'de tüm verileri barındırdığından prerender=false olarak çekilip hızlandırılır
   if (isAmazon || isPttavm) {
-    return microlinkFetchHtml(targetUrl, url, fetchStartTime);
+    return microlinkFetchHtml(targetUrl, url, fetchStartTime, false);
   }
 
   try {

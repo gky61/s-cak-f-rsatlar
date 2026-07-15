@@ -4,8 +4,10 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_app_check/firebase_app_check.dart';
 import '../firebase_options.dart';
 
+import '../utils/test_logger.dart';
+
 void _log(String message) {
-  if (kDebugMode) print(message);
+  LinkPreviewLogger.log("[Gemini AI] $message");
 }
 
 /// Gemini AI Proxy servisi - Ürün kategori ve fiyat tespiti

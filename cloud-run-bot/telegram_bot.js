@@ -35,6 +35,50 @@ const SESSION_STRING = rawSession;
 
 let CHANNELS = process.env.TELEGRAM_CHANNELS ? process.env.TELEGRAM_CHANNELS.split(',') : [];
 
+// Circular log buffer for admin console view
+const botLogs = [];
+const MAX_LOGS = 500;
+
+function formatLogLine(level, ...args) {
+  const message = args
+    .map(a => (typeof a === 'object' ? (a instanceof Error ? a.stack : JSON.stringify(a)) : String(a)))
+    .join(' ');
+  return {
+    timestamp: new Date().toISOString(),
+    level: level,
+    message: message
+  };
+}
+
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
+const originalInfo = console.info;
+
+console.log = function(...args) {
+  originalLog.apply(console, args);
+  botLogs.push(formatLogLine('info', ...args));
+  if (botLogs.length > MAX_LOGS) botLogs.shift();
+};
+
+console.error = function(...args) {
+  originalError.apply(console, args);
+  botLogs.push(formatLogLine('error', ...args));
+  if (botLogs.length > MAX_LOGS) botLogs.shift();
+};
+
+console.warn = function(...args) {
+  originalWarn.apply(console, args);
+  botLogs.push(formatLogLine('warn', ...args));
+  if (botLogs.length > MAX_LOGS) botLogs.shift();
+};
+
+console.info = function(...args) {
+  originalInfo.apply(console, args);
+  botLogs.push(formatLogLine('info', ...args));
+  if (botLogs.length > MAX_LOGS) botLogs.shift();
+};
+
 console.log('🤖 Telegram Bot başlatılıyor...');
 console.log('🔑 Environment Variables Kontrolü:');
 console.log(`   API_ID: ${API_ID ? 'Set ✅' : 'Missing ❌'}`);
@@ -482,7 +526,7 @@ function getDescriptionWithoutLinks(messageText, links) {
 /**
  * Mesajı Firebase'e kaydet
  */
-async function saveDealToFirebase(message, chatInfo) {
+async function saveDealToFirebase(message, chatInfo, isTest = false) {
   try {
     const messageText = message.message || '';
     const links = getAllLinks(message);
@@ -720,6 +764,7 @@ async function saveDealToFirebase(message, chatInfo) {
       telegramChatTitle: chatInfo.title || chatIdentifier,
       telegramChatUsername: chatIdentifier,
       rawMessage: messageText,
+      isTest: isTest,
     };
 
     console.log(`💾 Kaydediliyor: ${uniqueDocId} (imageUrl: ${imageUrl ? 'VAR ✅' : 'YOK ❌'})`);
@@ -964,15 +1009,53 @@ const PORT = process.env.PORT || 8080;
 const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   
+  // Helper to send JSON responses safely with CORS
+  const sendJson = (statusCode, data) => {
+    res.writeHead(statusCode, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    });
+    res.end(JSON.stringify(data));
+  };
+
+  // Helper to send text/empty responses safely with CORS
+  const sendText = (statusCode, text = '') => {
+    res.writeHead(statusCode, {
+      'Content-Type': 'text/plain',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    });
+    res.end(text);
+  };
+
+  if (req.method === 'OPTIONS') {
+    sendText(200);
+    return;
+  }
+
   if (parsedUrl.pathname === '/health' || parsedUrl.pathname === '/') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
+    sendJson(200, {
       status: 'ok',
       bot_running: isRunning,
       channels: CHANNELS,
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
-    }));
+    });
+  } else if (parsedUrl.pathname === '/bot-logs') {
+    const limit = parseInt(parsedUrl.searchParams.get('limit') || '100');
+    const startTime = parsedUrl.searchParams.get('startTime');
+    let logsToReturn = botLogs;
+    if (startTime) {
+      const parsedTime = new Date(startTime).getTime();
+      if (!isNaN(parsedTime)) {
+        logsToReturn = botLogs.filter(log => new Date(log.timestamp).getTime() >= parsedTime);
+      }
+    }
+    sendJson(200, { success: true, logs: logsToReturn.slice(-limit) });
+    return;
   } else if (parsedUrl.pathname === '/test-bypass') {
     const targetUrl = parsedUrl.searchParams.get('url') || 'https://www.hepsiburada.com/gamepower-skadi-round-240-argb-240mm-sivi-islemci-sogutucu-am5-ve-lga1700-uyumlu-p-HBCV000064LQCT';
     const results = {};
@@ -1038,21 +1121,18 @@ const server = http.createServer(async (req, res) => {
       }
     } catch(e) { results.microlink = { error: e.message }; }
 
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(results, null, 2));
+    sendJson(200, results);
     return;
   } else if (parsedUrl.pathname === '/simulate') {
     const urlToScrape = parsedUrl.searchParams.get('url');
     const customText = parsedUrl.searchParams.get('text');
     if (!urlToScrape) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'url parameter is required' }));
+      sendJson(400, { error: 'url parameter is required' });
       return;
     }
     
     if (!isRunning || !client) {
-      res.writeHead(503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Telegram bot is not running or client is not connected' }));
+      sendJson(503, { error: 'Telegram bot is not running or client is not connected' });
       return;
     }
     
@@ -1092,30 +1172,26 @@ const server = http.createServer(async (req, res) => {
       const docId = `telegram_${dummyChatInfo.id}_${mockMessageId}`;
       console.log(`[SIMULATE] saveDealToFirebase çağrılıyor. Beklenen Belge ID: ${docId}`);
       
-      const success = await saveDealToFirebase(dummyMessage, dummyChatInfo);
+      const success = await saveDealToFirebase(dummyMessage, dummyChatInfo, true);
       
       if (success) {
         // Firestore'dan belgenin güncel halini okuyalım
         const docRef = db.collection('deals').doc(docId);
         const docSnap = await docRef.get();
         if (docSnap.exists) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, docId, data: docSnap.data() }));
+          sendJson(200, { success: true, docId, data: docSnap.data() });
           return;
         }
       }
       
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: 'Failed to process deal or save to Firestore', docId }));
+      sendJson(500, { success: false, error: 'Failed to process deal or save to Firestore', docId });
       
     } catch (err) {
       console.error('[SIMULATE] Simülasyon hatası:', err);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message, stack: err.stack }));
+      sendJson(500, { error: err.message, stack: err.stack });
     }
   } else {
-    res.writeHead(404);
-    res.end('Not Found');
+    sendText(404, 'Not Found');
   }
 });
 

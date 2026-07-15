@@ -22,6 +22,11 @@ import 'profile_screen.dart';
 import 'message_screen.dart';
 import '../widgets/admin_reports_list.dart';
 import 'notification_debug_screen.dart';
+import '../widgets/test_automation_widget.dart';
+import '../utils/test_logger.dart';
+import '../services/link_preview_service.dart';
+import '../services/category_detection_service.dart';
+import '../services/ai_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -67,6 +72,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   int _usersCount = 0;
   int _unreadMessagesCount = 0;
   int _pendingReportsCount = 0;
+  int _testDealsCount = 0;
   
   // Stream Subscriptions - Bellek sızıntısını önlemek için
   StreamSubscription? _pendingSubscription;
@@ -75,6 +81,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   StreamSubscription? _usersSubscription;
   StreamSubscription? _messagesSubscription;
   StreamSubscription? _reportsSubscription;
+  StreamSubscription? _testDealsSubscription;
+  StreamSubscription? _mobileTestCommandSubscription;
   
   // Kullanıcı arama
   String _userSearchQuery = '';
@@ -139,11 +147,12 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _loadTabCounts();
     _loadReportCounts();
     // Admin paneli her açıldığında admin_deals topic'ine abone ol (bildirimlerin gelmesi için)
     _ensureAdminNotificationSubscription();
+    _startMobileTestCommandListener();
   }
 
   /// Admin bildirimlerine (onay bekleyen fırsatlar) abone olmayı garanti et
@@ -186,6 +195,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     _usersSubscription?.cancel();
     _messagesSubscription?.cancel();
     _reportsSubscription?.cancel();
+    _testDealsSubscription?.cancel();
+    _mobileTestCommandSubscription?.cancel();
     _tabController.dispose();
     _userSearchController.dispose();
     super.dispose();
@@ -239,6 +250,19 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         });
       }
     });
+
+    // Test Fırsatları sayısı
+    _testDealsSubscription = FirebaseFirestore.instance
+        .collection('deals')
+        .where('isTest', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _testDealsCount = snapshot.docs.length;
+        });
+      }
+    });
   }
 
   @override
@@ -289,6 +313,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             _buildTabWithBadge('Kullanıcılar', _usersCount),
             _buildTabWithBadge('Mesajlar', _unreadMessagesCount),
             _buildTabWithBadge('Raporlar', _pendingReportsCount),
+            _buildTabWithBadge('Test Otomasyonu', _testDealsCount),
           ],
         ),
       ),
@@ -301,6 +326,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           _buildUsersList(),
           _buildMessagesList(),
           const AdminReportsList(),
+          const TestAutomationWidget(),
         ],
       ),
     );
@@ -2559,5 +2585,132 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         ],
       ),
     );
+  }
+
+  void _startMobileTestCommandListener() {
+    _mobileTestCommandSubscription?.cancel();
+    _mobileTestCommandSubscription = FirebaseFirestore.instance
+        .collection('mobileTestCommands')
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .listen((snapshot) async {
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final url = data['url'] as String?;
+        if (url == null || url.isEmpty) continue;
+
+        // Initialize logs list and write initial running state
+        final localLogs = <String>[];
+        localLogs.add('[Mobile App] Test komutu alındı. Kazıcı başlatılıyor...');
+        await doc.reference.update({
+          'status': 'running',
+          'logs': localLogs,
+        });
+
+        // Set up periodic timer to flush logs to Firestore
+        bool needsUpdate = false;
+        final timer = Timer.periodic(const Duration(milliseconds: 500), (t) {
+          if (needsUpdate) {
+            doc.reference.update({'logs': localLogs});
+            needsUpdate = false;
+          }
+        });
+
+        // Redirect logs locally
+        final subscription = LinkPreviewLogger.logStream.listen((logLine) {
+          localLogs.add(logLine);
+          needsUpdate = true;
+        });
+
+        try {
+          // Fetch metadata
+          final preview = await LinkPreviewService().fetchMetadata(url).timeout(
+            const Duration(seconds: 15),
+          );
+
+          if (preview == null) {
+            throw Exception("Kazıma başarısız oldu (Preview boş).");
+          }
+
+          // Category detection
+          String category = 'diger';
+          String? subCategory;
+          final titleToClassify = '${preview.breadcrumbs?.join(" ") ?? ""} ${preview.title ?? ""}';
+          final catResult = CategoryDetectionService.detectCategory(titleToClassify);
+          if (catResult != null) {
+            category = catResult['categoryId']!;
+            subCategory = catResult['subCategory'];
+          }
+
+          // AI Analysis
+          final aiResult = await AIService.analyzeProduct(
+            url: url,
+            title: preview.title ?? "",
+            description: preview.description ?? "",
+          );
+
+          String finalTitle = preview.title ?? "Fırsat Ürünü";
+          double finalPrice = preview.price ?? 0.0;
+          String finalStore = preview.provider ?? "Diğer";
+
+          if (aiResult['success'] == true) {
+            if (aiResult.containsKey('title') && aiResult['title'] != null) {
+              finalTitle = aiResult['title'];
+            }
+            if (aiResult.containsKey('price') && aiResult['price'] != null) {
+              finalPrice = double.tryParse(aiResult['price'].toString()) ?? finalPrice;
+            }
+            if (aiResult.containsKey('store') && aiResult['store'] != null) {
+              finalStore = aiResult['store'];
+            }
+            if (aiResult.containsKey('category') && aiResult['category'] != null) {
+              category = aiResult['category'];
+              subCategory = null;
+            }
+          }
+
+          // Save test deal to Firestore
+          final deal = Deal(
+            id: '',
+            title: finalTitle,
+            description: preview.description ?? 'Mobil test açıklaması',
+            price: finalPrice,
+            originalPrice: finalPrice > 0 ? finalPrice * 1.2 : 0.0,
+            discountRate: finalPrice > 0 ? 20 : 0,
+            store: finalStore,
+            category: category,
+            subCategory: subCategory,
+            link: url,
+            imageUrl: preview.imageUrl ?? '',
+            hotVotes: 0,
+            coldVotes: 0,
+            commentCount: 0,
+            postedBy: 'admin_test_mobil',
+            createdAt: DateTime.now(),
+            isEditorPick: false,
+            isApproved: false,
+            isUserSubmitted: false,
+            isTest: true,
+          );
+
+          await FirebaseFirestore.instance.collection('deals').add(deal.toFirestore());
+
+          localLogs.add('[Mobile App] Test başarıyla tamamlandı ve Firestore\'a kaydedildi.');
+          await doc.reference.update({
+            'status': 'completed',
+            'logs': localLogs,
+          });
+        } catch (e) {
+          localLogs.add('[Mobile App] HATA: $e');
+          await doc.reference.update({
+            'status': 'failed',
+            'logs': localLogs,
+          });
+        } finally {
+          subscription.cancel();
+          timer.cancel();
+        }
+      }
+    });
   }
 }

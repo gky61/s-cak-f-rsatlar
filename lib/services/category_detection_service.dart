@@ -1,8 +1,8 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
+import '../utils/test_logger.dart';
 import '../models/category.dart';
 
 void _log(String message) {
-  if (kDebugMode) print(message);
+  LinkPreviewLogger.log("[Category] $message");
 }
 
 class CategoryDetectionService {

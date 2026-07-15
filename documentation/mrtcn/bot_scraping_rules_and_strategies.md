@@ -42,19 +42,21 @@ graph TD
 Sunucu ortamındaki bot korumalarını aşmak için geliştirilen 5 temel bypass stratejisi ve bunların mağaza eşleşmeleri:
 
 ### 1. Google Translate Proxy (`translate.goog`)
-*   **Kullanıldığı Mağazalar:** `N11`, `Vatan Bilgisayar`
-*   **Problem:** Bu mağazalar Google Cloud IP adreslerini (veri merkezleri) toptan (IP seviyesinde) engeller.
+*   **Kullanıldığı Mağazalar:** `N11`, `Vatan Bilgisayar`, `Itopya`
+*   **Problem:** Bu mağazalar Google Cloud bulut IP adreslerini (veri merkezleri) doğrudan engeller ve Cloudflare/WAF koruması ile `403 Forbidden` döndürür.
 *   **Çözüm:** İstekler `https://www-domain-com.translate.goog/path?_x_tr_sl=auto&_x_tr_tl=tr` formatına dönüştürülerek gönderilir. Google Translate sunucuları, Cloudflare/Akamai sistemlerinde beyaz listede olduğu için istek meşru bir arama motoru IP'sinden geliyormuş gibi görünür ve 403 engeli aşılır.
 *   **Kritik Detay (Tracking Temizleme):** 
     *   **N11:** Sadece mağaza bazlı indirimlerin doğru hesaplanması için `magaza` parametresi korunur.
+    *   **Itopya:** URL üzerindeki takip veya yönlendirme parametreleri temizlenerek doğrudan temiz ürün detayı proxy ile çekilir.
 
 ### 2. `curl` spawnSync ile Doğrudan Erişim (TLS/JA3/Geo-Redirect Bypass)
-*   **Kullanıldığı Mağazalar:** `Trendyol`, `Teknosa`, `Mavi`
+*   **Kullanıldığı Mağazalar:** `Trendyol`, `Teknosa`, `Mavi`, `Hepsiburada`
 *   **Problem:** 
     *   **Teknosa & Mavi:** Bu mağazalar Google Cloud IP bloklarını engellemez; ancak Node.js (`fetch`/`undici`) kütüphanesinin SSL el sıkışması (TLS Handshake JA3/JA4 parmak izi) imzasını "şüpheli bot" olarak algılayıp `403 Forbidden` (Cloudflare WAF Challenge) döndürür.
+    *   **Hepsiburada:** Hepsiburada'nın Akamai Bot Manager koruması, Google Translate Proxy sunucu IP'lerini (ve Googlebot IP'lerini) Captcha sayfasına (`HBBlockandCaptcha.html`) yönlendirir (403 WAF engeli, ~80KB HTML boyutu ama ürün bilgileri ve reduxStore bulunmaz). Ayrıca Microlink API'sinin ücretsiz sürümü Hepsiburada'yı engellemiştir (`EPROXYNEEDED` hatası döner).
     *   **Trendyol:** Yurt dışı (Iowa/Iowa-Central1 Cloud Run) IP'lerinden gelen direct istekleri otomatik olarak `/en/select-country?cb=...` (ülke seçimi) sayfasına yönlendirerek orijinal ürün detay sayfasını engeller (74KB anasayfa HTML'i döner). Google Translate Proxy ile gidildiğinde ise, Translate sunucuları yurt dışında olduğu için Trendyol local butik/sepet indirimlerini (`boutiqueId`) render etmeyip standart/indirimsiz global fiyatları (`65374 TL` yerine `63299 TL`) gösterir.
 *   **Çözüm:** 
-    *   **Teknosa & Mavi:** İşletim sistemi düzeyinde çalışan `curl` aracı, Node.js'ten tamamen farklı bir TLS stack'i (libcurl/OpenSSL) kullanır. `spawnSync('curl', [...args])` yardımıyla istek doğrudan `WhatsApp/2.23.4.15 A` User-Agent'ı ile atılarak TLS engeli aşılır.
+    *   **Teknosa, Mavi & Hepsiburada:** İşletim sistemi düzeyinde çalışan `curl` aracı, Node.js'ten tamamen farklı bir TLS stack'i (libcurl/OpenSSL) kullanır. `spawnSync('curl', [...args])` yardımıyla istek doğrudan `WhatsApp/2.23.4.15 A` User-Agent'ı ile atılarak hem TLS engelleri hem de Google Translate IP engelleri aşılır. Hepsiburada doğrudan 200 OK ile orijinal DOM ve `reduxStore` verilerini (~1MB HTML boyutu) eksiksiz döndürür.
     *   **Trendyol:** İstek doğrudan `curl` ile atılırken, header'lara **`Cookie: storefrontId=1; countryCode=TR; language=tr`** çerezleri eklenir. Bu çerezler sayesinde Trendyol yurt dışı IP yönlendirmesini (`select-country`) tamamen atlar, botu Türkiye lokasyonlu bir kullanıcı gibi algılar ve orijinal ürün sayfasını (425KB+) butik kampanya indirimli fiyatıyla beraber kusursuzca render eder. Linklerdeki affiliate/kampanya parametreleri temizlenmezse, Trendyol JSON-LD şemasını HTML içerisinden kaldırdığı için sadece `boutiqueId`, `merchantId` ve `storefrontId` parametreleri korunur, gerisi silinir.
 *   **Gereksinim:** Docker imajında (`Dockerfile`) `apk add --no-cache curl` komutuyla curl yüklü olmalıdır.
 
@@ -87,9 +89,11 @@ Sunucu ortamındaki bot korumalarını aşmak için geliştirilen 5 temel bypass
 
 | Mağaza | Bot Karşılaşma Durumu | Kullanılan Bypass Yöntemi | Teknik Detay / Başlık |
 | :--- | :--- | :--- | :--- |
+| **Hepsiburada** | Akamai Captcha / Microlink Blok | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA (Google Translate Proxy engellendiği ve Microlink ücretli plan istediği için doğrudan curl ile çekilir) |
 | **Trendyol** | Yurt dışı IP & Ülke Engeli | `curl` spawnSync (Doğrudan) | `storefrontId=1; countryCode=TR; language=tr` Cookie Entegrasyonu |
 | **N11** | 403 Forbidden (IP Engeli) | Google Translate Proxy | `translate.goog` + `magaza` parametresi koruma |
 | **Vatan Bilgisayar** | 403 Forbidden (IP Engeli) | Google Translate Proxy | `translate.goog` |
+| **Itopya** | 403 Forbidden (Cloudflare Engeli) | Google Translate Proxy | `translate.goog` (VM ve Direct curl Cloudflare tarafından engellendiği için translate proxy üzerinden Node fetch ile çekilir) |
 | **Teknosa** | 403 Forbidden (TLS Engeli) | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA |
 | **Mavi** | 403 Forbidden (TLS Engeli) | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA |
 | **Pttavm** | 403 Forbidden (Tam IP Blok) | **Microlink HTML Proxy** | `api.microlink.io` custom HTML selector |

@@ -477,6 +477,9 @@ class FirestoreService {
   Future<bool> setDealSharingEnabled(bool enabled) => _dealService.setDealSharingEnabled(enabled);
   Stream<bool> dealSharingEnabledStream() => firestore.collection('settings').doc('app').snapshots().map((s) => s.data()?['dealSharingEnabled'] ?? true);
   
+  Stream<List<Deal>> getTestDealsStream() => _dealService.getTestDealsStream();
+  Future<bool> deleteDealsBatch(List<String> dealIds) => _dealService.deleteDealsBatch(dealIds);
+  
   Future<bool> isCommentSharingEnabled() async {
     try {
       final doc = await firestore.collection('settings').doc('app').get();

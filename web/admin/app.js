@@ -609,6 +609,14 @@ function initEventListeners() {
         });
     }
 
+    const testAutomationMenuBtn = document.getElementById('testAutomationMenuBtn');
+    if (testAutomationMenuBtn) {
+        testAutomationMenuBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            showTestAutomationView();
+        });
+    }
+
     // Load initial global settings status
     loadDealSharingStatus();
     loadCommentSharingStatus();
@@ -2666,7 +2674,7 @@ function handleCancelDeal(event) {
 
 // View management
 function showView(viewId) {
-    const views = ['dashboardView', 'dealsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView'];
+    const views = ['dashboardView', 'dealsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'testAutomationView'];
     views.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -2809,7 +2817,22 @@ function updateMenuActiveState(activeView) {
             const icon = logsMenuItem.querySelector('.material-symbols-outlined');
             if (icon) icon.classList.add('icon-filled');
         }
+    } else if (activeView === 'testAutomation') {
+        const testAutomationMenuItem = document.getElementById('testAutomationMenuBtn');
+        if (testAutomationMenuItem) {
+            testAutomationMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
+            testAutomationMenuItem.classList.remove('text-slate-400');
+            const icon = testAutomationMenuItem.querySelector('.material-symbols-outlined');
+            if (icon) icon.classList.add('icon-filled');
+        }
     }
+}
+
+function showTestAutomationView() {
+    currentView = 'testAutomation';
+    showView('testAutomationView');
+    updateMenuActiveState('testAutomation');
+    initTestAutomation();
 }
 
 // Load messages from Firestore
@@ -5293,6 +5316,7 @@ function showLoadingIndicator(show) {
 window.showReportsView = showReportsView;
 window.showSettingsView = showSettingsView;
 window.showDashboardView = showDashboardView;
+window.showTestAutomationView = showTestAutomationView;
 
 // Environment badge initialization
 function initEnvironmentBadge() {
@@ -7115,6 +7139,484 @@ window.cleanupTestDataAdmin = async function() {
         }
     }
 };
+
+// --- TEST AUTOMATION MODULE ---
+let testSelectedMode = 'mobile';
+let testDeals = [];
+let selectedTestDealIds = new Set();
+let botLogsPollInterval = null;
+let mobileTestCommandListener = null;
+
+function initTestAutomation() {
+    const isProd = firebaseConfig.projectId === 'firsatkolik-prod-e6eae';
+    
+    // Set environment badge text
+    const testEnvBadge = document.getElementById('testEnvBadge');
+    if (testEnvBadge) {
+        testEnvBadge.innerHTML = `<span class="w-2 h-2 rounded-full ${isProd ? 'bg-red-500' : 'bg-amber-500'}"></span>${isProd ? 'PROD ORTAMI' : 'DEV ORTAMI'}`;
+        testEnvBadge.className = `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
+            isProd ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-800' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+        }`;
+    }
+
+    // Kazıma yöntemi butonları
+    const testModeMobileBtn = document.getElementById('testModeMobileBtn');
+    const testModeBotBtn = document.getElementById('testModeBotBtn');
+    const testCustomTextContainer = document.getElementById('testCustomTextContainer');
+    const mobileAppWarning = document.getElementById('mobileAppWarning');
+
+    if (testModeMobileBtn && testModeBotBtn) {
+        testModeMobileBtn.onclick = () => {
+            testSelectedMode = 'mobile';
+            testModeMobileBtn.className = 'flex-1 px-4 py-2 bg-primary text-white border border-primary rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2';
+            testModeBotBtn.className = 'flex-1 px-4 py-2 bg-slate-50 dark:bg-surface-darker hover:bg-slate-100 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2';
+            testCustomTextContainer.classList.add('hidden');
+            mobileAppWarning.classList.remove('hidden');
+        };
+
+        testModeBotBtn.onclick = () => {
+            testSelectedMode = 'bot';
+            testModeBotBtn.className = 'flex-1 px-4 py-2 bg-primary text-white border border-primary rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2';
+            testModeMobileBtn.className = 'flex-1 px-4 py-2 bg-slate-50 dark:bg-surface-darker hover:bg-slate-100 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2';
+            testCustomTextContainer.classList.remove('hidden');
+            mobileAppWarning.classList.add('hidden');
+        };
+    }
+
+    // Kazı ve Test Et
+    const runScrapeTestBtn = document.getElementById('runScrapeTestBtn');
+    if (runScrapeTestBtn) {
+        runScrapeTestBtn.onclick = startScrapeTest;
+    }
+
+    // Terminal Temizle
+    const clearTestTerminalBtn = document.getElementById('clearTestTerminalBtn');
+    if (clearTestTerminalBtn) {
+        clearTestTerminalBtn.onclick = clearTestTerminal;
+    }
+
+    // Tümünü Temizle (Test Fırsatları)
+    const deleteAllTestDealsBtn = document.getElementById('deleteAllTestDealsBtn');
+    if (deleteAllTestDealsBtn) {
+        deleteAllTestDealsBtn.onclick = deleteAllTestDeals;
+    }
+
+    // Seçilenleri Sil (Toplu Silme)
+    const deleteSelectedTestDealsBtn = document.getElementById('deleteSelectedTestDealsBtn');
+    if (deleteSelectedTestDealsBtn) {
+        deleteSelectedTestDealsBtn.onclick = deleteSelectedTestDeals;
+    }
+
+    // Tümünü Seç Checkbox'ı
+    const selectAllCheck = document.getElementById('selectAllTestDealsCheck');
+    if (selectAllCheck) {
+        selectAllCheck.onchange = (e) => {
+            const checked = e.target.checked;
+            selectedTestDealIds.clear();
+            if (checked) {
+                testDeals.forEach(d => selectedTestDealIds.add(d.id));
+            }
+            updateBatchControlsUI();
+            renderTestDealsList();
+        };
+    }
+
+    // Firebase live test deals listener
+    listenToTestDeals();
+}
+
+function appendTerminalLog(message, level = 'info') {
+    const terminal = document.getElementById('testTerminal');
+    if (!terminal) return;
+
+    // Remove placeholder on first log
+    if (terminal.querySelector('.text-slate-500')) {
+        terminal.innerHTML = '';
+    }
+
+    const timeString = new Date().toISOString().substring(11, 19);
+    
+    let colorClass = 'text-cyan-400';
+    if (level === 'error') colorClass = 'text-red-400';
+    else if (level === 'warn') colorClass = 'text-amber-400';
+    else if (level === 'success') colorClass = 'text-emerald-400';
+
+    const logRow = document.createElement('div');
+    logRow.className = 'flex items-start gap-1 font-mono text-[13px] leading-normal';
+    logRow.innerHTML = `
+        <span class="text-slate-500 select-none">[${timeString}]</span>
+        <span class="${colorClass} flex-1 break-all">${escapeHtml(message)}</span>
+    `;
+
+    terminal.appendChild(logRow);
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+function clearTestTerminal() {
+    const terminal = document.getElementById('testTerminal');
+    if (terminal) {
+        terminal.innerHTML = '<div class="text-slate-500">Konsol temizlendi. Yeni bir test başlatabilirsiniz.</div>';
+    }
+}
+
+function listenToTestDeals() {
+    db.collection('deals')
+        .where('isTest', '==', true)
+        .onSnapshot((snapshot) => {
+            testDeals = [];
+            snapshot.forEach((doc) => {
+                testDeals.push({ id: doc.id, ...doc.data() });
+            });
+
+            // Sort in memory by createdAt descending to avoid missing composite index errors
+            testDeals.sort((a, b) => {
+                const t1 = a.createdAt ? (a.createdAt.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt).getTime()) : 0;
+                const t2 = b.createdAt ? (b.createdAt.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt).getTime()) : 0;
+                return t2 - t1;
+            });
+
+            // Update UI count
+            const countText = document.getElementById('testDealsCountText');
+            if (countText) {
+                countText.textContent = `Toplam: ${testDeals.length} test datası`;
+            }
+
+            // Sync selection set (remove any IDs that don't exist anymore)
+            const activeIds = new Set(testDeals.map(d => d.id));
+            selectedTestDealIds.forEach(id => {
+                if (!activeIds.has(id)) {
+                    selectedTestDealIds.delete(id);
+                }
+            });
+
+            updateBatchControlsUI();
+            renderTestDealsList();
+        }, (error) => {
+            console.error("Error listening to test deals:", error);
+        });
+}
+
+function updateBatchControlsUI() {
+    const testBatchControls = document.getElementById('testBatchControls');
+    const selectedTestDealsCount = document.getElementById('selectedTestDealsCount');
+    const selectAllCheck = document.getElementById('selectAllTestDealsCheck');
+
+    if (testDeals.length > 0) {
+        testBatchControls.classList.remove('hidden');
+        selectedTestDealsCount.textContent = selectedTestDealIds.size;
+        if (selectAllCheck) {
+            selectAllCheck.checked = (selectedTestDealIds.size === testDeals.length);
+        }
+    } else {
+        testBatchControls.classList.add('hidden');
+        if (selectAllCheck) selectAllCheck.checked = false;
+    }
+}
+
+function renderTestDealsList() {
+    const listContainer = document.getElementById('testDealsList');
+    if (!listContainer) return;
+
+    if (testDeals.length === 0) {
+        listContainer.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
+                <span class="material-symbols-outlined text-5xl opacity-40">dashboard_customize</span>
+                <p class="text-sm">Kayıtlı test verisi yok.</p>
+            </div>
+        `;
+        return;
+    }
+
+    listContainer.innerHTML = testDeals.map(deal => {
+        const isSelected = selectedTestDealIds.has(deal.id);
+        const sourceLabel = deal.postedBy === 'admin_test_mobil' ? 'MOBİL' : 'BOT';
+        const sourceClass = deal.postedBy === 'admin_test_mobil' ? 'bg-blue-500/10 text-blue-500' : 'bg-amber-500/10 text-amber-500';
+        
+        return `
+            <div class="bg-slate-50 dark:bg-surface-darker border border-slate-200 dark:border-slate-800 p-3 rounded-lg flex items-center gap-3">
+                <input type="checkbox" class="rounded border-slate-300 dark:border-slate-700 text-primary focus:ring-primary focus:ring-offset-0 bg-transparent cursor-pointer" 
+                    ${isSelected ? 'checked' : ''} 
+                    onclick="toggleTestDealSelection('${deal.id}')" />
+                
+                <div class="w-12 h-12 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+                    ${deal.imageUrl ? `<img src="${deal.imageUrl}" class="w-full h-full object-cover" onerror="this.src=''" />` : '<span class="material-symbols-outlined text-slate-400">image</span>'}
+                </div>
+                
+                <div class="flex-1 min-w-0 flex flex-col flex">
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${escapeHtml(deal.title)}</span>
+                    <span class="text-[10px] text-slate-500 dark:text-slate-400">${escapeHtml(deal.store || 'Bilinmeyen Mağaza')}</span>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="text-xs font-black text-primary">${deal.price || 0} TL</span>
+                        <span class="px-1.5 py-0.5 rounded text-[8px] font-extrabold ${sourceClass}">${sourceLabel}</span>
+                    </div>
+                </div>
+                
+                <button type="button" onclick="deleteSingleTestDeal('${deal.id}')" class="p-1 hover:bg-red-500/10 text-red-500 rounded transition-colors shrink-0">
+                    <span class="material-symbols-outlined text-[20px]">delete</span>
+                </button>
+            </div>
+        `;
+    }).join('');
+}
+
+window.toggleTestDealSelection = function(dealId) {
+    if (selectedTestDealIds.has(dealId)) {
+        selectedTestDealIds.delete(dealId);
+    } else {
+        selectedTestDealIds.add(dealId);
+    }
+    updateBatchControlsUI();
+    renderTestDealsList();
+};
+
+window.deleteSingleTestDeal = async function(dealId) {
+    if (!confirm('Bu test verisini silmek istediğinizden emin misiniz?')) return;
+    try {
+        await db.collection('deals').doc(dealId).delete();
+        showSuccess('Test fırsatı silindi.');
+    } catch (e) {
+        showError('Hata: ' + e.message);
+    }
+};
+
+async function deleteSelectedTestDeals() {
+    if (selectedTestDealIds.size === 0) return;
+    if (!confirm(`Seçilen ${selectedTestDealIds.size} test fırsatını silmek istediğinizden emin misiniz?`)) return;
+
+    const ids = Array.from(selectedTestDealIds);
+    const batch = db.batch();
+    ids.forEach(id => {
+        batch.delete(db.collection('deals').doc(id));
+    });
+
+    try {
+        await batch.commit();
+        selectedTestDealIds.clear();
+        showSuccess('Seçilen test verileri silindi.');
+    } catch (e) {
+        showError('Hata: ' + e.message);
+    }
+}
+
+async function deleteAllTestDeals() {
+    if (testDeals.length === 0) return;
+    if (!confirm('Sistemdeki TÜM test fırsatlarını temizlemek istediğinizden emin misiniz?')) return;
+
+    const batch = db.batch();
+    testDeals.forEach(deal => {
+        batch.delete(db.collection('deals').doc(deal.id));
+    });
+
+    try {
+        await batch.commit();
+        selectedTestDealIds.clear();
+        showSuccess('Tüm test verileri temizlendi.');
+    } catch (e) {
+        showError('Hata: ' + e.message);
+    }
+}
+
+async function startScrapeTest() {
+    const urlInput = document.getElementById('testUrlInput');
+    const url = urlInput ? urlInput.value.trim() : '';
+
+    if (!url || !url.startsWith('http')) {
+        showError('Lütfen geçerli bir ürün linki girin!');
+        return;
+    }
+
+    const runScrapeTestBtn = document.getElementById('runScrapeTestBtn');
+    const testRunningIndicator = document.getElementById('testRunningIndicator');
+
+    // Reset UI states
+    runScrapeTestBtn.disabled = true;
+    const originalText = runScrapeTestBtn.innerHTML;
+    runScrapeTestBtn.innerHTML = '<span class="material-symbols-outlined text-[20px] animate-spin">refresh</span><span>İşlem Sürüyor...</span>';
+    testRunningIndicator.classList.remove('hidden');
+    clearTestTerminal();
+
+    appendTerminalLog(`🚀 Test Akışı Başlatıldı (${testSelectedMode.toUpperCase()} Modu)`);
+
+    try {
+        if (testSelectedMode === 'mobile') {
+            await runMobileScrapeTest(url);
+        } else {
+            await runBotScrapeTest(url);
+        }
+    } catch (e) {
+        appendTerminalLog(`❌ Test Başarısız: ${e.message}`, 'error');
+    } finally {
+        runScrapeTestBtn.disabled = false;
+        runScrapeTestBtn.innerHTML = originalText;
+        testRunningIndicator.classList.add('hidden');
+    }
+}
+
+async function runMobileScrapeTest(url) {
+    appendTerminalLog("📱 Mobil Uygulama test komutu Firestore'a yazılıyor...");
+    
+    const commandId = 'cmd_' + Math.random().toString(36).substr(2, 9);
+    const commandRef = db.collection('mobileTestCommands').doc(commandId);
+
+    await commandRef.set({
+        url: url,
+        status: 'pending',
+        logs: ['[Web Control] Komut oluşturuldu, mobil uygulama bekleniyor...'],
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    appendTerminalLog("⏳ Mobil uygulamanın komutu alması bekleniyor... (Lütfen telefon/emülatörde FırsatKolik uygulamasını açık tutun)");
+
+    return new Promise((resolve, reject) => {
+        let isResolved = false;
+        let lastLoggedIndex = 0;
+
+        const timeoutId = setTimeout(async () => {
+            if (isResolved) return;
+            isResolved = true;
+            if (mobileTestCommandListener) mobileTestCommandListener();
+            
+            appendTerminalLog("⏱️ Test Zaman Aşımı! Mobil uygulamadan 30 saniye boyunca yanıt alınamadı. Lütfen uygulamanın açık ve internete bağlı olduğundan emin olun.", "error");
+            
+            try {
+                await commandRef.update({ status: 'timed_out' });
+            } catch (_) {}
+
+            reject(new Error("Mobile app did not respond (timeout)"));
+        }, 30000);
+
+        mobileTestCommandListener = commandRef.onSnapshot((doc) => {
+            if (!doc.exists) return;
+            const data = doc.data();
+            
+            const logs = data.logs || [];
+            if (logs.length > lastLoggedIndex) {
+                for (let i = lastLoggedIndex; i < logs.length; i++) {
+                    const logLine = logs[i];
+                    let level = 'info';
+                    if (logLine.toLowerCase().includes('error') || logLine.toLowerCase().includes('hata') || logLine.includes('❌')) {
+                        level = 'error';
+                    } else if (logLine.toLowerCase().includes('warn') || logLine.toLowerCase().includes('uyarı') || logLine.includes('⚠️')) {
+                        level = 'warn';
+                    } else if (logLine.includes('✅') || logLine.includes('başarılı')) {
+                        level = 'success';
+                    }
+                    appendTerminalLog(logLine, level);
+                }
+                lastLoggedIndex = logs.length;
+            }
+
+            if (data.status === 'completed') {
+                isResolved = true;
+                clearTimeout(timeoutId);
+                if (mobileTestCommandListener) mobileTestCommandListener();
+                appendTerminalLog("🎉 MOBİL TEST BAŞARIYLA TAMAMLANDI!", "success");
+                showSuccess("Mobil kazıma başarıyla tamamlandı!");
+                resolve();
+            } else if (data.status === 'failed') {
+                isResolved = true;
+                clearTimeout(timeoutId);
+                if (mobileTestCommandListener) mobileTestCommandListener();
+                reject(new Error("Mobil kazıma sırasında hata oluştu."));
+            }
+        }, (error) => {
+            clearTimeout(timeoutId);
+            reject(error);
+        });
+    });
+}
+
+async function runBotScrapeTest(url) {
+    const isProd = firebaseConfig.projectId === 'firsatkolik-prod-e6eae';
+    const botUrl = isProd
+        ? 'https://telegram-bot-228657473310.us-central1.run.app'
+        : 'https://telegram-bot-560592268193.us-central1.run.app';
+
+    appendTerminalLog(`🤖 Bot Server URL: ${botUrl}`);
+    appendTerminalLog("⏱️ HTTP /simulate isteği gönderiliyor (İşlem 5-25 saniye sürebilir)...");
+
+    const customText = document.getElementById('testCustomTextInput').value.trim();
+    let simulateEndpoint = `${botUrl}/simulate?url=${encodeURIComponent(url)}`;
+    if (customText) {
+        simulateEndpoint += `&text=${encodeURIComponent(customText)}`;
+    }
+
+    startBotLogPolling(botUrl);
+
+    try {
+        const response = await fetch(simulateEndpoint);
+        const result = await response.json();
+
+        setTimeout(() => {
+            if (botLogsPollInterval) clearInterval(botLogsPollInterval);
+        }, 2000);
+
+        if (response.ok && result.success) {
+            appendTerminalLog("🎉 BOT TESTİ BAŞARIYLA TAMAMLANDI!", "success");
+            appendTerminalLog(`📌 Belge ID:    ${result.docId}`, "success");
+            const data = result.data || {};
+            appendTerminalLog(`🏢 Mağaza:      ${data.store || 'YOK'}`);
+            appendTerminalLog(`🏷️ Başlık:      "${data.title || 'YOK'}"`);
+            appendTerminalLog(`💰 Fiyat:       ${data.price || 'YOK'} TL`);
+            appendTerminalLog(`📁 Kategori:    ${data.category || 'YOK'}`);
+            showSuccess("Bot kazıma simülasyonu başarılı!");
+        } else {
+            const errDetail = result.error || 'Bilinmeyen Hata';
+            appendTerminalLog(`❌ Bot test hatası: ${errDetail}`, 'error');
+            throw new Error(errDetail);
+        }
+    } catch (e) {
+        if (botLogsPollInterval) clearInterval(botLogsPollInterval);
+        throw e;
+    }
+}
+
+function startBotLogPolling(botUrl) {
+    if (botLogsPollInterval) clearInterval(botLogsPollInterval);
+
+    const loggedLines = new Set();
+    let initialLoaded = false;
+
+    // Load initial logs to populate duplicate prevention set
+    async function loadInitialLogs() {
+        try {
+            const response = await fetch(`${botUrl}/bot-logs?limit=250`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.logs) {
+                    data.logs.forEach(log => {
+                        const uniqueKey = log.timestamp + '_' + log.message;
+                        loggedLines.add(uniqueKey);
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("Error loading initial bot logs:", e);
+        }
+        initialLoaded = true;
+    }
+
+    loadInitialLogs();
+
+    botLogsPollInterval = setInterval(async () => {
+        if (!initialLoaded) return;
+        try {
+            const response = await fetch(`${botUrl}/bot-logs?limit=100`);
+            if (!response.ok) return;
+
+            const data = await response.json();
+            if (data.success && data.logs) {
+                data.logs.forEach(log => {
+                    const uniqueKey = log.timestamp + '_' + log.message;
+                    if (!loggedLines.has(uniqueKey)) {
+                        loggedLines.add(uniqueKey);
+                        appendTerminalLog(`[Bot Server] ${log.message}`, log.level);
+                    }
+                });
+            }
+        } catch (_) {}
+    }, 1500);
+}
 
 
 

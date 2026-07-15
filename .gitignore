@@ -78,8 +78,13 @@ assets/ayı.jpg
 *.log
 **/node_modules/
 node_modules/
-documentation/project_secrets_and_credentials.md
+documentation/mrtcn/project_secrets_and_credentials.md
+documentation/mrtcn/project_secrets_and_credentials_updated.md
 *.bak
+
+# Firebase private keys
+cloud-run-bot/dev_firebase_key.json
+cloud-run-bot/prod_firebase_key.json
 
 # Scratch/debug script folders
 cloud-run-bot/scratch/

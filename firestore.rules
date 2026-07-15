@@ -255,6 +255,13 @@ service cloud.firestore {
     }
 
     // ========================================
+    // TEST AUTOMATION COMMANDS
+    // ========================================
+    match /mobileTestCommands/{commandId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ========================================
     // FALLBACK RULE - Diğer tüm koleksiyonlar
     // ========================================
     match /{document=**} {
