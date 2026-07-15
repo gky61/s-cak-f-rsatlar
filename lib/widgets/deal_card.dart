@@ -63,6 +63,7 @@ class _DealCardState extends State<DealCard> {
     if (lower.contains('beymen')) return 'assets/beymen.jpg';
     if (lower.contains('idefix')) return 'assets/idefix.jpg';
     if (lower.contains('havit')) return 'assets/havit.jpg';
+    if (lower.contains('migros')) return 'assets/migros.jpg';
     return 'assets/logo.jpg';
   }
   void _handleOnTap() {

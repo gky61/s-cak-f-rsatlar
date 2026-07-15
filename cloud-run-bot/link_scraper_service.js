@@ -439,6 +439,11 @@ async function fetchHtml(url) {
       const cleaned = new URL(parsed.pathname, parsed.origin);
       targetUrl = cleaned.toString();
       console.log(`[FETCH-HTML] 🔄 Havit Store linki tespit edildi. Standart Fetch kullanılacak: ${targetUrl}`);
+    } else if (parsed.hostname.includes('migros.com.tr')) {
+      // Migros: Herhangi bir bot engeli bulunmuyor, doğrudan fetch ile çekilir.
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      targetUrl = cleaned.toString();
+      console.log(`[FETCH-HTML] 🔄 Migros linki tespit edildi. Standart Fetch kullanılacak: ${targetUrl}`);
     }
   } catch (e) {
     console.error(`[FETCH-HTML] URL parse hatası: ${e.message}`);

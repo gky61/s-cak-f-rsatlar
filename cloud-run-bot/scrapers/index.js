@@ -16,6 +16,7 @@ const BeymenScraper = require('./beymen_scraper');
 const PttavmScraper = require('./pttavm_scraper');
 const IncehesapScraper = require('./incehesap_scraper');
 const HavitScraper = require('./havit_scraper');
+const MigrosScraper = require('./migros_scraper');
 
 module.exports = [
   new AmazonScraper(),
@@ -35,5 +36,6 @@ module.exports = [
   new BeymenScraper(),
   new PttavmScraper(),
   new IncehesapScraper(),
-  new HavitScraper()
+  new HavitScraper(),
+  new MigrosScraper()
 ];

@@ -28,6 +28,7 @@ import 'scrapers/beymen_scraper.dart';
 import 'scrapers/pttavm_scraper.dart';
 import 'scrapers/incehesap_scraper.dart';
 import 'scrapers/havit_scraper.dart';
+import 'scrapers/migros_scraper.dart';
 import '../utils/test_logger.dart';
 
 void _log(String message) {
@@ -77,6 +78,7 @@ class LinkPreviewService {
     PttavmScraper(),
     IncehesapScraper(),
     HavitScraper(),
+    MigrosScraper(),
   ];
   static const _defaultUserAgent =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36';
