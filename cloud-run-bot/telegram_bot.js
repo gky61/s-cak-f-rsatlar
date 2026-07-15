@@ -734,7 +734,7 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     // Deal objesi
     const deal = {
       title: cleanedTitle,
-      description: finalDescription || 'Fırsat Ürünü Detayları',
+      description: finalDescription || scrapeResult.description || 'Fırsat Ürünü Detayları',
       link: scrapeResult.url || mainLink,
       price: finalPrice,
       originalPrice: finalPrice ? finalPrice * 1.2 : 0,

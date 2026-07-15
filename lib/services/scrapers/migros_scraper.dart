@@ -104,37 +104,55 @@ class MigrosScraper extends BaseProductScraper {
 
   @override
   String? scrapeDescription(dom.Document document) {
+    final crmEl = document.querySelector('.product-label.crm');
+    String crmPrefix = '';
+    if (crmEl != null) {
+      final crmText = crmEl.text.trim().toUpperCase();
+      if (crmText.isNotEmpty) {
+        crmPrefix = '**$crmText**';
+      }
+    }
+
+    String baseDesc = '';
+
     // 1. JSON-LD şemasından açıklama çekmeyi dene (Öncelikli)
     final productJson = findProductJsonLd(document);
     if (productJson != null && productJson['description'] != null) {
-      return _cleanDescription(productJson['description'].toString());
-    }
-
-    // 2. JSON-LD Kök seviyesindeki açıklamayı dene
-    final scripts = document.querySelectorAll('script');
-    for (final script in scripts) {
-      final type = script.attributes['type']?.trim().toLowerCase();
-      if (type == 'application/ld+json') {
-        try {
-          final sanitizedText = script.text.replaceAll('\r\n', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
-          final data = jsonDecode(sanitizedText);
-          if (data is Map && data['description'] != null) {
-            return _cleanDescription(data['description'].toString());
-          }
-        } catch (_) {}
+      baseDesc = _cleanDescription(productJson['description'].toString());
+    } else {
+      // 2. JSON-LD Kök seviyesindeki açıklamayı dene
+      final scripts = document.querySelectorAll('script');
+      for (final script in scripts) {
+        final type = script.attributes['type']?.trim().toLowerCase();
+        if (type == 'application/ld+json') {
+          try {
+            final sanitizedText = script.text.replaceAll('\r\n', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
+            final data = jsonDecode(sanitizedText);
+            if (data is Map && data['description'] != null) {
+              baseDesc = _cleanDescription(data['description'].toString());
+              break;
+            }
+          } catch (_) {}
+        }
       }
     }
 
-    // 3. DOM Seçicileri (Fallback)
-    final descEl = document.querySelector('meta[name="description"]') ??
-                   document.querySelector('meta[property="og:description"]');
-    if (descEl != null) {
-      final content = descEl.attributes['content'];
-      if (content != null) {
-        return _cleanDescription(content);
+    // 3. DOM Seçicileri (Fallback if still empty)
+    if (baseDesc.isEmpty) {
+      final descEl = document.querySelector('meta[name="description"]') ??
+                     document.querySelector('meta[property="og:description"]');
+      if (descEl != null) {
+        final content = descEl.attributes['content'];
+        if (content != null) {
+          baseDesc = _cleanDescription(content);
+        }
       }
     }
-    return null;
+
+    if (crmPrefix.isNotEmpty) {
+      return baseDesc.isNotEmpty ? '$crmPrefix\n\n$baseDesc' : crmPrefix;
+    }
+    return baseDesc.isNotEmpty ? baseDesc : null;
   }
 
   @override

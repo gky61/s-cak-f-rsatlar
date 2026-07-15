@@ -78,26 +78,49 @@ class MigrosScraper extends BaseProductScraper {
   }
 
   scrapeDescription($) {
+    const crmEl = $('.product-label.crm').first();
+    let crmPrefix = '';
+    if (crmEl.length) {
+      const crmText = crmEl.text().trim().toLocaleUpperCase('tr-TR');
+      if (crmText) {
+        crmPrefix = `**${crmText}**`;
+      }
+    }
+
+    let baseDesc = '';
+
     // 1. JSON-LD Product
     const product = this.findProductJsonLd($);
     if (product && product['description']) {
-      return this.cleanDescription(product['description'].toString());
+      baseDesc = this.cleanDescription(product['description'].toString());
+    } else {
+      // 2. JSON-LD Root
+      const scripts = $('script[type="application/ld+json"]');
+      for (let i = 0; i < scripts.length; i++) {
+        try {
+          const text = $(scripts[i]).text() || '';
+          const sanitized = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ');
+          const data = JSON.parse(sanitized);
+          if (data && data.description) {
+            baseDesc = this.cleanDescription(data.description.toString());
+            break;
+          }
+        } catch (_) {}
+      }
     }
-    // 2. JSON-LD Root
-    const scripts = $('script[type="application/ld+json"]');
-    for (let i = 0; i < scripts.length; i++) {
-      try {
-        const text = $(scripts[i]).text() || '';
-        const sanitized = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ');
-        const data = JSON.parse(sanitized);
-        if (data && data.description) {
-          return this.cleanDescription(data.description.toString());
-        }
-      } catch (_) {}
+
+    // 3. DOM Fallback if still empty
+    if (!baseDesc) {
+      const descEl = $('meta[name="description"], meta[property="og:description"]').first();
+      if (descEl.length) {
+        baseDesc = this.cleanDescription(descEl.attr('content'));
+      }
     }
-    // 3. DOM
-    const descEl = $('meta[name="description"], meta[property="og:description"]').first();
-    return descEl.length ? this.cleanDescription(descEl.attr('content')) : null;
+
+    if (crmPrefix) {
+      return baseDesc ? `${crmPrefix}\n\n${baseDesc}` : crmPrefix;
+    }
+    return baseDesc || null;
   }
 
   scrapeBreadcrumbs($) {
