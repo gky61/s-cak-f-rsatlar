@@ -94,19 +94,42 @@ class HavitScraper extends BaseProductScraper {
     return null;
   }
 
+  String _cleanDescription(String desc) {
+    // 1. Remove @import statements
+    String cleaned = desc.replaceAll(RegExp(r'@import\s+url\([^)]+\);?', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'@import\s+[^;]+;', caseSensitive: false), '');
+    
+    // 2. Remove CSS rule blocks like selector { ... }
+    cleaned = cleaned.replaceAll(RegExp(r'[^{]+{[^}]+}'), '');
+    
+    // 3. Strip any HTML tags that might be left
+    cleaned = cleaned.replaceAll(RegExp(r'<[^>]*>'), ' ');
+    
+    // 4. Remove leftover braces or orphan CSS properties
+    cleaned = cleaned.replaceAll(RegExp(r'[\w-]+\s*:\s*[^;]+;'), '');
+    
+    // 5. Clean up multiple spaces, newlines, etc.
+    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ');
+    
+    return cleaned.trim();
+  }
+
   @override
   String? scrapeDescription(dom.Document document) {
     // 1. JSON-LD şemasından açıklama çekmeyi dene (Öncelikli)
     final productJson = findProductJsonLd(document);
     if (productJson != null && productJson['description'] != null) {
-      return productJson['description'].toString().trim();
+      return _cleanDescription(productJson['description'].toString());
     }
 
     // 2. DOM Seçicileri (Fallback)
     final descEl = document.querySelector('meta[name="description"]') ??
                    document.querySelector('meta[property="og:description"]');
     if (descEl != null) {
-      return descEl.attributes['content']?.trim();
+      final content = descEl.attributes['content'];
+      if (content != null) {
+        return _cleanDescription(content);
+      }
     }
     return null;
   }

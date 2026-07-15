@@ -70,13 +70,26 @@ class HavitScraper extends BaseProductScraper {
     return null;
   }
 
+  cleanDescription(desc) {
+    if (!desc) return '';
+    let cleaned = desc.replace(/@import\s+url\([^)]+\);?/gi, '');
+    cleaned = cleaned.replace(/@import\s+[^;]+;/gi, '');
+    cleaned = cleaned.replace(/[^{]+{[^}]+}/g, '');
+    cleaned = cleaned.replace(/<[^>]*>/g, ' ');
+    cleaned = cleaned.replace(/[\w-]+\s*:\s*[^;]+;/g, '');
+    cleaned = cleaned.replace(/\s+/g, ' ');
+    return cleaned.trim();
+  }
+
   scrapeDescription($) {
     // 1. JSON-LD
     const product = this.findProductJsonLd($);
-    if (product && product['description']) return product['description'].toString().trim();
+    if (product && product['description']) {
+      return this.cleanDescription(product['description'].toString());
+    }
     // 2. DOM
     const descEl = $('meta[name="description"], meta[property="og:description"]').first();
-    return descEl.length ? descEl.attr('content')?.trim() : null;
+    return descEl.length ? this.cleanDescription(descEl.attr('content')) : null;
   }
 
   scrapeBreadcrumbs($) {
