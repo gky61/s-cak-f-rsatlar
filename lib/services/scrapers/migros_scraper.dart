@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:html/dom.dart' as dom;
+import 'package:http/http.dart' as http;
 import 'base_scraper.dart';
 
 class MigrosScraper extends BaseProductScraper {
@@ -103,7 +105,7 @@ class MigrosScraper extends BaseProductScraper {
   }
 
   @override
-  String? scrapeDescription(dom.Document document) {
+  Future<String?> scrapeDescription(dom.Document document) async {
     final crmEl = document.querySelector('.product-label.crm');
     String crmPrefix = '';
     if (crmEl != null) {
@@ -111,6 +113,59 @@ class MigrosScraper extends BaseProductScraper {
       if (crmText.isNotEmpty) {
         crmPrefix = '**$crmText**';
       }
+    }
+
+    if (crmPrefix.isEmpty) {
+      try {
+        String imageUrl = '';
+        final productJson = findProductJsonLd(document);
+        if (productJson != null && productJson['image'] != null) {
+          imageUrl = extractImageFromProductJson(productJson['image']) ?? '';
+        }
+        if (imageUrl.isEmpty) {
+          final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'];
+          if (ogImage != null) {
+            imageUrl = ogImage;
+          }
+        }
+
+        if (imageUrl.isNotEmpty) {
+          final regExp = RegExp(r'product\/(\d+)');
+          final match = regExp.firstMatch(imageUrl);
+          if (match != null) {
+            final productId = match.group(1);
+            if (productId != null) {
+              final response = await http.get(
+                Uri.parse('https://www.migros.com.tr/rest/hemen/products/screens/$productId'),
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+                },
+              ).timeout(const Duration(seconds: 4));
+              if (response.statusCode == 200) {
+                final json = jsonDecode(response.body);
+                if (json is Map && json['data'] != null) {
+                  final data = json['data'];
+                  if (data is Map && data['storeProductInfoDTO'] != null) {
+                    final info = data['storeProductInfoDTO'];
+                    if (info is Map && info['crmDiscountTags'] != null) {
+                      final crmTags = info['crmDiscountTags'];
+                      if (crmTags is List && crmTags.isNotEmpty) {
+                        final tagObj = crmTags[0];
+                        if (tagObj is Map && tagObj['tag'] != null) {
+                          final crmText = tagObj['tag'].toString().trim().toUpperCase();
+                          if (crmText.isNotEmpty) {
+                            crmPrefix = '**$crmText**';
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
     }
 
     String baseDesc = '';

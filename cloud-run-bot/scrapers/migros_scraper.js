@@ -77,13 +77,55 @@ class MigrosScraper extends BaseProductScraper {
     return cleaned.trim();
   }
 
-  scrapeDescription($) {
-    const crmEl = $('.product-label.crm').first();
+  async scrapeDescription($) {
     let crmPrefix = '';
+
+    // 1. Check DOM (for SSR or local test cases)
+    const crmEl = $('.product-label.crm').first();
     if (crmEl.length) {
       const crmText = crmEl.text().trim().toLocaleUpperCase('tr-TR');
       if (crmText) {
         crmPrefix = `**${crmText}**`;
+      }
+    }
+
+    // 2. If not found in DOM, fetch from Screens API
+    if (!crmPrefix) {
+      try {
+        let imageUrl = '';
+        const product = this.findProductJsonLd($);
+        if (product && product['image']) {
+          imageUrl = this.extractImageFromProductJson(product['image']) || '';
+        }
+        if (!imageUrl) {
+          imageUrl = $('meta[property="og:image"]').attr('content') || '';
+        }
+
+        if (imageUrl) {
+          const match = imageUrl.match(/product\/(\d+)/);
+          if (match) {
+            const productId = match[1];
+            console.log(`[MigrosScraper] CRM label fetches from Screens API for product ID: ${productId}`);
+            const apiRes = await fetch(`https://www.migros.com.tr/rest/hemen/products/screens/${productId}`, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+              }
+            });
+            if (apiRes.ok) {
+              const json = await apiRes.json();
+              const crmTags = json.data?.storeProductInfoDTO?.crmDiscountTags;
+              if (Array.isArray(crmTags) && crmTags.length > 0) {
+                const crmText = crmTags[0].tag;
+                if (crmText) {
+                  crmPrefix = `**${crmText.trim().toLocaleUpperCase('tr-TR')}**`;
+                  console.log(`[MigrosScraper] CRM tag found from API: "${crmText}"`);
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[MigrosScraper] CRM tag API fetch failed: ${err.message}`);
       }
     }
 

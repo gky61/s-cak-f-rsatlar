@@ -242,7 +242,7 @@ class LinkPreviewService {
               final title = matchedScraper.scrapeTitle(document) ?? 
                             MetadataParser.parse(document, url: targetUrl)?.title;
                             
-              final description = matchedScraper.scrapeDescription(document) ??
+              final description = await matchedScraper.scrapeDescription(document) ??
                                   MetadataParser.parse(document, url: targetUrl)?.description;
                             
               final price = await matchedScraper.scrapePrice(document);

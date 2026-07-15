@@ -614,6 +614,11 @@ async function scrapeProductFromUrl(url) {
       const breadcrumbs = matchedScraper.scrapeBreadcrumbs($) || [];
       console.log(`[SCRAPE-SERVICE] [BREADCRUMBS] Sonuç: ${JSON.stringify(breadcrumbs)}`);
 
+      // 5. Açıklama Çekimi
+      console.log(`[SCRAPE-SERVICE] [DESCRIPTION] Açıklama çekiliyor...`);
+      const description = matchedScraper.scrapeDescription ? await matchedScraper.scrapeDescription($) : null;
+      console.log(`[SCRAPE-SERVICE] [DESCRIPTION] Sonuç: "${description || 'BULUNAMADI'}"`);
+
       const totalDuration = Date.now() - startTime;
       console.log(`============================================================`);
       console.log(`[SCRAPE-SERVICE] ✅ Scrape tamamlandı! Toplam süre: ${totalDuration}ms`);
@@ -624,6 +629,7 @@ async function scrapeProductFromUrl(url) {
         title: title || null,
         price: price || null,
         imageUrl: imageUrl || null,
+        description: description || null,
         breadcrumbs: breadcrumbs
       };
     } else {
@@ -661,6 +667,8 @@ async function scrapeProductFromUrl(url) {
         if (!isNaN(parsed)) price = parsed;
       }
       console.log(`[SCRAPE-SERVICE] [PRICE] (Fallback) Parsed Fiyat: "${price != null ? price + ' TL' : 'BULUNAMADI'}"`);
+      const description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || null;
+      console.log(`[SCRAPE-SERVICE] [DESCRIPTION] (Fallback) Sonuç: "${description || 'BULUNAMADI'}"`);
 
       const totalDuration = Date.now() - startTime;
       console.log(`============================================================`);
@@ -672,6 +680,7 @@ async function scrapeProductFromUrl(url) {
         title: title ? title.trim() : null,
         price: price,
         imageUrl: imageUrl,
+        description: description ? description.trim() : null,
         breadcrumbs: []
       };
     }

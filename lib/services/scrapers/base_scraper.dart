@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:html/dom.dart' as dom;
 
@@ -28,7 +29,7 @@ abstract class BaseProductScraper {
   Future<double?> scrapePrice(dom.Document document) async => null;
 
   /// Belgeyi analiz ederek ürün açıklamasını döndürür
-  String? scrapeDescription(dom.Document document) => null;
+  FutureOr<String?> scrapeDescription(dom.Document document) => null;
 
   /// Fiyat metnini temizleyip double değere dönüştüren yardımcı metot
   double? parsePriceText(String priceText) {
