@@ -1705,9 +1705,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     }
 
     final List<InlineSpan> spans = [];
-    final regex = RegExp(r'\*\*(.*?)\*\*');
-    int lastMatchEnd = 0;
-
     final baseStyle = TextStyle(
       fontSize: 14,
       fontWeight: FontWeight.w500,
@@ -1715,31 +1712,39 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       height: 1.6,
     );
 
-    for (final match in regex.allMatches(text)) {
-      if (match.start > lastMatchEnd) {
-        spans.add(TextSpan(
-          text: text.substring(lastMatchEnd, match.start),
-          style: baseStyle,
-        ));
-      }
-      final matchText = match.group(1) ?? '';
-      spans.add(TextSpan(
-        text: matchText,
-        style: baseStyle.copyWith(
-          fontWeight: FontWeight.bold,
-          fontStyle: FontStyle.italic,
-          fontSize: 15,
-          color: isDark ? Colors.amber[300] : const Color(0xFFFF7F00),
-        ),
-      ));
-      lastMatchEnd = match.end;
-    }
+    final lines = text.split('\n');
+    if (lines.isNotEmpty) {
+      final firstLine = lines[0];
+      final isCrmTag = firstLine.trim().isNotEmpty &&
+          firstLine == firstLine.toUpperCase() &&
+          firstLine.length < 80 &&
+          (firstLine.contains(RegExp(r'\d')) || 
+           firstLine.contains('TL') || 
+           firstLine.contains('SEPETTE') || 
+           firstLine.contains('İNDİRİM') ||
+           firstLine.contains('HEMEN') ||
+           firstLine.contains('%'));
 
-    if (lastMatchEnd < text.length) {
-      spans.add(TextSpan(
-        text: text.substring(lastMatchEnd),
-        style: baseStyle,
-      ));
+      if (isCrmTag) {
+        spans.add(TextSpan(
+          text: firstLine,
+          style: baseStyle.copyWith(
+            fontWeight: FontWeight.bold,
+            fontStyle: FontStyle.italic,
+            fontSize: 15,
+            color: isDark ? Colors.amber[300] : const Color(0xFFFF7F00),
+          ),
+        ));
+
+        if (lines.length > 1) {
+          final restText = '\n' + lines.sublist(1).join('\n');
+          spans.add(TextSpan(text: restText, style: baseStyle));
+        }
+      } else {
+        spans.add(TextSpan(text: text, style: baseStyle));
+      }
+    } else {
+      spans.add(TextSpan(text: text, style: baseStyle));
     }
 
     return Text.rich(

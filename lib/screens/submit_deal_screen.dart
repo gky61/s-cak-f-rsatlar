@@ -11,6 +11,7 @@ import '../services/link_preview_service.dart';
 import '../models/category.dart';
 import '../widgets/category_selector_widget.dart';
 import '../theme/app_theme.dart';
+import '../widgets/description_text_editing_controller.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -31,7 +32,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
   
   final _titleController = TextEditingController();
-  final _descriptionController = MarkdownTextEditingController();
+  final _descriptionController = DescriptionTextEditingController();
   final _priceController = TextEditingController();
   final _storeController = TextEditingController();
   final _imageUrlController = TextEditingController();
@@ -1481,64 +1482,5 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         ),
       ],
     );
-  }
-}
-
-class MarkdownTextEditingController extends TextEditingController {
-  MarkdownTextEditingController({super.text});
-
-  @override
-  TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
-    final baseStyle = style ?? const TextStyle();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final List<InlineSpan> spans = [];
-    final regex = RegExp(r'\*\*(.*?)\*\*');
-    int lastMatchEnd = 0;
-
-    for (final match in regex.allMatches(text)) {
-      if (match.start > lastMatchEnd) {
-        spans.add(TextSpan(
-          text: text.substring(lastMatchEnd, match.start),
-          style: baseStyle,
-        ));
-      }
-      final matchText = match.group(1) ?? '';
-      spans.add(TextSpan(
-        children: [
-          TextSpan(
-            text: '**',
-            style: baseStyle.copyWith(
-              color: Colors.transparent,
-              fontSize: 0.01,
-            ),
-          ),
-          TextSpan(
-            text: matchText,
-            style: baseStyle.copyWith(
-              fontWeight: FontWeight.bold,
-              fontStyle: FontStyle.italic,
-              color: isDark ? Colors.amber[300] : const Color(0xFFFF7F00),
-            ),
-          ),
-          TextSpan(
-            text: '**',
-            style: baseStyle.copyWith(
-              color: Colors.transparent,
-              fontSize: 0.01,
-            ),
-          ),
-        ],
-      ));
-      lastMatchEnd = match.end;
-    }
-
-    if (lastMatchEnd < text.length) {
-      spans.add(TextSpan(
-        text: text.substring(lastMatchEnd),
-        style: baseStyle,
-      ));
-    }
-
-    return TextSpan(children: spans, style: baseStyle);
   }
 }

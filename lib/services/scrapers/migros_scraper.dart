@@ -154,7 +154,7 @@ class MigrosScraper extends BaseProductScraper {
                         if (tagObj is Map && tagObj['tag'] != null) {
                           final crmText = tagObj['tag'].toString().trim().toUpperCase();
                           if (crmText.isNotEmpty) {
-                            crmPrefix = '**$crmText**';
+                            crmPrefix = crmText;
                           }
                         }
                       }

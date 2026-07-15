@@ -85,7 +85,7 @@ class MigrosScraper extends BaseProductScraper {
     if (crmEl.length) {
       const crmText = crmEl.text().trim().toLocaleUpperCase('tr-TR');
       if (crmText) {
-        crmPrefix = `**${crmText}**`;
+        crmPrefix = crmText;
       }
     }
 
@@ -117,7 +117,7 @@ class MigrosScraper extends BaseProductScraper {
               if (Array.isArray(crmTags) && crmTags.length > 0) {
                 const crmText = crmTags[0].tag;
                 if (crmText) {
-                  crmPrefix = `**${crmText.trim().toLocaleUpperCase('tr-TR')}**`;
+                  crmPrefix = crmText.trim().toLocaleUpperCase('tr-TR');
                   console.log(`[MigrosScraper] CRM tag found from API: "${crmText}"`);
                 }
               }
