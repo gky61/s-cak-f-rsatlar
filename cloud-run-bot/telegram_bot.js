@@ -553,8 +553,9 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     const hasWebpageMedia = (msg) => msg && msg.media && (msg.media.className === 'MessageMediaWebpage' || msg.media.className === 'MessageMediaWebPage') && msg.media.webpage;
 
     if (!hasWebpageMedia(currentMessage)) {
-      console.log(`⏱️ [${uniqueDocId}] Mesajda link önizlemesi bulunamadı. Telegram sunucularının önizleme üretmesi için 2.5 saniye bekleniyor...`);
-      await new Promise(resolve => setTimeout(resolve, 2500));
+      const waitTime = mainLink.includes('getir.com') || mainLink.includes('onelink.me') ? 8000 : 2500;
+      console.log(`⏱️ [${uniqueDocId}] Mesajda link önizlemesi bulunamadı. Telegram sunucularının önizleme üretmesi için ${waitTime / 1000} saniye bekleniyor...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
       try {
         const refreshedMsgs = await client.getMessages(chatInfo.id, { ids: messageId });
         if (refreshedMsgs && refreshedMsgs.length > 0 && refreshedMsgs[0]) {

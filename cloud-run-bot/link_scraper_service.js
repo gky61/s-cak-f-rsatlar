@@ -122,7 +122,8 @@ function isBotBlocked(htmlText) {
     'px-captcha', 'captcha-delivery.net',
     'blocked by distil', 'distil_ident_cookie',
     'access denied', "you don't have permission to access",
-    'access forbidden', 'ip blocked', 'request blocked', 'unauthorized access'
+    'access forbidden', 'ip blocked', 'request blocked', 'unauthorized access',
+    'human verification', 'awswafcookie'
   ];
   return blockSignatures.some(sig => lowerHtml.includes(sig));
 }
