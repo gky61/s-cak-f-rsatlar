@@ -343,41 +343,99 @@ function curlFetchGetir(targetUrl, originalUrl, fetchStartTime) {
       maxBuffer: 10 * 1024 * 1024
     });
 
+    if (!result.error) {
+      const output = result.stdout || '';
+      const statusMatch = output.match(/---CURL_HTTP_STATUS:(\d+)---/);
+      const httpStatus = statusMatch ? parseInt(statusMatch[1]) : 0;
+      const htmlText = output.replace(/\n---CURL_HTTP_STATUS:\d+---$/, '');
+      const duration = Date.now() - fetchStartTime;
+
+      console.log(`[FETCH-HTML] ⚡ curl (Getir) cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${httpStatus}`);
+      console.log(`[FETCH-HTML] curl (Getir) HTML boyutu: ${htmlText.length} karakter`);
+      console.log(`[FETCH-HTML] curl (Getir) __NEXT_DATA__ var mı: ${htmlText.includes('__NEXT_DATA__')}`);
+
+      if (httpStatus === 200 && htmlText.length > 1000) {
+        if (isBotBlocked(htmlText)) {
+          console.warn(`[FETCH-HTML] ❌ curl (Getir) cevabı bot engelleyici/WAF sayfası içeriyor. Wayback Machine fallback deneniyor...`);
+        } else {
+          checkForBotBlockers(htmlText, originalUrl);
+          return htmlText;
+        }
+      } else {
+        console.error(`[FETCH-HTML] ❌ curl (Getir) Hata Kodu (${httpStatus}). Wayback Machine fallback deneniyor...`);
+      }
+    } else {
+      console.error(`[FETCH-HTML] ❌ curl (Getir) spawnSync hatası: ${result.error.message}. Wayback Machine fallback deneniyor...`);
+    }
+
+    // ── Wayback Machine Fallback ──
+    // GCP VM IP'leri Getir CloudFront WAF tarafından engelleniyor.
+    // Wayback Machine, Getir sayfalarını arşivlemiştir ve __NEXT_DATA__ JSON'u 
+    // cache'de mevcuttur. Fiyat eski olabilir ama görsel URL'leri (CDN) sabit kalır.
+    // Görsel URL'ler Wayback prefix'inden temizlenerek orijinal CDN URL'si kullanılır.
+    return curlFetchGetirWayback(targetUrl, originalUrl, fetchStartTime);
+  } catch (err) {
+    console.error(`[FETCH-HTML] ❌ curl (Getir) Hatası: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Wayback Machine üzerinden Getir ürün sayfasını çeker.
+ * Getir CloudFront WAF, GCP datacenter IP'lerini engelliyor.
+ * Wayback Machine arşivi __NEXT_DATA__ JSON'u içerir ve:
+ * - Ürün adı, açıklama, görseller güncel kalır (CDN URL'leri sabittir)
+ * - Fiyat eski olabilir (arşiv zamanına ait)
+ * Wayback URL prefix'leri HTML'den temizlenerek orijinal CDN URL'leri korunur.
+ */
+function curlFetchGetirWayback(targetUrl, originalUrl, fetchStartTime) {
+  try {
+    const waybackUrl = `https://web.archive.org/web/2024/${targetUrl}`;
+    console.log(`[FETCH-HTML] 🔧 Wayback Machine fallback çekiliyor: ${waybackUrl}`);
+
+    const result = spawnSync('curl', [
+      '-sL',
+      '-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      '--compressed',
+      '-w', '\n---CURL_HTTP_STATUS:%{http_code}---',
+      '--max-time', '20',
+      waybackUrl
+    ], {
+      encoding: 'utf-8',
+      timeout: 25000,
+      maxBuffer: 10 * 1024 * 1024
+    });
+
     if (result.error) {
-      console.error(`[FETCH-HTML] ❌ curl (Getir) spawnSync hatası: ${result.error.message}`);
+      console.error(`[FETCH-HTML] ❌ Wayback Machine spawnSync hatası: ${result.error.message}`);
       return null;
     }
 
     const output = result.stdout || '';
     const statusMatch = output.match(/---CURL_HTTP_STATUS:(\d+)---/);
     const httpStatus = statusMatch ? parseInt(statusMatch[1]) : 0;
-    const htmlText = output.replace(/\n---CURL_HTTP_STATUS:\d+---$/, '');
+    let htmlText = output.replace(/\n---CURL_HTTP_STATUS:\d+---$/, '');
     const duration = Date.now() - fetchStartTime;
 
-    console.log(`[FETCH-HTML] ⚡ curl (Getir) cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${httpStatus}`);
-    console.log(`[FETCH-HTML] curl (Getir) HTML boyutu: ${htmlText.length} karakter`);
-    console.log(`[FETCH-HTML] curl (Getir) __NEXT_DATA__ var mı: ${htmlText.includes('__NEXT_DATA__')}`);
+    console.log(`[FETCH-HTML] ⚡ Wayback Machine cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${httpStatus}`);
+    console.log(`[FETCH-HTML] Wayback HTML boyutu: ${htmlText.length} karakter`);
+    console.log(`[FETCH-HTML] Wayback __NEXT_DATA__ var mı: ${htmlText.includes('__NEXT_DATA__')}`);
 
-    if (httpStatus === 200 && htmlText.length > 1000) {
-      if (isBotBlocked(htmlText)) {
-        console.warn(`[FETCH-HTML] ❌ curl (Getir) cevabı bot engelleyici/WAF sayfası içeriyor: ${originalUrl}`);
-        checkForBotBlockers(htmlText, originalUrl);
-        return null;
-      }
-      checkForBotBlockers(htmlText, originalUrl);
+    if (httpStatus === 200 && htmlText.length > 1000 && htmlText.includes('__NEXT_DATA__')) {
+      // Wayback Machine, URL'lere /web/YYYYMMDD/ prefix'i ekler.
+      // CDN URL'lerini orijinal hallerine geri çevir.
+      htmlText = htmlText.replace(/https?:\/\/web\.archive\.org\/web\/\d+\/(https?:\/\/)/gi, '$1');
+      // Wayback toolbar scriptlerini kaldır
+      htmlText = htmlText.replace(/<!-- BEGIN WAYBACK TOOLBAR INSERT -->[\s\S]*?<!-- END WAYBACK TOOLBAR INSERT -->/gi, '');
+      
+      console.log(`[FETCH-HTML] ✅ Wayback Machine'den Getir ürün verisi başarıyla çekildi!`);
       return htmlText;
     } else {
-      console.error(`[FETCH-HTML] ❌ curl (Getir) Hata Kodu (${httpStatus}): ${originalUrl}`);
-      if (htmlText.length > 0) {
-        console.error(`[FETCH-HTML] curl (Getir) Hata Cevap Gövdesi (ilk 500): ${htmlText.substring(0, 500).replace(/\s+/g, ' ')}`);
-      }
-      if (result.stderr) {
-        console.error(`[FETCH-HTML] curl (Getir) stderr: ${result.stderr}`);
-      }
+      console.error(`[FETCH-HTML] ❌ Wayback Machine'de Getir verisi bulunamadı (Status: ${httpStatus}, Size: ${htmlText.length})`);
       return null;
     }
   } catch (err) {
-    console.error(`[FETCH-HTML] ❌ curl (Getir) Hatası: ${err.message}`);
+    console.error(`[FETCH-HTML] ❌ Wayback Machine Hatası: ${err.message}`);
     return null;
   }
 }
