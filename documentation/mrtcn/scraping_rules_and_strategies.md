@@ -91,6 +91,12 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 ### 10. Vatan Bilgisayar / Teknosa / MediaMarkt / İtopya / İdefix / N11
 *   Bu mağazalar görece daha standart WAF yapıları kullanırlar. Ağırlıklı olarak `application/ld+json` taranır. N11'de Cloudflare engeli için `WhatsApp` UA taklidi yapılarak DOM fallback seçicileriyle veriler kurtarılır.
 
+### 11. Getir (`getir.com`)
+*   **Çerez ve Konum Entegrasyonu:** Getir, Next.js kullanan konum tabanlı bir teslimat servisidir. Bölgesel/depoya özel ürünlerin çözümlenebilmesi için istek başlıklarına `locale=tr; language=tr; countryCode=TR; appType=GETIR` çerezleri otomatik olarak enjekte edilir.
+*   **Next.js JSON-LD & DOM Verisi:**
+    *   **Fiyat ve Görsel:** Ürün bilgileri HTML içerisindeki `<script id="__NEXT_DATA__">` JSON bloğundan parse edilir. Ürün adı, fiyatı ve görsel cdn linkleri (`picURLs`) buradan doğrudan çekilir.
+    *   **Uzun Açıklama:** Detaylı açıklama için `shortDescription` yerine Next.js payload'undaki uzun olan `description` veya `content` alanları öncelikli olarak okunur. İkisi de yoksa fallback olarak `shortDescription` ve meta tag'ler (`og:description`) taranır.
+
 ---
 
 ## 📊 Mağaza Özelinde Scraping Özet Tablosu
@@ -112,6 +118,7 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 | **MediaMarkt** | JSON-LD | Standart yapı | JSON-LD `Product` şema çözücü |
 | **İtopya** | DOM Seçicileri & JSON-LD | Standart yapı | `.product-details-price` DOM seçici fallback |
 | **İdefix** | JSON-LD | Standart yapı | JSON-LD `Product` şema çözücü |
+| **Getir** | `__NEXT_DATA__` Script & Cookies | Lokasyon kısıtları ve kısa açıklamalar | `appType=GETIR` çerez enjeksiyonu + Next.js JSON parser (`description`/`content` öncelikli açıklama çekimi) |
 
 ---
 

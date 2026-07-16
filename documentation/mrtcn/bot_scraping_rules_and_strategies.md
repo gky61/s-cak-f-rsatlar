@@ -82,6 +82,12 @@ Sunucu ortamındaki bot korumalarını aşmak için geliştirilen 5 temel bypass
     `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&prerender=true&data.html.selector=html&data.html.type=html`
     Bu sorgu Microlink'in premium proxy/konut IP havuzu aracılığıyla Cloudflare korumasını aşarak orijinal sayfanın tüm HTML'ini (JSON-LD şemaları dahil) JSON içerisinde döndürür. Bot, bu HTML verisini Cheerio ile yükleyerek var olan `AmazonScraper` ve `PttavmScraper` sınıfları yardımıyla sorunsuzca parse eder.
 
+### 6. Yandex Translate Proxy & Wayback Machine Fallback
+*   **Kullanıldığı Mağazalar:** `Getir`
+*   **Problem:** Getir CloudFront WAF, Google Cloud datacenter IP'lerini tamamen engeller. Google Translate Proxy veya Microlink de captcha (405) engeline takılır. Direkt sunucu curl/fetch istekleri WAF'ı geçemez.
+*   **Çözüm:** Çok katmanlı bir fallback akışı uygulanmıştır:
+    1. **Yandex Translate Proxy:** Sunucudan atılan istek WAF'a takılırsa, `https://translate.yandex.ru/translate?url=...&lang=tr-tr` adresine yönlendirilir. Yandex Translate sunucuları WAF'a takılmadan orijinal `__NEXT_DATA__` JSON verisini çeker. Bu sayede genel ürünlerde (Ekmek vb.) **canlı/güncel fiyat** ve görseller başarıyla çekilir.
+    2. **Wayback Machine Fallback:** Eğer Yandex Translate 404 dönerse (bölgesel/depoya özel ürünlerde), en son yedek olarak Wayback Machine arşivi taranır (`https://web.archive.org/web/2024/...`). Buradan eski tarihli JSON-LD veya `__NEXT_DATA__` çekilerek başlık, görsel ve açıklama kurtarılır. Görsel URL'leri Wayback prefix'lerinden temizlenerek orijinal Getir CDN URL'si ile Firebase Storage'a yüklenir.
 
 ---
 
@@ -100,6 +106,7 @@ Sunucu ortamındaki bot korumalarını aşmak için geliştirilen 5 temel bypass
 | **Amazon** | US IP / Teslimat Adresi Engeli | **Microlink HTML Proxy** | Co-location / US adresi bypass ve Türkiye indirimli buybox fiyat çekimi |
 | **MediaMarkt** | 403 Forbidden (Bot Engeli) | Googlebot UA (Doğrudan) | `Googlebot/2.1` taklidi |
 | **Idefix** | Standart HTML Çekim | Standart Fetch | Regex filtre düzeltmesi (x.com karışıklığı giderildi) |
+| **Getir** | CloudFront WAF Captcha (405) | **Yandex Translate Proxy** & Wayback Machine | Yandex Translate tünellemesi ile WAF bypass (güncel fiyat) + Wayback arşiviyle görsel fallback kurtarma |
 
 ---
 
