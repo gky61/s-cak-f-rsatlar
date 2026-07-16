@@ -312,6 +312,76 @@ function curlFetchHtmlMinimal(targetUrl, originalUrl, fetchStartTime) {
   }
 }
 
+/**
+ * Getir için özel curl çekim fonksiyonu.
+ * Getir'in CloudFront WAF'ı:
+ * - WhatsApp UA → 403 (doğrudan engel)
+ * - Chrome UA (cookie'siz) → 405 captcha (depo-genel ürünler hariç)
+ * - Chrome UA + lokasyon cookie'leri → 200 OK (tüm ürünler, __NEXT_DATA__ dahil)
+ * 
+ * Lokasyon cookie'leri olmadan depo-özel ürünler (sandviç, dondurma vb.) 404 döner
+ * çünkü sunucu hangi depodan ürün sunacağını bilemez.
+ */
+function curlFetchGetir(targetUrl, originalUrl, fetchStartTime) {
+  try {
+    console.log(`[FETCH-HTML] 🔧 curl (Getir Chrome UA + cookie) ile çekiliyor: ${targetUrl}`);
+    const curlArgs = [
+      '-sL',
+      '-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+      '-H', 'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+      '-H', 'Cookie: locale=tr; language=tr; countryCode=TR; appType=GETIR',
+      '--compressed',
+      '-w', '\n---CURL_HTTP_STATUS:%{http_code}---',
+      '--max-time', '15',
+      targetUrl
+    ];
+
+    const result = spawnSync('curl', curlArgs, {
+      encoding: 'utf-8',
+      timeout: 18000,
+      maxBuffer: 10 * 1024 * 1024
+    });
+
+    if (result.error) {
+      console.error(`[FETCH-HTML] ❌ curl (Getir) spawnSync hatası: ${result.error.message}`);
+      return null;
+    }
+
+    const output = result.stdout || '';
+    const statusMatch = output.match(/---CURL_HTTP_STATUS:(\d+)---/);
+    const httpStatus = statusMatch ? parseInt(statusMatch[1]) : 0;
+    const htmlText = output.replace(/\n---CURL_HTTP_STATUS:\d+---$/, '');
+    const duration = Date.now() - fetchStartTime;
+
+    console.log(`[FETCH-HTML] ⚡ curl (Getir) cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${httpStatus}`);
+    console.log(`[FETCH-HTML] curl (Getir) HTML boyutu: ${htmlText.length} karakter`);
+    console.log(`[FETCH-HTML] curl (Getir) __NEXT_DATA__ var mı: ${htmlText.includes('__NEXT_DATA__')}`);
+
+    if (httpStatus === 200 && htmlText.length > 1000) {
+      if (isBotBlocked(htmlText)) {
+        console.warn(`[FETCH-HTML] ❌ curl (Getir) cevabı bot engelleyici/WAF sayfası içeriyor: ${originalUrl}`);
+        checkForBotBlockers(htmlText, originalUrl);
+        return null;
+      }
+      checkForBotBlockers(htmlText, originalUrl);
+      return htmlText;
+    } else {
+      console.error(`[FETCH-HTML] ❌ curl (Getir) Hata Kodu (${httpStatus}): ${originalUrl}`);
+      if (htmlText.length > 0) {
+        console.error(`[FETCH-HTML] curl (Getir) Hata Cevap Gövdesi (ilk 500): ${htmlText.substring(0, 500).replace(/\s+/g, ' ')}`);
+      }
+      if (result.stderr) {
+        console.error(`[FETCH-HTML] curl (Getir) stderr: ${result.stderr}`);
+      }
+      return null;
+    }
+  } catch (err) {
+    console.error(`[FETCH-HTML] ❌ curl (Getir) Hatası: ${err.message}`);
+    return null;
+  }
+}
+
 /** URL'den HTML çekerek Cheerio DOM nesnesi döndürür */
 async function fetchHtml(url) {
   const fetchStartTime = Date.now();
@@ -448,8 +518,10 @@ async function fetchHtml(url) {
       targetUrl = cleaned.toString();
       console.log(`[FETCH-HTML] 🔄 Migros linki tespit edildi. Standart Fetch kullanılacak: ${targetUrl}`);
     } else if (parsed.hostname.includes('getir.com')) {
-      // Getir CloudFront, datacenter IP'lerini 403 ile engelliyor.
-      // Microlink API'si üzerinden çekim yaparak bunu bypass ediyoruz.
+      // Getir CloudFront, WhatsApp UA'yı 403 ile engelliyor ancak
+      // Chrome UA + lokasyon cookie'leri ile 200 OK dönüyor.
+      // Lokasyon cookie'leri olmadan depo-özel ürünler (sandviç, dondurma vb.) 404 döner.
+      // curl ile Chrome UA + cookie kombinasyonu kullanarak bypass ediyoruz.
       let pathname = parsed.pathname;
       if (!pathname.endsWith('/')) {
         pathname += '/';
@@ -457,7 +529,7 @@ async function fetchHtml(url) {
       const cleaned = new URL(pathname, parsed.origin);
       targetUrl = cleaned.toString();
       isGetir = true;
-      console.log(`[FETCH-HTML] 🔄 Getir linki tespit edildi. Microlink API ile çekilecek: ${targetUrl}`);
+      console.log(`[FETCH-HTML] 🔄 Getir linki tespit edildi. curl (Chrome UA + cookie) ile çekilecek: ${targetUrl}`);
     }
   } catch (e) {
     console.error(`[FETCH-HTML] URL parse hatası: ${e.message}`);
@@ -470,9 +542,14 @@ async function fetchHtml(url) {
     return curlFetchHtml(targetUrl, url, fetchStartTime);
   }
 
-  // ── Amazon, Pttavm & Getir: Microlink API ile çek (Cloud Run IP engeline / Teslimat lokasyonu sorununa takıldığı için) ──
-  // Amazon, Pttavm ve Getir de statik HTML'de tüm verileri barındırdığından prerender=false olarak çekilip hızlandırılır
-  if (isAmazon || isPttavm || isGetir) {
+  // ── Getir: curl minimal (Chrome UA + lokasyon cookie'leri) ile çek ──
+  // Getir CloudFront, WhatsApp UA'yı engeller. Chrome UA + cookie ile tüm ürünler çekilir.
+  if (isGetir) {
+    return curlFetchGetir(targetUrl, url, fetchStartTime);
+  }
+
+  // ── Amazon & Pttavm: Microlink API ile çek (Cloud Run IP engeline takıldığı için) ──
+  if (isAmazon || isPttavm) {
     return microlinkFetchHtml(targetUrl, url, fetchStartTime, false);
   }
 
