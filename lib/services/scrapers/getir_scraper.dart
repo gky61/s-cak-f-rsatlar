@@ -107,6 +107,13 @@ class GetirScraper extends BaseProductScraper {
   String? scrapeDescription(dom.Document document) {
     final pData = _getProductData(document);
     if (pData != null) {
+      // Uzun açıklamayı tercih et (description veya content), shortDescription yerine.
+      // Örn: "100 cm uzunluk/Şarj ve veri senkronizasyonu" vs sadece "1 Adet"
+      final longDesc = pData['description'] ?? pData['content'];
+      if (longDesc is String && longDesc.trim().isNotEmpty) {
+        return longDesc.trim();
+      }
+      // Fallback: shortDescription
       final shortDesc = pData['shortDescription'];
       if (shortDesc is String && shortDesc.isNotEmpty) {
         return shortDesc.trim();

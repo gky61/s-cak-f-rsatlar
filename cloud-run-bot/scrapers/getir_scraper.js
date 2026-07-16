@@ -77,8 +77,17 @@ class GetirScraper extends BaseProductScraper {
 
   scrapeDescription($) {
     const pData = this._getProductData($);
-    if (pData && pData.shortDescription && pData.shortDescription.trim().length > 0) {
-      return pData.shortDescription.trim();
+    if (pData) {
+      // Uzun açıklamayı tercih et (description veya content), shortDescription yerine.
+      // Örn: "100 cm uzunluk/Şarj ve veri senkronizasyonu" vs sadece "1 Adet"
+      const longDesc = pData.description || pData.content;
+      if (longDesc && typeof longDesc === 'string' && longDesc.trim().length > 0) {
+        return longDesc.trim();
+      }
+      // Fallback: shortDescription
+      if (pData.shortDescription && pData.shortDescription.trim().length > 0) {
+        return pData.shortDescription.trim();
+      }
     }
 
     const ogDesc = $('meta[name="description"], meta[property="og:description"]').first();
