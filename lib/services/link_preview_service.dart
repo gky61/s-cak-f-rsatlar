@@ -128,7 +128,7 @@ class LinkPreviewService {
       userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
     }
 
-    return {
+    final headers = {
       'User-Agent': userAgent,
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -137,6 +137,15 @@ class LinkPreviewService {
       'Upgrade-Insecure-Requests': '1',
       'Referer': 'https://www.google.com/',
     };
+
+    // Getir lokasyon bazlı teslimat servisi: location cookie'si olmadan
+    // depo-özel ürünler (sandviç, dondurma vb.) 404 döner.
+    // İstanbul merkez koordinatları ile tüm ürünlerin çözümlenmesi sağlanır.
+    if (lowerUrl.contains('getir.com')) {
+      headers['Cookie'] = 'locale=tr; language=tr; countryCode=TR; appType=GETIR';
+    }
+
+    return headers;
   }
 
   static const _nativeHttpChannel = MethodChannel('com.sicakfirsatlar.app/native_http');
@@ -149,9 +158,11 @@ class LinkPreviewService {
         (lowerUrl.contains('zara.com') || lowerUrl.contains('getir.com'))) {
       _log('🚀 Native HTTP istemcisi çağrılıyor: $url');
       try {
+        final headers = _getHeadersForUrl(url);
         final String? html = await _nativeHttpChannel.invokeMethod<String>('fetchUrl', {
           'url': url,
-          'userAgent': _getHeadersForUrl(url)['User-Agent'],
+          'userAgent': headers['User-Agent'],
+          'cookie': headers['Cookie'],
         });
         if (html != null && html.isNotEmpty) {
           _log('✅ Native HTTP istemcisi başarılı (HTML Boyutu: ${html.length})');
