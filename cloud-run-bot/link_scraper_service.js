@@ -356,27 +356,75 @@ function curlFetchGetir(targetUrl, originalUrl, fetchStartTime) {
 
       if (httpStatus === 200 && htmlText.length > 1000) {
         if (isBotBlocked(htmlText)) {
-          console.warn(`[FETCH-HTML] ❌ curl (Getir) cevabı bot engelleyici/WAF sayfası içeriyor. Wayback Machine fallback deneniyor...`);
+          console.warn(`[FETCH-HTML] ❌ curl (Getir) cevabı bot engelleyici/WAF sayfası içeriyor. Yandex Translate fallback deneniyor...`);
         } else {
           checkForBotBlockers(htmlText, originalUrl);
           return htmlText;
         }
       } else {
-        console.error(`[FETCH-HTML] ❌ curl (Getir) Hata Kodu (${httpStatus}). Wayback Machine fallback deneniyor...`);
+        console.error(`[FETCH-HTML] ❌ curl (Getir) Hata Kodu (${httpStatus}). Yandex Translate fallback deneniyor...`);
       }
     } else {
-      console.error(`[FETCH-HTML] ❌ curl (Getir) spawnSync hatası: ${result.error.message}. Wayback Machine fallback deneniyor...`);
+      console.error(`[FETCH-HTML] ❌ curl (Getir) spawnSync hatası: ${result.error.message}. Yandex Translate fallback deneniyor...`);
     }
 
-    // ── Wayback Machine Fallback ──
-    // GCP VM IP'leri Getir CloudFront WAF tarafından engelleniyor.
-    // Wayback Machine, Getir sayfalarını arşivlemiştir ve __NEXT_DATA__ JSON'u 
-    // cache'de mevcuttur. Fiyat eski olabilir ama görsel URL'leri (CDN) sabit kalır.
-    // Görsel URL'ler Wayback prefix'inden temizlenerek orijinal CDN URL'si kullanılır.
-    return curlFetchGetirWayback(targetUrl, originalUrl, fetchStartTime);
+    // ── Yandex Translate Fallback (Canlı Fiyat Çekebilmek İçin) ──
+    // Yandex Translate, Getir WAF (CloudFront/AWS WAF) engeline takılmadan sayfaları çekebiliyor.
+    // Ekmek gibi genel/bölgesel kısıtlaması olmayan ürünlerde güncel, canlı fiyat ve görselleri çekebiliriz.
+    return curlFetchGetirYandexTranslate(targetUrl, originalUrl, fetchStartTime);
   } catch (err) {
     console.error(`[FETCH-HTML] ❌ curl (Getir) Hatası: ${err.message}`);
     return null;
+  }
+}
+
+/**
+ * Yandex Translate Proxy'si kullanarak Getir ürününü çeker.
+ * Bu yöntem, genel Getir ürünlerinde CloudFront WAF engelini aşarak canlı fiyat verisini çekmemizi sağlar.
+ */
+function curlFetchGetirYandexTranslate(targetUrl, originalUrl, fetchStartTime) {
+  try {
+    const yandexUrl = `https://translate.yandex.ru/translate?url=${encodeURIComponent(targetUrl)}&lang=tr-tr`;
+    console.log(`[FETCH-HTML] 🔧 Yandex Translate fallback çekiliyor: ${yandexUrl}`);
+
+    const result = spawnSync('curl', [
+      '-sL',
+      '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      '--compressed',
+      '-w', '\n---CURL_HTTP_STATUS:%{http_code}---',
+      '--max-time', '20',
+      yandexUrl
+    ], {
+      encoding: 'utf-8',
+      timeout: 25000,
+      maxBuffer: 10 * 1024 * 1024
+    });
+
+    if (result.error) {
+      console.error(`[FETCH-HTML] ❌ Yandex Translate spawnSync hatası: ${result.error.message}. Wayback Machine deneniyor...`);
+      return curlFetchGetirWayback(targetUrl, originalUrl, fetchStartTime);
+    }
+
+    const output = result.stdout || '';
+    const statusMatch = output.match(/---CURL_HTTP_STATUS:(\d+)---/);
+    const httpStatus = statusMatch ? parseInt(statusMatch[1]) : 0;
+    const htmlText = output.replace(/\n---CURL_HTTP_STATUS:\d+---$/, '');
+    const duration = Date.now() - fetchStartTime;
+
+    console.log(`[FETCH-HTML] ⚡ Yandex Translate cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${httpStatus}`);
+    console.log(`[FETCH-HTML] Yandex HTML boyutu: ${htmlText.length} karakter`);
+    console.log(`[FETCH-HTML] Yandex __NEXT_DATA__ var mı: ${htmlText.includes('__NEXT_DATA__')}`);
+
+    if (httpStatus === 200 && htmlText.length > 1000 && htmlText.includes('__NEXT_DATA__')) {
+      console.log(`[FETCH-HTML] ✅ Yandex Translate üzerinden canlı Getir verisi başarıyla çekildi!`);
+      return htmlText;
+    } else {
+      console.warn(`[FETCH-HTML] ❌ Yandex Translate başarısız (Status: ${httpStatus}, Size: ${htmlText.length}). Wayback Machine deneniyor...`);
+      return curlFetchGetirWayback(targetUrl, originalUrl, fetchStartTime);
+    }
+  } catch (err) {
+    console.error(`[FETCH-HTML] ❌ Yandex Translate Hatası: ${err.message}. Wayback Machine deneniyor...`);
+    return curlFetchGetirWayback(targetUrl, originalUrl, fetchStartTime);
   }
 }
 
