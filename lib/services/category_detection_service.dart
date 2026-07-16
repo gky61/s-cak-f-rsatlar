@@ -369,7 +369,8 @@ class CategoryDetectionService {
         'pirinc', 'rice', 'bulgur', 'bakliyat', 'legume', 'zeytinyağı', 'zeytinyagi', 'olive oil',
         'ayçiçek yağı', 'aycicek yagi', 'sunflower oil', 'salça', 'salca', 'tomato paste', 'baharat',
         'spice', 'çay', 'cay', 'tea', 'kahve', 'coffee', 'süt', 'sut', 'milk', 'yoğurt', 'yogurt',
-        'peynir', 'cheese', 'yumurta', 'egg', 'et', 'meat', 'tavuk', 'chicken', 'balık', 'balik', 'fish'
+        'peynir', 'cheese', 'yumurta', 'egg', 'et', 'meat', 'tavuk', 'chicken', 'balık', 'balik', 'fish',
+        'ekmek', 'un', 'şeker', 'seker', 'tuz', 'su', 'soda', 'gazoz', 'kola', 'meyve suyu', 'meyve', 'sebze'
       ],
       'Deterjan & Temizlik': [
         'deterjan', 'detergent', 'çamaşır deterjanı', 'camasir deterjani', 'laundry detergent',

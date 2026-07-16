@@ -78,6 +78,7 @@ async function resolveUrlRedirects(url) {
     lowerUrl.includes('t.co') ||
     lowerUrl.includes('rebrand.ly') ||
     lowerUrl.includes('rdrtr.com') ||
+    lowerUrl.includes('onelink.me') ||
     lowerUrl.includes('ty.gl');
 
   if (!isShortOrRedirect) return targetUrl;
@@ -448,7 +449,11 @@ async function fetchHtml(url) {
     } else if (parsed.hostname.includes('getir.com')) {
       // Getir CloudFront, datacenter IP'lerini 403 ile engelliyor.
       // Microlink API'si üzerinden çekim yaparak bunu bypass ediyoruz.
-      const cleaned = new URL(parsed.pathname, parsed.origin);
+      let pathname = parsed.pathname;
+      if (!pathname.endsWith('/')) {
+        pathname += '/';
+      }
+      const cleaned = new URL(pathname, parsed.origin);
       targetUrl = cleaned.toString();
       isGetir = true;
       console.log(`[FETCH-HTML] 🔄 Getir linki tespit edildi. Microlink API ile çekilecek: ${targetUrl}`);

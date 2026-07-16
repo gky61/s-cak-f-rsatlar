@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:sicak_firsatlar/services/scrapers/getir_scraper.dart';
+import 'package:sicak_firsatlar/services/category_detection_service.dart';
 
 void main() {
   group('GetirScraper Unit Tests', () {
@@ -38,6 +39,13 @@ void main() {
         log: (msg) => print(msg),
       );
       expect(image, equals('https://cdn-image.getir.com/market/product/48c81d77-9f2e-48d2-905c-6d49668ab0d5.jpg'));
+    });
+
+    test('should classify Ekmek as supermarket > Gıda Ürünleri', () {
+      final categoryResult = CategoryDetectionService.detectCategory('Ekmek');
+      expect(categoryResult, isNotNull);
+      expect(categoryResult!['categoryId'], equals('supermarket'));
+      expect(categoryResult['subCategory'], equals('Gıda Ürünleri'));
     });
   });
 }

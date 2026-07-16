@@ -144,8 +144,9 @@ class LinkPreviewService {
   Future<String?> _fetchHtml(String url) async {
     final lowerUrl = url.toLowerCase();
     
-    // Akamai Bot Manager gibi sıkı korumaları aşmak için Android ve iOS'ta native HTTP kütüphanesini kullanıyoruz.
-    if ((defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) && lowerUrl.contains('zara.com')) {
+    // Akamai Bot Manager ve AWS WAF gibi sıkı korumaları aşmak için Android ve iOS'ta native HTTP kütüphanesini kullanıyoruz.
+    if ((defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) && 
+        (lowerUrl.contains('zara.com') || lowerUrl.contains('getir.com'))) {
       _log('🚀 Native HTTP istemcisi çağrılıyor: $url');
       try {
         final String? html = await _nativeHttpChannel.invokeMethod<String>('fetchUrl', {
@@ -198,6 +199,7 @@ class LinkPreviewService {
                                lowerUrl.contains('t.co') ||
                                lowerUrl.contains('rebrand.ly') ||
                                lowerUrl.contains('rdrtr.com') ||
+                               lowerUrl.contains('onelink.me') ||
                                lowerUrl.contains('ty.gl');
 
       if (isShortOrRedirect) {
@@ -206,6 +208,8 @@ class LinkPreviewService {
           targetUrl = resolved;
         }
       }
+
+      targetUrl = _normalizeGetirUrl(targetUrl);
 
       _log('🔍 LinkPreviewService: URL çekiliyor: $targetUrl');
       
@@ -402,6 +406,26 @@ class LinkPreviewService {
     }
   }
 
+  String _normalizeGetirUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (uri.host.contains('getir.com') && uri.path.contains('/urun/')) {
+        var path = uri.path;
+        if (!path.endsWith('/')) {
+          path = '$path/';
+        }
+        path = path.replaceAll('//', '/');
+        final cleanUri = Uri(
+          scheme: uri.scheme,
+          host: uri.host,
+          path: path,
+        );
+        return cleanUri.toString();
+      }
+    } catch (_) {}
+    return url;
+  }
+
   String extractAdjustFallback(String url) {
     try {
       final uri = Uri.parse(url);
@@ -550,19 +574,11 @@ class LinkPreviewService {
   Future<String?> _extractImageFromHtml(String url) async {
     try {
       _log('🔍 HTML parsing başlatılıyor: $url');
-      final response = await http.get(
-        Uri.parse(url),
-        headers: _getHeadersForUrl(url),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode != 200) {
-        _log('⚠️ HTTP Status: ${response.statusCode}');
+      final htmlContent = await _fetchHtml(url);
+      if (htmlContent == null || htmlContent.isEmpty) {
         return null;
       }
-      
-      _log('✅ HTML başarıyla indirildi (${response.bodyBytes.length} bytes)');
-
-      final htmlContent = utf8.decode(response.bodyBytes);
+      _log('✅ HTML başarıyla indirildi (${htmlContent.length} chars)');
       final document = html_parser.parse(htmlContent);
       if (document == null) return null;
 
