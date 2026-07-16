@@ -59,6 +59,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     'İncehesap',
     'Havit',
     'Migros',
+    'Getir',
     'Diğer',
   ];
 
@@ -102,6 +103,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         return 'assets/havit.jpg';
       case 'Migros':
         return 'assets/migros.jpg';
+      case 'Getir':
+        return 'assets/getir.jpg';
       default:
         return 'assets/store-icon.png';
     }
@@ -151,6 +154,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       matchedStore = 'Havit';
     } else if (lowerName.contains('migros')) {
       matchedStore = 'Migros';
+    } else if (lowerName.contains('getir')) {
+      matchedStore = 'Getir';
     }
     
     setState(() {

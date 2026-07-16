@@ -4,7 +4,8 @@ const urls = [
   'https://www.vatanbilgisayar.com/asus-vivobook-16-3-nesil-core-ultra-5-325-16gb-512gb-ssd-16inc-w11.html',
   'https://www.pazarama.com/kurukahveci-mehmet-efendi-turk-kahvesi-100-gr-x-25-adet-p-8690627021209-25?magaza=kaytika',
   'https://app.hb.biz/zidAXCDC1RFp',
-  'https://www.trendyol.com/havit/h652bt-anc-aktif-gurultu-engelleme-kulakustu-kablosuz-kulaklik-p-844976728'
+  'https://www.trendyol.com/havit/h652bt-anc-aktif-gurultu-engelleme-kulakustu-kablosuz-kulaklik-p-844976728',
+  'https://getir.com/urun/chunkies-magnum-badem-nogger-paketi-mkbemgrdz5/'
 ];
 
 async function run() {

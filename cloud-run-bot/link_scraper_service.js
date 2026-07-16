@@ -322,6 +322,7 @@ async function fetchHtml(url) {
   let isHepsiburada = false;
   let isTrendyol = false;
   let isAmazon = false;
+  let isGetir = false;
 
   try {
     const parsed = new URL(url);
@@ -444,6 +445,13 @@ async function fetchHtml(url) {
       const cleaned = new URL(parsed.pathname, parsed.origin);
       targetUrl = cleaned.toString();
       console.log(`[FETCH-HTML] 🔄 Migros linki tespit edildi. Standart Fetch kullanılacak: ${targetUrl}`);
+    } else if (parsed.hostname.includes('getir.com')) {
+      // Getir CloudFront, datacenter IP'lerini 403 ile engelliyor.
+      // Microlink API'si üzerinden çekim yaparak bunu bypass ediyoruz.
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      targetUrl = cleaned.toString();
+      isGetir = true;
+      console.log(`[FETCH-HTML] 🔄 Getir linki tespit edildi. Microlink API ile çekilecek: ${targetUrl}`);
     }
   } catch (e) {
     console.error(`[FETCH-HTML] URL parse hatası: ${e.message}`);
@@ -456,9 +464,9 @@ async function fetchHtml(url) {
     return curlFetchHtml(targetUrl, url, fetchStartTime);
   }
 
-  // ── Amazon & Pttavm: Microlink API ile çek (Cloud Run IP engeline / Teslimat lokasyonu sorununa takıldığı için) ──
-  // Amazon ve Pttavm de statik HTML'de tüm verileri barındırdığından prerender=false olarak çekilip hızlandırılır
-  if (isAmazon || isPttavm) {
+  // ── Amazon, Pttavm & Getir: Microlink API ile çek (Cloud Run IP engeline / Teslimat lokasyonu sorununa takıldığı için) ──
+  // Amazon, Pttavm ve Getir de statik HTML'de tüm verileri barındırdığından prerender=false olarak çekilip hızlandırılır
+  if (isAmazon || isPttavm || isGetir) {
     return microlinkFetchHtml(targetUrl, url, fetchStartTime, false);
   }
 

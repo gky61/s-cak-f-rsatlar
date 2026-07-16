@@ -1,0 +1,4242 @@
+{
+  "props": {
+    "viewerCountry": "TR",
+    "initialState": {
+      "loadingIndicator": {
+        "visibility": false
+      },
+      "splashLoading": {
+        "visibility": true
+      },
+      "promotions": {
+        "promoList": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "promoDetail": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "currentTabId": null
+      },
+      "account": {
+        "siteConfig": {
+          "appType": "GETIR",
+          "language": "tr",
+          "locale": "tr",
+          "countryCode": "TR",
+          "activeService": {
+            "isGetir": true,
+            "isFood": false,
+            "isMarket": false,
+            "isWater": false,
+            "isLocals": false,
+            "isGetirTypes": true
+          },
+          "userId": null,
+          "accessToken": false,
+          "accessTokenExpiresAt": null,
+          "refreshToken": false,
+          "defaultToken": false,
+          "selectedAddressId": "",
+          "selectedCuisineId": "",
+          "selectedLocalsCategoryId": "",
+          "pathname": "/productPage/[id]",
+          "asPath": "/urun/chunkies-magnum-badem-nogger-paketi-mkbemgrdz5/",
+          "query": {
+            "id": "chunkies-magnum-badem-nogger-paketi-mkbemgrdz5"
+          },
+          "gsm": {},
+          "location": {
+            "lat": 0,
+            "lon": 0
+          },
+          "deviceId": "",
+          "cookieConsent": false,
+          "dpTrackId": "",
+          "ownerService": 10,
+          "isWarehouseClosed": false,
+          "isWarehouseRequestSended": false,
+          "foodId": false,
+          "newAddress": false,
+          "showActivation": false,
+          "trueClientIp": null,
+          "mobileLink": null,
+          "cloudfrontHeaders": {
+            "viewerCountry": "TR",
+            "lat": "41.03290",
+            "lon": "28.95290"
+          },
+          "permittedAge": null,
+          "isCrawler": false,
+          "version": "1.7.7",
+          "tempCheckoutRequestBody": null,
+          "tempTipCheckoutRequestBody": null
+        },
+        "profileInfo": {},
+        "getProfileInfo": {
+          "status": 1,
+          "reason": null
+        },
+        "updateProfileInfo": {
+          "status": 1,
+          "reason": null
+        },
+        "address": {
+          "list": [],
+          "specialAddress": [],
+          "selected": null,
+          "request": {
+            "addAddress": {
+              "status": 1,
+              "result": null
+            },
+            "removeAddress": {
+              "status": 1,
+              "result": null
+            },
+            "getAddressList": {
+              "status": 1,
+              "result": null
+            },
+            "selectAddress": {
+              "status": 1,
+              "result": null
+            }
+          }
+        },
+        "favorites": {
+          "reason": null,
+          "status": 1,
+          "data": [],
+          "currentPage": 1,
+          "totalCount": 0
+        },
+        "pastOrders": {
+          "reason": null,
+          "status": 1,
+          "data": {},
+          "page": 1,
+          "totalCount": 0
+        },
+        "selectedPastOrder": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "currentLanguage": "tr",
+        "changeLanguage": {
+          "reason": null,
+          "status": 1
+        },
+        "communicationPreferences": {
+          "reason": null,
+          "updateRequestStatus": 1,
+          "initialRequestStatus": 1,
+          "data": {}
+        },
+        "activateClient": {
+          "reason": null,
+          "status": 1
+        },
+        "menuVisible": true,
+        "usePromoCode": {
+          "reason": null,
+          "status": 1
+        }
+      },
+      "invoiceProvider": {
+        "submitStatus": 1,
+        "status": 1,
+        "reason": null,
+        "data": [],
+        "taxNumber": {
+          "status": 1,
+          "data": {},
+          "isGibUser": true,
+          "reason": null
+        },
+        "update": {
+          "data": {}
+        },
+        "delete": {
+          "status": 1,
+          "reason": null
+        },
+        "checkedInvoiceInfoTitle": "",
+        "selectedInvoice": {}
+      },
+      "notifications": [],
+      "mainPage": {
+        "searchKeyword": "",
+        "cuisines": {
+          "status": 1,
+          "result": [],
+          "reason": null
+        },
+        "banners": {
+          "status": 1,
+          "result": [],
+          "reason": null
+        },
+        "locations": {
+          "status": 1,
+          "result": [],
+          "reason": null
+        },
+        "registeredGsm": {
+          "status": 1,
+          "result": "",
+          "reason": null
+        },
+        "deliveryAddress": {
+          "coordinates": {
+            "status": 1,
+            "lat": 41.0053215,
+            "lng": 29.0121795,
+            "zoom": 12
+          },
+          "fullAddress": {
+            "status": 1,
+            "reason": null,
+            "result": null
+          },
+          "streetName": "",
+          "state": "",
+          "countryName": "",
+          "postCode": "",
+          "countryIsoCode": "TR"
+        },
+        "cookieContent": {
+          "status": 1,
+          "data": null,
+          "reason": null
+        }
+      },
+      "modalProvider": {
+        "name": null,
+        "analyticsArgs": null,
+        "logs": []
+      },
+      "auth": {
+        "login": {
+          "reason": null,
+          "status": 1
+        },
+        "register": {
+          "reason": null,
+          "status": 1
+        },
+        "activateClient": {
+          "reason": null,
+          "status": 1
+        },
+        "refreshTokenRequest": {
+          "reason": null,
+          "status": 1
+        },
+        "sendOtp": {
+          "reason": null,
+          "status": 1,
+          "expireTimeForOtp": null
+        },
+        "phoneNumber": {
+          "countryCode": "90",
+          "countryIsoCode": "tr",
+          "gsm": ""
+        },
+        "loginType": 1,
+        "client": null,
+        "accessToken": null,
+        "refreshToken": null,
+        "defaultToken": null,
+        "facebookUser": null,
+        "step": 0,
+        "registrationAgreements": {
+          "status": 1,
+          "data": null,
+          "reason": null
+        }
+      },
+      "popup": {
+        "isVisible": false
+      },
+      "searchProvider": {
+        "status": 1,
+        "keyword": null,
+        "searchArgs": null,
+        "analyticKeyword": null,
+        "isImmediate": false,
+        "results": [],
+        "reason": null,
+        "offset": "",
+        "fetchedAll": false
+      },
+      "throttleProvider": {
+        "registry": []
+      },
+      "localsPopularKeywords": {
+        "popularKeywords": {
+          "status": 1,
+          "data": {
+            "title": "",
+            "popularKeywords": []
+          },
+          "reason": null
+        }
+      },
+      "ssrErrorActionHandler": {
+        "errors": {}
+      },
+      "helpPage": {
+        "content": {
+          "status": 1,
+          "data": null,
+          "reason": null
+        }
+      },
+      "restaurantList": {
+        "status": 1,
+        "estimatedDeliveryDuration": {},
+        "deliveryOptions": {},
+        "restaurants": {
+          "data": [],
+          "status": 1,
+          "reason": null,
+          "filterStatus": 1,
+          "filterReason": null
+        },
+        "filterAndSortings": {
+          "reason": null,
+          "data": {
+            "cuisines": {
+              "data": []
+            },
+            "sort": {
+              "data": []
+            },
+            "smartOptions": {
+              "data": []
+            },
+            "deliveryType": {
+              "data": []
+            },
+            "paymentMethod": {
+              "data": []
+            },
+            "minBasketSize": {
+              "data": []
+            },
+            "rating": {
+              "data": []
+            }
+          },
+          "initialData": {},
+          "filtersList": [],
+          "status": 1
+        },
+        "selectedFilters": [],
+        "filtersQuery": {
+          "brandSlug": "",
+          "cuisines": [],
+          "deliveryType": "",
+          "minBasketSize": "300",
+          "paymentMethod": [],
+          "restaurantIds": [],
+          "restaurantListId": "",
+          "smartOptions": [],
+          "brandId": "",
+          "rating": "0"
+        },
+        "promotionName": "",
+        "applyFiltersWithButton": false,
+        "sortType": "2",
+        "activeOrders": {
+          "data": [],
+          "reason": null,
+          "status": 1
+        },
+        "foodOrder": {},
+        "pastFoodOrders": {
+          "data": null,
+          "reason": null,
+          "status": 1
+        },
+        "tagCategories": [],
+        "totalCount": 0,
+        "currentPage": 1,
+        "triedFavId": null,
+        "removedRestaurantCount": 0,
+        "kustomerToken": {
+          "data": "",
+          "status": 1
+        },
+        "cbotToken": {
+          "data": null,
+          "status": 1
+        },
+        "whatIEatRecommendations": {
+          "screenTitle": null,
+          "bannerData": [],
+          "recommendedRestaurants": [],
+          "reason": null,
+          "status": 1
+        },
+        "source": {},
+        "analytics": {
+          "source": "",
+          "preSource": ""
+        },
+        "deeplinkFilter": []
+      },
+      "restaurantDetail": {
+        "reason": null,
+        "status": 1,
+        "menu": {},
+        "categories": [],
+        "restaurant": {
+          "restaurantRatings": {
+            "restaurantRating": null,
+            "restaurantRatingCount": null,
+            "restaurantRatingScore": {},
+            "restaurantRatingHistory": {},
+            "totalReviewCount": null
+          },
+          "isReviewEnabled": false
+        },
+        "additionalInfo": null,
+        "productDetail": {
+          "reason": null,
+          "status": 1,
+          "data": []
+        },
+        "restaurantName": "",
+        "restaurantSlug": "",
+        "searchText": "",
+        "loyaltyInfo": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "foodOrders": {
+          "reason": null,
+          "status": 1,
+          "data": []
+        },
+        "reviews": {
+          "status": 1,
+          "reason": null,
+          "currentPage": 1,
+          "filters": [],
+          "data": [],
+          "chipId": null
+        },
+        "detail": {
+          "reason": null,
+          "status": 1,
+          "data": []
+        },
+        "chips": {
+          "status": 1,
+          "courierChips": [],
+          "restaurantChips": [],
+          "reason": ""
+        },
+        "ratingInformation": null
+      },
+      "foodDetail": {
+        "id": null,
+        "name": null,
+        "description": null,
+        "price": null,
+        "optionCategories": [],
+        "hasImage": null,
+        "imageURL": null,
+        "count": null,
+        "selectedOptionCategories": [],
+        "note": null,
+        "disabled": false,
+        "isProductNotesEnabled": false,
+        "restaurant": {
+          "id": null
+        },
+        "getProductDetail": {
+          "status": 1,
+          "reason": null
+        }
+      },
+      "brand": {
+        "cities": {},
+        "districts": {},
+        "filteredCities": {},
+        "cityName": "",
+        "cityFirstLetter": "",
+        "cityFirstLetters": [],
+        "restaurantIds": [],
+        "name": "",
+        "slug": "",
+        "status": 1,
+        "reason": null
+      },
+      "loyalty": {
+        "status": 1,
+        "reason": null,
+        "data": [],
+        "isLoyaltyEnabled": null,
+        "loyaltyDetail": {
+          "status": 1,
+          "reason": null,
+          "data": {}
+        },
+        "info": {
+          "title": "GetirYemek M├╝davim",
+          "description": "GetirYemek kullan─▒c─▒lar─▒ sipari┼ş verdik├ğe ÔÇØM├╝davimÔÇØ oluyor, t├╝m restoranlardan her X sipari┼şe X hediye sipari┼ş kazan─▒yor!",
+          "icon": ""
+        }
+      },
+      "brands": {
+        "status": 1,
+        "data": [],
+        "reason": null
+      },
+      "basket": {
+        "reason": null,
+        "status": 1,
+        "product": {},
+        "unavailableProducts": [],
+        "isProductImageVisible": false,
+        "addProduct": {
+          "id": null,
+          "status": 1,
+          "reason": null
+        },
+        "abort": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "recommendations": {
+          "reason": null,
+          "status": 1,
+          "data": []
+        },
+        "confirmBasket": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        }
+      },
+      "bannerAd": {
+        "basket": {
+          "data": {},
+          "status": 1,
+          "reason": null
+        }
+      },
+      "checkout": {
+        "reason": null,
+        "status": 1,
+        "product": {},
+        "isPageLoading": false,
+        "autoSelectedPromoId": null,
+        "creditCards": [],
+        "selectedDeliveryType": 0,
+        "selectedPaymentSection": 1,
+        "scheduleOptionKey": null,
+        "scheduledDate": null,
+        "isEcoFriendly": false,
+        "dropOffAtDoor": false,
+        "doNotKnock": false,
+        "cardWizardStep": 1,
+        "note": "",
+        "selectedPromoId": null,
+        "ignorePromo": false,
+        "isPaymentTypeDetectionAvailable": false,
+        "isAgreementChecked": false,
+        "isQueueConfirmed": false,
+        "selected": {
+          "paymentOption": null,
+          "masterpassCard": null,
+          "bkmCard": null,
+          "sodexoCard": null,
+          "ticketCard": null,
+          "multinetCard": null
+        },
+        "aggregatedPaymentOptions": {
+          "filteredMethod": null,
+          "lastActivityOn": null,
+          "previousOrder": null,
+          "currentOptions": []
+        },
+        "agreementHtml": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "amount": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "deliveryTypes": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "paymentMethods": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "completeCheckout": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "incompleteCheckout": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "scheduledOptions": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "otpVerifyCode": {
+          "code": null,
+          "errorMessage": null,
+          "step": null
+        }
+      },
+      "orderTracking": {
+        "activeFoodOrders": {},
+        "isFoodOrdersReFetchNeeded": false,
+        "baseUrls": {},
+        "foodOrder": {
+          "averagePreparationTime": {},
+          "cardInfo": {},
+          "courier": {},
+          "courierTipDetails": null,
+          "deliveryAddress": {},
+          "deliveryDuration": {},
+          "products": [],
+          "rating": {},
+          "restaurant": {},
+          "timeline": {},
+          "status": null,
+          "isTrackable": false,
+          "reorderLabel": {},
+          "invoiceUrl": null
+        },
+        "liveSupport": {
+          "timeline": {},
+          "categories": [],
+          "foodOrderTimeDetail": {},
+          "departmentType": "",
+          "orderDetailUrl": "",
+          "isActive": false
+        },
+        "checkoutCourierTip": {
+          "status": 1
+        },
+        "getFoodOrder": {
+          "status": 1
+        },
+        "rateRestaurant": {
+          "status": 1
+        },
+        "getCourierTipDetails": {
+          "status": 1
+        },
+        "rateCourier": {
+          "status": 1
+        },
+        "getInvoiceUrl": {
+          "status": 1
+        },
+        "reviewCriteria": {
+          "status": 1,
+          "criteriaData": [],
+          "criteriaText": null,
+          "reason": null
+        }
+      },
+      "paymentProvider": {
+        "common": {
+          "otpMode": 1,
+          "securePaymentUrl": "",
+          "refreshOnly": false,
+          "paymentOptions": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "paymentToken": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          }
+        },
+        "masterpass": {
+          "isResetToBeDeletedCard": null,
+          "masterpassAccount": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "masterpassCreditCards": {
+            "reason": null,
+            "status": 2,
+            "result": []
+          },
+          "registerMPCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "deleteMPCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "validateTransaction": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "purchaseMPCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "resendOTP": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "syncCreditCards": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "linkAccount": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          }
+        },
+        "bkm": {
+          "card": null,
+          "linkOfBKMAccount": {
+            "status": 1,
+            "reason": null,
+            "result": null
+          }
+        },
+        "sodexo": {
+          "card": null,
+          "addSodexoOnlineCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "removeSodexoOnlineCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          }
+        },
+        "ticket": {
+          "card": null,
+          "addTicketCard": {
+            "reason": null,
+            "status": 1,
+            "result": null,
+            "data": null
+          },
+          "removeTicketCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          }
+        },
+        "multinet": {
+          "card": null,
+          "addMultinetWallet": {
+            "reason": null,
+            "status": 1,
+            "result": null,
+            "data": null
+          },
+          "removeMultinetWallet": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          }
+        }
+      },
+      "getirListing": {
+        "products": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "categories": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "activeCategories": {
+          "main": {},
+          "sub": {}
+        },
+        "filters": [],
+        "isSubCategoryPage": false
+      },
+      "mainSearch": {
+        "popularKeywords": {
+          "status": 1,
+          "keywords": [],
+          "title": "",
+          "reason": null
+        }
+      },
+      "suggestProduct": {
+        "status": 1,
+        "reason": null
+      },
+      "productDetail": {
+        "status": 1,
+        "reason": null,
+        "data": {},
+        "slug": null,
+        "id": null,
+        "triggerLocation": null
+      },
+      "previousOrders": {
+        "status": 1,
+        "data": [],
+        "reason": null,
+        "pagination": {
+          "orderCount": 0,
+          "pageCount": 1
+        },
+        "detail": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "detailCheckoutAgreement": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "invoiceUrl": {
+          "status": 1,
+          "data": "",
+          "reason": null
+        },
+        "cancellationReason": {
+          "status": 1,
+          "data": "",
+          "reason": null
+        },
+        "cancellationVerify": {
+          "status": 1,
+          "data": {},
+          "reason": null
+        },
+        "tip": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "rating": {
+          "status": 1,
+          "data": {},
+          "reason": null
+        },
+        "tipCheckout": {
+          "status": 1,
+          "data": "",
+          "reason": null,
+          "amount": 0
+        }
+      },
+      "getirCheckout": {
+        "reason": null,
+        "status": 1,
+        "selectedEstimatedDeliveryDuration": null,
+        "completeCheckout": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "amount": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "creditCards": [],
+        "dropOffAtDoor": false,
+        "checkoutAgreement": {
+          "isEnabled": false,
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "doNotKnock": false,
+        "cardWizardStep": 1,
+        "isForOrderQueue": false,
+        "note": "",
+        "selectedPromoId": null,
+        "selectedInvoiceId": null,
+        "ignorePromo": false,
+        "invoiceInfoId": "",
+        "selectedBagPreferenceId": 1,
+        "paymentActions": {
+          "status": 1
+        }
+      },
+      "getirPaymentProvider": {
+        "paymentType": 1,
+        "checkoutType": 1,
+        "otpMode": 1,
+        "securePaymentUrl": "",
+        "linkOfBKMAccount": {
+          "status": 1,
+          "reason": null,
+          "result": null
+        },
+        "paymentOptions": {
+          "reason": null,
+          "status": 1,
+          "result": null,
+          "selectedBKMExpressCard": null,
+          "selectedAdyenCard": null,
+          "selectedSodexoCard": null,
+          "selectedTicketCard": null,
+          "selectedMultinetCard": null
+        },
+        "paymentToken": {
+          "reason": null,
+          "status": 1,
+          "result": {
+            "paymentToken": ""
+          },
+          "shouldUpdateMasterPass": true
+        },
+        "masterpassAccount": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "masterpassCreditCards": {
+          "reason": null,
+          "status": 2,
+          "result": [],
+          "selected": null
+        },
+        "registerMPCard": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "deleteMPCard": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "validateTransaction": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "purchaseMPCard": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "resendOTP": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "syncCreditCards": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "cardAddingProperties": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "isResetToBeDeletedCard": false,
+        "linkAccount": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        }
+      },
+      "getirPromotions": {
+        "promoList": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "promoDetail": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "promoContent": {
+          "reason": null,
+          "status": 1,
+          "data": {},
+          "id": ""
+        }
+      },
+      "getirMainPage": {
+        "main": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "banners": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "products": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        }
+      },
+      "getirBasket": {
+        "currentBasket": {
+          "status": 1,
+          "data": {},
+          "reason": null
+        },
+        "update": {
+          "args": null,
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "abort": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        }
+      },
+      "favoriteProducts": {
+        "reason": null,
+        "status": 1,
+        "data": []
+      },
+      "getirOrderTracking": {
+        "order": {
+          "status": "",
+          "timeline": {
+            "stages": [],
+            "selectedTimelineStageId": ""
+          },
+          "createdAt": "",
+          "products": [],
+          "courier": {
+            "id": "",
+            "name": "",
+            "picURL": "",
+            "lat": "",
+            "lon": ""
+          },
+          "deliveryAddress": {
+            "name": "",
+            "address": "",
+            "emojiURL": ""
+          },
+          "checkoutAmounts": {
+            "fields": []
+          },
+          "deliveryDuration": {
+            "title": {},
+            "text": {}
+          },
+          "rate": {
+            "isSkipped": false,
+            "canBeCommented": false,
+            "canBeRated": false
+          },
+          "liveSupport": {},
+          "promo": {
+            "title": "",
+            "picURL": "",
+            "description": ""
+          }
+        },
+        "orderRequestStatus": 1,
+        "connectSocketStatus": 1,
+        "connectedOrderId": null,
+        "socket": null
+      },
+      "getirCommon": {
+        "connectWarehouse": {
+          "status": 1,
+          "data": null,
+          "reason": null
+        },
+        "warehouseInfo": {
+          "status": 1,
+          "data": null,
+          "reason": null
+        },
+        "estimatedDeliveryDuration": {
+          "title": "",
+          "value": ""
+        },
+        "mapOverlayInfo": {
+          "minBasketTitle": "",
+          "minBasketAmount": "",
+          "deliveryFeeTitle": "",
+          "deliveryFeeAmount": ""
+        }
+      },
+      "getirActiveOrders": {
+        "status": 1,
+        "data": [],
+        "reason": null
+      },
+      "shopListFilter": {
+        "filterAndSortings": {
+          "status": 1,
+          "reason": null,
+          "data": {
+            "sortingSections": {
+              "sortOptions": {
+                "data": []
+              },
+              "defaultOption": 4
+            },
+            "filterSections": {
+              "verticals": {
+                "data": []
+              },
+              "smartFilterOptions": {
+                "data": []
+              },
+              "deliveryOptions": {
+                "data": []
+              },
+              "cuisines": {
+                "data": []
+              },
+              "paymentOptions": {
+                "data": []
+              },
+              "minBasketSizeOptions": {
+                "data": {}
+              }
+            }
+          }
+        },
+        "filterValues": {}
+      },
+      "shopList": {
+        "status": 1,
+        "estimatedDeliveryDuration": {
+          "text": "",
+          "styles": {
+            "font": {
+              "weight": "bold"
+            }
+          },
+          "suffix": "",
+          "title": "TVS"
+        },
+        "shops": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "activeOrders": {
+          "data": [],
+          "reason": null,
+          "status": 1
+        },
+        "pastLocalsOrders": {
+          "data": [],
+          "reason": null,
+          "status": 1
+        },
+        "smartSuggestions": {
+          "data": []
+        },
+        "orders": {},
+        "tagCategories": [],
+        "totalCount": 0,
+        "currentPage": 1,
+        "triedFavId": null,
+        "hasLimitedGiftingService": false
+      },
+      "localsProductDetail": {
+        "status": 1,
+        "data": {
+          "masterProduct": {},
+          "product": {
+            "specs": [],
+            "tabs": []
+          }
+        },
+        "reason": null
+      },
+      "localsOrderTracking": {
+        "activeLocalsOrders": [],
+        "isLocalOrdersReFetchNeeded": false,
+        "baseUrls": {},
+        "localOrder": {
+          "cardInfo": {},
+          "courier": {},
+          "courierTipDetails": null,
+          "deliveryAddress": {},
+          "products": [],
+          "rating": {},
+          "local": {},
+          "status": null,
+          "isTrackable": false,
+          "reorderLabel": {}
+        },
+        "liveSupport": {
+          "timeline": {}
+        },
+        "kustomerToken": {
+          "data": "",
+          "status": 1
+        },
+        "checkoutCourierTip": {
+          "status": 1
+        },
+        "getLocalOrder": {
+          "status": 1
+        },
+        "rateLocal": {
+          "status": 1
+        },
+        "getCourierTipDetails": {
+          "status": 1
+        },
+        "rateCourier": {
+          "status": 1
+        },
+        "getInvoiceUrl": {
+          "data": {},
+          "result": null,
+          "status": 1
+        },
+        "priceDifferenceWarningText": "",
+        "orderReviewChips": {
+          "data": {
+            "courierChips": {},
+            "shopChips": {}
+          },
+          "result": null,
+          "status": 1
+        }
+      },
+      "localsBasket": {
+        "reason": null,
+        "status": 1,
+        "product": {},
+        "unavailableProducts": [],
+        "isProductImageVisible": false,
+        "addProduct": {
+          "id": null,
+          "status": 1,
+          "reason": null
+        },
+        "abort": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "recommendations": {
+          "reason": null,
+          "status": 1,
+          "data": []
+        },
+        "confirmBasket": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        }
+      },
+      "localsCheckout": {
+        "reason": null,
+        "status": 1,
+        "product": {},
+        "isPageLoading": false,
+        "autoSelectedPromoId": null,
+        "addProduct": {
+          "id": null,
+          "status": 1,
+          "reason": null
+        },
+        "amount": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "abort": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "deliveryTypes": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "paymentMethods": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "giftingSettings": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "completeCheckout": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "creditCards": [],
+        "selectedDeliveryType": 0,
+        "selectedPaymentSection": 1,
+        "isEcoFriendly": false,
+        "dropOffAtDoor": false,
+        "doNotKnock": false,
+        "cardWizardStep": 1,
+        "note": "",
+        "isForOrderQueue": false,
+        "isGifting": false,
+        "isGiftingFormValid": false,
+        "giftingParameters": {
+          "receiverName": "",
+          "receiverGsm": "",
+          "giftingNote": "",
+          "senderName": ""
+        },
+        "selectedPromoId": null,
+        "selectedInvoiceId": null,
+        "ignorePromo": false,
+        "isPaymentTypeDetectionAvailable": false,
+        "unavailableProducts": [],
+        "isAgreementChecked": false,
+        "agreementHtml": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "isGetirMoneySelected": false,
+        "installment": {
+          "selectedInstallmentOption": {},
+          "selectedInstallmentType": 1,
+          "isInstallmentOptionsSeen": false
+        }
+      },
+      "localsPaymentProvider": {
+        "paymentType": null,
+        "otpMode": 1,
+        "securePaymentUrl": "",
+        "linkOfBKMAccount": {
+          "status": 1,
+          "reason": null,
+          "result": null
+        },
+        "paymentOptions": {
+          "reason": null,
+          "status": 1,
+          "result": null,
+          "selectedBKMExpressCard": null
+        },
+        "paymentToken": {
+          "reason": null,
+          "status": 1,
+          "result": null,
+          "shouldUpdateMasterPass": true
+        },
+        "masterpassAccount": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "masterpassCreditCards": {
+          "reason": null,
+          "status": 2,
+          "result": [],
+          "selected": null
+        },
+        "registerMPCard": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "deleteMPCard": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "validateTransaction": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "purchaseMPCard": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "resendOTP": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "syncCreditCards": {
+          "reason": null,
+          "status": 1,
+          "result": null
+        },
+        "isResetToBeDeletedCard": false
+      },
+      "localsMainPage": {
+        "categories": {
+          "status": 1,
+          "result": [],
+          "reason": null
+        },
+        "banners": {
+          "status": 1,
+          "result": [],
+          "reason": null
+        }
+      },
+      "localsPromotions": {
+        "promoList": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "promoDetail": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "checkoutPromos": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "usePromoCode": {
+          "reason": null,
+          "status": 1,
+          "data": {}
+        },
+        "currentTabId": null,
+        "selectedPromoId": null
+      },
+      "localsFavoritesProvider": {
+        "favorites": {
+          "reason": null,
+          "status": 1,
+          "data": [],
+          "currentPage": 1,
+          "totalCount": 0
+        }
+      },
+      "retailShopDetail": {
+        "reason": null,
+        "status": 1,
+        "retailShop": {
+          "reason": null,
+          "status": 1,
+          "data": null
+        },
+        "retailShopProducts": {
+          "reason": null,
+          "status": 1,
+          "data": [],
+          "fetchCount": 0
+        },
+        "filterValues": {},
+        "retailShopFilters": {
+          "reason": null,
+          "status": 4,
+          "data": {
+            "title": "Filtreler",
+            "filterSections": [
+              {
+                "filterKey": "sort",
+                "filterType": "single",
+                "title": "S─▒ralama",
+                "data": [
+                  {
+                    "id": 1,
+                    "title": "Ak─▒ll─▒ S─▒ralama (Varsay─▒lan)"
+                  },
+                  {
+                    "id": 2,
+                    "title": "En D├╝┼ş├╝k Fiyat"
+                  },
+                  {
+                    "id": 3,
+                    "title": "En Y├╝ksek Fiyat"
+                  }
+                ]
+              },
+              {
+                "filterKey": "gender",
+                "filterType": "single",
+                "title": "Cinsiyet",
+                "data": [
+                  {
+                    "id": 0,
+                    "title": "T├╝m├╝"
+                  },
+                  {
+                    "id": 1,
+                    "title": "Kad─▒n"
+                  },
+                  {
+                    "id": 2,
+                    "title": "Erkek"
+                  }
+                ]
+              },
+              {
+                "filterKey": "color",
+                "filterType": "multiple",
+                "title": "Renk",
+                "data": [
+                  {
+                    "id": "0",
+                    "title": "T├╝m├╝"
+                  },
+                  {
+                    "id": "1",
+                    "title": "Siyah"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Beyaz"
+                  },
+                  {
+                    "id": "3",
+                    "title": "K─▒rm─▒z─▒"
+                  },
+                  {
+                    "id": "4",
+                    "title": "Ye┼şil"
+                  },
+                  {
+                    "id": "5",
+                    "title": "Mavi"
+                  },
+                  {
+                    "id": "6",
+                    "title": "Pembe"
+                  },
+                  {
+                    "id": "7",
+                    "title": "Sar─▒"
+                  }
+                ]
+              },
+              {
+                "filterKey": "size",
+                "filterType": "multiple",
+                "title": "Beden",
+                "data": [
+                  {
+                    "id": "0",
+                    "title": "T├╝m├╝"
+                  },
+                  {
+                    "id": "1",
+                    "title": "XS"
+                  },
+                  {
+                    "id": "2",
+                    "title": "S"
+                  },
+                  {
+                    "id": "3",
+                    "title": "M"
+                  },
+                  {
+                    "id": "4",
+                    "title": "L"
+                  },
+                  {
+                    "id": "5",
+                    "title": "XL"
+                  },
+                  {
+                    "id": "6",
+                    "title": "XXL"
+                  },
+                  {
+                    "id": "7",
+                    "title": "XXXL"
+                  }
+                ]
+              },
+              {
+                "filterKey": "minBasketSize",
+                "filterType": "slider",
+                "title": "Fiyat Aral─▒─ş─▒",
+                "data": {
+                  "defaultValue": 50,
+                  "maxValue": 50,
+                  "maxValueText": "Hepsi",
+                  "minValue": 5,
+                  "stepCount": 5
+                }
+              }
+            ]
+          }
+        },
+        "shelf": "",
+        "subShelf": "",
+        "filterEnabled": false
+      },
+      "localsPreviousOrdersProvider": {
+        "status": 1,
+        "data": [],
+        "page": 1,
+        "totalCount": 0,
+        "reason": null,
+        "detail": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "invoiceUrl": {
+          "status": 1,
+          "data": "",
+          "reason": null
+        },
+        "cancellationReason": {
+          "status": 1,
+          "data": "",
+          "reason": null
+        },
+        "cancellationVerify": {
+          "status": 1,
+          "data": {},
+          "reason": null
+        },
+        "tipCheckout": {
+          "status": 1,
+          "data": "",
+          "reason": null
+        }
+      },
+      "localsGifting": {
+        "isGiftingAddressModalEnabled": false,
+        "addressHasNoFlorist": false
+      },
+      "localsReturns": {
+        "status": 1,
+        "availability": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "createReturn": {
+          "status": 1,
+          "data": {},
+          "reason": null
+        },
+        "slots": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "returnDetail": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "setDeliveryType": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "availableReturnSlots": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "changeReturnSlot": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "cancelReturn": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        }
+      }
+    },
+    "__N_SSP": true,
+    "pageProps": {
+      "_nextI18Next": {
+        "initialI18nStore": {
+          "tr": {
+            "common": {
+              "getirMetaDescription": "At─▒┼şt─▒rmal─▒ktan i├ğeceklere, kahvalt─▒l─▒klardan ki┼şisel bak─▒m ├╝r├╝nlerine kadar binlerce ├╝r├╝n├╝ dakikalar i├ğinde kap─▒na getiriyoruz.",
+              "getirMetaKeywords": "getir, mobil, al─▒┼şveri┼ş, kurye, market, bakkal, sipari┼ş, yemek, i├ğecek",
+              "getirYemekMetaDescription": "GetirYemek ile en sevdi─şin restoranlar, lezzetler bulundu─şun yere gelsin!",
+              "getirMoreMetaDescription": "Binlerce ├╝r├╝n uygun fiyata! Kasaptan manava binlerce ├ğe┼şidiyle uygun fiyatl─▒ ├╝r├╝nler, GetirB├╝y├╝kÔÇÖle kap─▒nda.",
+              "getirWaterMetaDescription": "Haftan─▒n her g├╝n├╝ gece 24.00'e kadar suyunu kap─▒na getiriyoruz. ┼Şimdilik sadece ─░stanbul'da hizmetindeyiz.",
+              "getirLocalsMetaDescription": "Getir├çar┼ş─▒ ile aktardan manava, kasaptan pet shopÔÇÖa sevdi─şin i┼şletmeler ├ğar┼ş─▒dan kap─▒na geliyor!",
+              "setDeliveryAddress": "Teslimat Adresi Belirle",
+              "login": "Giri┼ş yap",
+              "oneTimePassword": "Tek kullan─▒ml─▒k ┼şifre",
+              "otpPasswordText": "L├╝tfen {{phoneNumber}} numaral─▒ telefonuna g├Ânderilen tek kullan─▒ml─▒k ┼şifreyi gir",
+              "register": "Kay─▒t Ol",
+              "logout": "├ç─▒k─▒┼ş yap",
+              "myBasket": "Sepetim",
+              "goBasket": "Sepete git",
+              "goMainPage": "Ana Sayfa'ya git",
+              "mainPage": "Ana Sayfa",
+              "clearBasket": "Sepeti temizle",
+              "changeAddress": "Adresi de─şi┼ştir",
+              "total": "Toplam",
+              "cuisines": "Mutfaklar",
+              "categoriesTitle": "Restoran Men├╝s├╝",
+              "searchFoodRestaurant": "Yemek veya restoran ara",
+              "dragPinSelectingAddress": "Adresini se├ğmek i├ğin Pin'i s├╝r├╝kle",
+              "alreadyNotRegistered": "Hala kay─▒t olmad─▒n m─▒?",
+              "activationCode": "Aktivasyon kodu",
+              "approve": "Onayla",
+              "approveAndLogin": "Onayla ve giri┼ş yap",
+              "haveYouCode": "Kod gelmedi mi?",
+              "resendCode": "Kodu tekrar g├Ânder",
+              "passwordNotComming": "┼Şifre gelmedi mi?",
+              "resendOTP": "Tek kullan─▒ml─▒k ┼şifreyi tekrar g├Ânder",
+              "send": "G├Ânder",
+              "openApp": "Uygulamay─▒ a├ğ",
+              "downloadApp": "Uygulamay─▒ indir",
+              "downloadGetir": "Getir'i indir!",
+              "download": "─░ndir",
+              "aboutUs": "Hakk─▒m─▒zda",
+              "career": "Kariyer",
+              "techCareer": "Teknoloji Kariyerleri",
+              "allOf": "Hepsi",
+              "help": "Yard─▒m",
+              "backToHelpPage": "Yard─▒m'a geri d├Ân",
+              "accessibility": "Eri┼şebilirlik",
+              "areYouNeedHelp": "Yard─▒ma m─▒ ihtiyac─▒n var?",
+              "restaurantApplication": "GetirYemek Restoran─▒ Ol",
+              "localApplication": "Getir├çar┼ş─▒ ─░┼şletmesi Ol",
+              "storeApplication": "Deponu Kirala",
+              "areYouBusinessPartner": "─░┼ş Orta─ş─▒m─▒z Ol",
+              "discoverGetir": "Getir'i ke┼şfet",
+              "languages": "Diller",
+              "privacyPolicy": "Gizlilik Politikas─▒",
+              "termsConditions": "Kullan─▒m Ko┼şullar─▒",
+              "processGuide": "─░┼şlem Rehberi",
+              "distantSalesAgreementAndForm": "├ûn Bilgilendirme Formu ve Mesafeli Sat─▒┼ş S├Âzle┼şmesi",
+              "shouldAcceptCheckoutAgreement": "├ûn Bilgilendirme Formu ve Mesafeli Sat─▒┼ş S├Âzle┼şmesiÔÇÖni kabul etmelisin.",
+              "ok": "Tamam",
+              "save": "Kaydet",
+              "addDeliveryAddress": "Teslimat Adresi Ekle",
+              "listSavedAddress": "Kay─▒tl─▒ adreslerini g├Ârmek i├ğin",
+              "addressSearchTitle": "Bulundu─şunuz yere dakikalar i├ğinde yemek sipari┼şiniz gelsin.",
+              "phoneNumber": "Telefon numaras─▒",
+              "password": "┼Şifre",
+              "name": "Ad Soyad",
+              "mail": "E-posta",
+              "getir": "Getir",
+              "getirFood": "GetirYemek",
+              "getirMarket": "GetirB├╝y├╝k",
+              "getirWater": "GetirSu",
+              "getirLocals": "Getir├çar┼ş─▒",
+              "restaurant": "Restoran",
+              "deliveryType": "getirsin",
+              "basketAmount": "Sepet Tutar─▒",
+              "basketTotal": "Sepet Toplam─▒",
+              "goCheckout": "├ûdemeye Ge├ğ",
+              "orderDetail": "Sipari┼ş Detay─▒",
+              "detail": "Detay",
+              "trackOrder": "Sipari┼şi ─░zle",
+              "orderStatus": "Sipari┼ş Durumu",
+              "youCanTrackInMainPage": "Sipari┼ş durumunu <0>{{mainText}}</0>'dan da takip edebilirsin",
+              "searchFood": "Yemek ara",
+              "noFoodText": "Bu restoranda Arad─▒─ş─▒n yemek bulunmuyor.",
+              "noRestautantText": "Restoran Bulunamad─▒",
+              "noShopText": "─░┼şletme Bulunamad─▒",
+              "refreshPage": "Sayfay─▒ Yenile",
+              "countryCodeRequired": "L├╝tfen ├╝lke kodunu gir.",
+              "countryCode": "├£lke Kodu",
+              "postCode": "Posta Kodu",
+              "phoneNumberRequired": "L├╝tfen telefon numaran─▒ gir.",
+              "nameRequired": "L├╝tfen ad ve soyad─▒n─▒ gir.",
+              "messageRequired": "L├╝tfen mesaj gir.",
+              "emailRequired": "L├╝tfen e-posta adresini gir.",
+              "weReceivedYourMessage": "Mesaj─▒n ba┼şar─▒yla bize ula┼şt─▒",
+              "weCantReceivedYourMessage": "Bir ┼şeyler ters gitti, mesaj─▒n─▒ tekrar yollayabilir misin?",
+              "pleaseFillCaptcha": "L├╝tfen Captcha'y─▒ doldur",
+              "kvkk": "Ki┼şisel Verilerin Korunmas─▒ Politikas─▒",
+              "acceptedToReceiveNews": "Ki┼şisel Verilerin Korunmas─▒ Politikas─▒n─▒ onaylamal─▒s─▒n.",
+              "nameValid": "L├╝tfen soyad─▒n─▒z─▒ da gir.",
+              "nameLength": "Ad soyad en fazla 75 karakter uzunlukta olmal─▒d─▒r.",
+              "nameWithNonAlphabetCharacters": "Ad soyad yaln─▒zca alfabetik karakter i├ğermelidir.",
+              "phoneNumberValid": "L├╝tfen ge├ğerli bir telefon numaras─▒ gir.",
+              "emailValid": "L├╝tfen ge├ğerli bir e-posta adresi gir.",
+              "activationCodeRequired": "Aktivasyon Kodunu gir",
+              "otpRequired": "Tek kullan─▒ml─▒k ┼şifreyi gir",
+              "codeSendedClientPhone": "L├╝tfen {{clientGSM}} numaral─▒ telefona g├Ânderilen aktivasyon kodunu gir",
+              "readAndAccepted": "<0>{{agreementLink}}</0>ÔÇÖn─▒ okudum, kabul ediyorum.",
+              "readAndAccepted2": "<0>{{agreementLink}}</0> ÔÇÖni okudum, kabul ediyorum.",
+              "iWantToBeInformed": "GetirÔÇÖin bana ├Âzel kampanya, tan─▒t─▒m ve f─▒rsatlar─▒ndan haberdar olmak istiyorum.",
+              "clickForKvkk": "Ki┼şisel verilerine dair Ayd─▒nlatma Metni i├ğin <0>{{link}}</0>.",
+              "registerWithFacebook": "Facebook ile Kay─▒t Ol",
+              "promotion": "Promosyon",
+              "promotions": "Kampanyalar",
+              "selectedProducts": "Se├ğili ├£r├╝nler",
+              "promotionCode": "Kampanya Kodu",
+              "promoCodeRequired": "Kampanya Kodunu gir.",
+              "selectPromotion": "Kampanya Se├ğ",
+              "select": "Se├ğ",
+              "addPromotion": "Kampanya Kodu Ekle",
+              "continueWithNoPromotion": "Kampanyas─▒z Devam Et",
+              "goBackPromotionList": "KampanyalarÔÇÖa geri d├Ân",
+              "add": "Ekle",
+              "checkout": "├ûdeme",
+              "basket": "Sepetim",
+              "accountTitle": "Hesab─▒m",
+              "myPaymentMethods": "├ûdeme Y├Ântemlerim",
+              "myAddresses": "Adreslerim",
+              "myPastOrders": "Ge├ğmi┼ş Sipari┼şlerim",
+              "myFavoriteRestaurants": "Favori Restoranlar─▒m",
+              "favoriteRestaurants": "Favori Restoranlar",
+              "addToFavorite": "Favorilere Ekle",
+              "chooseAddressBeforeAddToFavorite": "Bu ├╝r├╝n├╝ favori olarak i┼şaretlemeden ├Ânce bir teslimat adresi se├ğmelisin.",
+              "email": "E-Posta",
+              "notification": "Bildirim",
+              "sms": "SMS",
+              "phoneCall": "Telefon",
+              "allowEmail": "Kampanyalarla ilgili e-posta almak istiyorum.",
+              "allowNotification": "Kampanyalarla ilgili bildirim almak istiyorum.",
+              "allowSms": "Kampanyalarla ilgili SMS almak istiyorum.",
+              "allowPhoneCall": "Kampanyalarla ilgili cep telefonumdan aranmak istiyorum.",
+              "open": "A├ğ─▒k",
+              "closed": "Kapal─▒",
+              "contactType": "─░leti┼şim Tercihlerim",
+              "contactTypeText": "*Kampanyalarla ilgili ileti┼şim tercihlerini kapatt─▒─ş─▒nda sipari┼şlerin ve ├╝yelik ayarlar─▒nla ilgili e-posta / bildirim almaya devam edersin.",
+              "noFavoriteText": "Restoran─▒ favorilerinize eklemek i├ğin kalp ikonuna basabilirsiniz.",
+              "noAddressText": "Kay─▒tl─▒ adresin bulunmuyor.",
+              "addAddress": "Adres Ekle",
+              "chooseAddress": "Sepetine ├╝r├╝n eklemeden ├Ânce adres se├ğmelisin.",
+              "addAddressTiny": "adres ekle",
+              "confirmAddress": "Adresi Onayla",
+              "addressNameLabel": "Ba┼şl─▒k(Ev, i┼şyeri)",
+              "addressLabel": "Adres",
+              "aptNoLabel": "Bina",
+              "floorLabel": "Kat",
+              "doorNoLabel": "Daire",
+              "apartmentDescription": "Apartman dairesinde oturuyorsan, l├╝tfen kat ve daire numaran─▒ gir.",
+              "addressDirections": "Adres Tarifi",
+              "noAddressForOrderText": "Sipari┼ş vermeye ba┼şlamak i├ğin bir adres ekle",
+              "toSeeRestaurants": "B├Âlgenizdeki restoranlar─▒ g├Ârmek i├ğin",
+              "newAddressText": "Ba┼şka bir adrese sipari┼ş vermek i├ğin yeni adres ekle",
+              "areYouAtAnotherAddress": "Ba┼şka bir adreste misin?",
+              "newAddressAction": "Yeni Adres Ekle",
+              "addAnotherAddressBeforePaymentMethods": "├ûdeme y├Ântemlerime gitmeden ├Ânce adres eklemelisin.",
+              "seeRestaurants": "Restoranlar─▒ G├Âr",
+              "pastOrders": "Ge├ğmi┼ş Sipari┼şler",
+              "pastOrdersFromRestaurant": "Bu restorandan ge├ğmi┼ş sipari┼şler",
+              "noPastOrdersText": "Ge├ğmi┼ş sipari┼şiniz bulunmuyor.",
+              "backPastOrders": "Ge├ğmi┼ş Sipari┼şlerimÔÇÖe geri d├Ân",
+              "backMainAccount": "Hesab─▒m'a geri d├Ân",
+              "profile": "Profil",
+              "backPaymentMethod": "├ûdeme Y├Ântemlerim'e geri d├Ân",
+              "noPaymentMethodText": "Kay─▒tl─▒ ├Âdeme y├Ântemin bulunmuyor.",
+              "payWithCreditCard": "Kredi Kart─▒ ile ├ûde",
+              "payWithoutSavingCard": "Kart kaydetmeden ├Âde",
+              "addCard": "Kart Ekle",
+              "addCreditCard": "Kredi/Banka Kart─▒",
+              "addCardWithBKM": "BKM Express",
+              "pleaseAddCardName": "L├╝tfen kart ismi gir.",
+              "pleaseAddPostCode": "L├╝tfen posta kodu gir.",
+              "pleaseAddCardNumber": "L├╝tfen kart numaran─▒ gir",
+              "pleaseAddValidCard": "L├╝tfen kart bilgilerini do─şrulay─▒n─▒z",
+              "pleaseAddValidCardNumber": "L├╝tfen ge├ğerli bir kart numaras─▒ gir.",
+              "pleaseAddValidSecurityCode": "L├╝tfen ge├ğerli bir g├╝venlik numaras─▒ gir.",
+              "pleaseAddLastUsedMonth": "Kart─▒n─▒n son kullan─▒m ay─▒n─▒ gir.",
+              "pleaseAddLastUsedYear": "Kart─▒n─▒n son kullanma y─▒l─▒n─▒ gir",
+              "youMustApproveTerms": "Kullan─▒m Ko┼şullar─▒n─▒ onaylamal─▒s─▒n.",
+              "minNameLength": "Girece─şin isim en az {{characterCount}} karakterden olu┼şmal─▒.",
+              "maxNameLength": "Girece─şin isim en fazla {{characterCount}} karakterden olu┼şmal─▒.",
+              "pleaseFill": "L├╝tfen bu alan─▒ doldur.",
+              "updateAccount": "Hesap bilgilerini g├╝ncelle",
+              "month": "Ay",
+              "year": "Y─▒l",
+              "threeDPaymentTitle": "3D G├╝venli ├ûdeme",
+              "yes": "Evet",
+              "no": "Hay─▒r",
+              "recommended": "Yan─▒nda iyi gider",
+              "abortBasket": "Sepeti bo┼şaltmak istedi─şinden emin misin?",
+              "useAddress": "Bu adresi kullan",
+              "addressNameRequired": "L├╝tfen adres ad─▒ gir",
+              "addressRequired": "L├╝tfen adres gir",
+              "toAddressSelection": "Adres se├ğimine",
+              "goBack": "geri d├Ân",
+              "backToMyAddresses": "Adreslerim'e geri d├Ân",
+              "noPageYouAreLookingFor": "Arad─▒─ş─▒n sayfa bulunamad─▒",
+              "goBackMainPage": "Ana sayfaya d├Ân",
+              "noPageGoBacktoMainPage": "B├Âyle bir sayfa bulunam─▒yor. Ana SayfaÔÇÖya d├Ân├╝p ba┼şka bir ┼şey arayabilirsin",
+              "pleaseReloadPage": "L├╝tfen sayfay─▒ yenile. Sorun devam ederse daha sonra tekrar dene.",
+              "cannotReachedServer": "Sunucuya ula┼ş─▒lam─▒yor",
+              "noPromotionsForYourSearch": "Arad─▒─ş─▒n {{activeTab}}─▒ bulamad─▒k",
+              "youCanLookOtherPromotions": "Di─şer {{activeTab}}a g├Âz atabilirsin",
+              "unfortunatelyWeDonthaveCampaign": "Maalesef ┼şu an g├Âsterebilece─şimiz {{activeTab}} bulunmuyor",
+              "searchOnCampaigns": "{{activeTab}}'da ara",
+              "contact": "─░leti┼şim",
+              "frequentlyAskedQuestions": "S─▒k├ğa Sorulan Sorular",
+              "personalDataProtectionAuthority": "Ki┼şisel Verilerin Korunmas─▒",
+              "warehouseApplication": "Bayimiz Olun",
+              "selectedFilters": "Se├ğili Filtreler",
+              "filters": "Filtreler",
+              "applyFilters": "Filtreleri Uygula",
+              "restaurantsLoading": "Restoranlar y├╝kleniyor...",
+              "noResultWithFilters": "Filtrelemeye uygun restoran bulunamad─▒.",
+              "noShopResultWithFilters": "Filtrelemeye uygun i┼şletme bulunamad─▒.",
+              "removeAddressQuestion": "Adresini silmek istedi─şine emin misin?",
+              "cancel": "─░ptal",
+              "remove": "Sil",
+              "addAddressQuestion": "Adresinin eksiksiz oldu─şuna emin misin?",
+              "selectAddress": "Adres se├ğ",
+              "loginForRegisteredAddress": "Kay─▒tl─▒ adreslerini g├Ârmek i├ğin Giri┼ş Yap",
+              "showingRestaurants": "{{count}} Restoran Listeleniyor",
+              "showingRestaurants2": "<0>{{totalCount}}</0> <1>{{restaurant}}</1> Listeleniyor",
+              "showAllMenu": "T├╝m men├╝y├╝ g├Âster",
+              "moreInfo": "Daha fazla bilgi",
+              "taste": "Lezzet",
+              "helpToRestaurantBeBetter": "Restoran─▒n iyile┼şmesine yard─▒mc─▒ olun",
+              "foodOrderContent": "Sipari┼ş ─░├ğeri─şi",
+              "packagingAndService": "Paketleme ve Servis",
+              "findMyLocation": "Konumumu bul",
+              "notFoundLocation": "Konum bulunamad─▒, farkl─▒ bir yer arayabilirsin.",
+              "suggestionPlaceholderEx": "Soka─ş─▒n─▒ veya posta kodunu arat",
+              "addToBasket": "Sepete Ekle",
+              "outOfStock": "Stokta Yok",
+              "updateBasket": "Sepeti G├╝ncelle",
+              "notFoundMainSearch": "Arad─▒─ş─▒n─▒z restoran─▒ ya da yeme─şi bulamad─▒k.",
+              "menu": "Men├╝",
+              "addBKM": "BKM Express",
+              "deleteCard": "Kart─▒ Sil",
+              "chooseOnlinePayment": "Online ├ûdeme Y├Ântemi Se├ğ",
+              "change": "De─şi┼ştir",
+              "pleaseSelectDeliveryPayment": "L├╝tfen kap─▒da ├Âdeme y├Ântemi se├ğ",
+              "cardInfoSecuredFromMasterpass": "Kart bilgileri MasterPass g├╝vencesiyle tutulmaktad─▒r.",
+              "addANotePlaceholder": "Not ekle",
+              "addANoteTitle": "Eklemek istedi─şin bir not varsa:",
+              "showMoreRestaurant": "Daha fazla restoran g├Âster",
+              "restaurants": "Restoranlar",
+              "workingHours": "├çal─▒┼şma saatleri",
+              "date": "Tarih",
+              "timeRange": "Saat Aral─▒─ş─▒",
+              "setDeliveryTime": "Teslimat Zaman─▒ Belirle",
+              "orderNow": "Sipari┼ş Ver",
+              "orderAndPayNow": "Sipari┼ş Ver ve ├ûde",
+              "orderTracking": "Sipari┼ş Takip",
+              "activeOrders": "Aktif Sipari┼şler",
+              "showAllActiveOrders": "T├╝m aktif sipari┼şleri g├Âster",
+              "showAllPastOrders": "T├╝m ge├ğmi┼ş sipari┼şleri g├Âster",
+              "overOneThousandFiveHundred": "1500ÔÇÖden fazla ├╝r├╝nle, dakikalar i├ğinde, ─░stanbul, ─░zmir, Ankara, Bursa, Kocaeli, Bodrum, Sakarya, Tekirda─ş, Eski┼şehir, Yalova, Antalya, Adana, Mersin, D├╝zce, Bolu, Kayseri, Ayd─▒n, Denizli ve K─▒rklareliÔÇÖde diledi─şin yere mutluluk getiriyoruz. Hem de gece g├╝nd├╝z demeden!",
+              "inMinutes": "Dakikalar i├ğinde 'getir bi mutluluk'",
+              "inMinutesEvenSeconds": "Dakikalar, hatta saniyeler senin i├ğin ├ğok ├Ânemli olabilir. Bu y├╝zden GetirÔÇÖle ihtiya├ğlar─▒n─▒ kap─▒na getirerek zaman kazan, kazand─▒─ş─▒n zaman─▒ mutlulu─şuna ay─▒r.",
+              "dontGetTired": "Sen yorulma, biz getirelim",
+              "returnOfShopping": "Al─▒┼şveri┼ş d├Ân├╝┼ş├╝ her ad─▒mda o torbalar daha da a─ş─▒rla┼ş─▒r biliyoruz. Bu y├╝zden ihtiya├ğlar─▒n─▒ biz getiriyoruz. Diledi─şin ├╝r├╝n├╝ se├ğ, dakikalar i├ğinde mutlulu─şu kap─▒na getirelim!",
+              "happinessIsWhereeverYouAre": "Sen neredeysen mutluluk orada",
+              "homeWorkOrPark": "─░ster ev, ister i┼ş, ister park... Neye, ne zaman, nerede ihtiyac─▒n olaca─ş─▒ belli olmaz. Sen neredeysen, Getir mutlulu─şu oraya getirir.",
+              "secureMobilePayment": "G├╝venli mobil ├Âdemeyle mutlulu─şuna mutluluk kat",
+              "oneTimeDefinition": "Kredi kart─▒ ya da banka kart─▒n─▒ sadece bir kez tan─▒mlayarak g├╝venle ├Âdeme yapabilirsin. Bu sayede ┼şifre, para ├╝st├╝ gibi detaylara tak─▒lmazs─▒n. E mutlu olursun. :)",
+              "comeOnDoBeauty": "Hadi bi g├╝zellik yap!",
+              "onlineTipFeature": "Uygulamam─▒zdaki Online Bah┼şi┼ş ├Âzelli─şiyle art─▒k g├Ânl├╝nden kopan─▒ kuryelerimize iletebilirsin. Destek olam─▒yorsan da sa─şl─▒k olsun, g├Ân├╝lden etti─şin bir te┼şekk├╝r de bizim i├ğin ├ğok de─şerli.",
+              "clickForListSavedAddress": "Kay─▒tl─▒ adreslerini g├Ârmek i├ğin t─▒kla",
+              "areYouSatisfiedCourierDelivery": "Kuryenin teslimat─▒ndan memnun musun?",
+              "myComment": "Yorumum",
+              "skip": "Ge├ğ",
+              "click": "t─▒klay─▒n─▒z",
+              "update": "G├╝ncelle",
+              "emptyBasket": "Sepetin ┼şu an bo┼ş",
+              "addSomethingForOrder": "Sipari┼ş vermek i├ğin bir ┼şeyler ekle",
+              "awaitingApproval": "Onay bekliyor",
+              "preparing": "Haz─▒rlan─▒yor",
+              "canceled": "─░ptal Edildi",
+              "onWay": "Yolda",
+              "reached": "Adreste",
+              "delivered": "Teslim Edildi",
+              "socialProjects": "Sosyal Sorumluluk Projeleri",
+              "pressReleasesTitle": "Bas─▒n B├╝ltenleri",
+              "socialResponsibility": "Sosyal Sorumluluk",
+              "noProjectsData": "Arad─▒─ş─▒n proje bulunamad─▒",
+              "environment": "├çevre",
+              "all": "T├╝m├╝",
+              "veryBad": "├çok K├Ât├╝",
+              "bad": "K├Ât├╝",
+              "soSo": "Orta",
+              "good": "─░yi",
+              "veryGood": "├çok ─░yi",
+              "continue": "Devam",
+              "giveNameToCart": "Karta ─░sim Ver (Ki┼şisel, ─░┼ş vb.)",
+              "cartNumber": "Kart Numaras─▒",
+              "pleaseEnterValidDate": "L├╝tfen ge├ğerli bir son kullanma tarihi gir.",
+              "expirationDate": "Kart─▒n Son Kullanma Tarihi",
+              "security": "G├╝venlik",
+              "securityDescription": "├ûdeme altyap─▒m─▒z MasterCard uygulamas─▒ olan MasterPass taraf─▒ndan sa─şlanmaktad─▒r ve i┼şlem g├╝venli─şi Mastercard g├╝vencesi alt─▒ndad─▒r.",
+              "clearSelectedFilters": "Se├ğili Filtreleri Temizle",
+              "protectEnvironment": "├çevreyi Koru",
+              "ecoFriendly": "Bana servis (plastik ├ğatal, b─▒├ğak, pe├ğete) g├Ânderme.",
+              "addNote": "Not Ekle",
+              "deliveryAddress": "Teslimat Adresi",
+              "paymentSummary": "├ûdeme ├ûzeti",
+              "dropOffAtDoor": "Sipari┼şi Kap─▒ya B─▒rak",
+              "doNotKnock": "Zili ├çalma",
+              "howWasRestaurant": "{{restaurant.name}} nas─▒ld─▒?",
+              "paymentDetails": "├ûdeme Detaylar─▒",
+              "addOtherAddress": "Di─şer Adres Ekle",
+              "addHomeAddress": "Ev adresi ekle",
+              "review": "De─şerlendir",
+              "reviews": "Yorumlar",
+              "allFilters": "T├╝m├╝",
+              "home": "Ev",
+              "work": "─░┼ş",
+              "other": "Di─şer",
+              "addBusinessAddress": "─░┼ş Adresi Ekle",
+              "choosePaymentTypeOnPayOnDelivery": "Kap─▒da ├ûdeme Y├Ântemi Se├ğ",
+              "addNotePlaceholder": "Sipari┼ş notunu buraya yazabilirsin.",
+              "searchOnSocialProjects": "Sosyal Sorumluluk Projeleri'nde ara...",
+              "socialProjectsHeader": "Sosyal Sorumluluk Projeleri",
+              "viewPhotoGallery": "Foto─şraf Galerisini G├Âr├╝nt├╝le",
+              "support": "Destek",
+              "activateGsm": "Aktive Et",
+              "filterKitchenTypePlaceholder": "Mutfak t├╝r├╝ ara",
+              "only": "sadece",
+              "promotionDetail": "Kampanya Ko┼şullar─▒",
+              "aptNo": "Bina No",
+              "doorNo": "Daire No",
+              "streetLabel": "Sokak Ad─▒",
+              "flatNoLabel": "Daire No",
+              "postCodeLabel": "Posta Kodu",
+              "aptSuiteLabel": "Apt/S├╝it",
+              "buildingNameLabel": "Bina Ad─▒",
+              "businessOrBuildingLabel": "─░┼şyeri veya bina ismi",
+              "zipCode": "Zip kodu",
+              "state": "Eyalet",
+              "helpAddressLabel": "Adres Tarifi",
+              "mainPageTitle": "Getir - Dakikalar ─░├ğinde Kap─▒n─▒zda",
+              "mainFoodPageTitle": "GetirYemek - Yemek sipari┼şi art─▒k Getir fark─▒yla!",
+              "mainMarketLandingTitle": "GetirB├╝y├╝k - Binlerce ├£r├╝n Uygun Fiyata",
+              "mainWaterLandingTitle": "GetirSu - Haftan─▒n her g├╝n├╝ kap─▒n─▒zda",
+              "mainLocalsLandingTitle": "Getir├çar┼ş─▒ - Haftan─▒n her g├╝n├╝ kap─▒n─▒zda",
+              "introFoodText": "Binlerce restorandan yeme─şinizi g├Ârerek se├ğin!",
+              "introDiscountText": "Haftan─▒n her g├╝n├╝ bulabilece─şin y├╝zlerce kampanya ile indirimli fiyatlardan yararlan!",
+              "introCourierText": "Kredi kart─▒, kap─▒da ya da yemek kartlar─▒ ile h─▒zl─▒ ve g├╝venli ├Âdeme yap!",
+              "searchPaymentMethodPlaceholder": "├ûdeme y├Ântemi ara",
+              "about": "Hakk─▒m─▒zda",
+              "founders": "Kurucular─▒m─▒z",
+              "backToAbout": "Hakk─▒m─▒zda'ya geri d├Ân",
+              "jobApplication": "─░┼ş Ba┼şvurusu",
+              "subjectRequired": "L├╝tfen konu se├ğimi yap─▒n.",
+              "subject": "Konu",
+              "message": "Mesaj",
+              "aboutTitle": "Hakk─▒m─▒zda",
+              "faqTitle": "S─▒k├ğa Sorulan Sorular",
+              "helpTitle": "Yard─▒m",
+              "kvkkTitle": "M├╝┼şteri Ki┼şisel Verileri Ayd─▒nlatma Metni",
+              "masterPassTitle": "MasterPass Kullan─▒m ┼Şartlar─▒",
+              "privacyPolicyTitle": "Gizlilik Politikas─▒",
+              "protectionTitle": "M├╝┼şteri Ki┼şisel Verilerinin Korunmas─▒ Politikas─▒",
+              "termsTitle": "Kullan─▒m Ko┼şullar─▒",
+              "lastUpdateDate": "Son G├╝ncelleme Tarihi",
+              "personalDataMailAddress": "kisiselveriler@getir.com",
+              "user": "Kullan─▒c─▒",
+              "cookieSettings": "├çerez Tercihleri",
+              "cookiePolicy": "├çerez Politikas─▒",
+              "toCookiePolicy": "├çerez Politikas─▒n─▒",
+              "acceptAll": "T├╝m├╝n├╝ Kabul Et",
+              "rejectAll": "T├╝m├╝n├╝ Reddet",
+              "manageCookies": "├çerezleri Y├Ânet",
+              "ourCookiePolicies": "├çerez Politikam─▒z─▒",
+              "technicalCookies": "Kesinlikle Gerekli ├çerezler",
+              "functionalCookies": "─░┼şlevsellik ├çerezleri",
+              "analyticalCookies": "Analitik / Performans ├çerezleri",
+              "marketingCookies": "Pazarlama ├çerezleri",
+              "cookiePermissionText": "─░nternet sitemizde deneyiminizi iyile┼ştirmek, ki┼şiselle┼ştirmek ve ilgi alanlar─▒n─▒za g├Âre ├Âzelle┼ştirilmi┼ş reklam/pazarlama faaliyetleri y├╝r├╝tebilmek i├ğin ├ğerezler kullan─▒yoruz. Kesinlikle Gerekli ├çerezler d─▒┼ş─▒ndaki ├ğerezlerin kullan─▒m─▒na ve bu ├ğerezler arac─▒l─▒─ş─▒yla elde edilen ki┼şisel verilerinizin yurt d─▒┼ş─▒na aktar─▒lmas─▒na onay vermek i├ğin ÔÇ£T├╝m├╝n├╝ Kabul EtÔÇØ butonuna; ├ğerezler arac─▒l─▒─ş─▒yla elde edilen ki┼şisel verilerinizin i┼şlenmesine ili┼şkin tercihlerinizi y├Ânetmek i├ğin ise ÔÇ£├çerezleri Y├ÂnetÔÇØ butonuna t─▒klayabilirsiniz. ├çerezler ile ki┼şisel verilerinizin i┼şlenmesine dair detayl─▒ bilgi almak i├ğin <0>{{link}}</0> ziyaret edebilirsiniz.",
+              "saveCookieSettings": "Se├ğimleri Onayla",
+              "acceptAllCookieSettings": "T├╝m├╝n├╝ Onayla",
+              "technicalCookiesText": "Bu ├ğerezler, internet sitemizin d├╝zg├╝n ├ğal─▒┼şmas─▒n─▒ ve temel i┼şlevlerini yerine getirebilmesini sa─şlar. Taray─▒c─▒ ayarlar─▒n─▒z─▒ de─şi┼ştirerek bu ├ğerezleri devre d─▒┼ş─▒ b─▒rakabilirsiniz; ancak bu ├ğerezler devre d─▒┼ş─▒ b─▒rak─▒ld─▒─ş─▒ takdirde internet sitemizin bir k─▒sm─▒n─▒n veya t├╝m├╝n├╝n d├╝zg├╝n ├ğal─▒┼şmas─▒n─▒ engelleyebilir.",
+              "functionalCookiesText": "─░┼şlevsellik ├ğerezleri kullan─▒m tercihlerinizi hat─▒rlayan ├ğerezlerdir. ─░┼şlevsellik ├ğerezlerini kabul ederek internet sitemizin tercihleriniz do─şrultusunda ├ğal─▒┼şmas─▒ i├ğin gerekli ├Âzellikleri kullanabilirsiniz. Bu ├ğerezlerden bir k─▒sm─▒n─▒n sa─şlay─▒c─▒lar─▒ yurt d─▒┼ş─▒nda bulunmaktad─▒r. Bu ├ğerezlerin kullan─▒m─▒n─▒ etkinle┼ştirmeniz halinde ├ğerezler arac─▒l─▒─ş─▒yla i┼şlenen ki┼şisel verileriniz yurt d─▒┼ş─▒na aktar─▒lacakt─▒r.",
+              "analyticalCookiesText": "Bu ├ğerezler internet sitemizi geli┼ştirmemize ve kullan─▒c─▒ dostu hale getirmemize yard─▒mc─▒ olur. Bu ├ğerezleri kullanmam─▒za izin verdi─şinizde, kullan─▒c─▒lar─▒m─▒z─▒n en ├ğok hangi sayfalar─▒ gezmekten keyif ald─▒─ş─▒ ve hangi ├╝r├╝nlerin en pop├╝ler oldu─şu hakk─▒nda bilgi sahibi olabilir, b├Âylece internet sitesi deneyiminizi iyile┼ştirebiliriz. Bu ├ğerezlerden bir k─▒sm─▒n─▒n sa─şlay─▒c─▒lar─▒ yurt d─▒┼ş─▒nda bulunmaktad─▒r. Bu ├ğerezlerin kullan─▒m─▒n─▒ etkinle┼ştirmeniz halinde ├ğerezler arac─▒l─▒─ş─▒yla i┼şlenen ki┼şisel verileriniz yurt d─▒┼ş─▒na aktar─▒lacakt─▒r.",
+              "marketingCookiesText": "Bu ├ğerezler, ilginizi ├ğekmeyen reklamlar─▒ g├Ârmenizi engellemeye yard─▒mc─▒ olur. Ayr─▒ca ilgi alanlar─▒n─▒za g├Âre i┼ş ortaklar─▒m─▒z taraf─▒ndan profilinizin ├ğ─▒kar─▒lmas─▒n─▒, b├Âylece internet sitemizde veya ├╝├ğ├╝nc├╝ taraf sitelerde yaln─▒zca ilgili reklamlar─▒ g├Ârmenizi ve reklamlar─▒n etkinli─şini ├Âl├ğmemizi sa─şlar. Bu ├ğerezlerden bir k─▒sm─▒n─▒n sa─şlay─▒c─▒lar─▒ yurt d─▒┼ş─▒nda bulunmaktad─▒r. Bu ├ğerezlerin kullan─▒m─▒n─▒ etkinle┼ştirmeniz halinde ├ğerezler arac─▒l─▒─ş─▒yla i┼şlenen ki┼şisel verileriniz yurt d─▒┼ş─▒na aktar─▒lacakt─▒r.",
+              "informationAboutCookies": "Kesinlikle Gerekli ├çerezler d─▒┼ş─▒ndaki ├ğerezlerin kullan─▒m─▒na izin vermeniz durumunda ki┼şisel verileriniz <strong>yurt i├ği ve yurtd─▒┼ş─▒nda i┼şlenecektir</strong>. ├çerezler hakk─▒nda detayl─▒ bilgi i├ğin <0>{{link}}</0> ziyaret edebilirsiniz.",
+              "yourMasterpassCardAdded": "Kart─▒n Masterpass'e eklendi",
+              "yourAdyenCardAdded": "Kart─▒n Adyen'e eklendi",
+              "yourCardAdded": "Kart─▒n eklendi",
+              "youCanPayNowWhitThisCard": "Art─▒k bu kart─▒nla ├Âdeme yapabilirsin.",
+              "mobilePhone": "Telefon Numaras─▒",
+              "chooseCampaign": "Kampanya Se├ğ",
+              "noCampaign": "Maalesef ┼şu an g├Âsterebilece─şimiz kampanya bulunmuyor.",
+              "pleaseSelectOnlineDeliveryPayment": "L├╝tfen online ├Âdeme y├Ântemi se├ğ",
+              "alreadyHasAccount": "Getir'e ├╝yeysen",
+              "applyNow": "Hemen Ba┼şvur",
+              "partnersTitle": "Restoran sahibi misiniz?",
+              "partnersText": "GetirYemek restoran i┼ş ortaklar─▒ndan biri olun, i┼şinizi daha az maliyetle b├╝y├╝t├╝n, m├╝┼şteri memnuniyetini art─▒r─▒n.",
+              "listRestaurants": "Adresine getiren restoranlar─▒ g├Âr",
+              "allowLocationServices": "L├╝tfen taray─▒c─▒ ayarlar─▒ndan konum servislerine izin verin",
+              "restaurantMetaTag": "{{restaurant}} restoran─▒ndan online yemek ya da i├ğecek sipari┼şi vermek i├ğin Getir.com'a t─▒klay─▒n!",
+              "averagePreparingTime": "Ortalama haz─▒rlama s├╝resi {{ min }} dk",
+              "next": "─░leri",
+              "previous": "Geri",
+              "or": "veya",
+              "loginOrRegister": "Giri┼ş yap veya kay─▒t ol",
+              "continueWithPhoneNumber": "Telefon numaras─▒ ile devam et",
+              "continueWithFacebook": "Facebook ile devam et",
+              "introGetirTitle": "Dakikalar i├ğinde 'getir bi mutluluk'",
+              "bringHappiniess": "Getir bi mutluluk!",
+              "introDiscountTitle": "Siz neredeyseniz mutluluk orada",
+              "introMarketCourierTitle": "Siz yorulmay─▒n, biz getirelim",
+              "introGetirDescription": "Dakikalar, hatta saniyeler senin i├ğin ├ğok ├Ânemli olabilir. Bu y├╝zden GetirÔÇÖle ihtiya├ğlar─▒n─▒ kap─▒ya kadar getirerek zaman kazan, kazand─▒─ş─▒n zaman─▒ mutlulu─şa ay─▒r.",
+              "introDiscountDescription": "─░ster ev, ister i┼ş, ister park... Neye, ne zaman, nerede ihtiyac─▒n olaca─ş─▒ belli olmaz. Sen neredeysen, Getir mutlulu─şu oraya getirir.",
+              "introMarketCourierDescription": "Al─▒┼şveri┼ş d├Ân├╝┼ş├╝ her ad─▒mda o torbalar daha da a─ş─▒rla┼ş─▒r biliyoruz. Bu y├╝zden ihtiya├ğlar─▒n─▒ biz getiriyoruz. Diledi─şin ├╝r├╝n├╝ se├ğ, dakikalar i├ğinde mutlulu─şu kap─▒na getirelim!",
+              "thousandsOfGroceries": "─░stedi─şiniz ├╝r├╝nleri dakikalar i├ğinde kap─▒n─▒za getirelim.",
+              "campaignsForAllOrder": "Her sipari┼şine bir kampanya",
+              "youCanFindCampaignsForAllOrder": "GetirÔÇÖde verece─şin her sipari┼şe uygun bir kampanya bulabilirsin.",
+              "onYourDoorInMinutes": "Dakikalar i├ğinde kap─▒nda",
+              "minutes": "{{minutes}} dakika",
+              "withGetirOnYourDoorInMinutes": "GetirÔÇÖle sipari┼şin dakikalar i├ğinde kap─▒na gelir.",
+              "happinessOfThousands": "Binlerce ├ğe┼şit mutluluk",
+              "youCanChooseFrom": "GetirÔÇÖde binlerce ├ğe┼şit aras─▒ndan se├ğimini yapabilirsin.",
+              "searchProduct": "├£r├╝n ara",
+              "brand": "Zincir",
+              "couldNotFound": "Sonu├ğ Bulunamad─▒",
+              "couldNotFoundYourSearch": "Arad─▒─ş─▒n kriterlere uygun bir sonu├ğ bulamad─▒k.",
+              "courier": "Kurye",
+              "favoriteProducts": "Favori ├£r├╝nlerim",
+              "usedPromo": "Kullan─▒lan Kampanya",
+              "orderCanceled": "Sipari┼ş ─░ptal Edildi",
+              "yourComment": "Yorumunuz",
+              "estimatedDeliveryDuration": "Tahmini teslimat s├╝resi",
+              "thanks": "Te┼şekk├╝rler!",
+              "liveSupport": "Canl─▒ Destek",
+              "liveSupportOrderInformation": "{{minutes}} dakika",
+              "orderStatusLabel": "Sipari┼ş Durumu",
+              "orderStatusMessage": "Sipari┼şimin durumunu ├Â─şrenmek istiyorum.",
+              "productOrDeliveryLabel": "├£r├╝n / Servis Konular─▒",
+              "productOrDeliveryMessage": "├£r├╝n ve servislerinizle ilgili destek almak istiyorum.",
+              "anotherTopicLabel": "Farkl─▒ bir konu",
+              "anotherTopicMessage": "Ba┼şka bir konuda destek almak istiyorum.",
+              "howCanWeHelpTitle": "Nas─▒l yard─▒mc─▒ olabiliriz?",
+              "howCanWeHelpDescription": "Sipari┼şinle ilgili problem ya┼ş─▒yorsan Canl─▒ DestekÔÇÖten bize ula┼şabilirsin!",
+              "reorder": "Sipari┼şi Tekrarla",
+              "reorderShort": "Tekrarla",
+              "notAvailable": "Bu ├╝r├╝n art─▒k mevcut de─şil.",
+              "priceChangeOnProduct": "Bu ├╝r├╝n├╝n fiyat─▒ de─şi┼şmi┼ştir.",
+              "informationSocietyServices": "Bilgi Toplumu Hizmetleri",
+              "samePriceAsMarketTitle": "Binlerce ├ğe┼şit",
+              "samePriceAsMarketDesc": "Kasaptan manava, ev bak─▒m ├╝r├╝nlerinden ki┼şisel bak─▒m ├╝r├╝nlerine binlerce ├ğe┼şidi kolayca bulabilirsin.",
+              "deliveredToYourDoorTitle": "Uygun fiyatl─▒ ├╝r├╝nler",
+              "deliveredToYourDoorDesc": "GetirB├╝y├╝kÔÇÖte binlerce ├╝r├╝n├╝ uygun fiyata sipari┼ş verirsin.",
+              "noDeliveryFeeTitle": "Kap─▒na teslimat",
+              "noDeliveryFeeDesc": "Sipari┼şlerin kap─▒na kadar gelir.",
+              "samePriceAsMarketSlogan": "Binlerce ├╝r├╝n ve ka├ğmaz fiyatlar kap─▒nda!",
+              "changeLanguage": "Dil De─şi┼ştir",
+              "pleaseMakeSelection": "L├╝tfen se├ğim yap.",
+              "yourOrderCanceled": "Sipari┼şin iptal edildi.",
+              "chainRestaurants": "Zincir Restoranlar",
+              "brandsMetaTitle": "Zincir Restoranlar | GetirYemek",
+              "brandsMetaDescription": "Getir Yemek ├╝zerinden sipari┼ş verebilece─şiniz zincir restoranlar bu sayfada. Getir Yemek avantajlar─▒ndan yararlanarak sipari┼ş vermek i├ğin hemen t─▒klay─▒n!",
+              "brandMetaTitle": "{{brand}} Men├╝ Fiyatlar─▒ ve T├╝m ┼Şubeler | GetirYemek",
+              "brandMetaDescription": "{{brand}} ┼şubelerinden GetirYemek ile sipari┼ş vermek ├ğok kolay! {{brand}} men├╝ fiyatlar─▒n─▒ ├Â─şrenmek ve online sipari┼ş olu┼şturmak i├ğin hemen t─▒kla!",
+              "searchCity": "┼Şehir ara...",
+              "theDistrictsInTheCity": "{{province}} ilindeki semtler",
+              "transactionIsProcessing": "3D G├╝venlik i┼şlemi ger├ğekle┼ştiriliyor.",
+              "transactionIsSuccessful": "3D G├╝venlik ba┼şar─▒l─▒.",
+              "transactionIsNotSuccessful": "3D G├╝venlik ba┼şar─▒s─▒z oldu.",
+              "announcements": "Duyurular",
+              "loyalty": "GetirYemek M├╝davim",
+              "localsLoyaltyText": "Getir├çar┼ş─▒ kullan─▒c─▒lar─▒ sipari┼ş verdik├ğe \"M├╝davim\" oluyor, indirim kazan─▒yor.",
+              "localsLoyaltyTitle": "Getir├çar┼ş─▒ M├╝davim",
+              "altPastOrderAmount": "Ge├ğmi┼ş Sipari┼ş Tutar─▒",
+              "altTotalBasketAmount": "Toplam sepet tutar─▒",
+              "altOverlayMap": "Kapsay─▒c─▒ ├Ârnek harita",
+              "altCategoryHeader": "Kategori ba┼şl─▒─ş─▒",
+              "showAll": "T├╝m├╝n├╝ G├Âr",
+              "outOfService": "Restoran ┼şu an hizmet vermemektedir.",
+              "more": "daha",
+              "willChargedAmount": "├ûdenecek Tutar",
+              "sendTip": "Bah┼şi┼şi G├Ânder",
+              "invoicePopupMessage": "Faturan─▒ yeni pencerede g├Ârmek i├ğin devam butonuna bas.",
+              "deliveryOptions": "Teslimat Se├ğenekleri",
+              "paymentMethods": "├ûdeme Y├Ântemleri",
+              "additionalInfo": "Ek Bilgiler",
+              "readMore": "Devam─▒n─▒ oku",
+              "reviewWarn": "Yorumlar, gerekli kontroller yap─▒ld─▒ktan sonra yay─▒nlanacakt─▒r. GetirÔÇÖin uygun g├Ârmedi─şi yorumlar─▒ yay─▒nlamama hakk─▒ sakl─▒d─▒r.",
+              "press": "Bas─▒n",
+              "notAvailableAreaForWeb": "Bulundu─şun b├Âlgede ┼şu anda sadece uygulama ├╝zerinden sipari┼ş verebilirsin.",
+              "cardDeleteQuestions": "Kart bilgilerini silmek istedi─şine emin misin?",
+              "gsmActivateMessage": "Devam etmek i├ğin hesab─▒n─▒ aktive etmelisin.",
+              "tooManyRequests": "Arka arkaya ├ğok fazla istekte bulundun.",
+              "noAccountOwnedByPhoneNumber": "Bu telefon numaras─▒na ait bir MasterPass hesab─▒ yok.",
+              "linkYourMpAccount": "Masterpass hesab─▒n─▒ ili┼şkilendir",
+              "existingMpAccountToLink": "Masterpass hesab─▒n mevcut. Hesab─▒n─▒ ba─şlayabilirsin.",
+              "mpAccountLinkedSuccessfully": "Masterpass hesab─▒n ba┼şar─▒l─▒ bir ┼şekilde ba─şland─▒.",
+              "shop": "─░┼şletme",
+              "shops": "─░┼şletmeler",
+              "search": "Arama",
+              "showMoreShop": "Daha fazla i┼şletme g├Âster",
+              "searchResults": "Sonu├ğlar",
+              "courierWaiting": "Kurye bekleniyor",
+              "listingCountTitle": "<0>{{counterText}}</0> listeleniyor",
+              "myFavoriteShops": "Favori ─░┼şletmelerim",
+              "favoriteShops": "Favori ─░┼şletmeler",
+              "seeShops": "─░┼şletmeleri G├Âr",
+              "noFavoriteShopsText": "─░┼şletmeleri favorilerine eklemek i├ğin kalp ikonuna basabilirsin",
+              "searchInShops": "├çar┼ş─▒da ara...",
+              "informations": "Bilgilendirmeler",
+              "loyaltyOnTab": "GetirYemek M├╝davim",
+              "promotionsOnTab": "Promosyonlar",
+              "announcementsOnTab": "Duyurular",
+              "validOtpCode": "L├╝tfen ge├ğerli bir ┼şifre gir.",
+              "liveChat": "Canl─▒ Destek",
+              "topicSelectionHeader": "Sana hangi konuda yard─▒mc─▒ olmam─▒z─▒ istersin?",
+              "evaluateYourDelivery": "Teslimat─▒n─▒ de─şerlendir...",
+              "publishingCriteria": "─░leti┼şim Kurallar─▒m─▒z",
+              "pendingReview": "Yorumun onay bekliyor.",
+              "removedReview": "Yorumun <0>{{communicationGuidelines}}</0>ÔÇÖa uygun olmad─▒─ş─▒ i├ğin kald─▒r─▒ld─▒.",
+              "communicationGuidelines": "─░leti┼şim Kurallar─▒m─▒z",
+              "localsNoResult": "─░stedi─şin ├╝r├╝n├╝ bulabilmek i├ğin adres ekledikten sonra tekrar arayabilirsin.",
+              "localsNoResultAddress": "─░stedi─şin ├╝r├╝n├╝ yak─▒n─▒ndaki i┼şletmelerde bulamad─▒k. Benzeri ├╝r├╝nleri inceleyebilirsin.",
+              "earthquakeMetaTitle": "Deprem Yard─▒m Restoranlar─▒ | GetirYemek",
+              "earthquakeRestaurants": "Deprem Yard─▒m",
+              "earthquakeRestaurantsSubText": "Deprem Yard─▒m Kart─▒ÔÇÖyla afet b├Âlgesindeki depremzedelere yard─▒m edebilirsin.",
+              "restaurantStar": {
+                "0": "Teslimat─▒n─▒ de─şerlendir...",
+                "1": "├çok ├╝zg├╝n├╝z. Sizce ne daha iyi olabilirdi?",
+                "2": "Nelerden memnun kalmad─▒n─▒z?",
+                "3": "Afiyet olsun! Yemek nas─▒ld─▒?",
+                "4": "En ├ğok neyi be─şendiniz?",
+                "5": "Harika! Detaylar─▒ bizimle de payla┼ş─▒r m─▒s─▒n─▒z?"
+              },
+              "courierStar": {
+                "none": "Teslimat─▒n─▒ de─şerlendir...",
+                "low": "├çok ├╝zg├╝n├╝z. Kurye nelere dikkat etmeli?",
+                "high": "Harika! Eklemek istedi─şin ba┼şka bir ┼şey var m─▒?"
+              },
+              "stillThere": "Hala orada m─▒s─▒n? ­şæÇ",
+              "orderPaused": "Senden bir s├╝redir cevap alamad─▒─ş─▒m─▒z i├ğin sipari┼şin yar─▒m kald─▒. ├ûdemeyi tamamlayarak hemen sipari┼ş verebilirsin.",
+              "estimatedDelivery": "Tahmini teslim: {{estimatedDeliveryDuration}}",
+              "allBrandBranches": "T├╝m {{ brand }} ┼Şubeleri",
+              "getirBarTitle": "Getir",
+              "creditCvcFieldPlaceholder": "CVV",
+              "waterNoServiceOnSite": "Hizmetimizi art─▒k sadece uygulamam─▒z ├╝zerinden veriyoruz. <br/> ┼Şimdi Getir uygulamas─▒n─▒ indir, sipari┼şini ver, <br/>  diledi─şin su markas─▒ bayiden kap─▒na gelsin.",
+              "resendCheckoutOTP": "Do─şrulama kodunu tekrar g├Ânder",
+              "resendErrorMessage": "1 dakika sonra yeni kod alabilirsin.",
+              "resendErrorMessage90Secs": "90 saniye sonra yeni kod alabilirsin.",
+              "remainingTime": "Kalan S├╝re",
+              "multinetOnlineCardAddingNotEnabled": "Online Multinet ile ├Âdemek i├ğin GetirYemek mobil uygulamas─▒ndan Multinet kart─▒n─▒ eklemelisin.",
+              "multinetOnlineCardDeleteNotEnabled": "Online Multinet hesab─▒n─▒ silmek i├ğin GetirYemek mobil uygulamas─▒ndan Multinet kart─▒n─▒ kald─▒rmal─▒s─▒n."
+            },
+            "getirx": {
+              "productMetaDescription": "{{mainText}} Getir ile dakikalar i├ğinde kap─▒nda! {{mainText}} sipari┼şini online olarak olu┼şturmak i├ğin ┼şimdi Getir'e t─▒kla!",
+              "categoryMetaDescription": "{{mainText}} kategorisinden verece─şin sipari┼şler, Getir'le dakikalar i├ğinde kap─▒nda!",
+              "categories": "Kategoriler",
+              "showMore": "Daha fazla ├╝r├╝n g├Âster",
+              "trackOrder": "Sipari┼şi ─░zle",
+              "activeOrder": "Aktif Sipari┼ş",
+              "activeOrders": "Aktif Sipari┼şler",
+              "myActiveOrders": "Aktif Sipari┼şlerim",
+              "orderDetail": "Sipari┼ş Detay─▒",
+              "liveSupport": "Canl─▒ Destek",
+              "myPreviousOrders": "Ge├ğmi┼ş Sipari┼şlerim",
+              "myBasket": "Sepetim",
+              "products": "├£r├╝nler",
+              "whichProductYouWantSee": "Hangi ├╝r├╝n├╝ Getirde g├Ârmek istersin?",
+              "productName": "├£r├╝n ismi",
+              "suggestProduct": "├£r├╝n ├ûner",
+              "wantPlasticBag": "Plastik po┼şet istiyorum",
+              "1xPlasticBag": "1x Plastik Po┼şet",
+              "1xPlasticBagPrice": "Ôé║0,25",
+              "noPlasticBag": "Plastik po┼şet istemiyorum",
+              "choosePlasticBag": "Po┼şet Se├ğimi",
+              "savedNotes": "Kay─▒tl─▒ Notlar─▒m",
+              "delete": "Sil",
+              "onlinePayment": "Online ├ûdeme",
+              "invoiceInfo": "Fatura Bilgileri",
+              "noInvoiceInfo": "Fatura bilgin yok.",
+              "addInvoiceInfo": "Fatura Bilgisi Ekle",
+              "addNewInvoiceInfo": "Yeni Fatura Ekle",
+              "chooseInvoiceInfo": "Fatura Bilgisi Se├ğ",
+              "invoiceSavedSuccessfully": "Fatura Bilgin Ba┼şar─▒yla Kaydedildi",
+              "invoiceUpdatedSuccessfully": "Fatura Bilgin Ba┼şar─▒yla G├╝ncellendi",
+              "invoiceDeleteQuestions": "Fatura Bilgilerini silmek istedi─şine emin misin? ",
+              "wantStandardArchivedInvoice": "Standart e-Ar┼şiv Faturas─▒ ─░stiyorum",
+              "addInvoice": "Fatura Ekle",
+              "corporate": "Kurumsal",
+              "personal": "Bireysel",
+              "useDeliveryAddressAsInvoiceAddress": " Teslimat adresimi fatura adresim olarak kullan",
+              "taxNumber": "Vergi No",
+              "tcNumber": "TC Kimlik No",
+              "taxName": "Fatura ├£nvan─▒",
+              "taxCenter": "Vergi Dairesi",
+              "taxNumberRequired": "L├╝tfen Vergi No gir",
+              "validTaxNumberRequired": "L├╝tfen Ge├ğerli Bir Vergi No gir",
+              "tcNumberRequired": "L├╝tfen TC Kimlik No gir",
+              "taxNameRequired": "L├╝tfen fatura ├╝nvan─▒ gir",
+              "taxOfficeRequired": "Vergi dairesi girmek zorunludur.",
+              "cityRequired": "L├╝tfen ┼şehir gir",
+              "countyRequired": "L├╝tfen il├ğe gir",
+              "province": "─░l",
+              "district": "─░l├ğe",
+              "paymentType": "├ûdeme Y├Ântemi",
+              "product": "├╝r├╝n",
+              "packageContent": "Paket ─░├ğeri─şi",
+              "wantToSuggestProduct": "├£r├╝n ├Ânermek ister misin?",
+              "showAll": "T├╝m├╝n├╝ G├Âr",
+              "listingPageTitle": "Kategoriler",
+              "getirExperienceQuestion": "Getir Deneyimin Nas─▒ld─▒?",
+              "noPreviousOrder": "Hen├╝z sipari┼şin yok",
+              "noPreviousOrderDesc": "─░lk sipari┼şinden itibaren b├╝t├╝n al─▒┼şveri┼ş detaylar─▒na buradan ula┼şabilirsin",
+              "address": "Adres",
+              "minTCNumberValid": "L├╝tfen minimum {{minTCLength}} karakterli TC gir.",
+              "minTaxNumberValid": "L├╝tfen minimum {{minTaxLength}} karakterli Vergi Numaras─▒n─▒ gir.",
+              "waitingverification": "Do─şrulama bekleniyor...",
+              "ourCourierWillCall": "Kuryemiz, belirtilen adrese ula┼şt─▒─ş─▒nda seninle ileti┼şime ge├ğecektir.",
+              "favoriteProducts": "Favori ├£r├╝nlerim",
+              "noFavoriteProducts": "Hen├╝z favori ├╝r├╝n├╝n├╝z yok",
+              "noFavoriteProductsDesc": "Bir ├╝r├╝n├╝ favorilere eklemek i├ğin ├╝r├╝n detaylar─▒ndan favorilere ekle butonuna t─▒klayabilirsin.",
+              "courierWaiting": "Kurye Bekleniyor",
+              "feedback1": "├£r├╝n ile ilgili problem ya┼şad─▒m",
+              "feedback2": "Kurye ile ilgili problem ya┼şad─▒m",
+              "feedback3": "Uygulama ile ilgili problem ya┼şad─▒m",
+              "getirExperience": "Getir deneyimini puanlayabilirsin",
+              "addSomethingForOrder": "Sipari┼ş vermek i├ğin sepetine ├╝r├╝n ekle",
+              "searchProduct": "├£r├╝n Ara",
+              "myComment": "Yorum",
+              "shouldSelectPaymentMethod": "Sipari┼ş vermek i├ğin ├Âdeme y├Ântemi se├ğmelisin.",
+              "threedPaymentMethodErrorMessage": "─░stenen ├Âdeme y├Ântemi ┼şu anda desteklenmiyor. Ba┼şka bir kart deneyebilir veya uygulamam─▒z arac─▒l─▒─ş─▒yla devam edebilirsin."
+            },
+            "market": {
+              "productMetaDescription": "{{mainText}} GetirB├╝y├╝k fark─▒yla kap─▒nda! {{mainText}}  sipari┼şini online olarak olu┼şturmak i├ğin ┼şimdi GetirB├╝y├╝kÔÇÖe t─▒kla!",
+              "categoryMetaDescription": "GetirB├╝y├╝kÔÇÖte {{mainText}} kategorisinden verece─şin sipari┼şler uygun fiyata kap─▒nda!",
+              "marketPrice": "Binlerce ├╝r├╝n market fiyat─▒na!",
+              "subtitle": "Kasaptan manava binlerce ├ğe┼şidiyle market fiyat─▒na ├╝r├╝nler, getirme ├╝creti olmadan, temass─▒z teslimatla GetirB├╝y├╝kÔÇÖte.",
+              "thousandsOfProduct": "Binlerce ├ğe┼şit ├╝r├╝n",
+              "examineTheCategories": "Meyve-sebze, et-bal─▒k-tavuk, ev ve ki┼şisel bak─▒m gibi kategorilerdeki ├ğe┼şitlili─şi incelemeni ├Âneririz.",
+              "marketPriceSection": "Market fiyat─▒na",
+              "marketPriceDescription": "Evinin b├╝y├╝k al─▒┼şveri┼şini g├Ân├╝l rahatl─▒─ş─▒yla yap diye ├╝r├╝nler market fiyat─▒na. ├£stelik bol bol da kampanya yap─▒yoruz!",
+              "noFee": "Getirme ├╝creti yok",
+              "noFeeDescription": "Her zamanki gibi bu al─▒┼şveri┼şini de evine kadar getiriyoruz. B├╝y├╝k al─▒┼şveri┼şini ta┼ş─▒makla u─şra┼şm─▒yorsun ve senden getirme ├╝creti de alm─▒yoruz!",
+              "yourTimePrecious": "Zaman─▒n bizim i├ğin k─▒ymetli",
+              "yourTimePreciousDescription": "Sipari┼şini canl─▒ ekrandan takip edebilir, teslim durumu g├Ârebilirsin.",
+              "bringHappiniess": "Getir bi mutluluk!",
+              "downloadTheApp": "Uygulamay─▒ indir, her yerden sipari┼ş ver, sipari┼şinin geli┼şini takip et.",
+              "comeToYourDoor": "Binlerce ├╝r├╝nle, dakikalar i├ğinde, oldu─şun yerde mutluluk kap─▒nda!",
+              "weDeliverToYourDoor": "Market ihtiya├ğlar─▒n─▒ kap─▒na kadar getirelim."
+            },
+            "water": {
+              "productMetaDescription": "Haftan─▒n her g├╝n├╝ gece 24.00'e kadar suyunu kap─▒na getiriyoruz. ┼Şimdilik sadece ─░stanbul'da hizmetindeyiz.",
+              "categoryMetaDescription": "Haftan─▒n her g├╝n├╝ gece 24.00'e kadar suyunu kap─▒na getiriyoruz. ┼Şimdilik sadece ─░stanbul'da hizmetindeyiz.",
+              "thousandsOfGroceries": "Damacana suyunuzu GetirSu ile dakikalar i├ğinde kap─▒n─▒za getirelim.",
+              "onYourDoorInMinutes": "Gece g├╝nd├╝z kap─▒n─▒za gelen su",
+              "sevenDaysServiceTitle": "7 g├╝n 08.00-24.00 aras─▒ hizmet",
+              "sevenDaysServiceDesc": "GetirSu hafta i├ği hafta sonu demeden gece 24.00'e kadar suyunu kap─▒na getirir.",
+              "noBattleChangeFeeTitle": "Damacana de─şi┼şim ├╝creti yok",
+              "noBattleChangeFeeDesc": "Sipari┼şlerinde elinde Kuzeyden ya da ba┼şka bir marka damacana bulunuyorsa damacana de─şi┼şimi ├╝cretsizdir.",
+              "noDeliveryFeeTitle": "Teslimat ├╝creti yok",
+              "noDeliveryFeeDesc": "GetirSuÔÇÖda sipari┼şin i├ğin teslimat ├╝creti ├Âdemezsin."
+            }
+          }
+        },
+        "userConfig": {
+          "i18n": {
+            "defaultLocale": "tr",
+            "locales": [
+              "en",
+              "tr",
+              "en-GB",
+              "tr-GB"
+            ],
+            "localeDetection": false
+          },
+          "react": {
+            "useSuspense": false
+          },
+          "defaultNS": "common",
+          "localePath": "/application/apps/web-commerce/public/locales",
+          "ns": [
+            "common",
+            "about",
+            "help",
+            "market",
+            "getirx",
+            "getirFood",
+            "getirLocals",
+            "water",
+            "pressReleases"
+          ],
+          "default": {
+            "i18n": {
+              "defaultLocale": "tr",
+              "locales": [
+                "en",
+                "tr",
+                "en-GB",
+                "tr-GB"
+              ],
+              "localeDetection": false
+            },
+            "react": {
+              "useSuspense": false
+            },
+            "defaultNS": "common",
+            "localePath": "/application/apps/web-commerce/public/locales",
+            "ns": [
+              "common",
+              "about",
+              "help",
+              "market",
+              "getirx",
+              "getirFood",
+              "getirLocals",
+              "water",
+              "pressReleases"
+            ]
+          }
+        }
+      },
+      "initialState": {
+        "loadingIndicator": {
+          "visibility": false
+        },
+        "splashLoading": {
+          "visibility": true
+        },
+        "promotions": {
+          "promoList": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "promoDetail": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "currentTabId": null
+        },
+        "account": {
+          "siteConfig": {
+            "appType": "GETIR",
+            "language": "tr",
+            "locale": "tr",
+            "countryCode": "TR",
+            "activeService": {
+              "isGetir": true,
+              "isFood": false,
+              "isMarket": false,
+              "isWater": false,
+              "isLocals": false,
+              "isGetirTypes": true
+            },
+            "userId": null,
+            "accessToken": false,
+            "accessTokenExpiresAt": null,
+            "refreshToken": false,
+            "defaultToken": false,
+            "selectedAddressId": "",
+            "selectedCuisineId": "",
+            "selectedLocalsCategoryId": "",
+            "pathname": "/productPage/[id]",
+            "asPath": "/urun/chunkies-magnum-badem-nogger-paketi-mkbemgrdz5/",
+            "query": {
+              "id": "chunkies-magnum-badem-nogger-paketi-mkbemgrdz5"
+            },
+            "gsm": {},
+            "location": {
+              "lat": 0,
+              "lon": 0
+            },
+            "deviceId": "",
+            "cookieConsent": false,
+            "dpTrackId": "",
+            "ownerService": 10,
+            "isWarehouseClosed": false,
+            "isWarehouseRequestSended": false,
+            "foodId": false,
+            "newAddress": false,
+            "showActivation": false,
+            "trueClientIp": null,
+            "mobileLink": null,
+            "cloudfrontHeaders": {
+              "viewerCountry": "TR",
+              "lat": "41.03290",
+              "lon": "28.95290"
+            },
+            "permittedAge": null,
+            "isCrawler": false,
+            "version": "1.7.7",
+            "tempCheckoutRequestBody": null,
+            "tempTipCheckoutRequestBody": null
+          },
+          "profileInfo": {},
+          "getProfileInfo": {
+            "status": 1,
+            "reason": null
+          },
+          "updateProfileInfo": {
+            "status": 1,
+            "reason": null
+          },
+          "address": {
+            "list": [],
+            "specialAddress": [],
+            "selected": null,
+            "request": {
+              "addAddress": {
+                "status": 1,
+                "result": null
+              },
+              "removeAddress": {
+                "status": 1,
+                "result": null
+              },
+              "getAddressList": {
+                "status": 1,
+                "result": null
+              },
+              "selectAddress": {
+                "status": 1,
+                "result": null
+              }
+            }
+          },
+          "favorites": {
+            "reason": null,
+            "status": 1,
+            "data": [],
+            "currentPage": 1,
+            "totalCount": 0
+          },
+          "pastOrders": {
+            "reason": null,
+            "status": 1,
+            "data": {},
+            "page": 1,
+            "totalCount": 0
+          },
+          "selectedPastOrder": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "currentLanguage": "tr",
+          "changeLanguage": {
+            "reason": null,
+            "status": 1
+          },
+          "communicationPreferences": {
+            "reason": null,
+            "updateRequestStatus": 1,
+            "initialRequestStatus": 1,
+            "data": {}
+          },
+          "activateClient": {
+            "reason": null,
+            "status": 1
+          },
+          "menuVisible": true,
+          "usePromoCode": {
+            "reason": null,
+            "status": 1
+          }
+        },
+        "invoiceProvider": {
+          "submitStatus": 1,
+          "status": 1,
+          "reason": null,
+          "data": [],
+          "taxNumber": {
+            "status": 1,
+            "data": {},
+            "isGibUser": true,
+            "reason": null
+          },
+          "update": {
+            "data": {}
+          },
+          "delete": {
+            "status": 1,
+            "reason": null
+          },
+          "checkedInvoiceInfoTitle": "",
+          "selectedInvoice": {}
+        },
+        "notifications": [],
+        "mainPage": {
+          "searchKeyword": "",
+          "cuisines": {
+            "status": 1,
+            "result": [],
+            "reason": null
+          },
+          "banners": {
+            "status": 1,
+            "result": [],
+            "reason": null
+          },
+          "locations": {
+            "status": 1,
+            "result": [],
+            "reason": null
+          },
+          "registeredGsm": {
+            "status": 1,
+            "result": "",
+            "reason": null
+          },
+          "deliveryAddress": {
+            "coordinates": {
+              "status": 1,
+              "lat": 41.0053215,
+              "lng": 29.0121795,
+              "zoom": 12
+            },
+            "fullAddress": {
+              "status": 1,
+              "reason": null,
+              "result": null
+            },
+            "streetName": "",
+            "state": "",
+            "countryName": "",
+            "postCode": "",
+            "countryIsoCode": "TR"
+          },
+          "cookieContent": {
+            "status": 1,
+            "data": null,
+            "reason": null
+          }
+        },
+        "modalProvider": {
+          "name": null,
+          "analyticsArgs": null,
+          "logs": []
+        },
+        "auth": {
+          "login": {
+            "reason": null,
+            "status": 1
+          },
+          "register": {
+            "reason": null,
+            "status": 1
+          },
+          "activateClient": {
+            "reason": null,
+            "status": 1
+          },
+          "refreshTokenRequest": {
+            "reason": null,
+            "status": 1
+          },
+          "sendOtp": {
+            "reason": null,
+            "status": 1,
+            "expireTimeForOtp": null
+          },
+          "phoneNumber": {
+            "countryCode": "90",
+            "countryIsoCode": "tr",
+            "gsm": ""
+          },
+          "loginType": 1,
+          "client": null,
+          "accessToken": null,
+          "refreshToken": null,
+          "defaultToken": null,
+          "facebookUser": null,
+          "step": 0,
+          "registrationAgreements": {
+            "status": 1,
+            "data": null,
+            "reason": null
+          }
+        },
+        "popup": {
+          "isVisible": false
+        },
+        "searchProvider": {
+          "status": 1,
+          "keyword": null,
+          "searchArgs": null,
+          "analyticKeyword": null,
+          "isImmediate": false,
+          "results": [],
+          "reason": null,
+          "offset": "",
+          "fetchedAll": false
+        },
+        "throttleProvider": {
+          "registry": []
+        },
+        "localsPopularKeywords": {
+          "popularKeywords": {
+            "status": 1,
+            "data": {
+              "title": "",
+              "popularKeywords": []
+            },
+            "reason": null
+          }
+        },
+        "ssrErrorActionHandler": {
+          "errors": {}
+        },
+        "helpPage": {
+          "content": {
+            "status": 1,
+            "data": null,
+            "reason": null
+          }
+        },
+        "restaurantList": {
+          "status": 1,
+          "estimatedDeliveryDuration": {},
+          "deliveryOptions": {},
+          "restaurants": {
+            "data": [],
+            "status": 1,
+            "reason": null,
+            "filterStatus": 1,
+            "filterReason": null
+          },
+          "filterAndSortings": {
+            "reason": null,
+            "data": {
+              "cuisines": {
+                "data": []
+              },
+              "sort": {
+                "data": []
+              },
+              "smartOptions": {
+                "data": []
+              },
+              "deliveryType": {
+                "data": []
+              },
+              "paymentMethod": {
+                "data": []
+              },
+              "minBasketSize": {
+                "data": []
+              },
+              "rating": {
+                "data": []
+              }
+            },
+            "initialData": {},
+            "filtersList": [],
+            "status": 1
+          },
+          "selectedFilters": [],
+          "filtersQuery": {
+            "brandSlug": "",
+            "cuisines": [],
+            "deliveryType": "",
+            "minBasketSize": "300",
+            "paymentMethod": [],
+            "restaurantIds": [],
+            "restaurantListId": "",
+            "smartOptions": [],
+            "brandId": "",
+            "rating": "0"
+          },
+          "promotionName": "",
+          "applyFiltersWithButton": false,
+          "sortType": "2",
+          "activeOrders": {
+            "data": [],
+            "reason": null,
+            "status": 1
+          },
+          "foodOrder": {},
+          "pastFoodOrders": {
+            "data": null,
+            "reason": null,
+            "status": 1
+          },
+          "tagCategories": [],
+          "totalCount": 0,
+          "currentPage": 1,
+          "triedFavId": null,
+          "removedRestaurantCount": 0,
+          "kustomerToken": {
+            "data": "",
+            "status": 1
+          },
+          "cbotToken": {
+            "data": null,
+            "status": 1
+          },
+          "whatIEatRecommendations": {
+            "screenTitle": null,
+            "bannerData": [],
+            "recommendedRestaurants": [],
+            "reason": null,
+            "status": 1
+          },
+          "source": {},
+          "analytics": {
+            "source": "",
+            "preSource": ""
+          },
+          "deeplinkFilter": []
+        },
+        "restaurantDetail": {
+          "reason": null,
+          "status": 1,
+          "menu": {},
+          "categories": [],
+          "restaurant": {
+            "restaurantRatings": {
+              "restaurantRating": null,
+              "restaurantRatingCount": null,
+              "restaurantRatingScore": {},
+              "restaurantRatingHistory": {},
+              "totalReviewCount": null
+            },
+            "isReviewEnabled": false
+          },
+          "additionalInfo": null,
+          "productDetail": {
+            "reason": null,
+            "status": 1,
+            "data": []
+          },
+          "restaurantName": "",
+          "restaurantSlug": "",
+          "searchText": "",
+          "loyaltyInfo": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "foodOrders": {
+            "reason": null,
+            "status": 1,
+            "data": []
+          },
+          "reviews": {
+            "status": 1,
+            "reason": null,
+            "currentPage": 1,
+            "filters": [],
+            "data": [],
+            "chipId": null
+          },
+          "detail": {
+            "reason": null,
+            "status": 1,
+            "data": []
+          },
+          "chips": {
+            "status": 1,
+            "courierChips": [],
+            "restaurantChips": [],
+            "reason": ""
+          },
+          "ratingInformation": null
+        },
+        "foodDetail": {
+          "id": null,
+          "name": null,
+          "description": null,
+          "price": null,
+          "optionCategories": [],
+          "hasImage": null,
+          "imageURL": null,
+          "count": null,
+          "selectedOptionCategories": [],
+          "note": null,
+          "disabled": false,
+          "isProductNotesEnabled": false,
+          "restaurant": {
+            "id": null
+          },
+          "getProductDetail": {
+            "status": 1,
+            "reason": null
+          }
+        },
+        "brand": {
+          "cities": {},
+          "districts": {},
+          "filteredCities": {},
+          "cityName": "",
+          "cityFirstLetter": "",
+          "cityFirstLetters": [],
+          "restaurantIds": [],
+          "name": "",
+          "slug": "",
+          "status": 1,
+          "reason": null
+        },
+        "loyalty": {
+          "status": 1,
+          "reason": null,
+          "data": [],
+          "isLoyaltyEnabled": null,
+          "loyaltyDetail": {
+            "status": 1,
+            "reason": null,
+            "data": {}
+          },
+          "info": {
+            "title": "GetirYemek M├╝davim",
+            "description": "GetirYemek kullan─▒c─▒lar─▒ sipari┼ş verdik├ğe ÔÇØM├╝davimÔÇØ oluyor, t├╝m restoranlardan her X sipari┼şe X hediye sipari┼ş kazan─▒yor!",
+            "icon": ""
+          }
+        },
+        "brands": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "basket": {
+          "reason": null,
+          "status": 1,
+          "product": {},
+          "unavailableProducts": [],
+          "isProductImageVisible": false,
+          "addProduct": {
+            "id": null,
+            "status": 1,
+            "reason": null
+          },
+          "abort": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "recommendations": {
+            "reason": null,
+            "status": 1,
+            "data": []
+          },
+          "confirmBasket": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          }
+        },
+        "bannerAd": {
+          "basket": {
+            "data": {},
+            "status": 1,
+            "reason": null
+          }
+        },
+        "checkout": {
+          "reason": null,
+          "status": 1,
+          "product": {},
+          "isPageLoading": false,
+          "autoSelectedPromoId": null,
+          "creditCards": [],
+          "selectedDeliveryType": 0,
+          "selectedPaymentSection": 1,
+          "scheduleOptionKey": null,
+          "scheduledDate": null,
+          "isEcoFriendly": false,
+          "dropOffAtDoor": false,
+          "doNotKnock": false,
+          "cardWizardStep": 1,
+          "note": "",
+          "selectedPromoId": null,
+          "ignorePromo": false,
+          "isPaymentTypeDetectionAvailable": false,
+          "isAgreementChecked": false,
+          "isQueueConfirmed": false,
+          "selected": {
+            "paymentOption": null,
+            "masterpassCard": null,
+            "bkmCard": null,
+            "sodexoCard": null,
+            "ticketCard": null,
+            "multinetCard": null
+          },
+          "aggregatedPaymentOptions": {
+            "filteredMethod": null,
+            "lastActivityOn": null,
+            "previousOrder": null,
+            "currentOptions": []
+          },
+          "agreementHtml": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "amount": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "deliveryTypes": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "paymentMethods": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "completeCheckout": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "incompleteCheckout": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "scheduledOptions": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "otpVerifyCode": {
+            "code": null,
+            "errorMessage": null,
+            "step": null
+          }
+        },
+        "orderTracking": {
+          "activeFoodOrders": {},
+          "isFoodOrdersReFetchNeeded": false,
+          "baseUrls": {},
+          "foodOrder": {
+            "averagePreparationTime": {},
+            "cardInfo": {},
+            "courier": {},
+            "courierTipDetails": null,
+            "deliveryAddress": {},
+            "deliveryDuration": {},
+            "products": [],
+            "rating": {},
+            "restaurant": {},
+            "timeline": {},
+            "status": null,
+            "isTrackable": false,
+            "reorderLabel": {},
+            "invoiceUrl": null
+          },
+          "liveSupport": {
+            "timeline": {},
+            "categories": [],
+            "foodOrderTimeDetail": {},
+            "departmentType": "",
+            "orderDetailUrl": "",
+            "isActive": false
+          },
+          "checkoutCourierTip": {
+            "status": 1
+          },
+          "getFoodOrder": {
+            "status": 1
+          },
+          "rateRestaurant": {
+            "status": 1
+          },
+          "getCourierTipDetails": {
+            "status": 1
+          },
+          "rateCourier": {
+            "status": 1
+          },
+          "getInvoiceUrl": {
+            "status": 1
+          },
+          "reviewCriteria": {
+            "status": 1,
+            "criteriaData": [],
+            "criteriaText": null,
+            "reason": null
+          }
+        },
+        "paymentProvider": {
+          "common": {
+            "otpMode": 1,
+            "securePaymentUrl": "",
+            "refreshOnly": false,
+            "paymentOptions": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            },
+            "paymentToken": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            }
+          },
+          "masterpass": {
+            "isResetToBeDeletedCard": null,
+            "masterpassAccount": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            },
+            "masterpassCreditCards": {
+              "reason": null,
+              "status": 2,
+              "result": []
+            },
+            "registerMPCard": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            },
+            "deleteMPCard": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            },
+            "validateTransaction": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            },
+            "purchaseMPCard": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            },
+            "resendOTP": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            },
+            "syncCreditCards": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            },
+            "linkAccount": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            }
+          },
+          "bkm": {
+            "card": null,
+            "linkOfBKMAccount": {
+              "status": 1,
+              "reason": null,
+              "result": null
+            }
+          },
+          "sodexo": {
+            "card": null,
+            "addSodexoOnlineCard": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            },
+            "removeSodexoOnlineCard": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            }
+          },
+          "ticket": {
+            "card": null,
+            "addTicketCard": {
+              "reason": null,
+              "status": 1,
+              "result": null,
+              "data": null
+            },
+            "removeTicketCard": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            }
+          },
+          "multinet": {
+            "card": null,
+            "addMultinetWallet": {
+              "reason": null,
+              "status": 1,
+              "result": null,
+              "data": null
+            },
+            "removeMultinetWallet": {
+              "reason": null,
+              "status": 1,
+              "result": null
+            }
+          }
+        },
+        "getirListing": {
+          "products": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "categories": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "activeCategories": {
+            "main": {},
+            "sub": {}
+          },
+          "filters": [],
+          "isSubCategoryPage": false
+        },
+        "mainSearch": {
+          "popularKeywords": {
+            "status": 1,
+            "keywords": [],
+            "title": "",
+            "reason": null
+          }
+        },
+        "suggestProduct": {
+          "status": 1,
+          "reason": null
+        },
+        "productDetail": {
+          "status": 4,
+          "reason": null,
+          "data": {
+            "id": "699477a2eb4bd49534153b18",
+            "name": "Chunkies & Magnum Badem & Nogger Paketi",
+            "shortName": "Chunkies & Magnum & Nogger",
+            "shareLink": "https://getir.onelink.me/kxRB/1bf5h9z0",
+            "shortDescription": "3 Adet",
+            "squareThumbnailURL": "https://cdn-image.getir.com/market/product/48c81d77-9f2e-48d2-905c-6d49668ab0d5.jpg",
+            "picURLs": [
+              "https://cdn-image.getir.com/market/product/48c81d77-9f2e-48d2-905c-6d49668ab0d5.jpg"
+            ],
+            "categoryIds": [
+              "55bca8484dcda90c00e3aa80",
+              "6a2682c191127d8011dd8f2c",
+              "6a26ac61902fcb957601137d",
+              "697c8609a5f2f92b12ca738b"
+            ],
+            "subCategoryIds": [
+              "5fbcd17a9b964c3e063b192a",
+              "5fbcd1beb1b8a2c673204b1f",
+              "5fbcd12305866908b9089586",
+              "636e2d113108031a93f4aee8",
+              "6a26a75a9289b9c298107c41",
+              "6a26acbd02dca0da12f06281",
+              "69943e123df46461bb5eabd8"
+            ],
+            "displayType": 0,
+            "price": 367.99,
+            "priceText": "367,99 TL",
+            "status": 1,
+            "struckPrice": 404.97,
+            "struckPriceText": "404,97 TL",
+            "bundleItems": [
+              {
+                "id": "678e4dabe39e2a9b41b2cc80",
+                "count": 1,
+                "name": "Carte D'Or Chunkies Cookie Dough",
+                "shortDescription": "430 ml",
+                "squareThumbnailURL": "https://cdn-image.getir.com/market/product/4730c2ff-cff4-42bb-95f5-bb8d1b2f801e.jpg",
+                "currency": {
+                  "symbol": "TL",
+                  "codeAlpha": "TRY",
+                  "isSymbolFirst": false
+                },
+                "badgeImages": []
+              },
+              {
+                "id": "559fec01f462100c00461d5c",
+                "count": 1,
+                "name": "Magnum Badem",
+                "shortDescription": "100 ml",
+                "squareThumbnailURL": "https://cdn-image.getir.com/market/product/ee2eae53-ea31-463c-94a7-9caf3f3f6932.jpg",
+                "wideThumbnailURL": "http://cdn.getir.com/product/559fec01f462100c00461d5c_wide_pic_tr_1630396077515.jpeg",
+                "currency": {
+                  "symbol": "TL",
+                  "codeAlpha": "TRY",
+                  "isSymbolFirst": false
+                },
+                "badgeImages": []
+              },
+              {
+                "id": "559fea46f462100c00461d32",
+                "count": 1,
+                "name": "Algida Nogger Sandwich ├çikolata Karamel",
+                "shortDescription": "145 ml",
+                "squareThumbnailURL": "https://cdn-image.getir.com/market/product/04504a77-52eb-432b-ae1f-1b8f90452d62.jpg",
+                "wideThumbnailURL": "http://cdn.getir.com/product/559fea46f462100c00461d32_wide_pic_tr_1634564062649.jpeg",
+                "currency": {
+                  "symbol": "TL",
+                  "codeAlpha": "TRY",
+                  "isSymbolFirst": false
+                },
+                "badgeImages": []
+              }
+            ],
+            "infoMessages": [],
+            "currency": {
+              "symbol": "TL",
+              "codeAlpha": "TRY",
+              "isSymbolFirst": false
+            },
+            "additionalPropertyTables": [],
+            "brand": {
+              "id": "5aae7beb3c0b5484c7acbf42"
+            },
+            "tags": [],
+            "type": 1,
+            "slug": "chunkies-magnum-badem-nogger-paketi-mkbemgrdz5",
+            "badgeImages": [],
+            "details": {
+              "additionalPropertyTables": []
+            },
+            "unit": 1,
+            "isWeightOptionsPickerAvailable": false,
+            "showUnitCountText": false,
+            "isSensitive": false,
+            "isBundle": true
+          },
+          "slug": null,
+          "id": null,
+          "triggerLocation": null
+        },
+        "previousOrders": {
+          "status": 1,
+          "data": [],
+          "reason": null,
+          "pagination": {
+            "orderCount": 0,
+            "pageCount": 1
+          },
+          "detail": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "detailCheckoutAgreement": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "invoiceUrl": {
+            "status": 1,
+            "data": "",
+            "reason": null
+          },
+          "cancellationReason": {
+            "status": 1,
+            "data": "",
+            "reason": null
+          },
+          "cancellationVerify": {
+            "status": 1,
+            "data": {},
+            "reason": null
+          },
+          "tip": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "rating": {
+            "status": 1,
+            "data": {},
+            "reason": null
+          },
+          "tipCheckout": {
+            "status": 1,
+            "data": "",
+            "reason": null,
+            "amount": 0
+          }
+        },
+        "getirCheckout": {
+          "reason": null,
+          "status": 1,
+          "selectedEstimatedDeliveryDuration": null,
+          "completeCheckout": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "amount": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "creditCards": [],
+          "dropOffAtDoor": false,
+          "checkoutAgreement": {
+            "isEnabled": false,
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "doNotKnock": false,
+          "cardWizardStep": 1,
+          "isForOrderQueue": false,
+          "note": "",
+          "selectedPromoId": null,
+          "selectedInvoiceId": null,
+          "ignorePromo": false,
+          "invoiceInfoId": "",
+          "selectedBagPreferenceId": 1,
+          "paymentActions": {
+            "status": 1
+          }
+        },
+        "getirPaymentProvider": {
+          "paymentType": 1,
+          "checkoutType": 1,
+          "otpMode": 1,
+          "securePaymentUrl": "",
+          "linkOfBKMAccount": {
+            "status": 1,
+            "reason": null,
+            "result": null
+          },
+          "paymentOptions": {
+            "reason": null,
+            "status": 1,
+            "result": null,
+            "selectedBKMExpressCard": null,
+            "selectedAdyenCard": null,
+            "selectedSodexoCard": null,
+            "selectedTicketCard": null,
+            "selectedMultinetCard": null
+          },
+          "paymentToken": {
+            "reason": null,
+            "status": 1,
+            "result": {
+              "paymentToken": ""
+            },
+            "shouldUpdateMasterPass": true
+          },
+          "masterpassAccount": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "masterpassCreditCards": {
+            "reason": null,
+            "status": 2,
+            "result": [],
+            "selected": null
+          },
+          "registerMPCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "deleteMPCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "validateTransaction": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "purchaseMPCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "resendOTP": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "syncCreditCards": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "cardAddingProperties": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "isResetToBeDeletedCard": false,
+          "linkAccount": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          }
+        },
+        "getirPromotions": {
+          "promoList": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "promoDetail": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "promoContent": {
+            "reason": null,
+            "status": 1,
+            "data": {},
+            "id": ""
+          }
+        },
+        "getirMainPage": {
+          "main": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "banners": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "products": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          }
+        },
+        "getirBasket": {
+          "currentBasket": {
+            "status": 1,
+            "data": {},
+            "reason": null
+          },
+          "update": {
+            "args": null,
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "abort": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          }
+        },
+        "favoriteProducts": {
+          "reason": null,
+          "status": 1,
+          "data": []
+        },
+        "getirOrderTracking": {
+          "order": {
+            "status": "",
+            "timeline": {
+              "stages": [],
+              "selectedTimelineStageId": ""
+            },
+            "createdAt": "",
+            "products": [],
+            "courier": {
+              "id": "",
+              "name": "",
+              "picURL": "",
+              "lat": "",
+              "lon": ""
+            },
+            "deliveryAddress": {
+              "name": "",
+              "address": "",
+              "emojiURL": ""
+            },
+            "checkoutAmounts": {
+              "fields": []
+            },
+            "deliveryDuration": {
+              "title": {},
+              "text": {}
+            },
+            "rate": {
+              "isSkipped": false,
+              "canBeCommented": false,
+              "canBeRated": false
+            },
+            "liveSupport": {},
+            "promo": {
+              "title": "",
+              "picURL": "",
+              "description": ""
+            }
+          },
+          "orderRequestStatus": 1,
+          "connectSocketStatus": 1,
+          "connectedOrderId": null,
+          "socket": null
+        },
+        "getirCommon": {
+          "connectWarehouse": {
+            "status": 1,
+            "data": null,
+            "reason": null
+          },
+          "warehouseInfo": {
+            "status": 1,
+            "data": null,
+            "reason": null
+          },
+          "estimatedDeliveryDuration": {
+            "title": "",
+            "value": ""
+          },
+          "mapOverlayInfo": {
+            "minBasketTitle": "",
+            "minBasketAmount": "",
+            "deliveryFeeTitle": "",
+            "deliveryFeeAmount": ""
+          }
+        },
+        "getirActiveOrders": {
+          "status": 1,
+          "data": [],
+          "reason": null
+        },
+        "shopListFilter": {
+          "filterAndSortings": {
+            "status": 1,
+            "reason": null,
+            "data": {
+              "sortingSections": {
+                "sortOptions": {
+                  "data": []
+                },
+                "defaultOption": 4
+              },
+              "filterSections": {
+                "verticals": {
+                  "data": []
+                },
+                "smartFilterOptions": {
+                  "data": []
+                },
+                "deliveryOptions": {
+                  "data": []
+                },
+                "cuisines": {
+                  "data": []
+                },
+                "paymentOptions": {
+                  "data": []
+                },
+                "minBasketSizeOptions": {
+                  "data": {}
+                }
+              }
+            }
+          },
+          "filterValues": {}
+        },
+        "shopList": {
+          "status": 1,
+          "estimatedDeliveryDuration": {
+            "text": "",
+            "styles": {
+              "font": {
+                "weight": "bold"
+              }
+            },
+            "suffix": "",
+            "title": "TVS"
+          },
+          "shops": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "activeOrders": {
+            "data": [],
+            "reason": null,
+            "status": 1
+          },
+          "pastLocalsOrders": {
+            "data": [],
+            "reason": null,
+            "status": 1
+          },
+          "smartSuggestions": {
+            "data": []
+          },
+          "orders": {},
+          "tagCategories": [],
+          "totalCount": 0,
+          "currentPage": 1,
+          "triedFavId": null,
+          "hasLimitedGiftingService": false
+        },
+        "localsProductDetail": {
+          "status": 1,
+          "data": {
+            "masterProduct": {},
+            "product": {
+              "specs": [],
+              "tabs": []
+            }
+          },
+          "reason": null
+        },
+        "localsOrderTracking": {
+          "activeLocalsOrders": [],
+          "isLocalOrdersReFetchNeeded": false,
+          "baseUrls": {},
+          "localOrder": {
+            "cardInfo": {},
+            "courier": {},
+            "courierTipDetails": null,
+            "deliveryAddress": {},
+            "products": [],
+            "rating": {},
+            "local": {},
+            "status": null,
+            "isTrackable": false,
+            "reorderLabel": {}
+          },
+          "liveSupport": {
+            "timeline": {}
+          },
+          "kustomerToken": {
+            "data": "",
+            "status": 1
+          },
+          "checkoutCourierTip": {
+            "status": 1
+          },
+          "getLocalOrder": {
+            "status": 1
+          },
+          "rateLocal": {
+            "status": 1
+          },
+          "getCourierTipDetails": {
+            "status": 1
+          },
+          "rateCourier": {
+            "status": 1
+          },
+          "getInvoiceUrl": {
+            "data": {},
+            "result": null,
+            "status": 1
+          },
+          "priceDifferenceWarningText": "",
+          "orderReviewChips": {
+            "data": {
+              "courierChips": {},
+              "shopChips": {}
+            },
+            "result": null,
+            "status": 1
+          }
+        },
+        "localsBasket": {
+          "reason": null,
+          "status": 1,
+          "product": {},
+          "unavailableProducts": [],
+          "isProductImageVisible": false,
+          "addProduct": {
+            "id": null,
+            "status": 1,
+            "reason": null
+          },
+          "abort": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "recommendations": {
+            "reason": null,
+            "status": 1,
+            "data": []
+          },
+          "confirmBasket": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          }
+        },
+        "localsCheckout": {
+          "reason": null,
+          "status": 1,
+          "product": {},
+          "isPageLoading": false,
+          "autoSelectedPromoId": null,
+          "addProduct": {
+            "id": null,
+            "status": 1,
+            "reason": null
+          },
+          "amount": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "abort": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "deliveryTypes": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "paymentMethods": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "giftingSettings": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "completeCheckout": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "creditCards": [],
+          "selectedDeliveryType": 0,
+          "selectedPaymentSection": 1,
+          "isEcoFriendly": false,
+          "dropOffAtDoor": false,
+          "doNotKnock": false,
+          "cardWizardStep": 1,
+          "note": "",
+          "isForOrderQueue": false,
+          "isGifting": false,
+          "isGiftingFormValid": false,
+          "giftingParameters": {
+            "receiverName": "",
+            "receiverGsm": "",
+            "giftingNote": "",
+            "senderName": ""
+          },
+          "selectedPromoId": null,
+          "selectedInvoiceId": null,
+          "ignorePromo": false,
+          "isPaymentTypeDetectionAvailable": false,
+          "unavailableProducts": [],
+          "isAgreementChecked": false,
+          "agreementHtml": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "isGetirMoneySelected": false,
+          "installment": {
+            "selectedInstallmentOption": {},
+            "selectedInstallmentType": 1,
+            "isInstallmentOptionsSeen": false
+          }
+        },
+        "localsPaymentProvider": {
+          "paymentType": null,
+          "otpMode": 1,
+          "securePaymentUrl": "",
+          "linkOfBKMAccount": {
+            "status": 1,
+            "reason": null,
+            "result": null
+          },
+          "paymentOptions": {
+            "reason": null,
+            "status": 1,
+            "result": null,
+            "selectedBKMExpressCard": null
+          },
+          "paymentToken": {
+            "reason": null,
+            "status": 1,
+            "result": null,
+            "shouldUpdateMasterPass": true
+          },
+          "masterpassAccount": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "masterpassCreditCards": {
+            "reason": null,
+            "status": 2,
+            "result": [],
+            "selected": null
+          },
+          "registerMPCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "deleteMPCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "validateTransaction": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "purchaseMPCard": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "resendOTP": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "syncCreditCards": {
+            "reason": null,
+            "status": 1,
+            "result": null
+          },
+          "isResetToBeDeletedCard": false
+        },
+        "localsMainPage": {
+          "categories": {
+            "status": 1,
+            "result": [],
+            "reason": null
+          },
+          "banners": {
+            "status": 1,
+            "result": [],
+            "reason": null
+          }
+        },
+        "localsPromotions": {
+          "promoList": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "promoDetail": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "checkoutPromos": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "usePromoCode": {
+            "reason": null,
+            "status": 1,
+            "data": {}
+          },
+          "currentTabId": null,
+          "selectedPromoId": null
+        },
+        "localsFavoritesProvider": {
+          "favorites": {
+            "reason": null,
+            "status": 1,
+            "data": [],
+            "currentPage": 1,
+            "totalCount": 0
+          }
+        },
+        "retailShopDetail": {
+          "reason": null,
+          "status": 1,
+          "retailShop": {
+            "reason": null,
+            "status": 1,
+            "data": null
+          },
+          "retailShopProducts": {
+            "reason": null,
+            "status": 1,
+            "data": [],
+            "fetchCount": 0
+          },
+          "filterValues": {},
+          "retailShopFilters": {
+            "reason": null,
+            "status": 4,
+            "data": {
+              "title": "Filtreler",
+              "filterSections": [
+                {
+                  "filterKey": "sort",
+                  "filterType": "single",
+                  "title": "S─▒ralama",
+                  "data": [
+                    {
+                      "id": 1,
+                      "title": "Ak─▒ll─▒ S─▒ralama (Varsay─▒lan)"
+                    },
+                    {
+                      "id": 2,
+                      "title": "En D├╝┼ş├╝k Fiyat"
+                    },
+                    {
+                      "id": 3,
+                      "title": "En Y├╝ksek Fiyat"
+                    }
+                  ]
+                },
+                {
+                  "filterKey": "gender",
+                  "filterType": "single",
+                  "title": "Cinsiyet",
+                  "data": [
+                    {
+                      "id": 0,
+                      "title": "T├╝m├╝"
+                    },
+                    {
+                      "id": 1,
+                      "title": "Kad─▒n"
+                    },
+                    {
+                      "id": 2,
+                      "title": "Erkek"
+                    }
+                  ]
+                },
+                {
+                  "filterKey": "color",
+                  "filterType": "multiple",
+                  "title": "Renk",
+                  "data": [
+                    {
+                      "id": "0",
+                      "title": "T├╝m├╝"
+                    },
+                    {
+                      "id": "1",
+                      "title": "Siyah"
+                    },
+                    {
+                      "id": "2",
+                      "title": "Beyaz"
+                    },
+                    {
+                      "id": "3",
+                      "title": "K─▒rm─▒z─▒"
+                    },
+                    {
+                      "id": "4",
+                      "title": "Ye┼şil"
+                    },
+                    {
+                      "id": "5",
+                      "title": "Mavi"
+                    },
+                    {
+                      "id": "6",
+                      "title": "Pembe"
+                    },
+                    {
+                      "id": "7",
+                      "title": "Sar─▒"
+                    }
+                  ]
+                },
+                {
+                  "filterKey": "size",
+                  "filterType": "multiple",
+                  "title": "Beden",
+                  "data": [
+                    {
+                      "id": "0",
+                      "title": "T├╝m├╝"
+                    },
+                    {
+                      "id": "1",
+                      "title": "XS"
+                    },
+                    {
+                      "id": "2",
+                      "title": "S"
+                    },
+                    {
+                      "id": "3",
+                      "title": "M"
+                    },
+                    {
+                      "id": "4",
+                      "title": "L"
+                    },
+                    {
+                      "id": "5",
+                      "title": "XL"
+                    },
+                    {
+                      "id": "6",
+                      "title": "XXL"
+                    },
+                    {
+                      "id": "7",
+                      "title": "XXXL"
+                    }
+                  ]
+                },
+                {
+                  "filterKey": "minBasketSize",
+                  "filterType": "slider",
+                  "title": "Fiyat Aral─▒─ş─▒",
+                  "data": {
+                    "defaultValue": 50,
+                    "maxValue": 50,
+                    "maxValueText": "Hepsi",
+                    "minValue": 5,
+                    "stepCount": 5
+                  }
+                }
+              ]
+            }
+          },
+          "shelf": "",
+          "subShelf": "",
+          "filterEnabled": false
+        },
+        "localsPreviousOrdersProvider": {
+          "status": 1,
+          "data": [],
+          "page": 1,
+          "totalCount": 0,
+          "reason": null,
+          "detail": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "invoiceUrl": {
+            "status": 1,
+            "data": "",
+            "reason": null
+          },
+          "cancellationReason": {
+            "status": 1,
+            "data": "",
+            "reason": null
+          },
+          "cancellationVerify": {
+            "status": 1,
+            "data": {},
+            "reason": null
+          },
+          "tipCheckout": {
+            "status": 1,
+            "data": "",
+            "reason": null
+          }
+        },
+        "localsGifting": {
+          "isGiftingAddressModalEnabled": false,
+          "addressHasNoFlorist": false
+        },
+        "localsReturns": {
+          "status": 1,
+          "availability": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "createReturn": {
+            "status": 1,
+            "data": {},
+            "reason": null
+          },
+          "slots": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "returnDetail": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "setDeliveryType": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "availableReturnSlots": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "changeReturnSlot": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          },
+          "cancelReturn": {
+            "status": 1,
+            "data": [],
+            "reason": null
+          }
+        }
+      }
+    }
+  },
+  "page": "/productPage/[id]",
+  "query": {
+    "id": "chunkies-magnum-badem-nogger-paketi-mkbemgrdz5"
+  },
+  "buildId": "pNIXBdk9pOKwZ1pL1KjID",
+  "isFallback": false,
+  "gssp": true,
+  "customServer": true,
+  "appGip": true,
+  "locale": "tr",
+  "locales": [
+    "tr",
+    "en",
+    "en-GB",
+    "tr-GB"
+  ],
+  "defaultLocale": "tr",
+  "scriptLoader": []
+}
