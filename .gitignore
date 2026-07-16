@@ -87,6 +87,7 @@ cloud-run-bot/dev_firebase_key.json
 cloud-run-bot/prod_firebase_key.json
 
 # Scratch/debug script folders
+scratch/
 cloud-run-bot/scratch/
 
 
