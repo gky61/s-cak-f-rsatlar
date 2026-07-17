@@ -11,6 +11,7 @@ import '../services/link_preview_service.dart';
 import '../models/category.dart';
 import '../widgets/category_selector_widget.dart';
 import '../theme/app_theme.dart';
+import 'deal_detail_screen.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -896,12 +897,18 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         }
       } catch (e) {
         if (mounted) {
-          _showCustomSnackBar(
-            message: e.toString().replaceAll('Exception: ', ''),
-            icon: Icons.error_outline_rounded,
-            backgroundColor: const Color(0xFFC62828),
-            duration: const Duration(seconds: 4),
-          );
+          final errorMsg = e.toString();
+          if (errorMsg.contains('already_shared:')) {
+            final dealId = errorMsg.split('already_shared:')[1].trim();
+            _showAlreadySharedDialog(context, dealId);
+          } else {
+            _showCustomSnackBar(
+              message: errorMsg.replaceAll('Exception: ', ''),
+              icon: Icons.error_outline_rounded,
+              backgroundColor: const Color(0xFFC62828),
+              duration: const Duration(seconds: 4),
+            );
+          }
         }
       }
     } catch (e) {
@@ -918,6 +925,80 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _showAlreadySharedDialog(BuildContext context, String dealId) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              const Icon(
+                Icons.info_outline_rounded,
+                color: Color(0xFFFF6B35),
+                size: 28,
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Bu Ürün Zaten Paylaşıldı',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Paylaşmaya çalıştığınız ürünün aktif ve sıcak bir fırsat paylaşımı zaten mevcut. '
+            'Yeni bir mükerrer konu açmak yerine, mevcut fırsata giderek oy verebilir veya yorum yazabilirsiniz.',
+            style: TextStyle(fontSize: 14, height: 1.4),
+          ),
+          actionsPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Kapat',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black54,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B35),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              onPressed: () {
+                Navigator.pop(context); // Diyalogu kapat
+                if (mounted) {
+                  Navigator.pop(context); // Paylaşım formunu kapat
+                }
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DealDetailScreen(dealId: dealId),
+                  ),
+                );
+              },
+              child: const Text('Fırsata Git'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override

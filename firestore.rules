@@ -237,8 +237,31 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (resource == null || resource.data.uid == userId());
       allow write: if canWrite() && (request.resource == null || request.resource.data.uid == userId()) && (resource == null || resource.data.uid == userId());
     }
+    // ========================================
+    // KUPONLAR COLLECTION
+    // ========================================
+    match /kuponlar/{kuponId} {
+      allow read: if true;
+      allow create: if canWrite();
+      // Sahip veya admin tüm alanları güncelleyebilir/silebilir.
+      // Giriş yapmış herhangi bir kullanıcı sadece oy sayaçlarını ve durumu güncelleyebilir.
+      allow update: if isAuthenticated() && (
+        resource.data.paylasanKullaniciId == userId() ||
+        isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['sicakOySayisi', 'sogukOySayisi', 'durum'])
+      );
+      allow delete: if isAuthenticated() && (resource.data.paylasanKullaniciId == userId() || isAdmin());
+
+      // Votes subcollection - kullanıcının oy kayıtları
+      match /votes/{voteUserId} {
+        allow read: if isAuthenticated();
+        allow write: if canWrite() && userId() == voteUserId;
+      }
+    }
 
     // ========================================
+
     // USER DEVICES
     // ========================================
     match /userDevices/{deviceId} {

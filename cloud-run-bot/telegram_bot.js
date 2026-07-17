@@ -22,6 +22,69 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+
+
+// URL parametrelerini temizleyen fonksiyon
+function cleanProductUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return '';
+  try {
+    const url = new URL(urlStr.trim());
+    const host = url.hostname.toLowerCase();
+    
+    const majorStores = [
+      'amazon',
+      'trendyol',
+      'hepsiburada',
+      'n11',
+      'pazarama',
+      'pttavm',
+      'zara',
+      'defacto',
+      'mavi',
+      'beymen',
+      'teknosa',
+      'mediamarkt',
+      'migros',
+      'getir',
+      'vatanbilgisayar',
+      'idefix',
+      'itopya',
+      'incehesap',
+      'havit'
+    ];
+    
+    let isMajorStore = false;
+    for (const store of majorStores) {
+      if (host.includes(store)) {
+        isMajorStore = true;
+        break;
+      }
+    }
+    
+    if (isMajorStore) {
+      // Büyük mağazalar için query parametrelerini tamamen temizle
+      url.search = '';
+    } else {
+      // Diğer mağazalar için sadece ürün kimlik parametrelerini koru, kalanları sil
+      const paramsToKeep = ['id', 'productid', 'product_id', 'p', 'item_id', 'itemid', 'sku'];
+      const keys = Array.from(url.searchParams.keys());
+      for (const key of keys) {
+        if (!paramsToKeep.includes(key.toLowerCase())) {
+          url.searchParams.delete(key);
+        }
+      }
+    }
+    
+    let result = url.toString();
+    if (result.endsWith('?')) {
+      result = result.substring(0, result.length - 1);
+    }
+    return result;
+  } catch (e) {
+    return urlStr;
+  }
+}
+
 // Environment variables - sanitized to prevent newline/quote issues from Secret Manager
 const API_ID = (process.env.TELEGRAM_API_ID || '').trim();
 const API_HASH = (process.env.TELEGRAM_API_HASH || '').trim();
@@ -731,6 +794,16 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
      ↳ [Kategori Tespit Servisi]
 🎯 ====================================================
     `);
+    // Deal onay gereksinimini Firestore settings/app belgesinden kontrol et
+    let dealApprovalRequired = true;
+    try {
+      const settingsDoc = await db.collection('settings').doc('app').get();
+      if (settingsDoc.exists) {
+        dealApprovalRequired = settingsDoc.data().dealApprovalRequired !== false;
+      }
+    } catch (e) {
+      console.log('⚠️ Settings yüklenemedi, varsayılan olarak onay beklenecek:', e.message);
+    }
 
     // Deal objesi
     const deal = {
@@ -743,11 +816,12 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       imageUrl: imageUrl,
       store: storeFromLink,
       category: finalCategory,
-      isApproved: false,
+      isApproved: !dealApprovalRequired,
       isUserSubmitted: false,
       isActive: true,
       isExpired: false,
       isFeatured: false,
+      cleanUrl: cleanProductUrl(scrapeResult.url || mainLink),
       viewCount: 0,
       hotVotes: 0,
       coldVotes: 0,
@@ -853,24 +927,56 @@ async function subscribeToChannels() {
           }
 
           const mainLink = links[0];
-
           // MÜKERRER (DUPLICATE) KONTROLÜ
           console.log(`🔍 [${channelInfo.title}] Mükerrer link kontrolü yapılıyor: ${mainLink}`);
-          const dupCheckLink = await db.collection('deals')
-            .where('link', '==', mainLink)
-            .limit(1)
-            .get();
-
-          let dupCheckUrl = { empty: true };
-          if (dupCheckLink.empty) {
-            dupCheckUrl = await db.collection('deals')
-              .where('url', '==', mainLink)
-              .limit(1)
+          let resolvedLink = mainLink;
+          try {
+            resolvedLink = await linkScraperService.resolveUrlRedirects(mainLink);
+          } catch (e) {
+            console.warn(`[DUPLICATE-CHECK] ⚠️ Yönlendirme çözülemedi: ${e.message}`);
+          }
+          const cleanUrl = cleanProductUrl(resolvedLink);
+          let isDuplicate = false;
+          if (cleanUrl) {
+            const querySnapshot = await db.collection('deals')
+              .where('cleanUrl', '==', cleanUrl)
+              .where('isApproved', '==', true)
               .get();
+
+            if (!querySnapshot.empty) {
+              for (const doc of querySnapshot.docs) {
+                const dealData = doc.data();
+
+                // Pasif/Biten Kontrolleri:
+                const isExpired = dealData.isExpired === true;
+                const expiredVotes = dealData.expiredVotes || 0;
+                if (isExpired || expiredVotes >= 15) {
+                  continue;
+                }
+
+                // Soğuk oylama kontrolü:
+                const hotVotes = dealData.hotVotes || 0;
+                const coldVotes = dealData.coldVotes || 0;
+                const totalVotes = hotVotes + coldVotes;
+                if (totalVotes >= 5) {
+                  const hotPercentage = (hotVotes / totalVotes * 100);
+                  if (hotPercentage < 20) {
+                    continue;
+                  }
+                }
+                if (hotVotes - coldVotes <= -5) {
+                  continue;
+                }
+
+                // Aktif bir fırsat var -> Mükerrer olarak işaretle
+                isDuplicate = true;
+                break;
+              }
+            }
           }
 
-          if (!dupCheckLink.empty || !dupCheckUrl.empty) {
-            console.log(`⏩ [${channelInfo.title}] Aynı link zaten kayıtlı, mükerrer atlanıyor: ${mainLink}`);
+          if (isDuplicate) {
+            console.log(`⏩ [${channelInfo.title}] Aynı link zaten aktif olarak kayıtlı, mükerrer atlanıyor: ${mainLink}`);
             dupCount++;
             return;
           }

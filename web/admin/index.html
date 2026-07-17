@@ -163,6 +163,10 @@
                     <span class="material-symbols-outlined icon-filled">local_offer</span>
                     <p class="text-sm font-medium">Fırsatlar</p>
                 </a>
+                <a id="couponsMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
+                    <span class="material-symbols-outlined">confirmation_number</span>
+                    <p class="text-sm font-medium">Kuponlar</p>
+                </a>
                 <a id="usersMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
                     <span class="material-symbols-outlined">group</span>
                     <p class="text-sm font-medium">Kullanıcılar</p>
@@ -648,7 +652,79 @@
                         </div>
                     </div>
                 </div>
-                
+
+                <!-- Coupons View -->
+                <div id="couponsView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
+                    <!-- Page Heading -->
+                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div class="flex flex-col gap-1">
+                            <h2 class="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Kupon Listesi</h2>
+                            <p class="text-slate-500 dark:text-slate-400 text-base">Kullanıcılar tarafından paylaşılan tüm kuponları yönetin.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <!-- Toggle switch for global coupons state -->
+                            <div class="flex items-center gap-2 bg-slate-100 dark:bg-surface-darker h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                                <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Kuponlar Aktif</span>
+                                <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                    <input id="settingsToggleCouponsBtn" class="sr-only peer" type="checkbox" checked/>
+                                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                </label>
+                            </div>
+                            
+                            <button id="refreshCouponsBtn" class="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-surface-darker border border-slate-700 hover:bg-slate-800 text-white text-sm font-medium transition-colors">
+                                <span class="material-symbols-outlined text-[20px]">refresh</span>
+                                <span class="hidden sm:inline">Yenile</span>
+                            </button>
+                            <button id="scrapeCouponsBtn" class="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors">
+                                <span class="material-symbols-outlined text-[20px]">sync</span>
+                                <span class="hidden sm:inline">Kuponları Otomatik Çek</span>
+                            </button>
+                            <button id="deleteAllCouponsBtn" class="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium transition-colors">
+                                <span class="material-symbols-outlined text-[20px]">delete_sweep</span>
+                                <span class="hidden sm:inline">Tüm Kuponları Sil</span>
+                            </button>
+                            <button id="addCouponBtn" class="flex items-center justify-center gap-1.5 rounded-lg h-10 px-3 bg-primary hover:bg-primary/90 text-white text-xs font-bold shadow-lg shadow-blue-900/20 transition-all whitespace-nowrap">
+                                <span class="material-symbols-outlined text-[18px]">add</span>
+                                <span>Kupon Ekle</span>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Filters & Toolbar -->
+                    <div class="flex flex-col xl:flex-row gap-4 justify-between xl:items-center bg-white dark:bg-surface-dark p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                        <div class="flex flex-1 flex-col sm:flex-row gap-4">
+                            <div class="relative flex-1 max-w-md group">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <span class="material-symbols-outlined text-slate-400">search</span>
+                                </div>
+                                <input id="couponSearchInput" class="block w-full pl-10 pr-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg leading-5 bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm transition-all" placeholder="Mağaza, başlık veya kupon kodu ara..." type="text"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Table -->
+                    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col flex-1 min-h-[500px]">
+                        <div id="couponsLoadingIndicator" class="p-8 text-center text-slate-500 dark:text-slate-400">Yükleniyor...</div>
+                        <div id="couponsEmptyState" class="hidden p-8 text-center text-slate-500 dark:text-slate-400">Henüz kupon yok</div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 dark:bg-surface-darker border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold tracking-wider">
+                                        <th class="p-4 min-w-[150px]">Mağaza</th>
+                                        <th class="p-4 min-w-[250px]">Kupon Başlığı / Açıklaması</th>
+                                        <th class="p-4 min-w-[150px]">Kupon Kodu</th>
+                                        <th class="p-4 min-w-[180px]">Paylaşan Kullanıcı ID</th>
+                                        <th class="p-4 min-w-[140px]">Tarih</th>
+                                        <th class="p-4 min-w-[160px] text-right">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="couponsList" class="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+                                    <!-- Coupons will be inserted here dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Users View -->
                 <!-- Messages View -->
                 <div id="messagesView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
@@ -1241,6 +1317,19 @@
                                 </label>
                             </div>
                             
+                            <!-- Deal Approval Required Toggle -->
+                            <div class="flex items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <div class="flex flex-col gap-1">
+                                    <h4 class="text-sm font-bold text-slate-900 dark:text-white">Fırsat Paylaşımlarında Admin Onayı</h4>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">Açık olduğunda paylaşılan tüm fırsatlar admin onayına tabi olur. Kapatıldığında doğrudan (onaysız) yayına girer.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                    <input id="settingsToggleDealApprovalBtn" class="sr-only peer" type="checkbox" checked/>
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                </label>
+                            </div>
+
+                            
                             <!-- Comment Sharing Toggle -->
                             <div class="flex items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-slate-800/50">
                                 <div class="flex flex-col gap-1">
@@ -1435,6 +1524,70 @@
                 </form>
             </main>
             
+        </div>
+    </div>
+
+    <!-- Coupon Modal -->
+    <div id="couponModal" class="modal hidden fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm">
+        <div class="min-h-screen flex flex-col justify-center items-center p-4">
+            <div class="bg-white dark:bg-surface-dark w-full max-w-xl rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
+                <!-- Modal Header -->
+                <div class="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-800">
+                    <h3 id="couponModalTitle" class="text-xl font-bold text-slate-900 dark:text-white">Kupon Paylaş / Düzenle</h3>
+                    <button type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer" onclick="closeCouponModal()">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <!-- Modal Body -->
+                <form id="couponForm" class="p-6 flex flex-col gap-4">
+                    <input type="hidden" id="couponIdInput"/>
+                    <!-- Store selection -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Mağaza</label>
+                        <select id="couponStoreSelect" class="form-select bg-slate-50 dark:bg-surface-darker border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg p-2.5">
+                            <option value="Trendyol">Trendyol</option>
+                            <option value="Hepsiburada">Hepsiburada</option>
+                            <option value="N11">N11</option>
+                            <option value="Amazon">Amazon</option>
+                            <option value="Pazarama">Pazarama</option>
+                            <option value="MediaMarkt">MediaMarkt</option>
+                            <option value="Teknosa">Teknosa</option>
+                            <option value="Mavi">Mavi</option>
+                            <option value="DeFacto">DeFacto</option>
+                            <option value="Zara">Zara</option>
+                            <option value="Mango">Mango</option>
+                            <option value="Beymen">Beymen</option>
+                            <option value="PttAVM">PttAVM</option>
+                            <option value="İncehesap">İncehesap</option>
+                            <option value="Havit">Havit</option>
+                            <option value="Migros">Migros</option>
+                            <option value="Getir">Getir</option>
+                            <option value="Diğer">Diğer</option>
+                        </select>
+                    </div>
+                    <!-- Coupon Title -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Kupon Başlığı</label>
+                        <input id="couponTitleInput" class="block w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary" placeholder="Örn: 150 TL İndirim" type="text" required/>
+                    </div>
+                    <!-- Coupon Description -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Kupon Açıklaması (Opsiyonel)</label>
+                        <textarea id="couponDescriptionInput" class="block w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary" placeholder="Örn: Alt limit 500 TL" rows="3"></textarea>
+                    </div>
+                    <!-- Coupon Code -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Kupon Kodu</label>
+                        <input id="couponCodeInput" class="block w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary uppercase" placeholder="Örn: TREND150" type="text" required/>
+                    </div>
+                    
+                    <!-- Modal Footer -->
+                    <div class="flex justify-end gap-3 mt-4">
+                        <button type="button" class="px-4 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg transition-colors cursor-pointer" onclick="closeCouponModal()">İptal</button>
+                        <button type="submit" class="px-4 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-bold rounded-lg transition-colors cursor-pointer">Kaydet</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 

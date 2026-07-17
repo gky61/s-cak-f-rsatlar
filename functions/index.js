@@ -580,6 +580,55 @@ exports.onDealUpdated = functions.firestore
       await matchAndCreateDealNotifications(newData, dealId);
     }
 
+    // Paylaşım Durumu Bildirimi: Kullanıcı tarafından yüklenen bir fırsat onaylandığında veya reddedildiğinde bildirim oluştur
+    const isUserSubmitted = newData.isUserSubmitted || false;
+    const postedBy = newData.postedBy || '';
+
+    if (isUserSubmitted && postedBy) {
+      // Onaylandı bildirmesi (isApproved: false -> true)
+      if (oldData.isApproved === false && newData.isApproved === true) {
+        functions.logger.info(`🔔 Paylaşılan fırsat onaylandı, yükleyen kullanıcıya bildirim gönderiliyor: ${postedBy}`);
+        const notifId = `deal_status_approved_${dealId}`;
+        const notifRef = admin.firestore()
+          .collection('users')
+          .doc(postedBy)
+          .collection('notifications')
+          .doc(notifId);
+
+        await notifRef.set({
+          type: 'submission_status',
+          dealId: dealId,
+          dealTitle: newData.title || 'Fırsatınız',
+          title: '🎉 Fırsatınız Onaylandı!',
+          body: `Paylaştığınız "${newData.title}" başlıklı fırsat onaylandı ve yayına alındı.`,
+          status: 'approved',
+          read: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      // Reddedildi bildirmesi (isRejected: false/undefined -> true)
+      else if (oldData.isRejected !== true && newData.isRejected === true) {
+        functions.logger.info(`🔔 Paylaşılan fırsat reddedildi, yükleyen kullanıcıya bildirim gönderiliyor: ${postedBy}`);
+        const notifId = `deal_status_rejected_${dealId}`;
+        const notifRef = admin.firestore()
+          .collection('users')
+          .doc(postedBy)
+          .collection('notifications')
+          .doc(notifId);
+
+        await notifRef.set({
+          type: 'submission_status',
+          dealId: dealId,
+          dealTitle: newData.title || 'Fırsatınız',
+          title: '❌ Fırsatınız Reddedildi',
+          body: `Paylaştığınız "${newData.title}" başlıklı fırsat kurallarımıza uymadığı için reddedildi.`,
+          status: 'rejected',
+          read: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    }
+
     return null;
   }));
 
@@ -947,6 +996,17 @@ exports.onNotificationCreated = functions.firestore
 
     functions.logger.info('🔔 onNotificationCreated tetiklendi:', { userId, notificationId, type: notification.type });
 
+    // 00. For type == 'submission_status' (NOTIF-05 & NOTIF-06), do not send push notifications, only keep in Notification Center
+    if (notification.type === 'submission_status') {
+      functions.logger.info(`🚫 Onay/Red bildirimi (submission_status) için push gönderimi yapılmaz. Sadece uygulama içi Bildirim Kutusunda saklanır.`);
+      await snap.ref.update({
+        pushEligible: false,
+        pushStatus: 'disabled_permanently_for_submission_status',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return null;
+    }
+
     // 0. Check global Master Switch for push notifications
     try {
       const sysConfigDoc = await admin.firestore().collection('systemConfig').doc('notifications').get();
@@ -1084,6 +1144,7 @@ exports.onNotificationCreated = functions.firestore
 
     // 5. ADIM 2 - FİLTRE D: Alt Kanal kontrolü
     let groupEnabled = true;
+    let groupName = type || reason;
     const reasons = notification.reasons || {};
     const hasReasons = Object.keys(reasons).length > 0;
 
@@ -1122,6 +1183,7 @@ exports.onNotificationCreated = functions.firestore
 
       if (activeReason) {
         groupEnabled = true;
+        groupName = activeReason;
 
         // Eğer aktif olan sebep orijinal sebepten farklı ise bildirim başlığını ve içeriğini güncelle
         if (activeReason !== originalReason) {
@@ -1161,28 +1223,35 @@ exports.onNotificationCreated = functions.firestore
         }
       } else {
         groupEnabled = false;
+        groupName = originalReason || type || 'deal';
       }
     } else {
       if (isKeywordNotif) {
+        groupName = 'keyword';
         groupEnabled = prefs.keywordNotificationsEnabled !== false;
       } else if (isCategoryNotif) {
+        groupName = 'category';
         groupEnabled = prefs.categoryNotificationsEnabled !== false;
       } else if (type === 'deal') {
+        groupName = 'deal';
         groupEnabled = prefs.dealNotificationsEnabled !== false;
       } else if (type === 'comment_reply' || type === 'comment') {
+        groupName = 'comment_reply';
         groupEnabled = prefs.communityNotificationsEnabled !== false;
       } else if (type === 'submission_status') {
+        groupName = 'submission_status';
         groupEnabled = prefs.submissionStatusNotificationsEnabled !== false;
       } else if (type === 'marketing') {
+        groupName = 'marketing';
         groupEnabled = prefs.marketingNotificationsEnabled !== false;
       }
     }
 
     if (!groupEnabled) {
-      functions.logger.info(`🚫 Kullanıcı ${userId} için bu bildirim grubu kapalı: ${type || reason}`);
+      functions.logger.info(`🚫 Kullanıcı ${userId} için bu bildirim grubu kapalı: ${groupName}`);
       await snap.ref.update({
         pushEligible: false,
-        pushStatus: `disabled_by_user_group_${type || reason}`,
+        pushStatus: `disabled_by_user_group_${groupName}`,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return null;
@@ -2501,7 +2570,6 @@ exports.cleanupTestData = functions.https.onCall(wrapCall('cleanupTestData', asy
     }
 
     await Promise.all(cleanPromises);
-
     return {
       success: true,
       cleanedCount
@@ -2511,6 +2579,158 @@ exports.cleanupTestData = functions.https.onCall(wrapCall('cleanupTestData', asy
     throw new functions.https.HttpsError('internal', `Test verileri temizlenemedi: ${error.message}`);
   }
 }));
+/**
+ * 7. USER GÜNCELLEME TETİKLEYİCİSİ - Profil resmi veya kullanıcı adı değiştiğinde
+ * tüm yorumlardaki ve mesajlardaki denormalized profil resmi ve kullanıcı adı verilerini senkronize eder.
+ */
+exports.onUserUpdated = functions.firestore
+  .document('users/{userId}')
+  .onUpdate(wrapTrigger('onUserUpdated', async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    const userId = context.params.userId;
 
+    const oldPhoto = before.profileImageUrl || '';
+    const newPhoto = after.profileImageUrl || '';
+    const oldName = before.username || '';
+    const newName = after.username || '';
 
+    const photoChanged = oldPhoto !== newPhoto;
+    const nameChanged = oldName !== newName;
+
+    if (!photoChanged && !nameChanged) {
+      functions.logger.info(`ℹ️ User ${userId} updated but profileImageUrl and username did not change. Skipping sync.`);
+      return null;
+    }
+
+    functions.logger.info(`👤 User ${userId} updated. Syncing data: photoChanged=${photoChanged}, nameChanged=${nameChanged}`);
+
+    const db = admin.firestore();
+    let currentBatch = db.batch();
+    let opCount = 0;
+
+    const commitBatchIfNeeded = async () => {
+      if (opCount >= 400) {
+        functions.logger.info(`💾 Committing sync batch of ${opCount} operations...`);
+        await currentBatch.commit();
+        currentBatch = db.batch();
+        opCount = 0;
+      }
+    };
+
+    // 1. Yorumları Senkronize Et - Collection Group Query
+    try {
+      const commentsSnap = await db.collectionGroup('comments')
+        .where('userId', '==', userId)
+        .get();
+
+      functions.logger.info(`💬 Found ${commentsSnap.size} comments for user ${userId} to sync.`);
+      
+      for (const doc of commentsSnap.docs) {
+        const updateData = {};
+        if (photoChanged) updateData.userProfileImageUrl = newPhoto;
+        if (nameChanged) updateData.userName = newName;
+
+        currentBatch.update(doc.ref, updateData);
+        opCount++;
+        await commitBatchIfNeeded();
+      }
+    } catch (commentErr) {
+      functions.logger.error('❌ Comments sync error:', commentErr);
+    }
+
+    // 2. Mesajları Senkronize Et (Gönderilen Mesajlar)
+    try {
+      const sentMsgSnap = await db.collection('messages')
+        .where('senderId', '==', userId)
+        .get();
+
+      functions.logger.info(`✉️ Found ${sentMsgSnap.size} sent messages for user ${userId} to sync.`);
+
+      for (const doc of sentMsgSnap.docs) {
+        const updateData = {};
+        if (photoChanged) updateData.senderImageUrl = newPhoto;
+        if (nameChanged) updateData.senderName = newName;
+
+        currentBatch.update(doc.ref, updateData);
+        opCount++;
+        await commitBatchIfNeeded();
+      }
+    } catch (msgErr) {
+      functions.logger.error('❌ Sent messages sync error:', msgErr);
+    }
+
+    // 3. Mesajları Senkronize Et (Alınan Mesajlar)
+    try {
+      const receivedMsgSnap = await db.collection('messages')
+        .where('receiverId', '==', userId)
+        .get();
+
+      functions.logger.info(`✉️ Found ${receivedMsgSnap.size} received messages for user ${userId} to sync.`);
+
+      for (const doc of receivedMsgSnap.docs) {
+        const updateData = {};
+        if (photoChanged) updateData.receiverImageUrl = newPhoto;
+        if (nameChanged) updateData.receiverName = newName;
+
+        currentBatch.update(doc.ref, updateData);
+        opCount++;
+        await commitBatchIfNeeded();
+      }
+    } catch (msgErr) {
+      functions.logger.error('❌ Received messages sync error:', msgErr);
+    }
+
+    // Commit any remaining operations
+    if (opCount > 0) {
+      functions.logger.info(`💾 Committing final sync batch of ${opCount} operations...`);
+      await currentBatch.commit();
+    }
+    functions.logger.info(`🎉 Sync completed successfully for user ${userId}.`);
+    return null;
+  }));
+
+/**
+ * 16. KUPON KAZIMA VE KAYDETME - MANUEL (Callable)
+ * Sadece adminler tetikleyebilir.
+ */
+exports.scrapeCouponsManual = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .https.onCall(wrapCall('scrapeCouponsManual', async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
+    }
+
+    const callerDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
+    const isCallerAdmin = callerDoc.exists && (
+      callerDoc.data().isAdmin === true ||
+      callerDoc.data().isadmin === true ||
+      callerDoc.data().isAdmin === 'true' ||
+      callerDoc.data().isadmin === 'true'
+    );
+    
+    if (!isCallerAdmin) {
+      throw new functions.https.HttpsError('permission-denied', 'Sadece adminler bu işlemi yapabilir.');
+    }
+
+    functions.logger.info('👥 Manual coupon scraping triggered by admin:', context.auth.uid);
+    const { scrapeAndSaveCoupons } = require('./coupon_scraper');
+    return await scrapeAndSaveCoupons();
+  }));
+
+/**
+ * 17. KUPON KAZIMA VE KAYDETME - ZAMANLANMIŞ (Scheduled)
+ * Her gün gece 04:00'da otomatik çalışır.
+ */
+exports.scrapeCouponsScheduled = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .pubsub.schedule('0 4 * * *')
+  .timeZone('Europe/Istanbul')
+  .onRun(wrapTrigger('scrapeCouponsScheduled', async (context) => {
+    functions.logger.info('⏰ Scheduled coupon scraping triggered...');
+    const { scrapeAndSaveCoupons } = require('./coupon_scraper');
+    const result = await scrapeAndSaveCoupons();
+    functions.logger.info('⏰ Scheduled coupon scraping finished:', result);
+    return null;
+  }));
 

@@ -472,10 +472,10 @@ class FirestoreService {
   // ===========================================================================
   // AYARLAR VE DİĞERLERİ (DealService içinde)
   // ===========================================================================
-
   Future<bool> isDealSharingEnabled() => _dealService.isDealSharingEnabled();
   Future<bool> setDealSharingEnabled(bool enabled) => _dealService.setDealSharingEnabled(enabled);
   Stream<bool> dealSharingEnabledStream() => firestore.collection('settings').doc('app').snapshots().map((s) => s.data()?['dealSharingEnabled'] ?? true);
+  Stream<bool> couponsEnabledStream() => firestore.collection('settings').doc('app').snapshots().map((s) => s.data()?['couponsEnabled'] ?? true);
   
   Stream<List<Deal>> getTestDealsStream() => _dealService.getTestDealsStream();
   Future<bool> deleteDealsBatch(List<String> dealIds) => _dealService.deleteDealsBatch(dealIds);

@@ -183,3 +183,26 @@ sudo docker restart prod-bot
 1.  **Yeni Mağaza Eklendiğinde:** Öncelikle doğrudan `fetch` ile istek atıp Cloudflare veya Akamai koruması olup olmadığını teyit edin. 403 Forbidden geliyorsa VM üzerinde `test_bypass` benzeri bir yöntemle Translate Proxy veya `curl` metodunu test edip bypass stratejisini seçin.
 2.  **Konteyner Portu:** Konteyner içerisindeki NodeJS sunucusu her zaman `PORT=8080` üzerinde çalışmalıdır. Host tarafındaki port yönlendirmesi (`8081` ve `8082`) sanal makinenin dışa açılan kapılarıdır. Dockerfile healthcheck'i container içi `8080/health` yolunu denetler.
 3.  **Firebase Kimlik Doğrulama:** Konteynerler VM üzerinde çalışırken `firebase_key.json` dosyalarını volume mount olarak bağlar. Local test yaparken `.env` dosyalarında ve kod seviyesinde `GOOGLE_APPLICATION_CREDENTIALS` dosya yolunun tırnaksız ve doğru tanımlandığından emin olun.
+
+---
+
+## 🔒 9. Akıllı Mükerrer Link ve Spam Engelleme (Cooldown) Mantığı
+
+Platformda aynı ürünün mükerrer şekilde üst üste paylaşılarak spam oluşturmasını engellemek amacıyla akıllı bir filtreleme mekanizması kurulmuştur:
+### URL Normalizasyonu ve cleanUrl Alanı:
+- Kısa link yönlendirmeleri (`amzn.eu`, `ty.gl`, `onelink.me` vb.) normalizasyon öncesinde HTTP istekleriyle takip edilerek nihai hedef ürün URL'ine çözümlenir (`resolveUrlRedirects`). Böylece aynı ürünün farklı cihazlardan veya zamanlarda üretilen farklı kısa linkleri tek bir asıl linke indirgenir.
+- Gelen linklerdeki takip ve reklam parametreleri (`utm_source`, `merchantId`, `spm`, `adjust_t` vb.) temizlenerek arındırılmış yalın ürün URL'i elde edilir.
+- Bu yalın URL, veritabanındaki fırsat dokümanlarında **`cleanUrl`** alanında saklanır. Mükerrerlik sorguları doğrudan bu alan üzerinden yürütülür.
+- Kullanıcıların yönlendirileceği asıl `link`/`url` alanlarındaki affiliate parametreleri **asla temizlenmez/değiştirilmez**; böylece affiliate komisyon gelirleri tam koruma altındadır.
+
+### Mükerrerlik Karar Kuralları:
+Sistemde yeni bir link paylaşıldığında veritabanı taranır:
+1.  **Durum A (Eşleşme Yoksa):** Link sistemde aktif olarak bulunmuyorsa paylaşıma izin verilir.
+2.  **Durum B (Aktif Eşleşme Varsa):** Eşleşen link veritabanında varsa ve fırsat hala **Aktif/Sıcak** durumdaysa paylaşım **engellenir**.
+    - *Aktif/Sıcak Koşulu:* Fırsatın yönetici tarafından onaylanmış olması (`isApproved: true`), el ile bitti olarak işaretlenmemiş olması (`isExpired: false`), toplulukça bitti oylanmaması (`expiredVotes < 15`), oylama puanının eksiye düşmemiş olması (`hotVotes - coldVotes > -5`) ve topluluk oylarıyla soğutulmamış olması (`totalVotes >= 5` ise sıcaklık yüzdesi `%20` üzerinde). Onay bekleyen (draft/pending) fırsatlar mükerrer engeline takılmaz.
+3.  **Durum C (Pasif/Biten Eşleşme Varsa):** Eşleşen link var ancak fırsat **Pasif/Biten** (expired, stok bitti veya soğuk) durumdaysa, ürünün yeniden indirime girdiği varsayılarak **yeni paylaşıma izin verilir**.
+
+### UX Davranışı (Mobil):
+- Mobil uygulamadan mükerrer aktif paylaşım yapılmaya çalışıldığında kullanıcı engellenir ve ekranda özel bir diyalog penceresi açılır. Kullanıcıya **"Fırsata Git"** butonu sunularak doğrudan mevcut aktif fırsatın detay sayfasına yönlendirilmesi sağlanır.
+- Telegram botu ise aktif mükerrer linkleri sessizce konsola loglayarak atlar.
+

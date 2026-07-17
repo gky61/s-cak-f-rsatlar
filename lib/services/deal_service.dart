@@ -5,6 +5,7 @@ import 'auth_service.dart';
 import 'notification_service.dart';
 import 'content_moderation_service.dart';
 import 'user_service.dart';
+import 'link_preview_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -220,7 +221,65 @@ class DealService {
       if (!moderationResult.isSafe) {
         throw Exception(moderationResult.reason ?? 'İçerik uygunsuz');
       }
+            // Akıllı Mükerrer Link Kontrolü
+      // Önce yönlendirmeleri çözüyoruz (short link vb. durumları için)
+      String resolvedUrl = url;
+      try {
+        final linkPreviewService = LinkPreviewService();
+        resolvedUrl = await linkPreviewService.resolveUrlRedirects(url);
+      } catch (e) {
+        _log('⚠️ Yönlendirme çözülemedi: $e');
+      }
+
+      final cleanUrl = Deal.cleanProductUrl(resolvedUrl);
+      if (cleanUrl.isNotEmpty) {
+        final querySnapshot = await _firestore
+            .collection('deals')
+            .where('cleanUrl', isEqualTo: cleanUrl)
+            .where('isApproved', isEqualTo: true)
+            .get();
+        
+        if (querySnapshot.docs.isNotEmpty) {
+          for (var doc in querySnapshot.docs) {
+            final dealData = doc.data();
+            
+            // Pasif/Biten Kontrolleri:
+            final isExpired = dealData['isExpired'] == true;
+            final expiredVotes = dealData['expiredVotes'] ?? 0;
+            if (isExpired || expiredVotes >= 15) {
+              continue;
+            }
+            
+            // Soğuk oylama kontrolü:
+            final hotVotes = dealData['hotVotes'] ?? 0;
+            final coldVotes = dealData['coldVotes'] ?? 0;
+            final totalVotes = hotVotes + coldVotes;
+            if (totalVotes >= 5) {
+              final hotPercentage = (hotVotes / totalVotes * 100);
+              if (hotPercentage < 20) {
+                continue;
+              }
+            }
+            if (hotVotes - coldVotes <= -5) {
+              continue;
+            }
+            
+            // Aktif fırsat eşleşti -> paylaşımı engelle
+            throw Exception('already_shared:${doc.id}');
+          }
+        }
+      }
       
+      bool isApprovalRequired = true;
+      try {
+        final settingsDoc = await _firestore.collection('settings').doc('app').get();
+        if (settingsDoc.exists) {
+          isApprovalRequired = settingsDoc.data()?['dealApprovalRequired'] ?? true;
+        }
+      } catch (e) {
+        _log('⚠️ Settings loading error: $e');
+      }
+
       final deal = Deal(
         id: '',
         title: title,
@@ -237,10 +296,11 @@ class DealService {
         commentCount: 0,
         createdAt: DateTime.now(),
         isEditorPick: false,
-        isApproved: false,
+        isApproved: isApprovalRequired ? false : true,
         isUserSubmitted: true,
+        cleanUrl: cleanUrl,
       );
-      
+
       final docRef = await _firestore.collection('deals').add(deal.toFirestore());
       
       // Kullanıcı puanını artır (UserService kullanımı)
@@ -344,8 +404,9 @@ class DealService {
             coldVotes += 1;
           } else if (newType == 'expired') {
             expiredVotes += 1;
-            // 15 veya daha fazla "fırsat bitti" oyu varsa fırsatı bitti olarak işaretle
-            if (expiredVotes >= 15) {
+            // Alev (hotVotes) popülerliğine göre dinamik bitiş limiti (en az 5, en fazla 20)
+            final dynamicLimit = (5 + (hotVotes / 5).floor()).clamp(5, 20);
+            if (expiredVotes >= dynamicLimit) {
               isExpired = true;
             }
           }

@@ -105,6 +105,8 @@ let currentUserDetail = null; // Seçili kullanıcı detayı
 let dealsTrendChartInstance = null;
 let categoriesDistributionChartInstance = null;
 let notifTrendChartInstance = null;
+let coupons = [];
+let couponsUnsubscribe = null;
 
 // DOM Elements - Wait for DOM to be ready
 let loginScreen, adminPanel, googleSignInBtn, logoutBtn, userName, userAvatar, loginError;
@@ -642,6 +644,14 @@ function initEventListeners() {
     if (settingsToggleDealSharingBtn) {
         settingsToggleDealSharingBtn.addEventListener('change', async () => {
             await toggleDealSharing();
+        });
+    }
+
+    // Toggle Deal Approval switch (Settings View)
+    const settingsToggleDealApprovalBtn = document.getElementById('settingsToggleDealApprovalBtn');
+    if (settingsToggleDealApprovalBtn) {
+        settingsToggleDealApprovalBtn.addEventListener('change', async () => {
+            await toggleDealApproval();
         });
     }
 
@@ -2674,7 +2684,7 @@ function handleCancelDeal(event) {
 
 // View management
 function showView(viewId) {
-    const views = ['dashboardView', 'dealsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'testAutomationView'];
+    const views = ['dashboardView', 'dealsView', 'couponsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'testAutomationView'];
     views.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -2693,6 +2703,7 @@ function showDashboardView() {
     updateMenuActiveState('dashboard');
     loadDashboardData();
 }
+
 
 function showDealsView() {
     currentView = 'deals';
@@ -2767,6 +2778,14 @@ function updateMenuActiveState(activeView) {
             dealsMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
             dealsMenuItem.classList.remove('text-slate-400');
             const icon = dealsMenuItem.querySelector('.material-symbols-outlined');
+            if (icon) icon.classList.add('icon-filled');
+        }
+    } else if (activeView === 'coupons') {
+        const couponsMenuItem = document.getElementById('couponsMenuBtn');
+        if (couponsMenuItem) {
+            couponsMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
+            couponsMenuItem.classList.remove('text-slate-400');
+            const icon = couponsMenuItem.querySelector('.material-symbols-outlined');
             if (icon) icon.classList.add('icon-filled');
         }
     } else if (activeView === 'users') {
@@ -4715,17 +4734,37 @@ window.sendAdminMessage = async function (userId, title, content) {
     }
 };
 
-// Deal Sharing durumunu yükle ve butonu güncelle
+// Deal Sharing ve Onay durumunu yükle ve butonu güncelle
 async function loadDealSharingStatus() {
     try {
-        console.log('📥 Loading deal sharing status...');
+        console.log('📥 Loading deal sharing and approval status...');
         const settingsDoc = await db.collection('settings').doc('app').get();
         const dealSharingEnabled = settingsDoc.exists && settingsDoc.data()
             ? (settingsDoc.data().dealSharingEnabled !== false)
             : true;
+            
+        const dealApprovalRequired = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().dealApprovalRequired !== false)
+            : true;
+            
+        const couponsEnabled = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().couponsEnabled !== false)
+            : true;
 
         console.log('📊 Deal sharing enabled:', dealSharingEnabled);
+        console.log('📊 Deal approval required:', dealApprovalRequired);
+        console.log('📊 Coupons enabled:', couponsEnabled);
         updateDealSharingButton(dealSharingEnabled);
+        
+        const approvalToggle = document.getElementById('settingsToggleDealApprovalBtn');
+        if (approvalToggle) {
+            approvalToggle.checked = dealApprovalRequired;
+        }
+
+        const couponsToggle = document.getElementById('settingsToggleCouponsBtn');
+        if (couponsToggle) {
+            couponsToggle.checked = couponsEnabled;
+        }
     } catch (error) {
         console.error('❌ Error loading deal sharing status:', error);
         updateDealSharingButton(true); // Varsayılan olarak aktif
@@ -4792,6 +4831,76 @@ async function toggleDealSharing() {
     } catch (error) {
         console.error('❌ Error toggling deal sharing:', error);
         showError('Paylaşım durumu değiştirilirken hata oluştu: ' + error.message);
+    }
+}
+
+// Deal Approval durumunu toggle et
+async function toggleDealApproval() {
+    try {
+        const settingsRef = db.collection('settings').doc('app');
+        const settingsDoc = await settingsRef.get();
+
+        const currentStatus = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().dealApprovalRequired !== false)
+            : true;
+
+        const newStatus = !currentStatus;
+
+        await settingsRef.set({
+            dealApprovalRequired: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        const message = newStatus
+            ? '✅ Fırsat paylaşımları için admin onayı aktifleştirildi!'
+            : '🚫 Fırsat paylaşımları için admin onayı devre dışı bırakıldı (Doğrudan Yayınlama)!';
+        showSuccess(message);
+
+        console.log(`✅ Deal approval requirement set to ${newStatus}`);
+    } catch (error) {
+        console.error('❌ Error toggling deal approval requirement:', error);
+        showError('Onay gereksinimi değiştirilirken hata oluştu: ' + error.message);
+        
+        // Reset toggle switch state on error
+        const toggle = document.getElementById('settingsToggleDealApprovalBtn');
+        if (toggle) {
+            toggle.checked = !toggle.checked;
+        }
+    }
+}
+
+// Coupons Enabled durumunu toggle et
+async function toggleCouponsEnabled() {
+    try {
+        const settingsRef = db.collection('settings').doc('app');
+        const settingsDoc = await settingsRef.get();
+
+        const currentStatus = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().couponsEnabled !== false)
+            : true;
+
+        const newStatus = !currentStatus;
+
+        await settingsRef.set({
+            couponsEnabled: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        const message = newStatus
+            ? '✅ Kuponlar modülü mobil uygulamada aktifleştirildi!'
+            : '🚫 Kuponlar modülü mobil uygulamada devre dışı bırakıldı!';
+        showSuccess(message);
+
+        console.log(`✅ Coupons enabled status set to ${newStatus}`);
+    } catch (error) {
+        console.error('❌ Error toggling coupons enabled status:', error);
+        showError('Kupon modülü durumu değiştirilirken hata oluştu: ' + error.message);
+        
+        // Reset toggle switch state on error
+        const toggle = document.getElementById('settingsToggleCouponsBtn');
+        if (toggle) {
+            toggle.checked = !toggle.checked;
+        }
     }
 }
 
@@ -7617,6 +7726,381 @@ function startBotLogPolling(botUrl) {
         } catch (_) {}
     }, 1500);
 }
+
+// ==========================================
+// COUPONS MANAGEMENT SECTION (KUPONLAR)
+// ==========================================
+
+function showCouponsView() {
+    currentView = 'coupons';
+    showView('couponsView');
+    updateMenuActiveState('coupons');
+    if (coupons.length === 0) {
+        loadCoupons();
+    } else {
+        renderCoupons();
+    }
+}
+
+function loadCoupons() {
+    const loadingEl = document.getElementById('couponsLoadingIndicator');
+    const emptyEl = document.getElementById('couponsEmptyState');
+    const listEl = document.getElementById('couponsList');
+
+    if (loadingEl) {
+        loadingEl.style.display = 'block';
+        loadingEl.textContent = 'Yükleniyor...';
+    }
+    if (emptyEl) emptyEl.classList.add('hidden');
+
+    if (couponsUnsubscribe) {
+        couponsUnsubscribe();
+        couponsUnsubscribe = null;
+    }
+
+    try {
+        couponsUnsubscribe = db.collection('kuponlar')
+            .orderBy('olusturulmaTarihi', 'desc')
+            .onSnapshot((snapshot) => {
+                coupons = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    let date = new Date();
+                    if (data.olusturulmaTarihi) {
+                        if (typeof data.olusturulmaTarihi.toDate === 'function') {
+                            date = data.olusturulmaTarihi.toDate();
+                        } else {
+                            date = new Date(data.olusturulmaTarihi);
+                        }
+                    }
+                    return {
+                        id: doc.id,
+                        magazaAdi: data.magazaAdi || '',
+                        baslik: data.baslik || '',
+                        aciklama: data.aciklama || '',
+                        kuponKodu: data.kuponKodu || '',
+                        paylasanKullaniciId: data.paylasanKullaniciId || '',
+                        olusturulmaTarihi: date
+                    };
+                });
+
+                if (loadingEl) loadingEl.style.display = 'none';
+
+                if (coupons.length === 0) {
+                    if (emptyEl) {
+                        emptyEl.classList.remove('hidden');
+                        emptyEl.textContent = 'Henüz kupon yok';
+                    }
+                    if (listEl) listEl.innerHTML = '';
+                } else {
+                    renderCoupons();
+                }
+            }, (error) => {
+                console.error("Error loading coupons:", error);
+                if (loadingEl) loadingEl.textContent = 'Hata: ' + error.message;
+                showError("Kuponlar yüklenirken hata oluştu: " + error.message);
+            });
+    } catch (err) {
+        console.error("Error setting up coupons listener:", err);
+        if (loadingEl) loadingEl.textContent = 'Hata: ' + err.message;
+    }
+}
+
+function renderCoupons() {
+    const listEl = document.getElementById('couponsList');
+    const emptyEl = document.getElementById('couponsEmptyState');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+
+    const searchQuery = (document.getElementById('couponSearchInput')?.value || '').toLowerCase().trim();
+
+    const filtered = coupons.filter(c => {
+        if (!searchQuery) return true;
+        return c.magazaAdi.toLowerCase().includes(searchQuery) ||
+               c.baslik.toLowerCase().includes(searchQuery) ||
+               c.aciklama.toLowerCase().includes(searchQuery) ||
+               c.kuponKodu.toLowerCase().includes(searchQuery);
+    });
+
+    if (filtered.length === 0) {
+        if (emptyEl) {
+            emptyEl.classList.remove('hidden');
+            emptyEl.textContent = searchQuery ? 'Aramayla eşleşen kupon bulunamadı.' : 'Henüz kupon yok';
+        }
+        return;
+    }
+
+    if (emptyEl) emptyEl.classList.add('hidden');
+
+    filtered.forEach(kupon => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800';
+
+        const dateStr = kupon.olusturulmaTarihi.toLocaleString('tr-TR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        tr.innerHTML = `
+            <td class="p-4 font-bold text-primary">${kupon.magazaAdi}</td>
+            <td class="p-4">
+                <div class="font-semibold text-slate-900 dark:text-white">${kupon.baslik}</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">${kupon.aciklama || '-'}</div>
+            </td>
+            <td class="p-4 font-mono font-bold bg-slate-50 dark:bg-surface-darker px-3 py-1 rounded text-center inline-block mt-2">${kupon.kuponKodu}</td>
+            <td class="p-4 font-mono text-xs text-slate-500">${kupon.paylasanKullaniciId || 'admin'}</td>
+            <td class="p-4 text-xs text-slate-500">${dateStr}</td>
+            <td class="p-4 text-right">
+                <div class="flex justify-end gap-2">
+                    <button onclick="editCoupon('${kupon.id}')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark hover:text-primary hover:border-primary text-xs font-semibold transition-colors cursor-pointer">
+                        <span class="material-symbols-outlined text-[16px]">edit</span>
+                        <span>Düzenle</span>
+                    </button>
+                    <button onclick="deleteCoupon('${kupon.id}')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-semibold transition-colors cursor-pointer">
+                        <span class="material-symbols-outlined text-[16px]">delete</span>
+                        <span>Sil</span>
+                    </button>
+                </div>
+            </td>
+        `;
+        listEl.appendChild(tr);
+    });
+}
+
+function deleteCoupon(id) {
+    if (confirm("Bu kuponu silmek istediğinize emin misiniz?")) {
+        db.collection('kuponlar').doc(id).delete()
+            .then(() => {
+                showSuccess("Kupon başarıyla silindi!");
+            })
+            .catch(error => {
+                showError("Kupon silinirken hata oluştu: " + error.message);
+            });
+    }
+}
+
+function openAddCouponModal() {
+    const modal = document.getElementById('couponModal');
+    
+    document.getElementById('couponIdInput').value = '';
+    document.getElementById('couponStoreSelect').value = 'Trendyol';
+    document.getElementById('couponTitleInput').value = '';
+    document.getElementById('couponDescriptionInput').value = '';
+    document.getElementById('couponCodeInput').value = '';
+    document.getElementById('couponModalTitle').textContent = 'Yeni Kupon Ekle';
+
+    if (modal) modal.classList.remove('hidden');
+}
+
+function editCoupon(id) {
+    const kupon = coupons.find(c => c.id === id);
+    if (!kupon) return;
+
+    const modal = document.getElementById('couponModal');
+    
+    document.getElementById('couponIdInput').value = kupon.id;
+    document.getElementById('couponStoreSelect').value = kupon.magazaAdi;
+    document.getElementById('couponTitleInput').value = kupon.baslik;
+    document.getElementById('couponDescriptionInput').value = kupon.aciklama;
+    document.getElementById('couponCodeInput').value = kupon.kuponKodu;
+    document.getElementById('couponModalTitle').textContent = 'Kupon Düzenle';
+
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeCouponModal() {
+    const modal = document.getElementById('couponModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function deleteAllCoupons() {
+    if (confirm("Tüm kuponları veritabanından kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
+        const deleteBtn = document.getElementById('deleteAllCouponsBtn');
+        if (!deleteBtn) return;
+        const originalHtml = deleteBtn.innerHTML;
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> <span class="hidden sm:inline">Siliniyor...</span>`;
+
+        db.collection('kuponlar').get()
+            .then(async (querySnapshot) => {
+                const docs = querySnapshot.docs;
+                if (docs.length === 0) {
+                    showSuccess("Silecek kupon bulunamadı.");
+                    deleteBtn.disabled = false;
+                    deleteBtn.innerHTML = originalHtml;
+                    return;
+                }
+
+                // Partition deletions in chunks of 500
+                const chunks = [];
+                for (let i = 0; i < docs.length; i += 500) {
+                    chunks.push(docs.slice(i, i + 500));
+                }
+
+                for (const chunk of chunks) {
+                    const batch = db.batch();
+                    chunk.forEach((doc) => {
+                        batch.delete(doc.ref);
+                    });
+                    await batch.commit();
+                }
+
+                showSuccess("Tüm kuponlar başarıyla silindi!");
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = originalHtml;
+                loadCoupons();
+            })
+            .catch((error) => {
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = originalHtml;
+                showError("Kuponlar silinirken hata oluştu: " + error.message);
+            });
+    }
+}
+
+// Register Coupon Event Listeners
+function initCouponsListeners() {
+    const couponsMenuBtn = document.getElementById('couponsMenuBtn');
+    if (couponsMenuBtn) {
+        couponsMenuBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            showCouponsView();
+        });
+    }
+
+    const refreshCouponsBtn = document.getElementById('refreshCouponsBtn');
+    if (refreshCouponsBtn) {
+        refreshCouponsBtn.addEventListener('click', () => {
+            loadCoupons();
+        });
+    }
+
+    const addCouponBtn = document.getElementById('addCouponBtn');
+    if (addCouponBtn) {
+        addCouponBtn.addEventListener('click', () => {
+            openAddCouponModal();
+        });
+    }
+
+    const couponSearchInput = document.getElementById('couponSearchInput');
+    if (couponSearchInput) {
+        couponSearchInput.addEventListener('input', () => {
+            renderCoupons();
+        });
+    }
+
+    const couponForm = document.getElementById('couponForm');
+    if (couponForm) {
+        couponForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const id = document.getElementById('couponIdInput').value;
+            const magazaAdi = document.getElementById('couponStoreSelect').value;
+            const baslik = document.getElementById('couponTitleInput').value.trim();
+            const aciklama = document.getElementById('couponDescriptionInput').value.trim();
+            const kuponKodu = document.getElementById('couponCodeInput').value.trim().toUpperCase();
+
+            if (!baslik || !kuponKodu) {
+                showError("Lütfen tüm zorunlu alanları doldurun.");
+                return;
+            }
+
+            const payload = {
+                magazaAdi,
+                baslik,
+                aciklama,
+                kuponKodu
+            };
+
+            if (id) {
+                // Update
+                db.collection('kuponlar').doc(id).update(payload)
+                    .then(() => {
+                        showSuccess("Kupon başarıyla güncellendi!");
+                        closeCouponModal();
+                    })
+                    .catch(err => {
+                        showError("Güncelleme hatası: " + err.message);
+                    });
+            } else {
+                // Create
+                payload.olusturulmaTarihi = firebase.firestore.FieldValue.serverTimestamp();
+                payload.paylasanKullaniciId = 'admin';
+                payload.kaynakTipi = 'web';
+                payload.sicakOySayisi = 0;
+                payload.sogukOySayisi = 0;
+                payload.durum = 'aktif';
+
+                db.collection('kuponlar').add(payload)
+                    .then(() => {
+                        showSuccess("Kupon başarıyla oluşturuldu!");
+                        closeCouponModal();
+                    })
+                    .catch(err => {
+                        showError("Ekleme hatası: " + err.message);
+                    });
+            }
+        });
+    }
+
+    const scrapeCouponsBtn = document.getElementById('scrapeCouponsBtn');
+    if (scrapeCouponsBtn) {
+        scrapeCouponsBtn.addEventListener('click', () => {
+            if (!confirm("Kuponları DonanımHaber'den otomatik çekmek istediğinize emin misiniz? Bu işlem mevcuttaki web kaynaklı (radar) kuponları silecek ve yeni kuponları yükleyecektir. Topluluk kuponları korunacaktır. İşlem 1-2 dakika sürebilir.")) {
+                return;
+            }
+
+            const originalHtml = scrapeCouponsBtn.innerHTML;
+            scrapeCouponsBtn.disabled = true;
+            scrapeCouponsBtn.innerHTML = `
+                <span class="material-symbols-outlined animate-spin text-[20px]">sync</span>
+                <span class="hidden sm:inline">Kazınıyor...</span>
+            `;
+
+            const scrapeCouponsManual = firebase.functions().httpsCallable('scrapeCouponsManual');
+            scrapeCouponsManual()
+                .then((res) => {
+                    scrapeCouponsBtn.disabled = false;
+                    scrapeCouponsBtn.innerHTML = originalHtml;
+                    if (res.data && res.data.success) {
+                        showSuccess(`${res.data.count} adet kupon başarıyla çekildi ve güncellendi.`);
+                        loadCoupons();
+                    } else {
+                        showError(res.data.message || "Kupon çekme işlemi başarısız.");
+                    }
+                })
+                .catch((err) => {
+                    scrapeCouponsBtn.disabled = false;
+                    scrapeCouponsBtn.innerHTML = originalHtml;
+                    showError("Kupon çekme hatası: " + err.message);
+                });
+        });
+    }
+
+    const deleteAllCouponsBtn = document.getElementById('deleteAllCouponsBtn');
+    if (deleteAllCouponsBtn) {
+        deleteAllCouponsBtn.addEventListener('click', () => {
+            deleteAllCoupons();
+        });
+    }
+
+    const settingsToggleCouponsBtn = document.getElementById('settingsToggleCouponsBtn');
+    if (settingsToggleCouponsBtn) {
+        settingsToggleCouponsBtn.addEventListener('change', () => {
+            toggleCouponsEnabled();
+        });
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCouponsListeners);
+} else {
+    initCouponsListeners();
+}
+
 
 
 
