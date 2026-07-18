@@ -633,7 +633,10 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(112),
+        preferredSize: Size.fromHeight(
+          MediaQuery.of(context).padding.top +
+          (_isSearchMode ? 56 : 92),
+        ),
         child: Container(
           decoration: BoxDecoration(
             color: isDark ? AppTheme.darkBackground : Colors.white,
@@ -646,114 +649,78 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ─── Row 1: Logo  +  Search  +  [Admin] ──────────────────
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
-                  child: _isSearchMode
-                      ? Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _searchController,
-                                autofocus: true,
-                                onChanged: _onSearchChanged,
-                                style: TextStyle(
-                                  color: isDark ? Colors.white : AppTheme.textPrimary,
-                                  fontSize: 15,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Fırsat, mağaza veya açıklama ara...',
-                                  hintStyle: TextStyle(
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.4)
-                                        : AppTheme.textSecondary,
-                                    fontSize: 15,
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.search_rounded,
-                                    color: AppTheme.primary.withValues(alpha: 0.7),
-                                    size: 20,
-                                  ),
-                                  suffixIcon: _searchQuery.isNotEmpty
-                                      ? IconButton(
-                                          icon: const Icon(Icons.close_rounded, size: 18),
-                                          onPressed: _clearSearch,
-                                          color: isDark
-                                              ? Colors.white54
-                                              : AppTheme.textSecondary,
-                                        )
-                                      : null,
-                                  filled: true,
-                                  fillColor: isDark
-                                      ? Colors.white.withValues(alpha: 0.07)
-                                      : AppTheme.primary.withValues(alpha: 0.05),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 10),
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close_rounded),
-                              onPressed: _toggleSearchMode,
-                              color: isDark ? Colors.white70 : AppTheme.textSecondary,
-                            ),
-                          ],
-                        )
-                      : Row(
-                          children: [
-                            // App logo
-                            Image.asset(
-                              'assets/store-icon.png',
-                              width: 32,
-                              height: 32,
-                            ),
-                            const SizedBox(width: 8),
-                            // App name
-                            Text(
-                              'Fırsatkolik',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                color: isDark ? Colors.white : AppTheme.textPrimary,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            const Spacer(),
-                            // Search button
-                            _buildHeaderIconButton(
-                              icon: Icons.search_rounded,
-                              onTap: _toggleSearchMode,
-                              isDark: isDark,
-                            ),
-                            if (_isAdmin) ...[
-                              _buildHeaderIconButton(
-                                icon: Icons.admin_panel_settings_rounded,
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => const AdminScreen()),
-                                ),
-                                isDark: isDark,
-                                accent: primaryColor,
-                              ),
-                            ],
-                          ],
-                        ),
-                ),
-                // ─── Row 2: Kataloglar + Kuponlar  +  View toggle ─────────
-                if (!_isSearchMode)
+                // ─── Ana Satır ─────────────────────────────────────────
+                if (_isSearchMode)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                    padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
                     child: Row(
                       children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            autofocus: true,
+                            onChanged: _onSearchChanged,
+                            style: TextStyle(
+                              color: isDark ? Colors.white : AppTheme.textPrimary,
+                              fontSize: 15,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Fırsat, mağaza veya açıklama ara...',
+                              hintStyle: TextStyle(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.4)
+                                    : AppTheme.textSecondary,
+                                fontSize: 15,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search_rounded,
+                                color: AppTheme.primary.withValues(alpha: 0.7),
+                                size: 20,
+                              ),
+                              suffixIcon: _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon:
+                                          const Icon(Icons.close_rounded, size: 18),
+                                      onPressed: _clearSearch,
+                                      color: isDark
+                                          ? Colors.white54
+                                          : AppTheme.textSecondary,
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: isDark
+                                  ? Colors.white.withValues(alpha: 0.07)
+                                  : AppTheme.primary.withValues(alpha: 0.05),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 22),
+                          onPressed: _toggleSearchMode,
+                          color:
+                              isDark ? Colors.white70 : AppTheme.textSecondary,
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 8, 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // ── Kataloglar / Kuponlar quick-action chips ──
                         StreamBuilder<bool>(
                           stream: _firestoreService.couponsEnabledStream(),
                           initialData: true,
@@ -782,7 +749,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                          builder: (_) => const KuponlarPage()),
+                                          builder: (_) =>
+                                              const KuponlarPage()),
                                     ),
                                     isDark: isDark,
                                     color: AppTheme.primary,
@@ -793,7 +761,26 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                         ),
                         const Spacer(),
-                        // Grid / List toggle
+                        // ── Search ──
+                        _buildHeaderIconButton(
+                          icon: Icons.search_rounded,
+                          onTap: _toggleSearchMode,
+                          isDark: isDark,
+                        ),
+                        // ── Admin (sadece adminlere) ──
+                        if (_isAdmin)
+                          _buildHeaderIconButton(
+                            icon: Icons.admin_panel_settings_rounded,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const AdminScreen()),
+                            ),
+                            isDark: isDark,
+                            accent: primaryColor,
+                          ),
+                        const SizedBox(width: 4),
+                        // ── Grid / List toggle ──
                         Container(
                           height: 32,
                           padding: const EdgeInsets.all(3),
@@ -801,14 +788,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: isDark
                                 ? Colors.white.withValues(alpha: 0.08)
                                 : Colors.black.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(9),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _buildViewModeButton(
                                 icon: Icons.grid_view_rounded,
-                                isSelected: _viewMode == CardViewMode.vertical,
+                                isSelected:
+                                    _viewMode == CardViewMode.vertical,
                                 onTap: () => _themeService
                                     .setViewMode(CardViewMode.vertical),
                                 isDark: isDark,
@@ -827,7 +815,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                // ─── Row 3: Category filter chips ─────────────────────────
+                // ─── Kategori Filtreleri ────────────────────────────────
                 if (!_isSearchMode)
                   SizedBox(
                     height: 36,
@@ -839,8 +827,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (context, index) {
                         final category = Category.categories[index];
-                        final isSelected = _selectedCategory == category.id &&
-                            _selectedSubCategory == null;
+                        final isSelected =
+                            _selectedCategory == category.id &&
+                                _selectedSubCategory == null;
                         return FilterChip(
                           label: Text(category.name),
                           selected: isSelected,
@@ -849,8 +838,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             _selectedSubCategory = null;
                             _displayLimit = 20;
                           }),
-                          backgroundColor:
-                              isDark ? AppTheme.darkSurface : AppTheme.surface,
+                          backgroundColor: isDark
+                              ? AppTheme.darkSurface
+                              : AppTheme.surface,
                           selectedColor: AppTheme.secondary,
                           labelStyle: TextStyle(
                             color: isSelected
@@ -877,13 +867,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 6),
+                              horizontal: 14, vertical: 6),
                           visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                         );
                       },
                     ),
                   ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
               ],
             ),
           ),
@@ -931,7 +923,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisCount: 2,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
-                        childAspectRatio: 0.68,
+                        childAspectRatio: 0.63,
                       ),
                       itemCount: 6,
                       itemBuilder: (context, index) {
@@ -1066,7 +1058,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
-                          childAspectRatio: 0.68,
+                          childAspectRatio: 0.63,
                         ),
                         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                         cacheExtent: 500, // Optimize edilmiş cache
