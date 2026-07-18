@@ -358,7 +358,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            _formatDateRange(catalog.basgangicTarihi, catalog.bitisTarihi),
+                            _formatDateRange(catalog.baslangicTarihi, catalog.bitisTarihi),
                             style: TextStyle(
                               fontSize: 10,
                               color: isDark ? Colors.grey[400] : Colors.grey[600],
