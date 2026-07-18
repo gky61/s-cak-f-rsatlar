@@ -2734,3 +2734,47 @@ exports.scrapeCouponsScheduled = functions
     return null;
   }));
 
+/**
+ * 18. AKTÜEL KATALOG KAZIMA VE KAYDETME - MANUEL (Callable)
+ * Sadece adminler tetikleyebilir.
+ */
+exports.scrapeCatalogsManual = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .https.onCall(wrapCall('scrapeCatalogsManual', async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
+    }
+
+    const callerDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
+    const isCallerAdmin = callerDoc.exists && (
+      callerDoc.data().isAdmin === true ||
+      callerDoc.data().isadmin === true ||
+      callerDoc.data().isAdmin === 'true' ||
+      callerDoc.data().isadmin === 'true'
+    );
+    
+    if (!isCallerAdmin) {
+      throw new functions.https.HttpsError('permission-denied', 'Sadece adminler bu işlemi yapabilir.');
+    }
+
+    functions.logger.info('👥 Manual catalog scraping triggered by admin:', context.auth.uid);
+    const { scrapeAndSaveCatalogs } = require('./catalog_scraper');
+    return await scrapeAndSaveCatalogs();
+  }));
+
+/**
+ * 19. AKTÜEL KATALOG KAZIMA VE KAYDETME - ZAMANLANMIŞ (Scheduled)
+ * Her gün gece 03:00'da otomatik çalışır.
+ */
+exports.scrapeCatalogsScheduled = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .pubsub.schedule('0 3 * * *')
+  .timeZone('Europe/Istanbul')
+  .onRun(wrapTrigger('scrapeCatalogsScheduled', async (context) => {
+    functions.logger.info('⏰ Scheduled catalog scraping triggered...');
+    const { scrapeAndSaveCatalogs } = require('./catalog_scraper');
+    const result = await scrapeAndSaveCatalogs();
+    functions.logger.info('⏰ Scheduled catalog scraping finished:', result);
+    return null;
+  }));
+

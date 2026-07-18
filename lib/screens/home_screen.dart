@@ -24,6 +24,7 @@ import 'admin_screen.dart';
 import 'profile_screen.dart';
 import 'favorites_screen.dart';
 import 'kuponlar_page.dart';
+import 'aktuel_magazalar_page.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -742,6 +743,33 @@ class _HomeScreenState extends State<HomeScreen> {
                                     width: 1,
                                     height: 24,
                                     color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Kataloglar butonu
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(999),
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => const AktuelMagazalarPage()),
+                                          );
+                                        },
+                                        child: Icon(
+                                          Icons.menu_book_outlined,
+                                          color: isDark ? Colors.white : AppTheme.textPrimary,
+                                          size: 22,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                   const SizedBox(width: 12),
                                   // Kuponlar butonu
