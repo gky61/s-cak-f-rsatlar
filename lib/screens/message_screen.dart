@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
@@ -9,10 +8,6 @@ import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'profile_screen.dart';
-
-void _log(String message) {
-  if (kDebugMode) print(message);
-}
 
 class MessageScreen extends StatefulWidget {
   final String otherUserId;
@@ -115,49 +110,58 @@ class _MessageScreenState extends State<MessageScreen> {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final currentUserId = _authService.currentUser?.uid;
 
-    return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
-      appBar: AppBar(
-        title: GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ProfileScreen(userId: widget.otherUserId),
-              ),
-            );
-          },
-          behavior: HitTestBehavior.opaque,
-          child: Row(
-            children: [
-              ClipOval(
-                child: widget.otherUserImageUrl.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: widget.otherUserImageUrl,
-                        width: 32,
-                        height: 32,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
-                        errorWidget: (context, url, error) => const Icon(Icons.person, size: 32),
-                      )
-                    : const Icon(Icons.person, size: 32),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  widget.otherUserName,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('users').doc(currentUserId).snapshots(),
+      builder: (context, currentUserSnapshot) {
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).snapshots(),
+          builder: (context, otherUserSnapshot) {
+            String currentUserImageUrl = _authService.currentUser?.photoURL ?? '';
+            if (currentUserSnapshot.hasData && currentUserSnapshot.data!.exists) {
+              currentUserImageUrl = currentUserSnapshot.data!.data()?['profileImageUrl'] ?? currentUserImageUrl;
+            }
+
+            String otherUserImageUrl = widget.otherUserImageUrl;
+            String otherUserName = widget.otherUserName;
+            if (otherUserSnapshot.hasData && otherUserSnapshot.data!.exists) {
+              otherUserImageUrl = otherUserSnapshot.data!.data()?['profileImageUrl'] ?? otherUserImageUrl;
+              otherUserName = otherUserSnapshot.data!.data()?['username'] ?? otherUserSnapshot.data!.data()?['displayName'] ?? otherUserName;
+            }
+
+            return Scaffold(
+              backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
+              appBar: AppBar(
+                title: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ProfileScreen(userId: widget.otherUserId),
+                      ),
+                    );
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    children: [
+                      ClipOval(
+                        child: _buildAvatar(otherUserImageUrl, 32),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          otherUserName,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+                elevation: 0,
+                iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
               ),
-            ],
-          ),
-        ),
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        elevation: 0,
-        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
-      ),
-      body: Column(
+              body: Column(
         children: [
           // Mesaj listesi
           Expanded(
@@ -263,18 +267,7 @@ class _MessageScreenState extends State<MessageScreen> {
                                   );
                                 },
                                 child: ClipOval(
-                                  child: message.senderImageUrl.isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: message.senderImageUrl,
-                                          width: 32,
-                                          height: 32,
-                                          fit: BoxFit.cover,
-                                          placeholder: (context, url) =>
-                                              const CircularProgressIndicator(strokeWidth: 2),
-                                          errorWidget: (context, url, error) =>
-                                              const Icon(Icons.person, size: 32),
-                                        )
-                                      : const Icon(Icons.person, size: 32),
+                                  child: _buildAvatar(otherUserImageUrl, 32),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -336,18 +329,7 @@ class _MessageScreenState extends State<MessageScreen> {
                                   );
                                 },
                                 child: ClipOval(
-                                  child: _authService.currentUser?.photoURL != null
-                                      ? CachedNetworkImage(
-                                          imageUrl: _authService.currentUser!.photoURL!,
-                                          width: 32,
-                                          height: 32,
-                                          fit: BoxFit.cover,
-                                          placeholder: (context, url) =>
-                                              const CircularProgressIndicator(strokeWidth: 2),
-                                          errorWidget: (context, url, error) =>
-                                              const Icon(Icons.person, size: 32),
-                                        )
-                                      : const Icon(Icons.person, size: 32),
+                                  child: _buildAvatar(currentUserImageUrl, 32),
                                 ),
                               ),
                             ],
@@ -433,7 +415,11 @@ class _MessageScreenState extends State<MessageScreen> {
             ),
           ),
         ],
-      ),
+              ),
+            );
+          }
+        );
+      }
     );
   }
 
@@ -453,6 +439,33 @@ class _MessageScreenState extends State<MessageScreen> {
 
   String _formatTime(DateTime date) {
     return DateFormat('HH:mm', 'tr_TR').format(date);
+  }
+
+  Widget _buildAvatar(String imageUrl, double size) {
+    if (imageUrl.isEmpty) {
+      return Icon(Icons.person, size: size);
+    }
+    if (imageUrl.startsWith('assets/')) {
+      return Image.asset(
+        imageUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Icon(Icons.person, size: size),
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      placeholder: (context, url) => SizedBox(
+        width: size,
+        height: size,
+        child: const CircularProgressIndicator(strokeWidth: 2),
+      ),
+      errorWidget: (context, url, error) => Icon(Icons.person, size: size),
+    );
   }
 }
 
