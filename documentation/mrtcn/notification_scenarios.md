@@ -107,18 +107,20 @@ Yukarıdaki tüm senaryoları izole ve kararlı bir şekilde test etmek için pr
 Bu test dosyası, tüm push bildirim senaryolarını parametrik bir test matrisi (`testMatrix`) ile ve zaman/limit kısıtlarını izole test durumlarıyla denetler:
 
 #### A. Parametrik Karar Matrisi Testleri (TEST 1)
-* **Master Switch Kapalı Durumları (Alt senaryo 1.1 - 1.3):**
-  * `pushMasterEnabled: false` olduğunda; kategori, yazar veya topluluk alt switchleri açık olsa dahi push bildiriminin `disabled_by_user_master_switch` ile engellendiğini doğrular.
-* **Alt Switch Kapalı Durumları (Alt senaryo 1.4 - 1.9):**
-  * Master switch açık, ancak ilgili alt switch `false` olduğunda push bildiriminin hedeflenen kanal bazında engellendiğini (`disabled_by_user_group_{groupName}`) doğrular:
+* **Master Switch Kapalı, Alt Switch Açık Durumları (Alt senaryo 1.1 - 1.3):**
+  * `pushMasterEnabled: false` ve ilgili alt switch `true` olduğunda push bildiriminin filtreleri başarıyla aştığını (`pushEligible: true`) ve gönderime ulaştığını doğrular.
+* **Master Switch Kapalı, Alt Switch Kapalı Durumları (Alt senaryo 1.4 - 1.6):**
+  * `pushMasterEnabled: false` ve ilgili alt switch `false` olduğunda push bildiriminin `disabled_by_user_master_switch` ile engellendiğini doğrular.
+* **Master Switch Açık, Alt Switch Kapalı Durumları (Alt senaryo 1.7 - 1.12):**
+  * `pushMasterEnabled: true` ve ilgili alt switch `false` olduğunda push bildiriminin hedeflenen kanal bazında engellendiğini (`disabled_by_user_group_{groupName}`) doğrular:
     * `categoryNotificationsEnabled: false` -> `disabled_by_user_group_category`
     * `keywordNotificationsEnabled: false` -> `disabled_by_user_group_keyword`
     * `dealNotificationsEnabled: false` -> `disabled_by_user_group_deal`
     * `communityNotificationsEnabled: false` -> `disabled_by_user_group_comment_reply`
     * `submissionStatusNotificationsEnabled: false` -> `disabled_by_user_group_submission_status`
     * `marketingNotificationsEnabled: false` -> `disabled_by_user_group_marketing`
-* **Alt Switch Açık Durumları (Alt senaryo 1.10 - 1.15):**
-  * Master switch açık ve ilgili alt switch `true` olduğunda push bildiriminin filtreleri başarıyla aştığını (`pushEligible: true`) ve gönderime ulaştığını (`pushStatus: failed` - sahte test token'ı nedeniyle) doğrular.
+* **Master Switch Açık, Alt Switch Açık Durumları (Alt senaryo 1.13 - 1.18):**
+  * `pushMasterEnabled: true` ve ilgili alt switch `true` olduğunda push bildiriminin filtreleri başarıyla aştığını (`pushEligible: true`) ve gönderime ulaştığını (`pushStatus: failed` - sahte test token'ı nedeniyle) doğrular.
 
 #### B. Zaman ve Limit Filtreleri (TEST 2 - 5)
 * **TEST 2 (Sessiz Saatler Filtresi):** Sessiz saatler aktifken standart indirim fırsatı push'larının `skipped_quiet_hours` ile engellendiğini doğrular.

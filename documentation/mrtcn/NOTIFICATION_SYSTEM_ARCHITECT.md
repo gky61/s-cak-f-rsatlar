@@ -68,7 +68,17 @@ Kategori bazlı bildirimlerin sınırlarını belirleyen global sistem ayarları
   "quietHoursStart": "23:00",
   "quietHoursEnd": "08:00",
   "timezone": "Europe/Istanbul",
-  "updatedAt": "Timestamp"
+  "updatedAt": "Timestamp",
+  "schemaVersion": 1,
+  "lastStates": {
+    "dealNotificationsEnabled": true,
+    "categoryNotificationsEnabled": true,
+    "keywordNotificationsEnabled": true,
+    "communityNotificationsEnabled": true,
+    "submissionStatusNotificationsEnabled": true,
+    "marketingNotificationsEnabled": false,
+    "quietHoursEnabled": false
+  }
 }
 ```
 
@@ -169,7 +179,7 @@ Bir kullanıcıya bildirim gitmiyorsa sırasıyla şu adımları kontrol edin:
 1. **Firestore `userDevices` kaydı var mı?**
    * Kullanıcının UID'sine ait aktif cihaz belgesi mevcut mu ve `active == true` mu? `fcmToken` alanı dolu mu?
 2. **Kullanıcı tercihleri açık mı?**
-   * `users/{uid}/notificationPreferences/main` belgesinde `pushMasterEnabled: true` mu?
+   * `users/{uid}/notificationPreferences/main` belgesinde `pushMasterEnabled: true` mu veya ilgili bildirim türüne ait alt kanal ayarı (örn: `dealNotificationsEnabled`) elle manuel olarak `true` yapılmış mı? (Master şalter kapalı olsa bile elle açılan alt kanallardan push gönderilmeye devam eder).
 3. **Fırsat Yayında mı?**
    * Fırsat belgesinin durumu `published` olmalıdır. Taslak veya onay bekleyen fırsatlar bildirim tetiklemez.
 4. **Limitler aşıldı mı?**
