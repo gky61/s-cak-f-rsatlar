@@ -640,18 +640,19 @@ class _HomeScreenState extends State<HomeScreen> {
             border: Border(
               bottom: BorderSide(
                 color: isDark
-                    ? Colors.white.withValues(alpha: 0.07)
-                    : Colors.black.withValues(alpha: 0.06),
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.07),
                 width: 1,
               ),
             ),
           ),
           child: SafeArea(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // ─── Row 1: Brand logo + Search + Admin ───────────────────
+                // ─── Row 1: Logo  +  Search  +  [Admin] ──────────────────
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
                   child: _isSearchMode
                       ? Row(
                           children: [
@@ -669,14 +670,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                   hintStyle: TextStyle(
                                     color: isDark
                                         ? Colors.white.withValues(alpha: 0.4)
-                                        : Colors.black.withValues(alpha: 0.35),
+                                        : AppTheme.textSecondary,
                                     fontSize: 15,
                                   ),
                                   prefixIcon: Icon(
                                     Icons.search_rounded,
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.5)
-                                        : Colors.black.withValues(alpha: 0.4),
+                                    color: AppTheme.primary.withValues(alpha: 0.7),
                                     size: 20,
                                   ),
                                   suffixIcon: _searchQuery.isNotEmpty
@@ -684,14 +683,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                           icon: const Icon(Icons.close_rounded, size: 18),
                                           onPressed: _clearSearch,
                                           color: isDark
-                                              ? Colors.white.withValues(alpha: 0.5)
-                                              : Colors.black.withValues(alpha: 0.4),
+                                              ? Colors.white54
+                                              : AppTheme.textSecondary,
                                         )
                                       : null,
                                   filled: true,
                                   fillColor: isDark
-                                      ? Colors.white.withValues(alpha: 0.08)
-                                      : Colors.black.withValues(alpha: 0.05),
+                                      ? Colors.white.withValues(alpha: 0.07)
+                                      : AppTheme.primary.withValues(alpha: 0.05),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                     borderSide: BorderSide.none,
@@ -701,7 +700,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 4),
                             IconButton(
                               icon: const Icon(Icons.close_rounded),
                               onPressed: _toggleSearchMode,
@@ -710,69 +708,50 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         )
                       : Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            // Brand mark
-                            Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'F',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 17,
-                                  ),
-                                ),
-                              ),
+                            // App logo
+                            Image.asset(
+                              'assets/store-icon.png',
+                              width: 32,
+                              height: 32,
                             ),
                             const SizedBox(width: 8),
+                            // App name
                             Text(
                               'Fırsatkolik',
                               style: TextStyle(
-                                fontSize: 19,
+                                fontSize: 20,
                                 fontWeight: FontWeight.w800,
-                                color: isDark ? Colors.white : const Color(0xFF111827),
-                                letterSpacing: -0.3,
+                                color: isDark ? Colors.white : AppTheme.textPrimary,
+                                letterSpacing: -0.5,
                               ),
                             ),
                             const Spacer(),
-                            // Search icon button
+                            // Search button
                             _buildHeaderIconButton(
                               icon: Icons.search_rounded,
                               onTap: _toggleSearchMode,
                               isDark: isDark,
-                              primaryColor: primaryColor,
                             ),
                             if (_isAdmin) ...[
-                              const SizedBox(width: 2),
                               _buildHeaderIconButton(
                                 icon: Icons.admin_panel_settings_rounded,
                                 onTap: () => Navigator.push(
                                   context,
-                                  MaterialPageRoute(builder: (_) => const AdminScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) => const AdminScreen()),
                                 ),
                                 isDark: isDark,
-                                primaryColor: primaryColor,
                                 accent: primaryColor,
                               ),
                             ],
                           ],
                         ),
                 ),
-                // ─── Row 2: Quick-action chips + View toggle ──────────────
+                // ─── Row 2: Kataloglar + Kuponlar  +  View toggle ─────────
                 if (!_isSearchMode)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
                     child: Row(
                       children: [
                         StreamBuilder<bool>(
@@ -789,10 +768,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onTap: () => Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                        builder: (_) => const AktuelMagazalarPage()),
+                                        builder: (_) =>
+                                            const AktuelMagazalarPage()),
                                   ),
                                   isDark: isDark,
-                                  color: const Color(0xFF3B82F6),
+                                  color: AppTheme.secondary,
                                 ),
                                 if (couponsEnabled) ...[
                                   const SizedBox(width: 8),
@@ -805,7 +785,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           builder: (_) => const KuponlarPage()),
                                     ),
                                     isDark: isDark,
-                                    color: const Color(0xFF10B981),
+                                    color: AppTheme.primary,
                                   ),
                                 ],
                               ],
@@ -813,7 +793,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                         ),
                         const Spacer(),
-                        // Grid / List toggle pill
+                        // Grid / List toggle
                         Container(
                           height: 32,
                           padding: const EdgeInsets.all(3),
@@ -829,15 +809,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               _buildViewModeButton(
                                 icon: Icons.grid_view_rounded,
                                 isSelected: _viewMode == CardViewMode.vertical,
-                                onTap: () =>
-                                    _themeService.setViewMode(CardViewMode.vertical),
+                                onTap: () => _themeService
+                                    .setViewMode(CardViewMode.vertical),
                                 isDark: isDark,
                               ),
                               _buildViewModeButton(
                                 icon: Icons.view_agenda_rounded,
-                                isSelected: _viewMode == CardViewMode.horizontal,
-                                onTap: () =>
-                                    _themeService.setViewMode(CardViewMode.horizontal),
+                                isSelected:
+                                    _viewMode == CardViewMode.horizontal,
+                                onTap: () => _themeService
+                                    .setViewMode(CardViewMode.horizontal),
                                 isDark: isDark,
                               ),
                             ],
@@ -846,7 +827,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 6),
                 // ─── Row 3: Category filter chips ─────────────────────────
                 if (!_isSearchMode)
                   SizedBox(
@@ -875,10 +855,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           labelStyle: TextStyle(
                             color: isSelected
                                 ? Colors.white
-                                : (isDark ? Colors.white : AppTheme.textPrimary),
-                            fontWeight:
-                                isSelected ? FontWeight.w700 : FontWeight.w500,
-                            fontSize: 14,
+                                : (isDark
+                                    ? Colors.white
+                                    : AppTheme.textPrimary),
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            fontSize: 13,
                           ),
                           side: BorderSide(
                             color: isDark
@@ -894,7 +877,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 8),
+                              horizontal: 16, vertical: 6),
+                          visualDensity: VisualDensity.compact,
                         );
                       },
                     ),
@@ -904,8 +888,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-      ),
-      body: Column(
+      ),      body: Column(
         children: [
           // Offline Banner
           const OfflineBanner(),
@@ -1457,7 +1440,6 @@ class _HomeScreenState extends State<HomeScreen> {
     required IconData icon,
     required VoidCallback onTap,
     required bool isDark,
-    required Color primaryColor,
     Color? accent,
   }) {
     return Material(
@@ -1466,8 +1448,9 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          width: 38,
-          height: 38,
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: accent != null
                 ? accent.withValues(alpha: 0.1)
@@ -1492,36 +1475,41 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isDark,
     required Color color,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: isDark ? 0.15 : 0.09),
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(
-            color: color.withValues(alpha: isDark ? 0.35 : 0.25),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 15, color: color),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isDark
-                    ? color.withValues(alpha: 0.9)
-                    : color.withValues(alpha: 0.85),
-                letterSpacing: -0.1,
-              ),
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(9),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(9),
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: isDark ? 0.13 : 0.08),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: color.withValues(alpha: isDark ? 0.3 : 0.2),
+              width: 1,
             ),
-          ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isDark
+                      ? color.withValues(alpha: 0.9)
+                      : color,
+                  letterSpacing: -0.1,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
