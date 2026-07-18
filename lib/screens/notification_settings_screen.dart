@@ -426,31 +426,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                                 }
                               : null,
                         ),
-                        const Divider(height: 1),
-                        SwitchListTile(
-                          title: const Text('Paylaşım Durumu Bildirimleri'),
-                          subtitle: const Text('Paylaştığınız fırsatların onaylanma, reddedilme veya yayından kaldırılma durumları.'),
-                          value: _preferences.submissionStatusNotificationsEnabled,
-                          activeColor: primaryColor,
-                          onChanged: _preferences.pushMasterEnabled
-                              ? (val) {
-                                  _updatePrefs(NotificationPreferences(
-                                    pushMasterEnabled: _preferences.pushMasterEnabled,
-                                    dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-                                    communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-                                    submissionStatusNotificationsEnabled: val,
-                                    marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                                    categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                                    keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
-                                    quietHoursEnabled: _preferences.quietHoursEnabled,
-                                    quietHoursStart: _preferences.quietHoursStart,
-                                    quietHoursEnd: _preferences.quietHoursEnd,
-                                    timezone: _preferences.timezone,
-                                    updatedAt: DateTime.now(),
-                                  ));
-                                }
-                              : null,
-                        ),
+
                         const Divider(height: 1),
                         SwitchListTile(
                           title: const Text('Kampanya Bildirimleri'),

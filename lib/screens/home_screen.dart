@@ -782,9 +782,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => _unreadAdminMessageCount > 0
-                                      ? const AdminNotificationsScreen()
-                                      : const NotificationSettingsScreen(),
+                                  builder: (_) => const AdminNotificationsScreen(),
                                 ),
                               ),
                               isDark: isDark,
@@ -839,7 +837,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 _buildNavChip(
-                                  label: 'Kataloglar',
+                                  label: 'Aktüel',
                                   icon: Icons.auto_stories_rounded,
                                   onTap: () => Navigator.push(
                                     context,

@@ -40,50 +40,46 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
   }
 
   String _getValidityText(Katalog catalog) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final expiry = DateTime(
-      catalog.bitisTarihi.year,
-      catalog.bitisTarihi.month,
-      catalog.bitisTarihi.day,
-    );
-    final diff = expiry.difference(today).inDays;
-
-    if (diff < 0) {
-      return "Süresi Doldu";
-    } else if (diff == 0) {
-      return "Son Gün: Bugün!";
-    } else if (diff == 1) {
-      return "Son Gün: Yarın!";
-    } else if (diff < 7) {
-      return "Son Gün: $diff Gün Kaldı";
-    } else {
-      final weeks = diff ~/ 7;
-      return "Son Gün: $weeks Hafta Kaldı";
-    }
+    return catalog.getValidityText();
   }
 
   Widget _buildValidityTextRow(Katalog catalog, bool isDark) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    
+    final start = DateTime(
+      catalog.baslangicTarihi.year,
+      catalog.baslangicTarihi.month,
+      catalog.baslangicTarihi.day,
+    );
+    
     final expiry = DateTime(
       catalog.bitisTarihi.year,
       catalog.bitisTarihi.month,
       catalog.bitisTarihi.day,
     );
-    final diff = expiry.difference(today).inDays;
 
     Color textColor;
     IconData icon;
-    if (diff <= 1) {
-      textColor = const Color(0xFFDC2626); // Red 600
-      icon = Icons.alarm;
-    } else if (diff < 7) {
-      textColor = const Color(0xFFD97706); // Orange 600
-      icon = Icons.hourglass_empty;
-    } else {
+
+    if (today.isBefore(start)) {
       textColor = isDark ? Colors.blue[300]! : const Color(0xFF2563EB); // Blue 600
-      icon = Icons.event_available;
+      icon = Icons.date_range;
+    } else {
+      final diff = expiry.difference(today).inDays;
+      if (diff < 0) {
+        textColor = isDark ? Colors.grey[500]! : Colors.grey[600]!;
+        icon = Icons.event_busy;
+      } else if (diff <= 1) {
+        textColor = const Color(0xFFDC2626); // Red 600
+        icon = Icons.alarm;
+      } else if (diff <= 3) {
+        textColor = const Color(0xFFD97706); // Orange 600
+        icon = Icons.hourglass_empty;
+      } else {
+        textColor = isDark ? Colors.blue[300]! : const Color(0xFF2563EB); // Blue 600
+        icon = Icons.event_available;
+      }
     }
 
     return Row(
@@ -118,7 +114,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
       backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: Text(
-          '${widget.magazaAdi} Katalogları',
+          '${widget.magazaAdi} Aktüel',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,

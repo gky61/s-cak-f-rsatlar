@@ -794,27 +794,27 @@ async function scrapeProductFromUrl(url) {
       const title = matchedScraper.scrapeTitle($);
       console.log(`[SCRAPE-SERVICE] [TITLE] Sonuç: "${title || 'BULUNAMADI'}"`);
 
-      // 2. Açıklama Çekimi (Önce! CRM fiyatını _crmPrice'a yazar)
-      console.log(`[SCRAPE-SERVICE] [DESCRIPTION] Açıklama çekiliyor...`);
-      const description = matchedScraper.scrapeDescription ? await matchedScraper.scrapeDescription($) : null;
-      console.log(`[SCRAPE-SERVICE] [DESCRIPTION] Sonuç: "${description || 'BULUNAMADI'}"`);
-
-      // 3. Fiyat Çekimi (Sonra! CRM scraperları _crmPrice'ı doldurmuş olabilir)
+      // 2. Fiyat Çekimi
       console.log(`[SCRAPE-SERVICE] [PRICE] Fiyat çekiliyor...`);
       const price = await matchedScraper.scrapePrice($);
       console.log(`[SCRAPE-SERVICE] [PRICE] Sonuç: "${price != null ? price + ' TL' : 'BULUNAMADI'}"`);
 
-      // 4. Görsel Çekimi
+      // 3. Görsel Çekimi
       console.log(`[SCRAPE-SERVICE] [IMAGE] Görsel çekiliyor...`);
       const rawImage = matchedScraper.scrapeImage($, targetUrl);
       console.log(`[SCRAPE-SERVICE] [IMAGE] Ham Görsel Alanı: "${rawImage || 'BULUNAMADI'}"`);
       const imageUrl = matchedScraper.resolveImageUrl(rawImage, targetUrl);
       console.log(`[SCRAPE-SERVICE] [IMAGE] Mutlak Görsel URL'i: "${imageUrl || 'BULUNAMADI'}"`);
 
-      // 5. Kırıntı Çekimi (Breadcrumbs)
+      // 4. Kırıntı Çekimi (Breadcrumbs)
       console.log(`[SCRAPE-SERVICE] [BREADCRUMBS] Kırıntı listesi çekiliyor...`);
       const breadcrumbs = matchedScraper.scrapeBreadcrumbs($) || [];
       console.log(`[SCRAPE-SERVICE] [BREADCRUMBS] Sonuç: ${JSON.stringify(breadcrumbs)}`);
+
+      // 5. Açıklama Çekimi
+      console.log(`[SCRAPE-SERVICE] [DESCRIPTION] Açıklama çekiliyor...`);
+      const description = matchedScraper.scrapeDescription ? await matchedScraper.scrapeDescription($) : null;
+      console.log(`[SCRAPE-SERVICE] [DESCRIPTION] Sonuç: "${description || 'BULUNAMADI'}"`);
 
       const totalDuration = Date.now() - startTime;
       console.log(`============================================================`);

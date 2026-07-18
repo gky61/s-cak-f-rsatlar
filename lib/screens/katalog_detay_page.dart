@@ -93,26 +93,38 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
   }
 
   String _getValidityText() {
+    return widget.catalog.getValidityText();
+  }
+
+  Color _getValidityColor(bool isDark) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    
+    final start = DateTime(
+      widget.catalog.baslangicTarihi.year,
+      widget.catalog.baslangicTarihi.month,
+      widget.catalog.baslangicTarihi.day,
+    );
+    
     final expiry = DateTime(
       widget.catalog.bitisTarihi.year,
       widget.catalog.bitisTarihi.month,
       widget.catalog.bitisTarihi.day,
     );
-    final diff = expiry.difference(today).inDays;
 
-    if (diff < 0) {
-      return "Süresi Doldu";
-    } else if (diff == 0) {
-      return "Son Gün: Bugün!";
-    } else if (diff == 1) {
-      return "Son Gün: Yarın!";
-    } else if (diff < 7) {
-      return "Son Gün: $diff Gün Kaldı";
+    if (today.isBefore(start)) {
+      return Colors.blue[300]!;
     } else {
-      final weeks = diff ~/ 7;
-      return "Son Gün: $weeks Hafta Kaldı";
+      final diff = expiry.difference(today).inDays;
+      if (diff < 0) {
+        return Colors.grey[500]!;
+      } else if (diff <= 1) {
+        return Colors.red[400] ?? Colors.red;
+      } else if (diff <= 3) {
+        return Colors.amber[600] ?? Colors.amber;
+      } else {
+        return Colors.blue[300]!;
+      }
     }
   }
 
@@ -279,7 +291,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
                         Text(
                           _getValidityText(),
                           style: TextStyle(
-                            color: Colors.red[400] ?? Colors.red,
+                            color: _getValidityColor(true),
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),

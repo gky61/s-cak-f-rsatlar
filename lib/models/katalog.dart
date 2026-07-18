@@ -64,4 +64,46 @@ class Katalog {
       'kapakResmi': kapakResmi,
     };
   }
+
+  /// Kampanya geçerlilik metnini döndürür.
+  String getValidityText() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final start = DateTime(
+      baslangicTarihi.year,
+      baslangicTarihi.month,
+      baslangicTarihi.day,
+    );
+
+    final expiry = DateTime(
+      bitisTarihi.year,
+      bitisTarihi.month,
+      bitisTarihi.day,
+    );
+
+    if (today.isBefore(start)) {
+      final daysToStart = start.difference(today).inDays;
+      return '$daysToStart gün sonra başlayacak';
+    }
+
+    final daysToExpiry = expiry.difference(today).inDays;
+
+    if (daysToExpiry < 0) {
+      return 'Süresi Doldu';
+    } else if (daysToExpiry > 3) {
+      return '$daysToExpiry gün sonra bitecek';
+    } else {
+      if (daysToExpiry == 3) {
+        return '3 gün sonra bitiyor';
+      } else if (daysToExpiry == 2) {
+        return '2 gün sonra bitiyor';
+      } else if (daysToExpiry == 1) {
+        return 'Yarın bitiyor';
+      } else {
+        return 'Bugün bitiyor';
+      }
+    }
+  }
 }
+

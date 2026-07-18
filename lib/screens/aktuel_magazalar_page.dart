@@ -51,7 +51,7 @@ class AktuelMagazalarPage extends StatelessWidget {
       backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: const Text(
-          'Aktüel Kataloglar',
+          'Aktüel',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
         ),
         centerTitle: true,

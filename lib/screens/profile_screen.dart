@@ -1205,6 +1205,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Column(
                       children: [
+                        // Notifications
+                        _buildSettingItem(
+                          icon: Icons.notifications,
+                          title: 'Bildirim Ayarları',
+                          iconBgColor: primaryColor.withValues(alpha: 0.2),
+                          iconColor: isDark ? Colors.yellow[200]! : Colors.yellow[800]!,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Switch(
+                                value: _notificationsEnabled,
+                                onChanged: _toggleNotifications,
+                                activeColor: primaryColor,
+                                activeTrackColor: primaryColor.withValues(alpha: 0.5),
+                              ),
+                              Icon(Icons.chevron_right, color: Colors.grey[400]),
+                            ],
+                          ),
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const NotificationSettingsScreen(),
+                              ),
+                            );
+                            // Bildirim ayarları ekranından dönüldüğünde ayarları yeniden yükle
+                            if (_isOwnProfile && mounted) {
+                              await _loadNotificationSettings();
+                            }
+                          },
+                          isDark: isDark,
+                        ),
+                        _buildDivider(isDark),
                         // Paylaştığım Fırsatlar
                         _buildSettingItem(
                           icon: Icons.local_offer,

@@ -6,9 +6,6 @@ const BaseProductScraper = require('./base_scraper');
 class MigrosScraper extends BaseProductScraper {
   get domain() { return 'migros.com.tr'; }
 
-  /** CRM etiketinden parse edilen fiyat. scrapeDescription() yazar, scrapePrice() öncelikle okur. */
-  _crmPrice = null;
-
   canHandle(url) {
     return url.toLowerCase().includes('migros.com.tr');
   }
@@ -58,10 +55,6 @@ class MigrosScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // ÖNCELİK: scrapeDescription tarafından set edilen CRM fiyatı
-    if (this._crmPrice && this._crmPrice > 0) {
-      return this._crmPrice;
-    }
     // 1. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
@@ -77,22 +70,6 @@ class MigrosScraper extends BaseProductScraper {
     return null;
   }
 
-  /**
-   * CRM etiket metninden fiyatı parse eder.
-   * Örnek: "50 TL SEPETTE 124,95 TL" → 124.95
-   * Birden fazla fiyat varsa en büyüğünü döndürür.
-   */
-  parseCrmPrice(crmText) {
-    const matches = [...crmText.matchAll(/(\d{1,6}[.,]\d{2}|\d{1,6})/g)];
-    let maxPrice = null;
-    for (const m of matches) {
-      const val = parseFloat(m[0].replace(',', '.'));
-      if (!isNaN(val) && val > 1) {
-        if (maxPrice === null || val > maxPrice) maxPrice = val;
-      }
-    }
-    return maxPrice;
-  }
 
   cleanDescription(desc) {
     if (!desc) return '';
@@ -102,7 +79,6 @@ class MigrosScraper extends BaseProductScraper {
   }
 
   async scrapeDescription($) {
-    this._crmPrice = null; // her çağırmada sıfırla
     let crmPrefix = '';
 
     // 1. Check DOM (for SSR or local test cases)
@@ -111,8 +87,6 @@ class MigrosScraper extends BaseProductScraper {
       const crmText = crmEl.text().trim().toLocaleUpperCase('tr-TR');
       if (crmText) {
         crmPrefix = crmText;
-        // CRM fiyatını parse et ve sakla
-        this._crmPrice = this.parseCrmPrice(crmText);
       }
     }
 
@@ -146,10 +120,6 @@ class MigrosScraper extends BaseProductScraper {
                 if (crmTags[0].tag) {
                   crmPrefix = crmTags[0].tag.trim().toLocaleUpperCase('tr-TR');
                   console.log(`[MigrosScraper] CRM tag found from API: "${crmTags[0].tag}"`);
-                  // CRM API fiyatını parse et (sadece daha önce set edilmemisse)
-                  if (!this._crmPrice) {
-                    this._crmPrice = this.parseCrmPrice(crmPrefix);
-                  }
                 }
               }
             }
