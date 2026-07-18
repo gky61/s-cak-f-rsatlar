@@ -127,30 +127,53 @@ async function runSettingsTests() {
     console.log('🧪 [TEST 1] Parametrik Bildirim Tercihleri ve Karar Matrisi Testleri Başlatılıyor...');
 
     const testMatrix = [
-      // A. Master Switch Kapalı Durumları (Diğer switchler ne olursa olsun engellenmeli)
+      // A. Master Switch Kapalı, Alt Switch Açık Durumları (Bypass / Gönderim)
       {
-        name: 'Master Switch Kapalı - Kategori Bildirimi',
+        name: 'Master Switch Kapalı - Kategori Bildirimi (Açık)',
         prefs: { pushMasterEnabled: false, categoryNotificationsEnabled: true },
+        notifData: { type: 'deal', reason: 'category', title: 'İndirim', body: 'Test' },
+        expectedEligible: true,
+        expectedStatus: 'failed'
+      },
+      {
+        name: 'Master Switch Kapalı - Yazar Bildirimi (Açık)',
+        prefs: { pushMasterEnabled: false, dealNotificationsEnabled: true },
+        notifData: { type: 'deal', reason: 'author', title: 'Yazar Fırsatı', body: 'Test' },
+        expectedEligible: true,
+        expectedStatus: 'failed'
+      },
+      {
+        name: 'Master Switch Kapalı - Topluluk Bildirimi (Açık)',
+        prefs: { pushMasterEnabled: false, communityNotificationsEnabled: true },
+        notifData: { type: 'comment_reply', title: 'Yorum', body: 'Test' },
+        expectedEligible: true,
+        expectedStatus: 'failed'
+      },
+
+      // B. Master Switch Kapalı, Alt Switch Kapalı Durumları (Master Switch nedeniyle engellenmeli)
+      {
+        name: 'Master Switch Kapalı - Kategori Bildirimi (Kapalı)',
+        prefs: { pushMasterEnabled: false, categoryNotificationsEnabled: false },
         notifData: { type: 'deal', reason: 'category', title: 'İndirim', body: 'Test' },
         expectedEligible: false,
         expectedStatus: 'disabled_by_user_master_switch'
       },
       {
-        name: 'Master Switch Kapalı - Yazar Bildirimi',
-        prefs: { pushMasterEnabled: false, dealNotificationsEnabled: true },
+        name: 'Master Switch Kapalı - Yazar Bildirimi (Kapalı)',
+        prefs: { pushMasterEnabled: false, dealNotificationsEnabled: false },
         notifData: { type: 'deal', reason: 'author', title: 'Yazar Fırsatı', body: 'Test' },
         expectedEligible: false,
         expectedStatus: 'disabled_by_user_master_switch'
       },
       {
-        name: 'Master Switch Kapalı - Topluluk Bildirimi',
-        prefs: { pushMasterEnabled: false, communityNotificationsEnabled: true },
+        name: 'Master Switch Kapalı - Topluluk Bildirimi (Kapalı)',
+        prefs: { pushMasterEnabled: false, communityNotificationsEnabled: false },
         notifData: { type: 'comment_reply', title: 'Yorum', body: 'Test' },
         expectedEligible: false,
         expectedStatus: 'disabled_by_user_master_switch'
       },
 
-      // B. Master Switch Açık / Alt Switch Kapalı Durumları (Kanal bazında engellenmeli)
+      // C. Master Switch Açık, Alt Switch Kapalı Durumları (Kanal bazında engellenmeli)
       {
         name: 'Kategori Switch Kapalı - Kategori Bildirimi',
         prefs: { pushMasterEnabled: true, categoryNotificationsEnabled: false },
@@ -194,13 +217,13 @@ async function runSettingsTests() {
         expectedStatus: 'disabled_by_user_group_marketing'
       },
 
-      // C. Master Switch Açık / Alt Switch Açık Durumları (Bypass / Gönderim)
+      // D. Master Switch Açık, Alt Switch Açık Durumları (Bypass / Gönderim)
       {
         name: 'Kategori Switch Açık - Kategori Bildirimi',
         prefs: { pushMasterEnabled: true, categoryNotificationsEnabled: true },
         notifData: { type: 'deal', reason: 'category', title: 'Kategori Fırsatı', body: 'Test' },
         expectedEligible: true,
-        expectedStatus: 'failed' // Bireysel gönderime ulaştığından (sahte token yüzünden) failed döner
+        expectedStatus: 'failed'
       },
       {
         name: 'Anahtar Kelime Switch Açık - Kelime Bildirimi',

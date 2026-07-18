@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_settings/app_settings.dart';
 import '../services/notification_service.dart';
 import '../models/notification_preferences.dart';
@@ -20,7 +19,6 @@ class NotificationSettingsScreen extends StatefulWidget {
 
 class _NotificationSettingsScreenState extends State<NotificationSettingsScreen> with WidgetsBindingObserver {
   final NotificationService _notificationService = NotificationService();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   
   NotificationPreferences _preferences = NotificationPreferences.defaultPreferences();
   List<String> _watchKeywords = [];
@@ -133,6 +131,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         quietHoursEnd: isStart ? _preferences.quietHoursEnd : newTime,
         timezone: _preferences.timezone,
         updatedAt: DateTime.now(),
+        lastStates: _preferences.lastStates,
       );
 
       _updatePrefs(updatedPrefs);
@@ -334,20 +333,51 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                       value: _preferences.pushMasterEnabled,
                       activeColor: primaryColor,
                       onChanged: (val) {
-                        _updatePrefs(NotificationPreferences(
-                          pushMasterEnabled: val,
-                          dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-                          communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-                          submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-                          marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                          categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                          keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
-                          quietHoursEnabled: _preferences.quietHoursEnabled,
-                          quietHoursStart: _preferences.quietHoursStart,
-                          quietHoursEnd: _preferences.quietHoursEnd,
-                          timezone: _preferences.timezone,
-                          updatedAt: DateTime.now(),
-                        ));
+                        if (!val) {
+                          // Save current state to lastStates, and set active fields to false
+                          final currentActive = {
+                            'dealNotificationsEnabled': _preferences.dealNotificationsEnabled,
+                            'categoryNotificationsEnabled': _preferences.categoryNotificationsEnabled,
+                            'keywordNotificationsEnabled': _preferences.keywordNotificationsEnabled,
+                            'communityNotificationsEnabled': _preferences.communityNotificationsEnabled,
+                            'submissionStatusNotificationsEnabled': _preferences.submissionStatusNotificationsEnabled,
+                            'marketingNotificationsEnabled': _preferences.marketingNotificationsEnabled,
+                            'quietHoursEnabled': _preferences.quietHoursEnabled,
+                          };
+                          _updatePrefs(NotificationPreferences(
+                            pushMasterEnabled: false,
+                            dealNotificationsEnabled: false,
+                            categoryNotificationsEnabled: false,
+                            keywordNotificationsEnabled: false,
+                            communityNotificationsEnabled: false,
+                            submissionStatusNotificationsEnabled: false,
+                            marketingNotificationsEnabled: false,
+                            quietHoursEnabled: false,
+                            quietHoursStart: _preferences.quietHoursStart,
+                            quietHoursEnd: _preferences.quietHoursEnd,
+                            timezone: _preferences.timezone,
+                            updatedAt: DateTime.now(),
+                            lastStates: currentActive,
+                          ));
+                        } else {
+                          // Restore active fields from lastStates
+                          final last = _preferences.lastStates;
+                          _updatePrefs(NotificationPreferences(
+                            pushMasterEnabled: true,
+                            dealNotificationsEnabled: last['dealNotificationsEnabled'] ?? true,
+                            categoryNotificationsEnabled: last['categoryNotificationsEnabled'] ?? true,
+                            keywordNotificationsEnabled: last['keywordNotificationsEnabled'] ?? true,
+                            communityNotificationsEnabled: last['communityNotificationsEnabled'] ?? true,
+                            submissionStatusNotificationsEnabled: last['submissionStatusNotificationsEnabled'] ?? true,
+                            marketingNotificationsEnabled: last['marketingNotificationsEnabled'] ?? false,
+                            quietHoursEnabled: last['quietHoursEnabled'] ?? false,
+                            quietHoursStart: _preferences.quietHoursStart,
+                            quietHoursEnd: _preferences.quietHoursEnd,
+                            timezone: _preferences.timezone,
+                            updatedAt: DateTime.now(),
+                            lastStates: Map<String, bool>.from(last),
+                          ));
+                        }
                       },
                     ),
                   ),
@@ -383,19 +413,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           value: _preferences.dealNotificationsEnabled,
                           activeColor: primaryColor,
                           onChanged: (val) {
+                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
+                            newLastStates['dealNotificationsEnabled'] = val;
                             _updatePrefs(NotificationPreferences(
                               pushMasterEnabled: _preferences.pushMasterEnabled,
                               dealNotificationsEnabled: val,
+                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
+                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
                               submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
                               marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               quietHoursEnabled: _preferences.quietHoursEnabled,
                               quietHoursStart: _preferences.quietHoursStart,
                               quietHoursEnd: _preferences.quietHoursEnd,
                               timezone: _preferences.timezone,
                               updatedAt: DateTime.now(),
+                              lastStates: newLastStates,
                             ));
                           },
                         ),
@@ -406,19 +439,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           value: _preferences.communityNotificationsEnabled,
                           activeColor: primaryColor,
                           onChanged: (val) {
+                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
+                            newLastStates['communityNotificationsEnabled'] = val;
                             _updatePrefs(NotificationPreferences(
                               pushMasterEnabled: _preferences.pushMasterEnabled,
                               dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
+                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
+                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               communityNotificationsEnabled: val,
                               submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
                               marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               quietHoursEnabled: _preferences.quietHoursEnabled,
                               quietHoursStart: _preferences.quietHoursStart,
                               quietHoursEnd: _preferences.quietHoursEnd,
                               timezone: _preferences.timezone,
                               updatedAt: DateTime.now(),
+                              lastStates: newLastStates,
                             ));
                           },
                         ),
@@ -430,19 +466,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           value: _preferences.marketingNotificationsEnabled,
                           activeColor: primaryColor,
                           onChanged: (val) {
+                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
+                            newLastStates['marketingNotificationsEnabled'] = val;
                             _updatePrefs(NotificationPreferences(
                               pushMasterEnabled: _preferences.pushMasterEnabled,
                               dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
+                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
+                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
                               submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
                               marketingNotificationsEnabled: val,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               quietHoursEnabled: _preferences.quietHoursEnabled,
                               quietHoursStart: _preferences.quietHoursStart,
                               quietHoursEnd: _preferences.quietHoursEnd,
                               timezone: _preferences.timezone,
                               updatedAt: DateTime.now(),
+                              lastStates: newLastStates,
                             ));
                           },
                         ),
@@ -453,19 +492,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           value: _preferences.categoryNotificationsEnabled,
                           activeColor: primaryColor,
                           onChanged: (val) {
+                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
+                            newLastStates['categoryNotificationsEnabled'] = val;
                             _updatePrefs(NotificationPreferences(
                               pushMasterEnabled: _preferences.pushMasterEnabled,
                               dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
+                              categoryNotificationsEnabled: val,
+                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
                               submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
                               marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              categoryNotificationsEnabled: val,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               quietHoursEnabled: _preferences.quietHoursEnabled,
                               quietHoursStart: _preferences.quietHoursStart,
                               quietHoursEnd: _preferences.quietHoursEnd,
                               timezone: _preferences.timezone,
                               updatedAt: DateTime.now(),
+                              lastStates: newLastStates,
                             ));
                           },
                         ),
@@ -476,19 +518,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           value: _preferences.keywordNotificationsEnabled,
                           activeColor: primaryColor,
                           onChanged: (val) {
+                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
+                            newLastStates['keywordNotificationsEnabled'] = val;
                             _updatePrefs(NotificationPreferences(
                               pushMasterEnabled: _preferences.pushMasterEnabled,
                               dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
+                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
+                              keywordNotificationsEnabled: val,
                               communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
                               submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
                               marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: val,
                               quietHoursEnabled: _preferences.quietHoursEnabled,
                               quietHoursStart: _preferences.quietHoursStart,
                               quietHoursEnd: _preferences.quietHoursEnd,
                               timezone: _preferences.timezone,
                               updatedAt: DateTime.now(),
+                              lastStates: newLastStates,
                             ));
                           },
                         ),
@@ -527,19 +572,22 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           value: _preferences.quietHoursEnabled,
                           activeColor: primaryColor,
                           onChanged: (val) {
+                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
+                            newLastStates['quietHoursEnabled'] = val;
                             _updatePrefs(NotificationPreferences(
                               pushMasterEnabled: _preferences.pushMasterEnabled,
                               dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
+                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
+                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
                               submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
                               marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
                               quietHoursEnabled: val,
                               quietHoursStart: _preferences.quietHoursStart,
                               quietHoursEnd: _preferences.quietHoursEnd,
                               timezone: _preferences.timezone,
                               updatedAt: DateTime.now(),
+                              lastStates: newLastStates,
                             ));
                           },
                         ),
@@ -640,7 +688,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                             Expanded(
                               child: TextField(
                                 controller: _keywordController,
-                                enabled: true,
                                 decoration: InputDecoration(
                                   hintText: 'Kelime girin (örn: Dyson, Laptop)',
                                   hintStyle: TextStyle(color: textSub, fontSize: 14),

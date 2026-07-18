@@ -48,26 +48,29 @@ Push bildirimlerinin telefona ulaşma karar ağacı Cloud Functions `onNotificat
 ### Tercihler ve Eşleşen Karar Senaryoları:
 
 #### A. Telefon Bildirimleri (Master Switch - `pushMasterEnabled`)
-* **Senaryo PUSH-MASTER-OFF:** `pushMasterEnabled: false` ise, bildirim türü ne olursa olsun push engellenir.
-  * *Sonuç:* Firestore dokümanında `pushEligible: false`, `pushStatus: 'disabled_by_user_master_switch'` güncellenir. Bildirim telefona gitmez, sadece uygulama içi bildirim kutusunda görünür.
-  * *UI Davranışı (Yeni Özellik):* Master switch kapalı olsa dahi alt bildirim kanalları (yazar, topluluk, kampanya vb.) ve sessiz saat/anahtar kelime/kategori ayarları pasifleşmez (grey out olmaz). Kullanıcı master switch kapalıyken de her bir alt ayarı bağımsız olarak açıp kapatabilir, anahtar kelime veya kategori ekleyip çıkarabilir, sessiz saatleri yapılandırabilir. Bu tercihler Firestore'da anında güncellenir ve saklanır.
-  * *Geriye Dönük Mantık:* Master switch tekrar `true` konumuna getirildiğinde, alt kanallar son seçili durumlarına (Firestore'daki aktif değerlerine) göre çalışmaya devam eder.
-* **Senaryo PUSH-MASTER-ON:** `pushMasterEnabled: true` ise, diğer alt kanal ve zaman kuralları denetlenmeye başlar.
+* **Senaryo PUSH-MASTER-OFF:** `pushMasterEnabled: false` yapıldığında:
+  * Tüm alt bildirim ayarları otomatik olarak kapalı konuma getirilir (`false` olarak Firestore'a yazılır).
+  * Kullanıcıların eski tercihleri `lastStates` adında bir harita (Map) içerisinde yedeklenir.
+  * Master switch kapalı olsa bile kullanıcı alt ayarları tek tek elle manuel olarak açabilir (açılanlar Firestore'da `true` olarak güncellenir ve `lastStates` haritasına da yansıtılır).
+  * *Karar Mekanizması:* Alt ayarı kapalı olan tüm bildirimler `pushEligible: false`, `pushStatus: 'disabled_by_user_master_switch'` olarak engellenir. Manuel olarak açılan alt kanallar ise Master kapalı olsa dahi push uyarısı almaya devam eder (`pushEligible: true`).
+* **Senaryo PUSH-MASTER-ON:** `pushMasterEnabled: true` yapıldığında:
+  * Tüm alt bildirim kanalları, kullanıcının en son seçtiği veya kaydettiği durumlarına (yani `lastStates` haritasındaki yedek değerlerine) otomatik olarak geri döndürülür.
+  * *Karar Mekanizması:* Diğer alt kanal, limit ve sessiz saat kuralları olağan şekilde denetlenmeye başlar.
 
 #### B. Kanal Bazlı Filtreler (`groupEnabled` Kontrolleri)
-Master Switch açık olduğunda, bildirim türüne göre alt kanal ayarı kontrol edilir:
+Master Switch açık olduğunda veya Master Switch kapalıyken ilgili alt ayar manuel olarak açıldığında, bildirim türüne göre alt kanal ayarı kontrol edilir:
 * **Takip Edilen Yazar Bildirimleri (`dealNotificationsEnabled`):**
-  * `false` ve gelen bildirim nedeni `author` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_deal'`).
+  * Gelen bildirim nedeni `author` iken ilgili ayar `false` ise: Push engellenir (Master açıkken `pushStatus: 'disabled_by_user_group_deal'`, Master kapalıyken `pushStatus: 'disabled_by_user_master_switch'`).
 * **Topluluk Bildirimleri (`communityNotificationsEnabled`):**
-  * `false` ve gelen bildirim tipi `comment_reply` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_comment_reply'`).
+  * Gelen bildirim tipi `comment_reply` iken ilgili ayar `false` ise: Push engellenir (Master açıkken `pushStatus: 'disabled_by_user_group_comment_reply'`, Master kapalıyken `pushStatus: 'disabled_by_user_master_switch'`).
 * **Paylaşım Durumu Bildirimleri (`submission_status`):**
   * Bu bildirim grubu için push gönderimi sistem tarafından kalıcı olarak kapatılmıştır (Sessiz Bildirim kuralı). `pushStatus` değeri her zaman `disabled_permanently_for_submission_status` olarak güncellenir ve telefona push uyarısı gitmeden doğrudan uygulama içi Bildirim Kutusu'nda saklanır.
 * **Kampanya Bildirimleri (`marketingNotificationsEnabled`):**
-  * `false` ve gelen bildirim tipi `marketing` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_marketing'`).
+  * Gelen bildirim tipi `marketing` iken ilgili ayar `false` ise: Push engellenir (Master açıkken `pushStatus: 'disabled_by_user_group_marketing'`, Master kapalıyken `pushStatus: 'disabled_by_user_master_switch'`).
 * **Kategori Bildirimleri (`categoryNotificationsEnabled`):**
-  * `false` ve gelen bildirim nedeni `category` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_category'`).
+  * Gelen bildirim nedeni `category` iken ilgili ayar `false` ise: Push engellenir (Master açıkken `pushStatus: 'disabled_by_user_group_category'`, Master kapalıyken `pushStatus: 'disabled_by_user_master_switch'`).
 * **Anahtar Kelime Bildirimleri (`keywordNotificationsEnabled`):**
-  * `false` ve gelen bildirim nedeni `keyword` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_keyword'`).
+  * Gelen bildirim nedeni `keyword` iken ilgili ayar `false` ise: Push engellenir (Master açıkken `pushStatus: 'disabled_by_user_group_keyword'`, Master kapalıyken `pushStatus: 'disabled_by_user_master_switch'`).
 
 #### C. Zaman ve Saat Kısıtları (Sessiz Saatler - `quietHoursEnabled`)
 * **Quiet Hours Aktif (`true`):** Kullanıcı local saat dilimine (`timezone`, Örn: `Europe/Istanbul`) göre şu anki saati hesaplar. Eğer saat `quietHoursStart` ile `quietHoursEnd` aralığındaysa (Örn: 23:00 - 08:00):

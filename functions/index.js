@@ -1131,22 +1131,35 @@ exports.onNotificationCreated = functions.firestore
       }
     }
 
-    // 4. ADIM 2 - FİLTRE C: Ana Şalter (Telefon Bildirimleri) kontrolü
-    if (!prefs.pushMasterEnabled) {
-      functions.logger.info(`🚫 Kullanıcı ${userId} için tüm push bildirimleri kapalı.`);
-      await snap.ref.update({
-        pushEligible: false,
-        pushStatus: 'disabled_by_user_master_switch',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      return null;
-    }
-
-    // 5. ADIM 2 - FİLTRE D: Alt Kanal kontrolü
+    // 4. ADIM 2 - FİLTRE C ve D: Alt Kanal ve Ana Şalter (Telefon Bildirimleri) Kontrolleri
     let groupEnabled = true;
     let groupName = type || reason;
     const reasons = notification.reasons || {};
     const hasReasons = Object.keys(reasons).length > 0;
+
+    const isKeywordPrefEnabled = prefs.pushMasterEnabled !== false
+      ? prefs.keywordNotificationsEnabled !== false
+      : prefs.keywordNotificationsEnabled === true;
+
+    const isDealPrefEnabled = prefs.pushMasterEnabled !== false
+      ? prefs.dealNotificationsEnabled !== false
+      : prefs.dealNotificationsEnabled === true;
+
+    const isCategoryPrefEnabled = prefs.pushMasterEnabled !== false
+      ? prefs.categoryNotificationsEnabled !== false
+      : prefs.categoryNotificationsEnabled === true;
+
+    const isCommunityPrefEnabled = prefs.pushMasterEnabled !== false
+      ? prefs.communityNotificationsEnabled !== false
+      : prefs.communityNotificationsEnabled === true;
+
+    const isSubmissionStatusPrefEnabled = prefs.pushMasterEnabled !== false
+      ? prefs.submissionStatusNotificationsEnabled !== false
+      : prefs.submissionStatusNotificationsEnabled === true;
+
+    const isMarketingPrefEnabled = prefs.pushMasterEnabled !== false
+      ? prefs.marketingNotificationsEnabled !== false
+      : prefs.marketingNotificationsEnabled === true;
 
     if (hasReasons) {
       // Hangi sebebin aktif olarak kullanılacağını belirleyelim.
@@ -1157,11 +1170,11 @@ exports.onNotificationCreated = functions.firestore
 
       const originalReason = notification.reason;
       let isOriginalReasonEnabled = false;
-      if (originalReason === 'keyword' && prefs.keywordNotificationsEnabled !== false) {
+      if (originalReason === 'keyword' && isKeywordPrefEnabled) {
         isOriginalReasonEnabled = true;
-      } else if (originalReason === 'author' && prefs.dealNotificationsEnabled !== false) {
+      } else if (originalReason === 'author' && isDealPrefEnabled) {
         isOriginalReasonEnabled = true;
-      } else if (originalReason === 'category' && prefs.categoryNotificationsEnabled !== false) {
+      } else if (originalReason === 'category' && isCategoryPrefEnabled) {
         isOriginalReasonEnabled = true;
       }
 
@@ -1169,13 +1182,13 @@ exports.onNotificationCreated = functions.firestore
         activeReason = originalReason;
         activeDetail = notification.reasonDetail || '';
       } else {
-        if (reasons.keyword && prefs.keywordNotificationsEnabled !== false) {
+        if (reasons.keyword && isKeywordPrefEnabled) {
           activeReason = 'keyword';
           activeDetail = reasons.keyword;
-        } else if (reasons.author && prefs.dealNotificationsEnabled !== false) {
+        } else if (reasons.author && isDealPrefEnabled) {
           activeReason = 'author';
           activeDetail = reasons.author;
-        } else if (reasons.category && prefs.categoryNotificationsEnabled !== false) {
+        } else if (reasons.category && isCategoryPrefEnabled) {
           activeReason = 'category';
           activeDetail = reasons.category;
         }
@@ -1228,30 +1241,34 @@ exports.onNotificationCreated = functions.firestore
     } else {
       if (isKeywordNotif) {
         groupName = 'keyword';
-        groupEnabled = prefs.keywordNotificationsEnabled !== false;
+        groupEnabled = isKeywordPrefEnabled;
       } else if (isCategoryNotif) {
         groupName = 'category';
-        groupEnabled = prefs.categoryNotificationsEnabled !== false;
+        groupEnabled = isCategoryPrefEnabled;
       } else if (type === 'deal') {
         groupName = 'deal';
-        groupEnabled = prefs.dealNotificationsEnabled !== false;
+        groupEnabled = isDealPrefEnabled;
       } else if (type === 'comment_reply' || type === 'comment') {
         groupName = 'comment_reply';
-        groupEnabled = prefs.communityNotificationsEnabled !== false;
+        groupEnabled = isCommunityPrefEnabled;
       } else if (type === 'submission_status') {
         groupName = 'submission_status';
-        groupEnabled = prefs.submissionStatusNotificationsEnabled !== false;
+        groupEnabled = isSubmissionStatusPrefEnabled;
       } else if (type === 'marketing') {
         groupName = 'marketing';
-        groupEnabled = prefs.marketingNotificationsEnabled !== false;
+        groupEnabled = isMarketingPrefEnabled;
       }
     }
 
     if (!groupEnabled) {
-      functions.logger.info(`🚫 Kullanıcı ${userId} için bu bildirim grubu kapalı: ${groupName}`);
+      const status = prefs.pushMasterEnabled !== false
+        ? `disabled_by_user_group_${groupName}`
+        : `disabled_by_user_master_switch`;
+
+      functions.logger.info(`🚫 Kullanıcı ${userId} için bu bildirim grubu kapalı: ${groupName} (Status: ${status})`);
       await snap.ref.update({
         pushEligible: false,
-        pushStatus: `disabled_by_user_group_${groupName}`,
+        pushStatus: status,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return null;
