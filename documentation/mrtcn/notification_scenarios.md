@@ -50,6 +50,8 @@ Push bildirimlerinin telefona ulaşma karar ağacı Cloud Functions `onNotificat
 #### A. Telefon Bildirimleri (Master Switch - `pushMasterEnabled`)
 * **Senaryo PUSH-MASTER-OFF:** `pushMasterEnabled: false` ise, bildirim türü ne olursa olsun push engellenir.
   * *Sonuç:* Firestore dokümanında `pushEligible: false`, `pushStatus: 'disabled_by_user_master_switch'` güncellenir. Bildirim telefona gitmez, sadece uygulama içi bildirim kutusunda görünür.
+  * *UI Davranışı (Yeni Özellik):* Master switch kapalı olsa dahi alt bildirim kanalları (yazar, topluluk, kampanya vb.) ve sessiz saat/anahtar kelime/kategori ayarları pasifleşmez (grey out olmaz). Kullanıcı master switch kapalıyken de her bir alt ayarı bağımsız olarak açıp kapatabilir, anahtar kelime veya kategori ekleyip çıkarabilir, sessiz saatleri yapılandırabilir. Bu tercihler Firestore'da anında güncellenir ve saklanır.
+  * *Geriye Dönük Mantık:* Master switch tekrar `true` konumuna getirildiğinde, alt kanallar son seçili durumlarına (Firestore'daki aktif değerlerine) göre çalışmaya devam eder.
 * **Senaryo PUSH-MASTER-ON:** `pushMasterEnabled: true` ise, diğer alt kanal ve zaman kuralları denetlenmeye başlar.
 
 #### B. Kanal Bazlı Filtreler (`groupEnabled` Kontrolleri)
@@ -102,19 +104,18 @@ Yukarıdaki tüm senaryoları izole ve kararlı bir şekilde test etmek için pr
 Bu test dosyası, tüm push bildirim senaryolarını parametrik bir test matrisi (`testMatrix`) ile ve zaman/limit kısıtlarını izole test durumlarıyla denetler:
 
 #### A. Parametrik Karar Matrisi Testleri (TEST 1)
-* **Master Switch Kapalı Çapraz Kombinasyon Durumları (Alt senaryo 1.1 - 1.6):**
-  * Kullanıcı arayüzünde Master Switch (`pushMasterEnabled: false`) kapalıyken bile tüm alt kanal ayarları (kategori, yazar, topluluk vb.) bağımsız olarak açılıp kapatılabilir.
-  * Bu durumda veritabanında alt kanalların son seçili değerleri tutulur. Ancak gönderim esnasında Master Switch kapalı olduğu sürece, alt kanallar açık (`true`) ya da kapalı (`false`) olsun fark etmeksizin push bildirimi hedeflenen kanal bazında `disabled_by_user_master_switch` nedeni ile engellenir.
-* **Alt Switch Kapalı Durumları (Alt senaryo 1.7 - 1.12):**
-  * Master switch açık (`pushMasterEnabled: true`), ancak ilgili alt switch `false` olduğunda push bildiriminin hedeflenen kanal bazında engellendiğini (`disabled_by_user_group_{groupName}`) doğrular:
+* **Master Switch Kapalı Durumları (Alt senaryo 1.1 - 1.3):**
+  * `pushMasterEnabled: false` olduğunda; kategori, yazar veya topluluk alt switchleri açık olsa dahi push bildiriminin `disabled_by_user_master_switch` ile engellendiğini doğrular.
+* **Alt Switch Kapalı Durumları (Alt senaryo 1.4 - 1.9):**
+  * Master switch açık, ancak ilgili alt switch `false` olduğunda push bildiriminin hedeflenen kanal bazında engellendiğini (`disabled_by_user_group_{groupName}`) doğrular:
     * `categoryNotificationsEnabled: false` -> `disabled_by_user_group_category`
     * `keywordNotificationsEnabled: false` -> `disabled_by_user_group_keyword`
     * `dealNotificationsEnabled: false` -> `disabled_by_user_group_deal`
     * `communityNotificationsEnabled: false` -> `disabled_by_user_group_comment_reply`
     * `submissionStatusNotificationsEnabled: false` -> `disabled_by_user_group_submission_status`
     * `marketingNotificationsEnabled: false` -> `disabled_by_user_group_marketing`
-* **Alt Switch Açık Durumları (Alt senaryo 1.13 - 1.18):**
-  * Master switch açık (`pushMasterEnabled: true`) ve ilgili alt switch `true` olduğunda push bildiriminin filtreleri başarıyla aştığını (`pushEligible: true`) ve gönderime ulaştığını (`pushStatus: failed` - sahte test token'ı nedeniyle) doğrular.
+* **Alt Switch Açık Durumları (Alt senaryo 1.10 - 1.15):**
+  * Master switch açık ve ilgili alt switch `true` olduğunda push bildiriminin filtreleri başarıyla aştığını (`pushEligible: true`) ve gönderime ulaştığını (`pushStatus: failed` - sahte test token'ı nedeniyle) doğrular.
 
 #### B. Zaman ve Limit Filtreleri (TEST 2 - 5)
 * **TEST 2 (Sessiz Saatler Filtresi):** Sessiz saatler aktifken standart indirim fırsatı push'larının `skipped_quiet_hours` ile engellendiğini doğrular.
@@ -123,5 +124,4 @@ Bu test dosyası, tüm push bildirim senaryolarını parametrik bir test matrisi
 * **TEST 5 (Aktif Cihaz Bulunmama):** Kullanıcının aktif bir cihaz kaydı bulunmadığında push gönderiminin `no_active_devices` ile atlandığını doğrular.
 
 Bu testler, Google Cloud Service Account anahtarı (`dev_firebase_key.json`) kullanılarak Firebase DEV ortamında doğrudan çalıştırılabilir.
-
 

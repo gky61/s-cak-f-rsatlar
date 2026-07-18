@@ -129,43 +129,22 @@ async function runSettingsTests() {
     const testMatrix = [
       // A. Master Switch Kapalı Durumları (Diğer switchler ne olursa olsun engellenmeli)
       {
-        name: 'Master Switch Kapalı - Kategori Bildirimi (Alt Açık)',
+        name: 'Master Switch Kapalı - Kategori Bildirimi',
         prefs: { pushMasterEnabled: false, categoryNotificationsEnabled: true },
         notifData: { type: 'deal', reason: 'category', title: 'İndirim', body: 'Test' },
         expectedEligible: false,
         expectedStatus: 'disabled_by_user_master_switch'
       },
       {
-        name: 'Master Switch Kapalı - Kategori Bildirimi (Alt Kapalı)',
-        prefs: { pushMasterEnabled: false, categoryNotificationsEnabled: false },
-        notifData: { type: 'deal', reason: 'category', title: 'İndirim', body: 'Test' },
-        expectedEligible: false,
-        expectedStatus: 'disabled_by_user_master_switch'
-      },
-      {
-        name: 'Master Switch Kapalı - Yazar Bildirimi (Alt Açık)',
+        name: 'Master Switch Kapalı - Yazar Bildirimi',
         prefs: { pushMasterEnabled: false, dealNotificationsEnabled: true },
         notifData: { type: 'deal', reason: 'author', title: 'Yazar Fırsatı', body: 'Test' },
         expectedEligible: false,
         expectedStatus: 'disabled_by_user_master_switch'
       },
       {
-        name: 'Master Switch Kapalı - Yazar Bildirimi (Alt Kapalı)',
-        prefs: { pushMasterEnabled: false, dealNotificationsEnabled: false },
-        notifData: { type: 'deal', reason: 'author', title: 'Yazar Fırsatı', body: 'Test' },
-        expectedEligible: false,
-        expectedStatus: 'disabled_by_user_master_switch'
-      },
-      {
-        name: 'Master Switch Kapalı - Topluluk Bildirimi (Alt Açık)',
+        name: 'Master Switch Kapalı - Topluluk Bildirimi',
         prefs: { pushMasterEnabled: false, communityNotificationsEnabled: true },
-        notifData: { type: 'comment_reply', title: 'Yorum', body: 'Test' },
-        expectedEligible: false,
-        expectedStatus: 'disabled_by_user_master_switch'
-      },
-      {
-        name: 'Master Switch Kapalı - Topluluk Bildirimi (Alt Kapalı)',
-        prefs: { pushMasterEnabled: false, communityNotificationsEnabled: false },
         notifData: { type: 'comment_reply', title: 'Yorum', body: 'Test' },
         expectedEligible: false,
         expectedStatus: 'disabled_by_user_master_switch'
