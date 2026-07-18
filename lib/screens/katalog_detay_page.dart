@@ -14,9 +14,13 @@ class KatalogDetayPage extends StatefulWidget {
   State<KatalogDetayPage> createState() => _KatalogDetayPageState();
 }
 
-class _KatalogDetayPageState extends State<KatalogDetayPage> {
+class _KatalogDetayPageState extends State<KatalogDetayPage>
+    with TickerProviderStateMixin {
   late final PageController _pageController;
   late final TransformationController _transformationController;
+  late final AnimationController _zoomAnimController;
+  Animation<Matrix4>? _zoomAnimation;
+
   int _currentPage = 0;
   bool _isZoomed = false;
   int _pointerCount = 0;
@@ -27,11 +31,21 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
     _pageController = PageController();
     _transformationController = TransformationController();
     _transformationController.addListener(_handleZoomChange);
+
+    _zoomAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    _zoomAnimController.addListener(() {
+      if (_zoomAnimation != null) {
+        _transformationController.value = _zoomAnimation!.value;
+      }
+    });
   }
 
   void _handleZoomChange() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
-    final isZoomedNow = scale > 1.0;
+    final isZoomedNow = scale > 1.02; // small threshold to avoid float jitter
     if (isZoomedNow != _isZoomed) {
       setState(() {
         _isZoomed = isZoomedNow;
@@ -40,28 +54,33 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
   }
 
   void _handleDoubleTap() {
-    if (_transformationController.value.getMaxScaleOnAxis() > 1.0) {
-      // Zoom out to normal
-      setState(() {
-        _isZoomed = false;
-      });
-      _transformationController.value = Matrix4.identity();
+    final currentScale = _transformationController.value.getMaxScaleOnAxis();
+    final Matrix4 targetMatrix;
+
+    if (currentScale > 1.02) {
+      // Zoom out smoothly to identity
+      targetMatrix = Matrix4.identity();
     } else {
-      // Zoom in to 2.5x exactly centered
-      setState(() {
-        _isZoomed = true;
-      });
-      final double scale = 2.5;
+      // Zoom in to 2.5x, centered on screen
+      const double scale = 2.5;
       final double width = MediaQuery.of(context).size.width;
       final double height = MediaQuery.of(context).size.height;
-      
       final double x = -(width * (scale - 1)) / 2;
       final double y = -(height * (scale - 1)) / 2;
-      
-      _transformationController.value = Matrix4.identity()
+      targetMatrix = Matrix4.identity()
         ..translate(x, y)
         ..scale(scale, scale, 1.0);
     }
+
+    _zoomAnimation = Matrix4Tween(
+      begin: _transformationController.value.clone(),
+      end: targetMatrix,
+    ).animate(CurvedAnimation(
+      parent: _zoomAnimController,
+      curve: Curves.easeInOutCubic,
+    ));
+
+    _zoomAnimController.forward(from: 0.0);
   }
 
   @override
@@ -69,6 +88,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
     _pageController.dispose();
     _transformationController.removeListener(_handleZoomChange);
     _transformationController.dispose();
+    _zoomAnimController.dispose();
     super.dispose();
   }
 
@@ -101,7 +121,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
     final pageCount = widget.catalog.sayfaResimleri.length;
 
     return Scaffold(
-      backgroundColor: Colors.black, // Dark cinematic reader view
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           // Main PageView with zoomable images
@@ -110,6 +130,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
               controller: _pageController,
               itemCount: pageCount,
               onPageChanged: (index) {
+                _zoomAnimController.stop();
                 _transformationController.value = Matrix4.identity();
                 setState(() {
                   _currentPage = index;
@@ -136,7 +157,10 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
                   onPointerUp: (event) {
                     if (isCurrent) {
                       _pointerCount = (_pointerCount - 1).clamp(0, 99);
-                      if (_pointerCount < 2 && _transformationController.value.getMaxScaleOnAxis() <= 1.0) {
+                      if (_pointerCount < 2 &&
+                          _transformationController.value
+                                  .getMaxScaleOnAxis() <=
+                              1.02) {
                         setState(() {
                           _isZoomed = false;
                         });
@@ -146,7 +170,10 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
                   onPointerCancel: (event) {
                     if (isCurrent) {
                       _pointerCount = (_pointerCount - 1).clamp(0, 99);
-                      if (_pointerCount < 2 && _transformationController.value.getMaxScaleOnAxis() <= 1.0) {
+                      if (_pointerCount < 2 &&
+                          _transformationController.value
+                                  .getMaxScaleOnAxis() <=
+                              1.02) {
                         setState(() {
                           _isZoomed = false;
                         });
@@ -157,9 +184,13 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
                     child: InteractiveViewer(
                       minScale: 1.0,
                       maxScale: 4.0,
-                      transformationController: isCurrent ? _transformationController : null,
+                      transformationController:
+                          isCurrent ? _transformationController : null,
                       onInteractionEnd: (details) {
-                        if (isCurrent && _transformationController.value.getMaxScaleOnAxis() <= 1.0) {
+                        if (isCurrent &&
+                            _transformationController.value
+                                    .getMaxScaleOnAxis() <=
+                                1.02) {
                           setState(() {
                             _isZoomed = false;
                           });
@@ -181,11 +212,13 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.broken_image, color: Colors.white60, size: 60),
+                                Icon(Icons.broken_image,
+                                    color: Colors.white60, size: 60),
                                 SizedBox(height: 12),
                                 Text(
                                   'Görsel yüklenemedi',
-                                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                                  style: TextStyle(
+                                      color: Colors.white70, fontSize: 16),
                                 ),
                               ],
                             ),
@@ -283,9 +316,9 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Text indicator (e.g. 1 / 13)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(20),
@@ -304,13 +337,13 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // Line/Dots indicator
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(
                         pageCount,
                         (index) => Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          margin:
+                              const EdgeInsets.symmetric(horizontal: 3),
                           width: _currentPage == index ? 16 : 6,
                           height: 6,
                           decoration: BoxDecoration(
