@@ -1205,39 +1205,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Column(
                       children: [
-                        // Notifications
-                        _buildSettingItem(
-                          icon: Icons.notifications,
-                          title: 'Bildirim Ayarları',
-                          iconBgColor: primaryColor.withValues(alpha: 0.2),
-                          iconColor: isDark ? Colors.yellow[200]! : Colors.yellow[800]!,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                    children: [
-                              Switch(
-                                value: _notificationsEnabled,
-                                onChanged: _toggleNotifications,
-                                activeColor: primaryColor,
-                                activeTrackColor: primaryColor.withValues(alpha: 0.5),
-                              ),
-                              Icon(Icons.chevron_right, color: Colors.grey[400]),
-                            ],
-                          ),
-                          onTap: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const NotificationSettingsScreen(),
-                              ),
-                            );
-                            // Bildirim ayarları ekranından dönüldüğünde ayarları yeniden yükle
-                            if (_isOwnProfile && mounted) {
-                              await _loadNotificationSettings();
-                            }
-                          },
-                          isDark: isDark,
-                        ),
-                        _buildDivider(isDark),
                         // Paylaştığım Fırsatlar
                         _buildSettingItem(
                           icon: Icons.local_offer,
@@ -1368,47 +1335,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               context,
                               MaterialPageRoute(
                                 builder: (_) => const PrivacyPolicyScreen(),
-                              ),
-                            );
-                          },
-                          isDark: isDark,
-                        ),
-                        _buildDivider(isDark),
-                        // Language
-                        // Admin'den gelen bildirimler
-                        _buildSettingItem(
-                          icon: Icons.campaign,
-                          title: 'Bildirimler',
-                          iconBgColor: Colors.purple.withValues(alpha: 0.1),
-                          iconColor: Colors.purple,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (_unreadAdminMessageCount > 0)
-                                Container(
-                                  margin: const EdgeInsets.only(right: 8),
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    _unreadAdminMessageCount > 99 ? '99+' : _unreadAdminMessageCount.toString(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              Icon(Icons.chevron_right, color: Colors.grey[400]),
-                            ],
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AdminNotificationsScreen(),
                               ),
                             );
                           },

@@ -25,6 +25,8 @@ import 'profile_screen.dart';
 import 'favorites_screen.dart';
 import 'kuponlar_page.dart';
 import 'aktuel_magazalar_page.dart';
+import 'notification_settings_screen.dart';
+import 'admin_notifications_screen.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -635,7 +637,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(
           MediaQuery.of(context).padding.top +
-          (_isSearchMode ? 56 : 92),
+          (_isSearchMode ? 56 : 108),
         ),
         child: Container(
           decoration: BoxDecoration(
@@ -643,8 +645,8 @@ class _HomeScreenState extends State<HomeScreen> {
             border: Border(
               bottom: BorderSide(
                 color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.07),
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.06),
                 width: 1,
               ),
             ),
@@ -654,10 +656,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ─── Ana Satır ─────────────────────────────────────────
+                // ─── ARAMA MODU ────────────────────────────────────────
                 if (_isSearchMode)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
                     child: Row(
                       children: [
                         Expanded(
@@ -684,20 +686,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               suffixIcon: _searchQuery.isNotEmpty
                                   ? IconButton(
-                                      icon:
-                                          const Icon(Icons.close_rounded, size: 18),
+                                      icon: const Icon(Icons.close_rounded, size: 18),
                                       onPressed: _clearSearch,
-                                      color: isDark
-                                          ? Colors.white54
-                                          : AppTheme.textSecondary,
+                                      color: isDark ? Colors.white54 : AppTheme.textSecondary,
                                     )
                                   : null,
                               filled: true,
                               fillColor: isDark
                                   ? Colors.white.withValues(alpha: 0.07)
-                                  : AppTheme.primary.withValues(alpha: 0.05),
+                                  : const Color(0xFFF5F5F5),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
                                 borderSide: BorderSide.none,
                               ),
                               contentPadding: const EdgeInsets.symmetric(
@@ -705,22 +704,121 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 4),
                         IconButton(
                           icon: const Icon(Icons.close_rounded, size: 22),
                           onPressed: _toggleSearchMode,
-                          color:
-                              isDark ? Colors.white70 : AppTheme.textSecondary,
+                          color: isDark ? Colors.white70 : AppTheme.textSecondary,
                         ),
                       ],
                     ),
                   )
-                else
+                else ...[
+                  // ─── SATIR 1: Logo + Bildirim + Profil + Admin ─────────
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 6, 8, 4),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
                     child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // ── Kataloglar / Kuponlar quick-action chips ──
+                        // Fırsatkolik logosu + wordmark
+                        Image.asset(
+                          'assets/store-icon.png',
+                          width: 28,
+                          height: 28,
+                        ),
+                        const SizedBox(width: 7),
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Fırsat',
+                                style: TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? Colors.white : AppTheme.textPrimary,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              const TextSpan(
+                                text: 'kolik',
+                                style: TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.primary,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Spacer(),
+                        // Arama
+                        _buildHeaderIconButton(
+                          icon: Icons.search_rounded,
+                          onTap: _toggleSearchMode,
+                          isDark: isDark,
+                        ),
+                        // Bildirim zili
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            _buildHeaderIconButton(
+                              icon: _unreadAdminMessageCount > 0
+                                  ? Icons.notifications_active
+                                  : Icons.notifications_outlined,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => _unreadAdminMessageCount > 0
+                                      ? const AdminNotificationsScreen()
+                                      : const NotificationSettingsScreen(),
+                                ),
+                              ),
+                              isDark: isDark,
+                              accent: _unreadAdminMessageCount > 0
+                                  ? Colors.red
+                                  : null,
+                            ),
+                            if (_unreadAdminMessageCount > 0)
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isDark
+                                          ? AppTheme.darkBackground
+                                          : Colors.white,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        // Admin (sadece adminlere)
+                        if (_isAdmin)
+                          _buildHeaderIconButton(
+                            icon: Icons.admin_panel_settings_rounded,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const AdminScreen()),
+                            ),
+                            isDark: isDark,
+                            accent: primaryColor,
+                          ),
+                      ],
+                    ),
+                  ),
+                  // ─── SATIR 2: Kataloglar + Kuponlar + Grid/List ────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                    child: Row(
+                      children: [
                         StreamBuilder<bool>(
                           stream: _firestoreService.couponsEnabledStream(),
                           initialData: true,
@@ -761,28 +859,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                         ),
                         const Spacer(),
-                        // ── Search ──
-                        _buildHeaderIconButton(
-                          icon: Icons.search_rounded,
-                          onTap: _toggleSearchMode,
-                          isDark: isDark,
-                        ),
-                        // ── Admin (sadece adminlere) ──
-                        if (_isAdmin)
-                          _buildHeaderIconButton(
-                            icon: Icons.admin_panel_settings_rounded,
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => const AdminScreen()),
-                            ),
-                            isDark: isDark,
-                            accent: primaryColor,
-                          ),
-                        const SizedBox(width: 4),
-                        // ── Grid / List toggle ──
+                        // Grid / List toggle
                         Container(
-                          height: 32,
+                          height: 30,
                           padding: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
                             color: isDark
@@ -795,8 +874,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               _buildViewModeButton(
                                 icon: Icons.grid_view_rounded,
-                                isSelected:
-                                    _viewMode == CardViewMode.vertical,
+                                isSelected: _viewMode == CardViewMode.vertical,
                                 onTap: () => _themeService
                                     .setViewMode(CardViewMode.vertical),
                                 isDark: isDark,
@@ -815,8 +893,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                // ─── Kategori Filtreleri ────────────────────────────────
-                if (!_isSearchMode)
+                  // ─── SATIR 3: Kategori Filtreleri ─────────────────────
                   SizedBox(
                     height: 36,
                     child: ListView.separated(
@@ -824,7 +901,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       itemCount: Category.categories.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
                       itemBuilder: (context, index) {
                         final category = Category.categories[index];
                         final isSelected =
@@ -838,16 +915,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             _selectedSubCategory = null;
                             _displayLimit = 20;
                           }),
-                          backgroundColor: isDark
-                              ? AppTheme.darkSurface
-                              : AppTheme.surface,
+                          backgroundColor:
+                              isDark ? AppTheme.darkSurface : AppTheme.surface,
                           selectedColor: AppTheme.secondary,
                           labelStyle: TextStyle(
                             color: isSelected
                                 ? Colors.white
-                                : (isDark
-                                    ? Colors.white
-                                    : AppTheme.textPrimary),
+                                : (isDark ? Colors.white : AppTheme.textPrimary),
                             fontWeight: isSelected
                                 ? FontWeight.w700
                                 : FontWeight.w500,
@@ -860,7 +934,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     : AppTheme.darkBorder)
                                 : (isSelected
                                     ? AppTheme.secondary
-                                    : const Color(0xFFE0E0E0)),
+                                    : const Color(0xFFE8E8E8)),
                             width: 1,
                           ),
                           shape: RoundedRectangleBorder(
@@ -875,7 +949,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                   ),
-                const SizedBox(height: 6),
+                  const SizedBox(height: 6),
+                ],
               ],
             ),
           ),
