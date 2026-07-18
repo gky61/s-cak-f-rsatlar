@@ -633,243 +633,234 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(125),
+        preferredSize: const Size.fromHeight(112),
         child: Container(
           decoration: BoxDecoration(
-            color: (isDark ? AppTheme.darkBackground : Colors.white).withOpacity(0.95),
+            color: isDark ? AppTheme.darkBackground : Colors.white,
             border: Border(
               bottom: BorderSide(
-                color: Colors.black.withOpacity(isDark ? 0.05 : 0.05),
-                width: 2,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.07)
+                    : Colors.black.withValues(alpha: 0.06),
+                width: 1,
               ),
             ),
           ),
-          child: Container(
-            color: (isDark ? AppTheme.darkBackground : Colors.white).withOpacity(0.95),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  // Header - FIRSAT KOLİK başlığı ve butonlar veya Arama çubuğu
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: _isSearchMode
-                        ? Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _searchController,
-                                  autofocus: true,
-                                  onChanged: _onSearchChanged,
-                                  decoration: InputDecoration(
-                                    hintText: 'Fırsat, mağaza veya açıklama ara...',
-                                    prefixIcon: const Icon(Icons.search),
-                                    suffixIcon: _searchQuery.isNotEmpty
-                                        ? IconButton(
-                                            icon: const Icon(Icons.clear),
-                                            onPressed: _clearSearch,
-                                          )
-                                        : null,
-                                    filled: true,
-                                    fillColor: isDark 
-                                        ? Colors.white.withValues(alpha: 0.1)
-                                        : Colors.black.withValues(alpha: 0.05),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: _toggleSearchMode,
-                                color: isDark ? Colors.white : AppTheme.textPrimary,
-                              ),
-                            ],
-                          )
-                        : Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'FIRSAT KOLİK',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark ? Colors.white : AppTheme.textPrimary,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                        if (!_isSearchMode) ...[
-                          // Görünüm modu toggle
-                          Container(
-                            height: 40,
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildViewModeButton(
-                                  icon: Icons.grid_view,
-                                  isSelected: _viewMode == CardViewMode.vertical,
-                                  onTap: () => _themeService.setViewMode(CardViewMode.vertical),
-                                  isDark: isDark,
-                                ),
-                                _buildViewModeButton(
-                                  icon: Icons.view_agenda,
-                                  isSelected: _viewMode == CardViewMode.horizontal,
-                                  onTap: () => _themeService.setViewMode(CardViewMode.horizontal),
-                                  isDark: isDark,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          StreamBuilder<bool>(
-                            stream: _firestoreService.couponsEnabledStream(),
-                            initialData: true,
-                            builder: (context, snapshot) {
-                              final enabled = snapshot.data ?? true;
-                              if (!enabled) return const SizedBox.shrink();
-                              return Row(
-                                children: [
-                                  // Dikey ayırıcı
-                                  Container(
-                                    width: 1,
-                                    height: 24,
-                                    color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Kataloglar butonu
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(999),
-                                        onTap: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(builder: (_) => const AktuelMagazalarPage()),
-                                          );
-                                        },
-                                        child: Icon(
-                                          Icons.menu_book_outlined,
-                                          color: isDark ? Colors.white : AppTheme.textPrimary,
-                                          size: 22,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Kuponlar butonu
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(999),
-                                        onTap: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(builder: (_) => const KuponlarPage()),
-                                          );
-                                        },
-                                        child: Icon(
-                                          Icons.confirmation_number_outlined,
-                                          color: isDark ? Colors.white : AppTheme.textPrimary,
-                                          size: 22,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                ],
-                              );
-                            },
-                          ),
-
-                          // Search butonu
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(999),
-                                onTap: _toggleSearchMode,
-                                child: Icon(
-                                  Icons.search,
+          child: SafeArea(
+            child: Column(
+              children: [
+                // ─── Row 1: Brand logo + Search + Admin ───────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+                  child: _isSearchMode
+                      ? Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                autofocus: true,
+                                onChanged: _onSearchChanged,
+                                style: TextStyle(
                                   color: isDark ? Colors.white : AppTheme.textPrimary,
-                                  size: 22,
+                                  fontSize: 15,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Fırsat, mağaza veya açıklama ara...',
+                                  hintStyle: TextStyle(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.4)
+                                        : Colors.black.withValues(alpha: 0.35),
+                                    fontSize: 15,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.search_rounded,
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.5)
+                                        : Colors.black.withValues(alpha: 0.4),
+                                    size: 20,
+                                  ),
+                                  suffixIcon: _searchQuery.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.close_rounded, size: 18),
+                                          onPressed: _clearSearch,
+                                          color: isDark
+                                              ? Colors.white.withValues(alpha: 0.5)
+                                              : Colors.black.withValues(alpha: 0.4),
+                                        )
+                                      : null,
+                                  filled: true,
+                                  fillColor: isDark
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.05),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 10),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                        // Admin panel butonu (sadece admin kullanıcılar için ve arama modunda değilken)
-                        if (_isAdmin && !_isSearchMode) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.circular(999),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded),
+                              onPressed: _toggleSearchMode,
+                              color: isDark ? Colors.white70 : AppTheme.textSecondary,
                             ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(999),
+                          ],
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Brand mark
+                            Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'F',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 17,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Fırsatkolik',
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                color: isDark ? Colors.white : const Color(0xFF111827),
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const Spacer(),
+                            // Search icon button
+                            _buildHeaderIconButton(
+                              icon: Icons.search_rounded,
+                              onTap: _toggleSearchMode,
+                              isDark: isDark,
+                              primaryColor: primaryColor,
+                            ),
+                            if (_isAdmin) ...[
+                              const SizedBox(width: 2),
+                              _buildHeaderIconButton(
+                                icon: Icons.admin_panel_settings_rounded,
                                 onTap: () => Navigator.push(
                                   context,
                                   MaterialPageRoute(builder: (_) => const AdminScreen()),
                                 ),
-                                child: Icon(
-                                  Icons.admin_panel_settings_rounded,
-                                  color: primaryColor,
-                                  size: 22,
-                                ),
+                                isDark: isDark,
+                                primaryColor: primaryColor,
+                                accent: primaryColor,
                               ),
-                            ),
+                            ],
+                          ],
+                        ),
+                ),
+                // ─── Row 2: Quick-action chips + View toggle ──────────────
+                if (!_isSearchMode)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                    child: Row(
+                      children: [
+                        StreamBuilder<bool>(
+                          stream: _firestoreService.couponsEnabledStream(),
+                          initialData: true,
+                          builder: (context, snapshot) {
+                            final couponsEnabled = snapshot.data ?? true;
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildQuickActionChip(
+                                  label: 'Kataloglar',
+                                  icon: Icons.auto_stories_rounded,
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const AktuelMagazalarPage()),
+                                  ),
+                                  isDark: isDark,
+                                  color: const Color(0xFF3B82F6),
+                                ),
+                                if (couponsEnabled) ...[
+                                  const SizedBox(width: 8),
+                                  _buildQuickActionChip(
+                                    label: 'Kuponlar',
+                                    icon: Icons.local_offer_rounded,
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => const KuponlarPage()),
+                                    ),
+                                    isDark: isDark,
+                                    color: const Color(0xFF10B981),
+                                  ),
+                                ],
+                              ],
+                            );
+                          },
+                        ),
+                        const Spacer(),
+                        // Grid / List toggle pill
+                        Container(
+                          height: 32,
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(9),
                           ),
-                        ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildViewModeButton(
+                                icon: Icons.grid_view_rounded,
+                                isSelected: _viewMode == CardViewMode.vertical,
+                                onTap: () =>
+                                    _themeService.setViewMode(CardViewMode.vertical),
+                                isDark: isDark,
+                              ),
+                              _buildViewModeButton(
+                                icon: Icons.view_agenda_rounded,
+                                isSelected: _viewMode == CardViewMode.horizontal,
+                                onTap: () =>
+                                    _themeService.setViewMode(CardViewMode.horizontal),
+                                isDark: isDark,
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  // Kategori Chip'leri (Horizontal Scroll) - Arama modunda gizle
-                  if (!_isSearchMode)
+                const SizedBox(height: 6),
+                // ─── Row 3: Category filter chips ─────────────────────────
+                if (!_isSearchMode)
                   SizedBox(
                     height: 36,
                     child: ListView.separated(
                       controller: _categoryScrollController,
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       itemCount: Category.categories.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (context, index) {
                         final category = Category.categories[index];
-                        final isSelected = _selectedCategory == category.id && _selectedSubCategory == null;
-                        
+                        final isSelected = _selectedCategory == category.id &&
+                            _selectedSubCategory == null;
                         return FilterChip(
                           label: Text(category.name),
                           selected: isSelected,
@@ -878,32 +869,38 @@ class _HomeScreenState extends State<HomeScreen> {
                             _selectedSubCategory = null;
                             _displayLimit = 20;
                           }),
-                          backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.surface,
+                          backgroundColor:
+                              isDark ? AppTheme.darkSurface : AppTheme.surface,
                           selectedColor: AppTheme.secondary,
                           labelStyle: TextStyle(
-                            color: isSelected 
+                            color: isSelected
                                 ? Colors.white
                                 : (isDark ? Colors.white : AppTheme.textPrimary),
-                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w500,
                             fontSize: 14,
                           ),
                           side: BorderSide(
-                            color: isDark 
-                                ? (isSelected ? AppTheme.secondary : AppTheme.darkBorder)
-                                : (isSelected ? AppTheme.secondary : const Color(0xFFE0E0E0)),
+                            color: isDark
+                                ? (isSelected
+                                    ? AppTheme.secondary
+                                    : AppTheme.darkBorder)
+                                : (isSelected
+                                    ? AppTheme.secondary
+                                    : const Color(0xFFE0E0E0)),
                             width: 1,
                           ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999), // rounded-full
+                            borderRadius: BorderRadius.circular(999),
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 8),
                         );
                       },
                     ),
                   ),
-                  const SizedBox(height: 8),
-                ],
-              ),
+                const SizedBox(height: 8),
+              ],
             ),
           ),
         ),
@@ -1451,6 +1448,80 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? (isDark ? Colors.white : AppTheme.textPrimary)
                 : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderIconButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool isDark,
+    required Color primaryColor,
+    Color? accent,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: accent != null
+                ? accent.withValues(alpha: 0.1)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            size: 22,
+            color: accent ??
+                (isDark ? Colors.white70 : AppTheme.textSecondary),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionChip({
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool isDark,
+    required Color color,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: isDark ? 0.15 : 0.09),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: color.withValues(alpha: isDark ? 0.35 : 0.25),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark
+                    ? color.withValues(alpha: 0.9)
+                    : color.withValues(alpha: 0.85),
+                letterSpacing: -0.1,
+              ),
+            ),
+          ],
         ),
       ),
     );
