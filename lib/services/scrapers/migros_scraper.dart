@@ -5,6 +5,10 @@ import 'package:http/http.dart' as http;
 import 'base_scraper.dart';
 
 class MigrosScraper extends BaseProductScraper {
+  /// CRM etiketinden parse edilen fiyat.
+  /// scrapeDescription() tarafından set edilir, scrapePrice() tarafından öncelikle kullanılır.
+  double? _crmPrice;
+
   @override
   String get domain => 'migros.com.tr';
 
@@ -74,6 +78,11 @@ class MigrosScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
+    // ÖNCELİK: scrapeDescription tarafından set edilen CRM fiyatı
+    if (_crmPrice != null && _crmPrice! > 0) {
+      return _crmPrice;
+    }
+
     // 1. JSON-LD şemasından fiyat çekmeyi dene (Öncelikli)
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
@@ -104,14 +113,33 @@ class MigrosScraper extends BaseProductScraper {
     return cleaned.trim();
   }
 
+  /// CRM etiket metninden içindeki fiyatı parse eder.
+  /// Örnek: "50 TL SEPETTE 124,95 TL" → 124.95
+  /// Birden fazla fiyat varsa en büyüğünü döndürür (gerçek market fiyatı).
+  double? _parseCrmPrice(String crmText) {
+    // Tüm sayısal değerleri bul: "124,95" veya "124.95" veya "125" biçiminde
+    final matches = RegExp(r'(\d{1,6}[.,]\d{2}|\d{1,6})').allMatches(crmText);
+    double? maxPrice;
+    for (final m in matches) {
+      final raw = m.group(0)!.replaceAll(',', '.');
+      final val = double.tryParse(raw);
+      if (val != null && val > 1) {
+        if (maxPrice == null || val > maxPrice) maxPrice = val;
+      }
+    }
+    return maxPrice;
+  }
+
   @override
   Future<String?> scrapeDescription(dom.Document document) async {
+    _crmPrice = null; // Reset
     final crmEl = document.querySelector('.product-label.crm');
     String crmPrefix = '';
     if (crmEl != null) {
       final crmText = crmEl.text.trim().toUpperCase();
       if (crmText.isNotEmpty) {
         crmPrefix = '**$crmText**';
+        _crmPrice = _parseCrmPrice(crmText);
       }
     }
 
@@ -155,6 +183,8 @@ class MigrosScraper extends BaseProductScraper {
                           final crmText = tagObj['tag'].toString().trim().toUpperCase();
                           if (crmText.isNotEmpty) {
                             crmPrefix = crmText;
+                            // CRM etiketindeki fiyatı parse et ve sakla (API fallback)
+                            _crmPrice ??= _parseCrmPrice(crmText);
                           }
                         }
                       }
