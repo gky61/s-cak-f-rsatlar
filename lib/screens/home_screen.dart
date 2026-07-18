@@ -637,19 +637,18 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(
           MediaQuery.of(context).padding.top +
-          (_isSearchMode ? 56 : 108),
+          (_isSearchMode ? 52 : 100),
         ),
         child: Container(
           decoration: BoxDecoration(
             color: isDark ? AppTheme.darkBackground : Colors.white,
-            border: Border(
-              bottom: BorderSide(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.06),
-                width: 1,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-            ),
+            ],
           ),
           child: Padding(
             padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
@@ -659,112 +658,127 @@ class _HomeScreenState extends State<HomeScreen> {
                 // ─── ARAMA MODU ────────────────────────────────────────
                 if (_isSearchMode)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
                     child: Row(
                       children: [
                         Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            autofocus: true,
-                            onChanged: _onSearchChanged,
-                            style: TextStyle(
-                              color: isDark ? Colors.white : AppTheme.textPrimary,
-                              fontSize: 15,
+                          child: Container(
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : const Color(0xFFF2F3F5),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            decoration: InputDecoration(
-                              hintText: 'Fırsat, mağaza veya açıklama ara...',
-                              hintStyle: TextStyle(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.4)
-                                    : AppTheme.textSecondary,
-                                fontSize: 15,
+                            child: TextField(
+                              controller: _searchController,
+                              autofocus: true,
+                              onChanged: _onSearchChanged,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : AppTheme.textPrimary,
+                                fontSize: 14,
                               ),
-                              prefixIcon: Icon(
-                                Icons.search_rounded,
-                                color: AppTheme.primary.withValues(alpha: 0.7),
-                                size: 20,
+                              decoration: InputDecoration(
+                                hintText: 'Fırsat, mağaza veya ürün ara...',
+                                hintStyle: TextStyle(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.35)
+                                      : const Color(0xFF9CA3AF),
+                                  fontSize: 14,
+                                ),
+                                prefixIcon: Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: Icon(
+                                    Icons.search_rounded,
+                                    color: isDark
+                                        ? Colors.white54
+                                        : const Color(0xFF9CA3AF),
+                                    size: 20,
+                                  ),
+                                ),
+                                suffixIcon: _searchQuery.isNotEmpty
+                                    ? GestureDetector(
+                                        onTap: _clearSearch,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(10),
+                                          child: Icon(
+                                            Icons.close_rounded,
+                                            size: 18,
+                                            color: isDark
+                                                ? Colors.white54
+                                                : const Color(0xFF9CA3AF),
+                                          ),
+                                        ),
+                                      )
+                                    : null,
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 0, vertical: 10),
                               ),
-                              suffixIcon: _searchQuery.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(Icons.close_rounded, size: 18),
-                                      onPressed: _clearSearch,
-                                      color: isDark ? Colors.white54 : AppTheme.textSecondary,
-                                    )
-                                  : null,
-                              filled: true,
-                              fillColor: isDark
-                                  ? Colors.white.withValues(alpha: 0.07)
-                                  : const Color(0xFFF5F5F5),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 10),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 22),
-                          onPressed: _toggleSearchMode,
-                          color: isDark ? Colors.white70 : AppTheme.textSecondary,
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _toggleSearchMode,
+                          child: Text(
+                            'İptal',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primary,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   )
                 else ...[
-                  // ─── SATIR 1: Logo + Bildirim + Profil + Admin ─────────
+                  // ─── SATIR 1: Wordmark + İkonlar ─────────────────────
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+                    padding: const EdgeInsets.fromLTRB(16, 6, 12, 2),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Fırsatkolik logosu + wordmark
-                        Image.asset(
-                          'assets/store-icon.png',
-                          width: 28,
-                          height: 28,
-                        ),
-                        const SizedBox(width: 7),
+                        // Wordmark
                         RichText(
                           text: TextSpan(
                             children: [
                               TextSpan(
                                 text: 'Fırsat',
                                 style: TextStyle(
-                                  fontSize: 19,
+                                  fontSize: 22,
                                   fontWeight: FontWeight.w800,
-                                  color: isDark ? Colors.white : AppTheme.textPrimary,
-                                  letterSpacing: -0.5,
+                                  color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                                  letterSpacing: -0.8,
                                 ),
                               ),
-                              const TextSpan(
+                              TextSpan(
                                 text: 'kolik',
                                 style: TextStyle(
-                                  fontSize: 19,
+                                  fontSize: 22,
                                   fontWeight: FontWeight.w800,
                                   color: AppTheme.primary,
-                                  letterSpacing: -0.5,
+                                  letterSpacing: -0.8,
                                 ),
                               ),
                             ],
                           ),
                         ),
                         const Spacer(),
-                        // Arama
-                        _buildHeaderIconButton(
+                        // ── İkon grubu: hepsi aynı boyut, aynı stil ──
+                        _buildHeaderAction(
                           icon: Icons.search_rounded,
                           onTap: _toggleSearchMode,
                           isDark: isDark,
                         ),
+                        const SizedBox(width: 4),
                         // Bildirim zili
                         Stack(
                           clipBehavior: Clip.none,
                           children: [
-                            _buildHeaderIconButton(
-                              icon: _unreadAdminMessageCount > 0
-                                  ? Icons.notifications_active
-                                  : Icons.notifications_outlined,
+                            _buildHeaderAction(
+                              icon: Icons.notifications_none_rounded,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -774,14 +788,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               isDark: isDark,
-                              accent: _unreadAdminMessageCount > 0
-                                  ? Colors.red
-                                  : null,
                             ),
                             if (_unreadAdminMessageCount > 0)
                               Positioned(
-                                top: 4,
-                                right: 4,
+                                top: 6,
+                                right: 6,
                                 child: Container(
                                   width: 8,
                                   height: 8,
@@ -799,24 +810,24 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                           ],
                         ),
-                        // Admin (sadece adminlere)
-                        if (_isAdmin)
-                          _buildHeaderIconButton(
-                            icon: Icons.admin_panel_settings_rounded,
+                        if (_isAdmin) ...[
+                          const SizedBox(width: 4),
+                          _buildHeaderAction(
+                            icon: Icons.settings_rounded,
                             onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute(
                                   builder: (_) => const AdminScreen()),
                             ),
                             isDark: isDark,
-                            accent: primaryColor,
                           ),
+                        ],
                       ],
                     ),
                   ),
-                  // ─── SATIR 2: Kataloglar + Kuponlar + Grid/List ────────
+                  // ─── SATIR 2: Chips (Kataloglar, Kuponlar) + View ────
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 12, 6),
                     child: Row(
                       children: [
                         StreamBuilder<bool>(
@@ -827,7 +838,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             return Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _buildQuickActionChip(
+                                _buildNavChip(
                                   label: 'Kataloglar',
                                   icon: Icons.auto_stories_rounded,
                                   onTap: () => Navigator.push(
@@ -837,13 +848,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                             const AktuelMagazalarPage()),
                                   ),
                                   isDark: isDark,
-                                  color: AppTheme.secondary,
                                 ),
                                 if (couponsEnabled) ...[
                                   const SizedBox(width: 8),
-                                  _buildQuickActionChip(
+                                  _buildNavChip(
                                     label: 'Kuponlar',
-                                    icon: Icons.local_offer_rounded,
+                                    icon: Icons.confirmation_number_outlined,
                                     onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -851,7 +861,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                               const KuponlarPage()),
                                     ),
                                     isDark: isDark,
-                                    color: AppTheme.primary,
                                   ),
                                 ],
                               ],
@@ -861,25 +870,25 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Spacer(),
                         // Grid / List toggle
                         Container(
-                          height: 30,
-                          padding: const EdgeInsets.all(3),
+                          height: 32,
+                          padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
                             color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.black.withValues(alpha: 0.05),
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : const Color(0xFFF2F3F5),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              _buildViewModeButton(
+                              _buildViewToggle(
                                 icon: Icons.grid_view_rounded,
                                 isSelected: _viewMode == CardViewMode.vertical,
                                 onTap: () => _themeService
                                     .setViewMode(CardViewMode.vertical),
                                 isDark: isDark,
                               ),
-                              _buildViewModeButton(
+                              _buildViewToggle(
                                 icon: Icons.view_agenda_rounded,
                                 isSelected:
                                     _viewMode == CardViewMode.horizontal,
@@ -895,56 +904,60 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   // ─── SATIR 3: Kategori Filtreleri ─────────────────────
                   SizedBox(
-                    height: 36,
+                    height: 34,
                     child: ListView.separated(
                       controller: _categoryScrollController,
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: Category.categories.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (context, index) {
                         final category = Category.categories[index];
                         final isSelected =
                             _selectedCategory == category.id &&
                                 _selectedSubCategory == null;
-                        return FilterChip(
-                          label: Text(category.name),
-                          selected: isSelected,
-                          onSelected: (_) => setState(() {
+                        return GestureDetector(
+                          onTap: () => setState(() {
                             _selectedCategory = category.id;
                             _selectedSubCategory = null;
                             _displayLimit = 20;
                           }),
-                          backgroundColor:
-                              isDark ? AppTheme.darkSurface : AppTheme.surface,
-                          selectedColor: AppTheme.secondary,
-                          labelStyle: TextStyle(
-                            color: isSelected
-                                ? Colors.white
-                                : (isDark ? Colors.white : AppTheme.textPrimary),
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            fontSize: 13,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? (isDark
+                                      ? AppTheme.primary.withValues(alpha: 0.2)
+                                      : AppTheme.primary.withValues(alpha: 0.1))
+                                  : (isDark
+                                      ? Colors.white.withValues(alpha: 0.06)
+                                      : const Color(0xFFF5F5F5)),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppTheme.primary.withValues(alpha: 0.4)
+                                    : Colors.transparent,
+                                width: 1,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                category.name,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? AppTheme.primary
+                                      : (isDark
+                                          ? Colors.white.withValues(alpha: 0.7)
+                                          : const Color(0xFF6B7280)),
+                                ),
+                              ),
+                            ),
                           ),
-                          side: BorderSide(
-                            color: isDark
-                                ? (isSelected
-                                    ? AppTheme.secondary
-                                    : AppTheme.darkBorder)
-                                : (isSelected
-                                    ? AppTheme.secondary
-                                    : const Color(0xFFE8E8E8)),
-                            width: 1,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 6),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
                         );
                       },
                     ),
@@ -1464,123 +1477,119 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildViewModeButton({
+  Widget _buildViewToggle({
     required IconData icon,
     required bool isSelected,
     required VoidCallback onTap,
     required bool isDark,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: isSelected 
-                ? (isDark ? AppTheme.darkSurface : Colors.white)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-            boxShadow: isSelected ? [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 2,
-                offset: const Offset(0, 1),
-              ),
-            ] : null,
-          ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: isSelected 
-                ? (isDark ? Colors.white : AppTheme.textPrimary)
-                : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
-          ),
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: isSelected
+              ? (isDark ? Colors.white : const Color(0xFF1A1A2E))
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.35)
+                  : const Color(0xFFB0B0B0)),
         ),
       ),
     );
   }
 
-  Widget _buildHeaderIconButton({
+  Widget _buildHeaderAction({
     required IconData icon,
     required VoidCallback onTap,
     required bool isDark,
-    Color? accent,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: 40,
-          height: 40,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: accent != null
-                ? accent.withValues(alpha: 0.1)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            icon,
-            size: 22,
-            color: accent ??
-                (isDark ? Colors.white70 : AppTheme.textSecondary),
-          ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : const Color(0xFFF2F3F5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.7)
+              : const Color(0xFF4B5563),
         ),
       ),
     );
   }
 
-  Widget _buildQuickActionChip({
+  Widget _buildNavChip({
     required String label,
     required IconData icon,
     required VoidCallback onTap,
     required bool isDark,
-    required Color color,
   }) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(9),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(9),
-        child: Container(
-          height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 11),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: isDark ? 0.13 : 0.08),
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(
-              color: color.withValues(alpha: isDark ? 0.3 : 0.2),
-              width: 1,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : const Color(0xFFF2F3F5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.6)
+                  : const Color(0xFF6B7280),
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isDark
-                      ? color.withValues(alpha: 0.9)
-                      : color,
-                  letterSpacing: -0.1,
-                ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.8)
+                    : const Color(0xFF374151),
+                letterSpacing: -0.2,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+
 
   String _getSelectedCategoryText() {
     if (_selectedCategory == 'tumu') return 'Tümü';
