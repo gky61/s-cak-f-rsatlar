@@ -31,7 +31,7 @@ Mesela örnek bir madde domu üzerinden inceleme yapalım mağazamız BİM olsun
 Bu örnekte gördüğün üzere : <span class="bn">İndirimli Ürünler</span> içerisinde broşürün kategorisi yazıyor bunu "katalogBasligi" kısmına ekleyebilirsin.
 a href linkindeki değere tıkladığımızda ise şöyle bir url'e iste atılıyor: https://www.akakce.com/brosurler/bim-24-mart-2026-aktuel-katalogu-indirimli-urunler-56190
 
-Bu url sonucu asıl fotoğraf/fotoğrafları alacağımız sayfa açılıyor. Bu açılan sayfada fotoğrafı şöyle çekeceksin:
+Bu url sonucu asıl fotoğraf/fotoğrafları alacağımız sayfa açılıyor. Bu açılan sayfada yüksek kaliteli fotoğrafı şöyle çekeceksin:
 
 <div id="BP_W" class="bpgc"> <div class="p"><img alt="Bim 24 Mart 2026 Aktüel Kataloğu - sayfa 1" src="https://cdn.akakce.com/_bro/u/731/56190/56190_464539.jpg" style="width: 480.458px;"><span class="led gr" style="top: 61.83%; left: 35.23%;"></span><span class="rct rct_d" title="Terlik Kadın " style="width: 11.16%; height: 12.67%; top: 55.5%; left: 29.65%;"></span></div></div>
 

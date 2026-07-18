@@ -205,11 +205,16 @@ async function scrapeAndSaveCatalogs() {
             
             const sayfaResimleri = [];
             $detail('#BP_W .p img').each((i, el) => {
-              let src = $(el).attr('src');
-              if (src) {
+              let src = $(el).attr('data-src') || $(el).attr('src');
+              if (src && !src.includes('t.gif')) {
                 if (src.startsWith('//')) {
                   src = 'https:' + src;
                 }
+                // Convert low-res thumbnail paths (/l/, /y/, /m/) to high-res upload path (/u/)
+                src = src.replace('/_bro/l/', '/_bro/u/')
+                         .replace('/_bro/y/', '/_bro/u/')
+                         .replace('/_bro/m/', '/_bro/u/');
+                
                 sayfaResimleri.push(src);
               }
             });
@@ -219,9 +224,17 @@ async function scrapeAndSaveCatalogs() {
               const bitisTarihi = calculateEndDate(baslangicTarihi, item.timeRemainingText);
 
               // Use first page image as cover if cover thumbnail is empty or a placeholder
-              const finalCover = (item.coverImage && !item.coverImage.includes('t.gif'))
+              let finalCover = (item.coverImage && !item.coverImage.includes('t.gif'))
                 ? item.coverImage
                 : sayfaResimleri[0];
+
+              if (finalCover.startsWith('//')) {
+                finalCover = 'https:' + finalCover;
+              }
+              // Convert to high-res path
+              finalCover = finalCover.replace('/_bro/l/', '/_bro/u/')
+                                     .replace('/_bro/y/', '/_bro/u/')
+                                     .replace('/_bro/m/', '/_bro/u/');
 
               allScrapedCatalogs.push({
                 katalogId: `${store.code}_${item.brochureId}`,
