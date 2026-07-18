@@ -84,16 +84,24 @@ class Katalog {
 
     if (today.isBefore(start)) {
       final daysToStart = start.difference(today).inDays;
-      return '$daysToStart gün sonra başlayacak';
+      if (daysToStart == 1) {
+        return 'Yarın başlıyor';
+      } else if (daysToStart >= 2 && daysToStart <= 14) {
+        return '$daysToStart gün sonra başlayacak';
+      } else if (daysToStart >= 15 && daysToStart <= 29) {
+        final weeks = (daysToStart / 7).round();
+        return '$weeks hafta sonra başlayacak';
+      } else {
+        final months = (daysToStart / 30).round();
+        return '$months ay sonra başlayacak';
+      }
     }
 
     final daysToExpiry = expiry.difference(today).inDays;
 
     if (daysToExpiry < 0) {
       return 'Süresi Doldu';
-    } else if (daysToExpiry > 3) {
-      return '$daysToExpiry gün sonra bitecek';
-    } else {
+    } else if (daysToExpiry <= 3) {
       if (daysToExpiry == 3) {
         return '3 gün sonra bitiyor';
       } else if (daysToExpiry == 2) {
@@ -102,6 +110,16 @@ class Katalog {
         return 'Yarın bitiyor';
       } else {
         return 'Bugün bitiyor';
+      }
+    } else {
+      if (daysToExpiry >= 4 && daysToExpiry <= 14) {
+        return '$daysToExpiry gün sonra bitecek';
+      } else if (daysToExpiry >= 15 && daysToExpiry <= 29) {
+        final weeks = (daysToExpiry / 7).round();
+        return '$weeks hafta sonra bitecek';
+      } else {
+        final months = (daysToExpiry / 30).round();
+        return '$months ay sonra bitecek';
       }
     }
   }
