@@ -63,7 +63,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
     }
   }
 
-  Widget _buildValidityBadge(Katalog catalog) {
+  Widget _buildValidityTextRow(Katalog catalog, bool isDark) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final expiry = DateTime(
@@ -73,31 +73,40 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
     );
     final diff = expiry.difference(today).inDays;
 
-    Color badgeColor;
+    Color textColor;
+    IconData icon;
     if (diff <= 1) {
-      badgeColor = const Color(0xFFDC2626); // Red 600
+      textColor = const Color(0xFFDC2626); // Red 600
+      icon = Icons.alarm;
     } else if (diff < 7) {
-      badgeColor = const Color(0xFFD97706); // Orange 600
+      textColor = const Color(0xFFD97706); // Orange 600
+      icon = Icons.hourglass_empty;
     } else {
-      badgeColor = const Color(0xFF2563EB); // Blue 600
+      textColor = isDark ? Colors.blue[300]! : const Color(0xFF2563EB); // Blue 600
+      icon = Icons.event_available;
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.9),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(12),
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 11,
+          color: textColor,
         ),
-      ),
-      child: Text(
-        _getValidityText(catalog),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            _getValidityText(catalog),
+            style: TextStyle(
+              fontSize: 10,
+              color: textColor,
+              fontWeight: FontWeight.bold,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -135,7 +144,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                       color: _currentSort == KatalogSortOption.defaultNewest ? AppTheme.primary : null,
                     ),
                     const SizedBox(width: 8),
-                    const Text('Tarihe Göre (Yeni)'),
+                    const Text('Yayınlanma Tarihine Göre (Yeni)'),
                   ],
                 ),
               ),
@@ -252,7 +261,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
               crossAxisCount: 2,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio: 0.64,
+              childAspectRatio: 0.60, // Adjusted to fit the extra status row neatly
             ),
             itemCount: catalogs.length,
             physics: const BouncingScrollPhysics(),
@@ -301,33 +310,24 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Cover Image + Badge Stack
+              // Cover Image
               Expanded(
-                child: Stack(
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      height: double.infinity,
-                      color: isDark ? AppTheme.darkBackground : const Color(0xFFF0F2F5),
-                      child: CachedNetworkImage(
-                        imageUrl: catalog.kapakResmi,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        errorWidget: (context, url, error) => Icon(
-                          Icons.broken_image_outlined,
-                          size: 40,
-                          color: isDark ? Colors.grey[700] : Colors.grey[400],
-                        ),
-                      ),
+                child: Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  color: isDark ? AppTheme.darkBackground : const Color(0xFFF0F2F5),
+                  child: CachedNetworkImage(
+                    imageUrl: catalog.kapakResmi,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: _buildValidityBadge(catalog),
+                    errorWidget: (context, url, error) => Icon(
+                      Icons.broken_image_outlined,
+                      size: 40,
+                      color: isDark ? Colors.grey[700] : Colors.grey[400],
                     ),
-                  ],
+                  ),
                 ),
               ),
               // Content Info
@@ -358,7 +358,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            _formatDateRange(catalog.baslangicTarihi, catalog.bitisTarihi),
+                            _formatDateRange(catalog.basgangicTarihi, catalog.bitisTarihi),
                             style: TextStyle(
                               fontSize: 10,
                               color: isDark ? Colors.grey[400] : Colors.grey[600],
@@ -370,6 +370,8 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 6),
+                    _buildValidityTextRow(catalog, isDark),
                   ],
                 ),
               ),

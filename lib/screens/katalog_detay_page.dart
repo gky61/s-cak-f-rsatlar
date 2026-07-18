@@ -19,6 +19,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
   late final TransformationController _transformationController;
   int _currentPage = 0;
   bool _isZoomed = false;
+  int _pointerCount = 0;
 
   @override
   void initState() {
@@ -35,6 +36,31 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
       setState(() {
         _isZoomed = isZoomedNow;
       });
+    }
+  }
+
+  void _handleDoubleTap() {
+    if (_transformationController.value.getMaxScaleOnAxis() > 1.0) {
+      // Zoom out to normal
+      setState(() {
+        _isZoomed = false;
+      });
+      _transformationController.value = Matrix4.identity();
+    } else {
+      // Zoom in to 2.5x exactly centered
+      setState(() {
+        _isZoomed = true;
+      });
+      final double scale = 2.5;
+      final double width = MediaQuery.of(context).size.width;
+      final double height = MediaQuery.of(context).size.height;
+      
+      final double x = -(width * (scale - 1)) / 2;
+      final double y = -(height * (scale - 1)) / 2;
+      
+      _transformationController.value = Matrix4.identity()
+        ..translate(x, y)
+        ..scale(scale, scale, 1.0);
     }
   }
 
@@ -88,6 +114,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
                 setState(() {
                   _currentPage = index;
                   _isZoomed = false;
+                  _pointerCount = 0;
                 });
               },
               physics: _isZoomed
@@ -95,32 +122,74 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
                   : const BouncingScrollPhysics(),
               itemBuilder: (context, index) {
                 final isCurrent = index == _currentPage;
-                return Center(
-                  child: InteractiveViewer(
-                    minScale: 1.0,
-                    maxScale: 4.0,
-                    transformationController: isCurrent ? _transformationController : null,
-                    child: CachedNetworkImage(
-                      imageUrl: widget.catalog.sayfaResimleri[index],
-                      fit: BoxFit.contain,
-                      width: double.infinity,
-                      height: double.infinity,
-                      placeholder: (context, url) => const Center(
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                        ),
-                      ),
-                      errorWidget: (context, url, error) => const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.broken_image, color: Colors.white60, size: 60),
-                            SizedBox(height: 12),
-                            Text(
-                              'Görsel yüklenemedi',
-                              style: TextStyle(color: Colors.white70, fontSize: 16),
+                return Listener(
+                  onPointerDown: (event) {
+                    if (isCurrent) {
+                      _pointerCount++;
+                      if (_pointerCount >= 2) {
+                        setState(() {
+                          _isZoomed = true;
+                        });
+                      }
+                    }
+                  },
+                  onPointerUp: (event) {
+                    if (isCurrent) {
+                      _pointerCount = (_pointerCount - 1).clamp(0, 99);
+                      if (_pointerCount < 2 && _transformationController.value.getMaxScaleOnAxis() <= 1.0) {
+                        setState(() {
+                          _isZoomed = false;
+                        });
+                      }
+                    }
+                  },
+                  onPointerCancel: (event) {
+                    if (isCurrent) {
+                      _pointerCount = (_pointerCount - 1).clamp(0, 99);
+                      if (_pointerCount < 2 && _transformationController.value.getMaxScaleOnAxis() <= 1.0) {
+                        setState(() {
+                          _isZoomed = false;
+                        });
+                      }
+                    }
+                  },
+                  child: Center(
+                    child: InteractiveViewer(
+                      minScale: 1.0,
+                      maxScale: 4.0,
+                      transformationController: isCurrent ? _transformationController : null,
+                      onInteractionEnd: (details) {
+                        if (isCurrent && _transformationController.value.getMaxScaleOnAxis() <= 1.0) {
+                          setState(() {
+                            _isZoomed = false;
+                          });
+                        }
+                      },
+                      child: GestureDetector(
+                        onDoubleTap: isCurrent ? _handleDoubleTap : null,
+                        child: CachedNetworkImage(
+                          imageUrl: widget.catalog.sayfaResimleri[index],
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                          placeholder: (context, url) => const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
                             ),
-                          ],
+                          ),
+                          errorWidget: (context, url, error) => const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.broken_image, color: Colors.white60, size: 60),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Görsel yüklenemedi',
+                                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
