@@ -10,7 +10,6 @@ import '../models/category.dart';
 import '../models/user.dart';
 import '../services/link_preview_service.dart';
 import '../services/theme_service.dart';
-import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../screens/profile_screen.dart';
 
@@ -41,7 +40,6 @@ class _DealCardState extends State<DealCard> {
   bool _showVoteCount = false; // Oy sayısını göster/gizle
 
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
-  final AuthService _authService = AuthService();
 
   String _getStoreAsset(String storeName) {
     final lower = storeName.toLowerCase().trim();
@@ -650,7 +648,7 @@ class _DealCardState extends State<DealCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                    // Mağaza ve Kullanıcı adı (aynı satırda)
+                    // Mağaza adı
                     Row(
                       children: [
                         Icon(
@@ -671,7 +669,71 @@ class _DealCardState extends State<DealCard> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        // Kullanıcı adı (sadece kullanıcı paylaşımı ise, sağda)
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    // Başlık
+                    Stack(
+                      children: [
+                        Text(
+                          deal.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            height: 1.2,
+                            color: (isExpired || deal.expiredVotes >= 15)
+                                ? Colors.red[700] 
+                                : (isDark ? Colors.white : AppTheme.textPrimary),
+                          ),
+                        ),
+                        // Kırmızı çizgi (expiredVotes >= 15 veya isExpired ise)
+                        if (isExpired || deal.expiredVotes >= 15)
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _StrikeThroughPainter(),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Fiyat ve Paylaşan Kullanıcı (Aynı Satırda - Kullanıcı adı sağ altta)
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            currencyFormat.format(deal.price),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                              color: isExpired 
+                                  ? Colors.red[700] 
+                                  : AppTheme.primary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              currencyFormat.format(deal.originalPrice),
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w400,
+                                color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+                                decoration: TextDecoration.lineThrough,
+                                decorationThickness: 1,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                        const Spacer(),
+                        // Kullanıcı adı ve profil resmi (sadece kullanıcı paylaşımı ise, sağ tarafta)
                         if (deal.isUserSubmitted && deal.postedBy.isNotEmpty)
                           StreamBuilder<DocumentSnapshot>(
                             stream: FirebaseFirestore.instance
@@ -693,14 +755,8 @@ class _DealCardState extends State<DealCard> {
                                   return const SizedBox.shrink();
                                 }
                                 
-                                // Kullanıcı bilgisini parse et
                                 final user = AppUser.fromFirestore(snapshot.data!);
-                                
-                                // Display name'i doğrudan Firestore'dan al
-                                // Sadece username kullanıyoruz (en güncel değer)
                                 final displayName = userData['username']?.toString() ?? 'Kullanıcı';
-                                
-                                // Key'e snapshot hash'ini ekleyerek her snapshot değişikliğinde rebuild garantisi
                                 final snapshotHash = snapshot.data?.data().toString().hashCode ?? 0;
                                 
                                 return InkWell(
@@ -718,35 +774,42 @@ class _DealCardState extends State<DealCard> {
                                     children: [
                                       ClipOval(
                                         child: user.profileImageUrl.isNotEmpty
-                                            ? CachedNetworkImage(
-                                                imageUrl: user.profileImageUrl,
-                                                width: 16,
-                                                height: 16,
-                                                fit: BoxFit.cover,
-                                                memCacheWidth: 32,
-                                                memCacheHeight: 32,
-                                                fadeInDuration: const Duration(milliseconds: 200),
-                                                placeholder: (context, url) => Container(
-                                                  width: 16,
-                                                  height: 16,
-                                                  color: primaryColor.withOpacity(0.1),
-                                                  child: Icon(
-                                                    Icons.person,
-                                                    size: 10,
-                                                    color: primaryColor,
-                                                  ),
-                                                ),
-                                                errorWidget: (context, url, error) => Container(
-                                                  width: 16,
-                                                  height: 16,
-                                                  color: primaryColor.withOpacity(0.1),
-                                                  child: Icon(
-                                                    Icons.person,
-                                                    size: 10,
-                                                    color: primaryColor,
-                                                  ),
-                                                ),
-                                              )
+                                            ? (user.profileImageUrl.startsWith('assets/')
+                                                ? Image.asset(
+                                                    user.profileImageUrl,
+                                                    width: 16,
+                                                    height: 16,
+                                                    fit: BoxFit.cover,
+                                                  )
+                                                : CachedNetworkImage(
+                                                    imageUrl: user.profileImageUrl,
+                                                    width: 16,
+                                                    height: 16,
+                                                    fit: BoxFit.cover,
+                                                    memCacheWidth: 32,
+                                                    memCacheHeight: 32,
+                                                    fadeInDuration: const Duration(milliseconds: 200),
+                                                    placeholder: (context, url) => Container(
+                                                      width: 16,
+                                                      height: 16,
+                                                      color: primaryColor.withOpacity(0.1),
+                                                      child: Icon(
+                                                        Icons.person,
+                                                        size: 10,
+                                                        color: primaryColor,
+                                                      ),
+                                                    ),
+                                                    errorWidget: (context, url, error) => Container(
+                                                      width: 16,
+                                                      height: 16,
+                                                      color: primaryColor.withOpacity(0.1),
+                                                      child: Icon(
+                                                        Icons.person,
+                                                        size: 10,
+                                                        color: primaryColor,
+                                                      ),
+                                                    ),
+                                                  ))
                                             : Container(
                                                 width: 16,
                                                 height: 16,
@@ -784,69 +847,6 @@ class _DealCardState extends State<DealCard> {
                               }
                             },
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    // Başlık
-                    Stack(
-                      children: [
-                        Text(
-                          deal.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                            color: (isExpired || deal.expiredVotes >= 15)
-                                ? Colors.red[700] 
-                                : (isDark ? Colors.white : AppTheme.textPrimary),
-                          ),
-                        ),
-                        // Kırmızı çizgi (expiredVotes >= 15 veya isExpired ise)
-                        if (isExpired || deal.expiredVotes >= 15)
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _StrikeThroughPainter(),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    // Fiyat
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            currencyFormat.format(deal.price),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
-                              color: isExpired 
-                                  ? Colors.red[700] 
-                                  : AppTheme.primary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              currencyFormat.format(deal.originalPrice),
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w400,
-                                color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                decoration: TextDecoration.lineThrough,
-                                decorationThickness: 1,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                     ],
@@ -1365,35 +1365,42 @@ class _DealCardState extends State<DealCard> {
                                                 children: [
                                                   ClipOval(
                                                     child: user.profileImageUrl.isNotEmpty
-                                                        ? CachedNetworkImage(
-                                                            imageUrl: user.profileImageUrl,
-                                                            width: 14,
-                                                            height: 14,
-                                                            fit: BoxFit.cover,
-                                                            memCacheWidth: 28,
-                                                            memCacheHeight: 28,
-                                                            fadeInDuration: const Duration(milliseconds: 200),
-                                                            placeholder: (context, url) => Container(
-                                                              width: 14,
-                                                              height: 14,
-                                                              color: primaryColor.withOpacity(0.1),
-                                                              child: Icon(
-                                                                Icons.person,
-                                                                size: 9,
-                                                                color: primaryColor,
-                                                              ),
-                                                            ),
-                                                            errorWidget: (context, url, error) => Container(
-                                                              width: 14,
-                                                              height: 14,
-                                                              color: primaryColor.withOpacity(0.1),
-                                                              child: Icon(
-                                                                Icons.person,
-                                                                size: 9,
-                                                                color: primaryColor,
-                                                              ),
-                                                            ),
-                                                          )
+                                                        ? (user.profileImageUrl.startsWith('assets/')
+                                                            ? Image.asset(
+                                                                user.profileImageUrl,
+                                                                width: 14,
+                                                                height: 14,
+                                                                fit: BoxFit.cover,
+                                                              )
+                                                            : CachedNetworkImage(
+                                                                imageUrl: user.profileImageUrl,
+                                                                width: 14,
+                                                                height: 14,
+                                                                fit: BoxFit.cover,
+                                                                memCacheWidth: 28,
+                                                                memCacheHeight: 28,
+                                                                fadeInDuration: const Duration(milliseconds: 200),
+                                                                placeholder: (context, url) => Container(
+                                                                  width: 14,
+                                                                  height: 14,
+                                                                  color: primaryColor.withOpacity(0.1),
+                                                                  child: Icon(
+                                                                    Icons.person,
+                                                                    size: 9,
+                                                                    color: primaryColor,
+                                                                  ),
+                                                                ),
+                                                                errorWidget: (context, url, error) => Container(
+                                                                  width: 14,
+                                                                  height: 14,
+                                                                  color: primaryColor.withOpacity(0.1),
+                                                                  child: Icon(
+                                                                    Icons.person,
+                                                                    size: 9,
+                                                                    color: primaryColor,
+                                                                  ),
+                                                                ),
+                                                              ))
                                                         : Container(
                                                             width: 14,
                                                             height: 14,

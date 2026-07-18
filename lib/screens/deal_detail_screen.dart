@@ -1128,35 +1128,42 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                           children: [
                                                             ClipOval(
                                                               child: profileImageUrl.isNotEmpty
-                                                                  ? CachedNetworkImage(
-                                                                      imageUrl: profileImageUrl,
-                                                                      width: 16,
-                                                                      height: 16,
-                                                                      fit: BoxFit.cover,
-                                                                      memCacheWidth: 32,
-                                                                      memCacheHeight: 32,
-                                                                      fadeInDuration: const Duration(milliseconds: 200),
-                                                                      placeholder: (context, url) => Container(
-                                                                        width: 16,
-                                                                        height: 16,
-                                                                        color: primaryColor.withOpacity(0.1),
-                                                                        child: Icon(
-                                                                          Icons.person,
-                                                                          size: 10,
-                                                                          color: primaryColor,
-                                                                        ),
-                                                                      ),
-                                                                      errorWidget: (context, url, error) => Container(
-                                                                        width: 16,
-                                                                        height: 16,
-                                                                        color: primaryColor.withOpacity(0.1),
-                                                                        child: Icon(
-                                                                          Icons.person,
-                                                                          size: 10,
-                                                                          color: primaryColor,
-                                                                        ),
-                                                                      ),
-                                                                    )
+                                                                  ? (profileImageUrl.startsWith('assets/')
+                                                                      ? Image.asset(
+                                                                          profileImageUrl,
+                                                                          width: 16,
+                                                                          height: 16,
+                                                                          fit: BoxFit.cover,
+                                                                        )
+                                                                      : CachedNetworkImage(
+                                                                          imageUrl: profileImageUrl,
+                                                                          width: 16,
+                                                                          height: 16,
+                                                                          fit: BoxFit.cover,
+                                                                          memCacheWidth: 32,
+                                                                          memCacheHeight: 32,
+                                                                          fadeInDuration: const Duration(milliseconds: 200),
+                                                                          placeholder: (context, url) => Container(
+                                                                            width: 16,
+                                                                            height: 16,
+                                                                            color: primaryColor.withOpacity(0.1),
+                                                                            child: Icon(
+                                                                              Icons.person,
+                                                                              size: 10,
+                                                                              color: primaryColor,
+                                                                            ),
+                                                                          ),
+                                                                          errorWidget: (context, url, error) => Container(
+                                                                            width: 16,
+                                                                            height: 16,
+                                                                            color: primaryColor.withOpacity(0.1),
+                                                                            child: Icon(
+                                                                              Icons.person,
+                                                                              size: 10,
+                                                                              color: primaryColor,
+                                                                            ),
+                                                                          ),
+                                                                        ))
                                                                   : Container(
                                                                       width: 16,
                                                                       height: 16,
