@@ -215,20 +215,11 @@ class ContentModerationService {
     for (final profanity in _profanityWords) {
       final normalizedProfanity = _normalize(profanity);
       
-      // Tam kelime eşleşmesi veya metin içinde geçiyor mu kontrol et
-      if (normalizedText.contains(normalizedProfanity)) {
-        // Kelime sınırları kontrolü (yanlış pozitifleri önlemek için)
-        final regex = RegExp(r'\b' + RegExp.escape(normalizedProfanity) + r'\b');
-        if (regex.hasMatch(normalizedText)) {
-          _log('⚠️ Küfür tespit edildi: "$profanity" içerikte: "${text.substring(0, text.length > 50 ? 50 : text.length)}..."');
-          return true;
-        }
-        
-        // Eğer kelime çok kısa değilse, substring kontrolü yap
-        if (normalizedProfanity.length >= 3 && normalizedText.contains(normalizedProfanity)) {
-          _log('⚠️ Küfür tespit edildi: "$profanity" içerikte: "${text.substring(0, text.length > 50 ? 50 : text.length)}..."');
-          return true;
-        }
+      // Tam kelime eşleşmesi kontrolü (yanlış pozitifleri önlemek için sadece tam kelimelere bakarız)
+      final regex = RegExp(r'\b' + RegExp.escape(normalizedProfanity) + r'\b');
+      if (regex.hasMatch(normalizedText)) {
+        _log('⚠️ Küfür tespit edildi: "$profanity" içerikte: "${text.substring(0, text.length > 50 ? 50 : text.length)}..."');
+        return true;
       }
     }
     
