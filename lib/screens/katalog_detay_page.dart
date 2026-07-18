@@ -16,17 +16,33 @@ class KatalogDetayPage extends StatefulWidget {
 
 class _KatalogDetayPageState extends State<KatalogDetayPage> {
   late final PageController _pageController;
+  late final TransformationController _transformationController;
   int _currentPage = 0;
+  bool _isZoomed = false;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _transformationController = TransformationController();
+    _transformationController.addListener(_handleZoomChange);
+  }
+
+  void _handleZoomChange() {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    final isZoomedNow = scale > 1.0;
+    if (isZoomedNow != _isZoomed) {
+      setState(() {
+        _isZoomed = isZoomedNow;
+      });
+    }
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _transformationController.removeListener(_handleZoomChange);
+    _transformationController.dispose();
     super.dispose();
   }
 
@@ -68,16 +84,22 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> {
               controller: _pageController,
               itemCount: pageCount,
               onPageChanged: (index) {
+                _transformationController.value = Matrix4.identity();
                 setState(() {
                   _currentPage = index;
+                  _isZoomed = false;
                 });
               },
-              physics: const BouncingScrollPhysics(),
+              physics: _isZoomed
+                  ? const NeverScrollableScrollPhysics()
+                  : const BouncingScrollPhysics(),
               itemBuilder: (context, index) {
+                final isCurrent = index == _currentPage;
                 return Center(
                   child: InteractiveViewer(
                     minScale: 1.0,
                     maxScale: 4.0,
+                    transformationController: isCurrent ? _transformationController : null,
                     child: CachedNetworkImage(
                       imageUrl: widget.catalog.sayfaResimleri[index],
                       fit: BoxFit.contain,
