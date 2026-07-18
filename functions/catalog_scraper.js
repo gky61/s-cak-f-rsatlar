@@ -231,10 +231,10 @@ async function scrapeAndSaveCatalogs() {
               if (finalCover.startsWith('//')) {
                 finalCover = 'https:' + finalCover;
               }
-              // Convert to high-res path
-              finalCover = finalCover.replace('/_bro/l/', '/_bro/u/')
-                                     .replace('/_bro/y/', '/_bro/u/')
-                                     .replace('/_bro/m/', '/_bro/u/');
+              // Convert to large thumbnail path (/l/) for fast grid listing
+              finalCover = finalCover.replace('/_bro/u/', '/_bro/l/')
+                                     .replace('/_bro/y/', '/_bro/l/')
+                                     .replace('/_bro/m/', '/_bro/l/');
 
               allScrapedCatalogs.push({
                 katalogId: `${store.code}_${item.brochureId}`,
