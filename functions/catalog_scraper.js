@@ -15,7 +15,12 @@ const STORES = [
   { code: 'file', name: 'File', url: 'https://www.akakce.com/brosurler/filemarket' },
   { code: 'hakmar', name: 'Hakmar', url: 'https://www.akakce.com/brosurler/hakmarexpress' },
   { code: 'gratis', name: 'Gratis', url: 'https://www.akakce.com/brosurler/gratis' },
-  { code: 'watsons', name: 'Watsons', url: 'https://www.akakce.com/brosurler/watsons' }
+  { code: 'watsons', name: 'Watsons', url: 'https://www.akakce.com/brosurler/watsons' },
+  { code: 'kooperatifmarket', name: 'Kooperatif Market', url: 'https://www.akakce.com/brosurler/kooperatifmarket' },
+  { code: 'metro', name: 'Metro', url: 'https://www.akakce.com/brosurler/metro-tr' },
+  { code: 'bizim', name: 'Bizim', url: 'https://www.akakce.com/brosurler/bizimtoptan' },
+  { code: 'teknosa', name: 'Teknosa', url: 'https://www.akakce.com/brosurler/teknosacom' },
+  { code: 'vatan', name: 'Vatan', url: 'https://www.akakce.com/brosurler/vatanbilgisayar' }
 ];
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';

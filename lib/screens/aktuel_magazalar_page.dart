@@ -33,6 +33,11 @@ class AktuelMagazalarPage extends StatelessWidget {
     Magaza(code: 'hakmar', name: 'Hakmar', logoAsset: 'assets/hakmar.jpg', brandColor: Color(0xFFD32F2F)),
     Magaza(code: 'gratis', name: 'Gratis', logoAsset: 'assets/gratis.jpg', brandColor: Color(0xFF8B1E87)),
     Magaza(code: 'watsons', name: 'Watsons', logoAsset: 'assets/watsons.jpg', brandColor: Color(0xFF00A19B)),
+    Magaza(code: 'kooperatifmarket', name: 'Kooperatif Market', logoAsset: 'assets/kooperatif.jpg', brandColor: Color(0xFF00755F)),
+    Magaza(code: 'metro', name: 'Metro', logoAsset: 'assets/metro.jpg', brandColor: Color(0xFF002F6C)),
+    Magaza(code: 'bizim', name: 'Bizim Toptan', logoAsset: 'assets/bizim.jpg', brandColor: Color(0xFFFFCC00)),
+    Magaza(code: 'teknosa', name: 'Teknosa', logoAsset: 'assets/teknosa.jpg', brandColor: Color(0xFFFF5F00)),
+    Magaza(code: 'vatan', name: 'Vatan Bilgisayar', logoAsset: 'assets/vatan.jpg', brandColor: Color(0xFF005691)),
   ];
 
   @override
