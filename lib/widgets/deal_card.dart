@@ -641,13 +641,14 @@ class _DealCardState extends State<DealCard> {
                 ),
               ),
               // İçerik
-              Expanded(
+              Flexible(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                    // Mağaza adı
+                    // Mağaza adı ve Paylaşan Kullanıcı Avatarı (aynı satırda)
                     Row(
                       children: [
                         Icon(
@@ -668,6 +669,101 @@ class _DealCardState extends State<DealCard> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        // Sadece Profil Resmi (sadece kullanıcı paylaşımı ise, sağda)
+                        if (deal.isUserSubmitted && deal.postedBy.isNotEmpty)
+                          StreamBuilder<DocumentSnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(deal.postedBy)
+                                .snapshots(includeMetadataChanges: false),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return const SizedBox.shrink();
+                              }
+                              
+                              if (!snapshot.hasData || !snapshot.data!.exists) {
+                                return const SizedBox.shrink();
+                              }
+                              
+                              try {
+                                final userData = snapshot.data!.data() as Map<String, dynamic>?;
+                                if (userData == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                
+                                final user = AppUser.fromFirestore(snapshot.data!);
+                                final displayName = userData['username']?.toString() ?? 'Kullanıcı';
+                                final snapshotHash = snapshot.data?.data().toString().hashCode ?? 0;
+                                
+                                return InkWell(
+                                  key: ValueKey('user_avatar_widget_${deal.postedBy}_${displayName}_$snapshotHash'),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ProfileScreen(userId: user.uid),
+                                      ),
+                                    );
+                                  },
+                                  child: ClipOval(
+                                    child: user.profileImageUrl.isNotEmpty
+                                        ? (user.profileImageUrl.startsWith('assets/')
+                                            ? Image.asset(
+                                                user.profileImageUrl,
+                                                width: 16,
+                                                height: 16,
+                                                fit: BoxFit.cover,
+                                              )
+                                            : CachedNetworkImage(
+                                                imageUrl: user.profileImageUrl,
+                                                width: 16,
+                                                height: 16,
+                                                fit: BoxFit.cover,
+                                                memCacheWidth: 32,
+                                                memCacheHeight: 32,
+                                                fadeInDuration: const Duration(milliseconds: 200),
+                                                placeholder: (context, url) => Container(
+                                                  width: 16,
+                                                  height: 16,
+                                                  color: primaryColor.withOpacity(0.1),
+                                                  child: Icon(
+                                                    Icons.person,
+                                                    size: 10,
+                                                    color: primaryColor,
+                                                  ),
+                                                ),
+                                                errorWidget: (context, url, error) => Container(
+                                                  width: 16,
+                                                  height: 16,
+                                                  color: primaryColor.withOpacity(0.1),
+                                                  child: Icon(
+                                                    Icons.person,
+                                                    size: 10,
+                                                    color: primaryColor,
+                                                  ),
+                                                ),
+                                              ))
+                                        : Container(
+                                            width: 16,
+                                            height: 16,
+                                            decoration: BoxDecoration(
+                                              color: primaryColor.withOpacity(0.1),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              Icons.person,
+                                              size: 10,
+                                              color: primaryColor,
+                                            ),
+                                          ),
+                                  ),
+                                );
+                              } catch (e) {
+                                _log('Kullanıcı bilgisi yükleme hatası: $e');
+                                return const SizedBox.shrink();
+                              }
+                            },
+                          ),
                       ],
                     ),
                     const SizedBox(height: 3),
@@ -696,8 +792,8 @@ class _DealCardState extends State<DealCard> {
                           ),
                       ],
                     ),
-                    const Spacer(),
-                    // Fiyat ve Paylaşan Kullanıcı (Aynı Satırda - Kullanıcı adı sağ altta)
+                    const SizedBox(height: 6),
+                    // Fiyat
                     Row(
                       children: [
                         Flexible(
@@ -731,121 +827,6 @@ class _DealCardState extends State<DealCard> {
                             ),
                           ),
                         ],
-                        const Spacer(),
-                        // Kullanıcı adı ve profil resmi (sadece kullanıcı paylaşımı ise, sağ tarafta)
-                        if (deal.isUserSubmitted && deal.postedBy.isNotEmpty)
-                          StreamBuilder<DocumentSnapshot>(
-                            stream: FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(deal.postedBy)
-                                .snapshots(includeMetadataChanges: false),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting) {
-                                return const SizedBox.shrink();
-                              }
-                              
-                              if (!snapshot.hasData || !snapshot.data!.exists) {
-                                return const SizedBox.shrink();
-                              }
-                              
-                              try {
-                                final userData = snapshot.data!.data() as Map<String, dynamic>?;
-                                if (userData == null) {
-                                  return const SizedBox.shrink();
-                                }
-                                
-                                final user = AppUser.fromFirestore(snapshot.data!);
-                                final displayName = userData['username']?.toString() ?? 'Kullanıcı';
-                                final snapshotHash = snapshot.data?.data().toString().hashCode ?? 0;
-                                
-                                return InkWell(
-                                  key: ValueKey('user_widget_${deal.postedBy}_${displayName}_$snapshotHash'),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => ProfileScreen(userId: user.uid),
-                                      ),
-                                    );
-                                  },
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      ClipOval(
-                                        child: user.profileImageUrl.isNotEmpty
-                                            ? (user.profileImageUrl.startsWith('assets/')
-                                                ? Image.asset(
-                                                    user.profileImageUrl,
-                                                    width: 16,
-                                                    height: 16,
-                                                    fit: BoxFit.cover,
-                                                  )
-                                                : CachedNetworkImage(
-                                                    imageUrl: user.profileImageUrl,
-                                                    width: 16,
-                                                    height: 16,
-                                                    fit: BoxFit.cover,
-                                                    memCacheWidth: 32,
-                                                    memCacheHeight: 32,
-                                                    fadeInDuration: const Duration(milliseconds: 200),
-                                                    placeholder: (context, url) => Container(
-                                                      width: 16,
-                                                      height: 16,
-                                                      color: primaryColor.withOpacity(0.1),
-                                                      child: Icon(
-                                                        Icons.person,
-                                                        size: 10,
-                                                        color: primaryColor,
-                                                      ),
-                                                    ),
-                                                    errorWidget: (context, url, error) => Container(
-                                                      width: 16,
-                                                      height: 16,
-                                                      color: primaryColor.withOpacity(0.1),
-                                                      child: Icon(
-                                                        Icons.person,
-                                                        size: 10,
-                                                        color: primaryColor,
-                                                      ),
-                                                    ),
-                                                  ))
-                                            : Container(
-                                                width: 16,
-                                                height: 16,
-                                                decoration: BoxDecoration(
-                                                  color: primaryColor.withOpacity(0.1),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: Icon(
-                                                  Icons.person,
-                                                  size: 10,
-                                                  color: primaryColor,
-                                                ),
-                                              ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Flexible(
-                                        child: Text(
-                                          displayName,
-                                          key: ValueKey('username_text_${deal.postedBy}_$displayName'),
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w500,
-                                            color: primaryColor,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              } catch (e) {
-                                _log('Kullanıcı bilgisi yükleme hatası: $e');
-                                return const SizedBox.shrink();
-                              }
-                            },
-                          ),
                       ],
                     ),
                     ],
@@ -1308,61 +1289,45 @@ class _DealCardState extends State<DealCard> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                // Kullanıcı adı (sadece kullanıcı paylaşımı ise, mağaza altında sağda)
-                                if (deal.isUserSubmitted && deal.postedBy.isNotEmpty)
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: StreamBuilder<DocumentSnapshot>(
-                                      stream: FirebaseFirestore.instance
-                                          .collection('users')
-                                          .doc(deal.postedBy)
-                                          .snapshots(includeMetadataChanges: false),
-                                      builder: (context, snapshot) {
-                                        if (snapshot.connectionState == ConnectionState.waiting) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        
-                                        if (!snapshot.hasData || !snapshot.data!.exists) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        
-                                        try {
-                                          final userData = snapshot.data!.data() as Map<String, dynamic>?;
-                                          if (userData == null) {
-                                            return const SizedBox.shrink();
-                                          }
-                                          
-                                          // Kullanıcı bilgisini parse et
-                                          final user = AppUser.fromFirestore(snapshot.data!);
-                                          
-                                          // Display name'i doğrudan Firestore'dan al
-                                          // Sadece username kullanıyoruz (en güncel değer)
-                                          final displayName = userData['username']?.toString() ?? 'Kullanıcı';
-                                          
-                                          // Key'e snapshot hash'ini ekleyerek her snapshot değişikliğinde rebuild garantisi
-                                          final snapshotHash2 = snapshot.data?.data().toString().hashCode ?? 0;
-                                          
-                                          final primaryColor = Theme.of(context).colorScheme.primary;
-                                          return Padding(
-                                            key: ValueKey('user_list_widget_${deal.postedBy}_${displayName}_$snapshotHash2'),
-                                            padding: const EdgeInsets.only(top: 2),
-                                            child: InkWell(
-                                              onTap: () {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) => ProfileScreen(userId: user.uid),
-                                                  ),
-                                                );
-                                              },
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  ClipOval(
+                                        // Sadece Profil Resmi (sadece kullanıcı paylaşımı ise, sağda)
+                                        if (deal.isUserSubmitted && deal.postedBy.isNotEmpty) ...[
+                                          const SizedBox(width: 6),
+                                          StreamBuilder<DocumentSnapshot>(
+                                            stream: FirebaseFirestore.instance
+                                                .collection('users')
+                                                .doc(deal.postedBy)
+                                                .snapshots(includeMetadataChanges: false),
+                                            builder: (context, snapshot) {
+                                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                                return const SizedBox.shrink();
+                                              }
+                                              
+                                              if (!snapshot.hasData || !snapshot.data!.exists) {
+                                                return const SizedBox.shrink();
+                                              }
+                                              
+                                              try {
+                                                final userData = snapshot.data!.data() as Map<String, dynamic>?;
+                                                if (userData == null) {
+                                                  return const SizedBox.shrink();
+                                                }
+                                                
+                                                final user = AppUser.fromFirestore(snapshot.data!);
+                                                final displayName = userData['username']?.toString() ?? 'Kullanıcı';
+                                                final snapshotHash2 = snapshot.data?.data().toString().hashCode ?? 0;
+                                                
+                                                final primaryColor = Theme.of(context).colorScheme.primary;
+                                                return InkWell(
+                                                  key: ValueKey('user_avatar_list_widget_${deal.postedBy}_${displayName}_$snapshotHash2'),
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) => ProfileScreen(userId: user.uid),
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: ClipOval(
                                                     child: user.profileImageUrl.isNotEmpty
                                                         ? (user.profileImageUrl.startsWith('assets/')
                                                             ? Image.asset(
@@ -1383,21 +1348,13 @@ class _DealCardState extends State<DealCard> {
                                                                   width: 14,
                                                                   height: 14,
                                                                   color: primaryColor.withOpacity(0.1),
-                                                                  child: Icon(
-                                                                    Icons.person,
-                                                                    size: 9,
-                                                                    color: primaryColor,
-                                                                  ),
+                                                                  child: Icon(Icons.person, size: 9, color: primaryColor),
                                                                 ),
                                                                 errorWidget: (context, url, error) => Container(
                                                                   width: 14,
                                                                   height: 14,
                                                                   color: primaryColor.withOpacity(0.1),
-                                                                  child: Icon(
-                                                                    Icons.person,
-                                                                    size: 9,
-                                                                    color: primaryColor,
-                                                                  ),
+                                                                  child: Icon(Icons.person, size: 9, color: primaryColor),
                                                                 ),
                                                               ))
                                                         : Container(
@@ -1407,38 +1364,21 @@ class _DealCardState extends State<DealCard> {
                                                               color: primaryColor.withOpacity(0.1),
                                                               shape: BoxShape.circle,
                                                             ),
-                                                            child: Icon(
-                                                              Icons.person,
-                                                              size: 9,
-                                                              color: primaryColor,
-                                                            ),
+                                                            child: Icon(Icons.person, size: 9, color: primaryColor),
                                                           ),
                                                   ),
-                                                  const SizedBox(width: 4),
-                                                  Flexible(
-                                                    child: Text(
-                                                      displayName,
-                                                      key: ValueKey('username_list_text_${deal.postedBy}_$displayName'),
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        fontWeight: FontWeight.w500,
-                                                        color: primaryColor,
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        } catch (e) {
-                                          _log('Kullanıcı bilgisi yükleme hatası: $e');
-                                          return const SizedBox.shrink();
-                                        }
-                                      },
+                                                );
+                                              } catch (e) {
+                                                _log('Kullanıcı bilgisi yükleme hatası: $e');
+                                                return const SizedBox.shrink();
+                                              }
+                                            },
+                                          ),
+                                        ],
+                                      ],
                                     ),
-                                  ),
+                                  ],
+                                ),
                               ],
                             ),
                             const SizedBox(height: 4),
