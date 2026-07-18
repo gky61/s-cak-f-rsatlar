@@ -261,6 +261,14 @@ service cloud.firestore {
     }
 
     // ========================================
+    // KATALOGLAR COLLECTION
+    // ========================================
+    match /kataloglar/{katalogId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ========================================
 
     // USER DEVICES
     // ========================================
