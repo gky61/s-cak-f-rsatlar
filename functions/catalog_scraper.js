@@ -257,11 +257,27 @@ async function scrapeAndSaveCatalogs() {
 
   const db = admin.firestore();
 
-  // Save/Update catalogs in batch
-  functions.logger.info('💾 Saving catalogs to Firestore...');
+  // 1. Delete all existing catalogs to ensure fresh reload (matching coupons scraper)
+  functions.logger.info('🧹 Deleting all existing catalogs from Firestore...');
+  const querySnapshot = await db.collection('kataloglar').get();
+  const deleteDocs = querySnapshot.docs;
+  const deleteChunks = [];
   
-  // We use batch to write documents.
-  // Since we have brochure IDs as document IDs, we can update or set them to prevent duplicate entries.
+  for (let i = 0; i < deleteDocs.length; i += 500) {
+    deleteChunks.push(deleteDocs.slice(i, i + 500));
+  }
+
+  for (const chunk of deleteChunks) {
+    const batch = db.batch();
+    chunk.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+  }
+  functions.logger.info(`Deleted ${deleteDocs.length} old catalogs.`);
+
+  // 2. Add newly scraped catalogs
+  functions.logger.info('💾 Saving new catalogs to Firestore...');
   const writeChunks = [];
   for (let i = 0; i < allScrapedCatalogs.length; i += 500) {
     writeChunks.push(allScrapedCatalogs.slice(i, i + 500));
@@ -280,25 +296,9 @@ async function scrapeAndSaveCatalogs() {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
 
-      batch.set(docRef, dataToSave, { merge: true });
+      batch.set(docRef, dataToSave);
     });
     await batch.commit();
-  }
-
-  // Delete expired catalogs
-  functions.logger.info('🧹 Cleaning up expired catalogs from database...');
-  const now = new Date();
-  const expiredSnap = await db.collection('kataloglar')
-    .where('bitisTarihi', '<', admin.firestore.Timestamp.fromDate(now))
-    .get();
-
-  if (!expiredSnap.empty) {
-    functions.logger.info(`🧹 Found ${expiredSnap.size} expired catalogs to delete.`);
-    const deleteBatch = db.batch();
-    expiredSnap.docs.forEach((doc) => {
-      deleteBatch.delete(doc.ref);
-    });
-    await deleteBatch.commit();
   }
 
   functions.logger.info('🎉 Catalog sync finished successfully.');

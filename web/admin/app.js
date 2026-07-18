@@ -107,6 +107,8 @@ let categoriesDistributionChartInstance = null;
 let notifTrendChartInstance = null;
 let coupons = [];
 let couponsUnsubscribe = null;
+let catalogs = [];
+let catalogsUnsubscribe = null;
 
 // DOM Elements - Wait for DOM to be ready
 let loginScreen, adminPanel, googleSignInBtn, logoutBtn, userName, userAvatar, loginError;
@@ -584,6 +586,14 @@ function initEventListeners() {
         usersMenuBtn.addEventListener('click', (e) => {
             e.preventDefault();
             showUsersView();
+        });
+    }
+
+    const catalogsMenuBtn = document.getElementById('catalogsMenuBtn');
+    if (catalogsMenuBtn) {
+        catalogsMenuBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            showCatalogsView();
         });
     }
 
@@ -2684,7 +2694,7 @@ function handleCancelDeal(event) {
 
 // View management
 function showView(viewId) {
-    const views = ['dashboardView', 'dealsView', 'couponsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'testAutomationView'];
+    const views = ['dashboardView', 'dealsView', 'couponsView', 'catalogsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'testAutomationView'];
     views.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -2786,6 +2796,14 @@ function updateMenuActiveState(activeView) {
             couponsMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
             couponsMenuItem.classList.remove('text-slate-400');
             const icon = couponsMenuItem.querySelector('.material-symbols-outlined');
+            if (icon) icon.classList.add('icon-filled');
+        }
+    } else if (activeView === 'catalogs') {
+        const catalogsMenuItem = document.getElementById('catalogsMenuBtn');
+        if (catalogsMenuItem) {
+            catalogsMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
+            catalogsMenuItem.classList.remove('text-slate-400');
+            const icon = catalogsMenuItem.querySelector('.material-symbols-outlined');
             if (icon) icon.classList.add('icon-filled');
         }
     } else if (activeView === 'users') {
@@ -8095,10 +8113,238 @@ function initCouponsListeners() {
     }
 }
 
+// ==========================================
+// CATALOGS MANAGEMENT SECTION (KATALOGLAR)
+// ==========================================
+
+function showCatalogsView() {
+    currentView = 'catalogs';
+    showView('catalogsView');
+    updateMenuActiveState('catalogs');
+    if (catalogs.length === 0) {
+        loadCatalogs();
+    } else {
+        renderCatalogs();
+    }
+}
+
+function loadCatalogs() {
+    const loadingEl = document.getElementById('catalogsLoadingIndicator');
+    const emptyEl = document.getElementById('catalogsEmptyState');
+    const listEl = document.getElementById('catalogsList');
+
+    if (loadingEl) {
+        loadingEl.style.display = 'block';
+        loadingEl.textContent = 'Yükleniyor...';
+    }
+    if (emptyEl) emptyEl.classList.add('hidden');
+
+    if (catalogsUnsubscribe) {
+        catalogsUnsubscribe();
+        catalogsUnsubscribe = null;
+    }
+
+    try {
+        catalogsUnsubscribe = db.collection('kataloglar')
+            .orderBy('baslangicTarihi', 'desc')
+            .onSnapshot((snapshot) => {
+                catalogs = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    let startDate = new Date();
+                    let endDate = new Date();
+                    
+                    if (data.baslangicTarihi) {
+                        startDate = typeof data.baslangicTarihi.toDate === 'function' 
+                            ? data.baslangicTarihi.toDate() 
+                            : new Date(data.baslangicTarihi);
+                    }
+                    if (data.bitisTarihi) {
+                        endDate = typeof data.bitisTarihi.toDate === 'function' 
+                            ? data.bitisTarihi.toDate() 
+                            : new Date(data.bitisTarihi);
+                    }
+
+                    return {
+                        id: doc.id,
+                        magazaKodu: data.magazaKodu || '',
+                        katalogBasligi: data.katalogBasligi || '',
+                        baslangicTarihi: startDate,
+                        bitisTarihi: endDate,
+                        sayfaResimleri: data.sayfaResimleri || [],
+                        kapakResmi: data.kapakResmi || ''
+                    };
+                });
+
+                if (loadingEl) loadingEl.style.display = 'none';
+
+                if (catalogs.length === 0) {
+                    if (emptyEl) {
+                        emptyEl.classList.remove('hidden');
+                        emptyEl.textContent = 'Henüz katalog yok';
+                    }
+                    if (listEl) listEl.innerHTML = '';
+                    const countText = document.getElementById('catalogCountText');
+                    if (countText) countText.textContent = '0 katalog';
+                } else {
+                    renderCatalogs();
+                }
+            }, (error) => {
+                console.error("Error loading catalogs:", error);
+                if (loadingEl) loadingEl.textContent = 'Hata: ' + error.message;
+                showError("Kataloglar yüklenirken hata oluştu: " + error.message);
+            });
+    } catch (err) {
+        console.error("Error setting up catalogs listener:", err);
+        if (loadingEl) loadingEl.textContent = 'Hata: ' + err.message;
+    }
+}
+
+function renderCatalogs() {
+    const listEl = document.getElementById('catalogsList');
+    const emptyEl = document.getElementById('catalogsEmptyState');
+    const countText = document.getElementById('catalogCountText');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+
+    if (countText) {
+        countText.textContent = `${catalogs.length} katalog`;
+    }
+
+    if (catalogs.length === 0) {
+        if (emptyEl) {
+            emptyEl.classList.remove('hidden');
+            emptyEl.textContent = 'Henüz katalog yok';
+        }
+        return;
+    }
+
+    if (emptyEl) emptyEl.classList.add('hidden');
+
+    catalogs.forEach(katalog => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800';
+
+        const startDateStr = katalog.baslangicTarihi.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const endDateStr = katalog.bitisTarihi.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+        tr.innerHTML = `
+            <td class="p-4">
+                <img src="${katalog.kapakResmi || '//cdn.akakce.com/t.gif'}" class="w-12 h-16 object-contain rounded border border-slate-200 dark:border-slate-800" alt="Kapak"/>
+            </td>
+            <td class="p-4 font-bold text-primary uppercase">${katalog.magazaKodu}</td>
+            <td class="p-4 font-semibold text-slate-900 dark:text-white">${katalog.katalogBasligi}</td>
+            <td class="p-4 text-xs text-slate-500">${startDateStr}</td>
+            <td class="p-4 text-xs text-slate-500">${endDateStr}</td>
+            <td class="p-4 font-mono font-bold text-slate-600 dark:text-slate-400">${katalog.sayfaResimleri.length} sayfa</td>
+        `;
+        listEl.appendChild(tr);
+    });
+}
+
+function deleteAllCatalogs() {
+    if (confirm("Tüm katalogları veritabanından kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
+        const deleteBtn = document.getElementById('deleteAllCatalogsBtn');
+        if (!deleteBtn) return;
+        const originalHtml = deleteBtn.innerHTML;
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> <span class="hidden sm:inline">Siliniyor...</span>`;
+
+        db.collection('kataloglar').get()
+            .then(async (querySnapshot) => {
+                const docs = querySnapshot.docs;
+                if (docs.length === 0) {
+                    showSuccess("Silecek katalog bulunamadı.");
+                    deleteBtn.disabled = false;
+                    deleteBtn.innerHTML = originalHtml;
+                    return;
+                }
+
+                // Partition deletions in chunks of 500
+                const chunks = [];
+                for (let i = 0; i < docs.length; i += 500) {
+                    chunks.push(docs.slice(i, i + 500));
+                }
+
+                for (const chunk of chunks) {
+                    const batch = db.batch();
+                    chunk.forEach((doc) => {
+                        batch.delete(doc.ref);
+                    });
+                    await batch.commit();
+                }
+
+                showSuccess("Tüm kataloglar başarıyla silindi!");
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = originalHtml;
+                loadCatalogs();
+            })
+            .catch((error) => {
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = originalHtml;
+                showError("Kataloglar silinirken hata oluştu: " + error.message);
+            });
+    }
+}
+
+function initCatalogsListeners() {
+    const refreshCatalogsBtn = document.getElementById('refreshCatalogsBtn');
+    if (refreshCatalogsBtn) {
+        refreshCatalogsBtn.addEventListener('click', () => {
+            loadCatalogs();
+        });
+    }
+
+    const scrapeCatalogsBtn = document.getElementById('scrapeCatalogsBtn');
+    if (scrapeCatalogsBtn) {
+        scrapeCatalogsBtn.addEventListener('click', () => {
+            if (!confirm("Katalogları Akakçe'den otomatik çekmek istediğinize emin misiniz? Bu işlem tüm mevcuttaki katalogları silecek ve yenilerini yükleyecektir. İşlem 1-2 dakika sürebilir.")) {
+                return;
+            }
+
+            const originalHtml = scrapeCatalogsBtn.innerHTML;
+            scrapeCatalogsBtn.disabled = true;
+            scrapeCatalogsBtn.innerHTML = `
+                <span class="material-symbols-outlined animate-spin text-[20px]">sync</span>
+                <span class="hidden sm:inline">Kazınıyor...</span>
+            `;
+
+            const scrapeCatalogsManual = firebase.functions().httpsCallable('scrapeCatalogsManual');
+            scrapeCatalogsManual()
+                .then((res) => {
+                    scrapeCatalogsBtn.disabled = false;
+                    scrapeCatalogsBtn.innerHTML = originalHtml;
+                    if (res.data && res.data.success) {
+                        showSuccess(`${res.data.count} adet katalog başarıyla çekildi ve güncellendi.`);
+                        loadCatalogs();
+                    } else {
+                        showError(res.data.message || "Katalog çekme işlemi başarısız.");
+                    }
+                })
+                .catch((err) => {
+                    scrapeCatalogsBtn.disabled = false;
+                    scrapeCatalogsBtn.innerHTML = originalHtml;
+                    showError("Katalog çekme hatası: " + err.message);
+                });
+        });
+    }
+
+    const deleteAllCatalogsBtn = document.getElementById('deleteAllCatalogsBtn');
+    if (deleteAllCatalogsBtn) {
+        deleteAllCatalogsBtn.addEventListener('click', () => {
+            deleteAllCatalogs();
+        });
+    }
+}
+
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initCouponsListeners);
+    document.addEventListener('DOMContentLoaded', () => {
+        initCouponsListeners();
+        initCatalogsListeners();
+    });
 } else {
     initCouponsListeners();
+    initCatalogsListeners();
 }
 
 
