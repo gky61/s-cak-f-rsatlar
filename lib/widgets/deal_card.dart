@@ -641,12 +641,11 @@ class _DealCardState extends State<DealCard> {
                 ),
               ),
               // İçerik
-              Flexible(
+              Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                     // Mağaza adı
                     Row(
@@ -697,7 +696,7 @@ class _DealCardState extends State<DealCard> {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const Spacer(),
                     // Fiyat ve Paylaşan Kullanıcı (Aynı Satırda - Kullanıcı adı sağ altta)
                     Row(
                       children: [
