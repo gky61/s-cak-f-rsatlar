@@ -37,6 +37,60 @@ const WEEKDAYS_MAP = {
 };
 
 /**
+ * Parses start and end dates from detail page span#br_s text.
+ */
+function parseDatesFromSpan(spanText, baslangicTarihiFromUrl) {
+  if (!spanText) return null;
+  const normalized = spanText.toLowerCase().replace(/\s+/g, ' ').trim();
+  
+  const parts = normalized.split(/[-–]/);
+  if (parts.length === 0) return null;
+
+  const urlYear = baslangicTarihiFromUrl.getFullYear();
+  
+  function parseSinglePart(partText) {
+    const match = partText.trim().match(/(\d+)\s+([a-zA-ZğüşöçıİĞÜŞÖÇI]+)/);
+    if (match) {
+      const day = parseInt(match[1], 10);
+      const monthStr = match[2];
+      const month = MONTHS_MAP[monthStr];
+      if (month !== undefined) {
+        return { day, month };
+      }
+    }
+    return null;
+  }
+
+  if (parts.length === 2) {
+    const startPart = parseSinglePart(parts[0]);
+    const endPart = parseSinglePart(parts[1]);
+
+    if (startPart && endPart) {
+      const startDate = new Date(urlYear, startPart.month, startPart.day);
+      startDate.setHours(0, 0, 0, 0);
+      let endYear = urlYear;
+      if (endPart.month < startPart.month) {
+        endYear = urlYear + 1;
+      }
+      const endDate = new Date(endYear, endPart.month, endPart.day);
+      endDate.setHours(23, 59, 59, 999);
+      return { startDate, endDate };
+    }
+  } else if (parts.length === 1) {
+    const singlePart = parseSinglePart(parts[0]);
+    if (singlePart) {
+      const startDate = new Date(urlYear, singlePart.month, singlePart.day);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(urlYear, singlePart.month, singlePart.day);
+      endDate.setHours(23, 59, 59, 999);
+      return { startDate, endDate };
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Parses start date from relative URL.
  * Example: /brosurler/bim-24-mart-2026-aktuel-katalogu-indirimli-urunler-56190
  */
@@ -225,8 +279,19 @@ async function scrapeAndSaveCatalogs() {
             });
 
             if (sayfaResimleri.length > 0) {
-              const baslangicTarihi = parseDateFromUrl(item.href);
-              const bitisTarihi = calculateEndDate(baslangicTarihi, item.timeRemainingText);
+              let baslangicTarihi = parseDateFromUrl(item.href);
+              let bitisTarihi = calculateEndDate(baslangicTarihi, item.timeRemainingText);
+
+              // Extract precise dates from span#br_s on the detail page if present
+              const dateSpanText = $detail('#br_s').text().trim();
+              if (dateSpanText) {
+                const parsedDates = parseDatesFromSpan(dateSpanText, baslangicTarihi);
+                if (parsedDates) {
+                  baslangicTarihi = parsedDates.startDate;
+                  bitisTarihi = parsedDates.endDate;
+                  functions.logger.info(`   📅 Date override for brochure ${item.brochureId}: ${baslangicTarihi.toLocaleDateString('tr-TR')} - ${bitisTarihi.toLocaleDateString('tr-TR')}`);
+                }
+              }
 
               // Use first page image as cover if cover thumbnail is empty or a placeholder
               let finalCover = (item.coverImage && !item.coverImage.includes('t.gif'))
