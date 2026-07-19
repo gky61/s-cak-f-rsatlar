@@ -154,94 +154,11 @@ class AmazonScraper extends BaseProductScraper {
 
   @override
   String? scrapeTitle(dom.Document document) {
-    // 1. Selector'lar ile çekmeyi dene
-    final selectors = [
-      '#productTitle',
-      '#title',
-      '.a-size-large.product-title-word-break',
-      'h1#title',
-      'h1.a-size-large'
-    ];
-    for (final selector in selectors) {
-      final el = document.querySelector(selector);
-      if (el != null) {
-        final txt = el.text.trim();
-        if (txt.isNotEmpty && !_isGenericAmazonTitle(txt)) {
-          return txt;
-        }
-      }
-    }
-
-    // 2. og:title ve twitter:title meta etiketlerini dene
-    final metaSelectors = [
-      'meta[property="og:title"]',
-      'meta[name="twitter:title"]',
-      'meta[name="title"]'
-    ];
-    for (final selector in metaSelectors) {
-      final el = document.querySelector(selector);
-      if (el != null) {
-        final content = el.attributes['content'];
-        if (content != null) {
-          final txt = content.trim();
-          if (txt.isNotEmpty && !_isGenericAmazonTitle(txt)) {
-            return txt;
-          }
-        }
-      }
-    }
-
-    // 3. JSON-LD Product name alanını dene
-    final amazonJsonLd = document.querySelectorAll('script[type="application/ld+json"]');
-    for (final script in amazonJsonLd) {
-      try {
-        final jsonContent = script.text;
-        if (jsonContent.contains('Product') || jsonContent.contains('name')) {
-          final jsonData = jsonDecode(jsonContent);
-          final name = _extractNameFromJson(jsonData);
-          if (name != null && name.isNotEmpty && !_isGenericAmazonTitle(name)) {
-            return name.trim();
-          }
-        }
-      } catch (_) {}
-    }
-
-    // 4. Standart <title> etiketini dene
-    final titleEl = document.querySelector('title');
+    final titleEl = document.querySelector('#productTitle') ??
+                    document.querySelector('#title') ??
+                    document.querySelector('.a-size-large.product-title-word-break');
     if (titleEl != null) {
-      final pageTitle = titleEl.text.trim();
-      if (pageTitle.isNotEmpty && !_isGenericAmazonTitle(pageTitle)) {
-        return pageTitle;
-      }
-    }
-
-    return null;
-  }
-
-  bool _isGenericAmazonTitle(String title) {
-    final lower = title.toLowerCase().trim();
-    return lower == 'amazon' || 
-           lower == 'amazon.com.tr' || 
-           lower == 'amazon.com' || 
-           lower == 'com.tr' ||
-           (lower.startsWith('amazon.com.tr:') && lower.length < 50);
-  }
-
-  String? _extractNameFromJson(dynamic jsonData) {
-    if (jsonData is Map) {
-      if (jsonData['name'] != null && jsonData['name'] is String) {
-        return jsonData['name'] as String;
-      }
-      if (jsonData['@graph'] != null && jsonData['@graph'] is List) {
-        for (final item in jsonData['@graph'] as List) {
-          final name = _extractNameFromJson(item);
-          if (name != null) return name;
-        }
-      }
-      for (final value in jsonData.values) {
-        final name = _extractNameFromJson(value);
-        if (name != null) return name;
-      }
+      return titleEl.text.trim();
     }
     return null;
   }
