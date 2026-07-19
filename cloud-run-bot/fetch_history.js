@@ -281,7 +281,12 @@ function cleanFallbackTitle(rawTitle) {
     title = title.substring(0, 80).trim() + '...';
   }
 
-  return title || 'Fırsat Ürünü';
+  const checkLower = title.toLowerCase().trim();
+  if (!title || checkLower === 'com.tr' || checkLower === 'com' || checkLower === 'tr' || checkLower === 'net') {
+    return 'Fırsat Ürünü';
+  }
+
+  return title;
 }
 
 /**
