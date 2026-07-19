@@ -97,7 +97,7 @@ Sunucu ortamındaki bot korumalarını aşmak için geliştirilen 5 temel bypass
 | :--- | :--- | :--- | :--- |
 | **Hepsiburada** | Akamai Captcha / Microlink Blok | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA (Google Translate Proxy engellendiği ve Microlink ücretli plan istediği için doğrudan curl ile çekilir) |
 | **Trendyol** | Yurt dışı IP & Ülke Engeli | `curl` spawnSync (Doğrudan) | `storefrontId=1; countryCode=TR; language=tr` Cookie Entegrasyonu |
-| **N11** | 403 Forbidden (IP Engeli) | Google Translate Proxy | `translate.goog` + `magaza` parametresi koruma |
+| **N11** | 403 Forbidden (IP Engeli) & Kısa Linkler | Google Translate Proxy | `translate.goog` + `magaza` parametresi koruma. `sl.n11.com/n/` kısa linkleri `www.n11.com/n/` formatına dönüştürülerek Google Translate Proxy üzerinden çözümlenir (`resolveN11ShortLink`), böylece Adjust'ın Google Play Store yönlendirmesi tamamen bypass edilir. |
 | **Vatan Bilgisayar** | 403 Forbidden (IP Engeli) | Google Translate Proxy | `translate.goog` |
 | **Itopya** | 403 Forbidden (Cloudflare Engeli) | Google Translate Proxy | `translate.goog` (VM ve Direct curl Cloudflare tarafından engellendiği için translate proxy üzerinden Node fetch ile çekilir) |
 | **Teknosa** | 403 Forbidden (TLS Engeli) | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA |

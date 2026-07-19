@@ -113,7 +113,7 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 | **Zara** | `zara.analyticsData` Script & Meta Tags | Akamai Bot Manager (JA3 TLS parmak izi engellemesi) | **Android (`HttpURLConnection`) & iOS (`URLSession`) Native MethodChannel bypass** + Regex script tarayıcı |
 | **Mango** | Next.js `__next_f.push` Script & Meta Tags | JSON-LD şemasının olmaması ve fiyatların Next.js hydration payload'unda olması | `__next_f.push` payload price regex ayrıştırıcı + og:image meta tag |
 | **Beymen** | JSON-LD (`application/ld+json`) & DOM | Hatalı JSON-LD karakter dizilimleri (satır sonu, kaçışsız çift tırnak) ve marka/başlık ayrımı | JSON-LD Sanitizer + DOM başlık (`.o-productDetail__description`) & en ucuz fiyat karşılaştırma |
-| **N11** | JSON-LD & DOM | WAF / Cloudflare bot koruması | `WhatsApp` User-Agent + `.newPrice` / dataLayer fallback |
+| **N11** | JSON-LD & DOM | WAF / Cloudflare bot koruması & Kısa Linkler | `WhatsApp` User-Agent + `.newPrice` / dataLayer fallback. `sl.n11.com/n/` kısa linkleri web tarafındaki `/n/` yönlendirme yoluna çevrilerek (`www.n11.com/n/`) ve HTTP redirect takibiyle asıl ürün sayfasına çözümlenir. |
 | **Vatan Bilgisayar**| DOM Seçicileri | Dinamik render bağımlılığı | `.product-list__price` DOM seçici fallback |
 | **Teknosa** | JSON-LD | Standart yapı | JSON-LD `Product` şema çözücü |
 | **MediaMarkt** | JSON-LD | Standart yapı | JSON-LD `Product` şema çözücü |

@@ -201,6 +201,9 @@ class LinkPreviewService {
     try {
       // Kısa linkler veya yönlendirme/takip linkleri için nihai uzun linki bul
       String targetUrl = extractAdjustFallback(url);
+      if (targetUrl.toLowerCase().contains('sl.n11.com/n/') || targetUrl.toLowerCase().contains('n11.com/n/')) {
+        targetUrl = await resolveN11ShortLink(targetUrl);
+      }
       final lowerUrl = targetUrl.toLowerCase();
       final isShortOrRedirect = lowerUrl.contains('amzn.eu') || 
                                lowerUrl.contains('amzn.to') || 
@@ -464,6 +467,9 @@ class LinkPreviewService {
   Future<String> resolveUrlRedirects(String url) async {
     try {
       var currentUrl = extractAdjustFallback(url);
+      if (currentUrl.toLowerCase().contains('sl.n11.com/n/') || currentUrl.toLowerCase().contains('n11.com/n/')) {
+        currentUrl = await resolveN11ShortLink(currentUrl);
+      }
       if (currentUrl != url) {
         _log('🎯 Adjust yönlendirmesi hemen çözüldü: $currentUrl');
         return currentUrl;
@@ -505,6 +511,30 @@ class LinkPreviewService {
       _log('⚠️ Yönlendirme çözme hatası: $e, orijinal URL kullanılıyor');
       return url;
     }
+  }
+
+  // N11 kısa linklerini (sl.n11.com/n/...) uzun ürün linkine çözer
+  Future<String> resolveN11ShortLink(String url) async {
+    try {
+      var targetUrl = url;
+      if (targetUrl.toLowerCase().contains('sl.n11.com/n/')) {
+        targetUrl = targetUrl.replaceAll('sl.n11.com', 'www.n11.com');
+      }
+      _log('🔗 N11 kısa linki çözülüyor: $targetUrl');
+      final client = http.Client();
+      final request = http.Request('GET', Uri.parse(targetUrl))
+        ..followRedirects = false;
+      final response = await client.send(request).timeout(const Duration(seconds: 4));
+      final location = response.headers['location'] ?? response.headers['Location'];
+      client.close();
+      if (location != null && location.isNotEmpty) {
+        _log('✅ N11 kısa linki çözüldü: $location');
+        return location;
+      }
+    } catch (e) {
+      _log('⚠️ N11 kısa link çözme hatası: $e');
+    }
+    return url;
   }
 
   // Amazon kısa linkini (amzn.eu) uzun linke (amazon.com.tr/dp/...) çevir

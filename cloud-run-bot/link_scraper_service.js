@@ -18,6 +18,7 @@ function getHeadersForUrl(url) {
     lowerUrl.includes('amazon.') ||
     lowerUrl.includes('amzn.') ||
     lowerUrl.includes('link.amazon') ||
+    lowerUrl.includes('amzlinks.') ||
     lowerUrl.includes('hepsiburada.com') ||
     lowerUrl.includes('mavi.com') ||
     lowerUrl.includes('defacto.com.tr') ||
@@ -65,14 +66,55 @@ function extractAdjustFallback(url) {
   return url;
 }
 
+/** N11 kısa linklerini (sl.n11.com/n/...) Google Translate Proxy üzerinden uzun ürün linkine çözer */
+async function resolveN11ShortLink(url) {
+  try {
+    let targetUrl = url;
+    if (targetUrl.toLowerCase().includes('sl.n11.com/n/')) {
+      targetUrl = targetUrl.replace(/sl\.n11\.com/i, 'www.n11.com');
+    }
+    const parsed = new URL(targetUrl);
+    const proxyHostname = parsed.hostname.replace(/\./g, '-') + '.translate.goog';
+    const proxyUrl = `https://${proxyHostname}${parsed.pathname}${parsed.search || ''}${parsed.search ? '&' : '?'}_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
+    
+    console.log(`[RESOLVE-REDIRECT] Resolving N11 short link via Google Translate Proxy: ${proxyUrl}`);
+    const res = await fetch(proxyUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+      },
+      redirect: 'manual'
+    });
+    
+    const location = res.headers.get('location');
+    if (location) {
+      console.log(`[RESOLVE-REDIRECT] N11 short link location: ${location}`);
+      let cleanUrl = location.replace(/www-n11-com\.translate\.goog/gi, 'www.n11.com');
+      const parsedClean = new URL(cleanUrl);
+      const paramsToRemove = ['_x_tr_sl', '_x_tr_tl', '_x_tr_hl', '_x_tr_pto', '_x_tr_sch'];
+      for (const param of paramsToRemove) {
+        parsedClean.searchParams.delete(param);
+      }
+      return parsedClean.toString();
+    }
+  } catch (err) {
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ N11 short link resolution error: ${err.message}`);
+  }
+  return url;
+}
+
 /** URL yönlendirmelerini çözer ve nihai hedef URL'yi döndürür */
 async function resolveUrlRedirects(url) {
   let targetUrl = extractAdjustFallback(url);
+  if (targetUrl.toLowerCase().includes('sl.n11.com/n/') || targetUrl.toLowerCase().includes('n11.com/n/')) {
+    targetUrl = await resolveN11ShortLink(targetUrl);
+  }
   const lowerUrl = targetUrl.toLowerCase();
 
   const isShortOrRedirect = lowerUrl.includes('amzn.eu') ||
     lowerUrl.includes('amzn.to') ||
     lowerUrl.includes('link.amazon') ||
+    lowerUrl.includes('amzlinks.in') ||
     lowerUrl.includes('hb.biz') ||
     lowerUrl.includes('publicis.link') ||
     lowerUrl.includes('bit.ly') ||
@@ -81,6 +123,7 @@ async function resolveUrlRedirects(url) {
     lowerUrl.includes('rebrand.ly') ||
     lowerUrl.includes('rdrtr.com') ||
     lowerUrl.includes('onelink.me') ||
+    lowerUrl.includes('sl.n11.com') ||
     lowerUrl.includes('ty.gl');
 
   if (!isShortOrRedirect) return targetUrl;
@@ -607,7 +650,7 @@ async function fetchHtml(url) {
       targetUrl = cleaned.toString();
       isPttavm = true;
       console.log(`[FETCH-HTML] 🔄 Pttavm linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
-    } else if (parsed.hostname.includes('amazon.')) {
+    } else if (parsed.hostname.includes('amazon.') || parsed.hostname.includes('link.amazon') || parsed.hostname.includes('amzlinks.') || parsed.hostname.includes('amzn.')) {
       // Amazon ABD sunucumuzdan çekildiğinde teslimat adresini ABD seçer
       // ve bu durum indirimli buybox TR fiyatını gizler.
       // Microlink API'si sayesinde TR/genel proxy üzerinden çekim yapılarak indirimli fiyat başarıyla alınır.
