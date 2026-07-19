@@ -17,7 +17,6 @@ function getHeadersForUrl(url) {
     lowerUrl.includes('teknosa.com') ||
     lowerUrl.includes('amazon.') ||
     lowerUrl.includes('amzn.') ||
-    lowerUrl.includes('link.amazon') ||
     lowerUrl.includes('hepsiburada.com') ||
     lowerUrl.includes('mavi.com') ||
     lowerUrl.includes('defacto.com.tr') ||
@@ -72,7 +71,6 @@ async function resolveUrlRedirects(url) {
 
   const isShortOrRedirect = lowerUrl.includes('amzn.eu') ||
     lowerUrl.includes('amzn.to') ||
-    lowerUrl.includes('link.amazon') ||
     lowerUrl.includes('hb.biz') ||
     lowerUrl.includes('publicis.link') ||
     lowerUrl.includes('bit.ly') ||
