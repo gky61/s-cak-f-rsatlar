@@ -78,7 +78,7 @@ class DealLinkUtils {
       if (hostname.contains('trendyol.com')) return 'Trendyol';
       if (hostname.contains('hepsiburada.com')) return 'Hepsiburada';
       if (hostname.contains('n11.com')) return 'N11';
-      if (hostname.contains('amazon.com')) return 'Amazon';
+      if (hostname.contains('amazon.') || hostname.contains('amzn.') || hostname.contains('link.amazon')) return 'Amazon';
       if (hostname.contains('gittigidiyor.com')) return 'GittiGidiyor';
       if (hostname.contains('havitstore.com.tr')) return 'Havit';
       if (hostname.contains('migros.com.tr')) return 'Migros';
@@ -141,7 +141,7 @@ class DealLinkUtils {
       }
 
       // Amazon
-      if (hostname.contains('amazon.com.tr') || hostname.contains('amazon.com')) {
+      if (hostname.contains('amazon.com.tr') || hostname.contains('amazon.com') || hostname.contains('amazon.') || hostname.contains('amzn.') || hostname.contains('link.amazon')) {
         final tag = affiliateConfig['amazon']?['tag'];
         if (tag != null && tag.isNotEmpty) {
           final newQueryParams = Map<String, String>.from(uri.queryParameters);

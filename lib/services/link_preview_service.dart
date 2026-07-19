@@ -112,6 +112,7 @@ class LinkPreviewService {
         lowerUrl.contains('teknosa.com') ||
         lowerUrl.contains('amazon.') ||
         lowerUrl.contains('amzn.') ||
+        lowerUrl.contains('link.amazon') ||
         lowerUrl.contains('hepsiburada.com') ||
         lowerUrl.contains('mavi.com') ||
         lowerUrl.contains('defacto.com.tr') ||
@@ -203,6 +204,7 @@ class LinkPreviewService {
       final lowerUrl = targetUrl.toLowerCase();
       final isShortOrRedirect = lowerUrl.contains('amzn.eu') || 
                                lowerUrl.contains('amzn.to') || 
+                               lowerUrl.contains('link.amazon') || 
                                lowerUrl.contains('hb.biz') ||
                                lowerUrl.contains('publicis.link') ||
                                lowerUrl.contains('bit.ly') ||
@@ -524,6 +526,7 @@ class LinkPreviewService {
       final lowerUrl = url.toLowerCase();
       final isShortOrRedirect = lowerUrl.contains('amzn.eu') || 
                                lowerUrl.contains('amzn.to') || 
+                               lowerUrl.contains('link.amazon') || 
                                lowerUrl.contains('hb.biz') ||
                                lowerUrl.contains('publicis.link') ||
                                lowerUrl.contains('bit.ly') ||

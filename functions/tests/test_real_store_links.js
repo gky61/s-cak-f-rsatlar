@@ -113,6 +113,11 @@ const TEST_CASES = [
     link2: 'https://amzn.eu/d/0iDpudyT'
   },
   {
+    store: 'Amazon (link.amazon Short Link)',
+    link1: 'https://link.amazon/B0aH5993k',
+    link2: 'https://link.amazon/B0aH5993k'
+  },
+  {
     store: 'Hepsiburada (Short Link)',
     link1: 'https://app.hb.biz/0hfOOmmCObc3',
     link2: 'https://app.hb.biz/PKYRtQoUMuj5'

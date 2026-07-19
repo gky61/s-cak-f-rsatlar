@@ -9,7 +9,9 @@ class AmazonScraper extends BaseProductScraper {
   @override
   bool canHandle(String url) {
     final lowerUrl = url.toLowerCase();
-    return lowerUrl.contains('amazon.') || lowerUrl.contains('amzn.');
+    return lowerUrl.contains('amazon.') || 
+           lowerUrl.contains('amzn.') || 
+           lowerUrl.contains('link.amazon');
   }
 
   @override

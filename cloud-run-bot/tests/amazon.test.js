@@ -8,6 +8,7 @@ function run() {
   // 1. canHandle
   assert.strictEqual(scraper.canHandle('https://www.amazon.com.tr/dp/B0CFYNMDF2'), true);
   assert.strictEqual(scraper.canHandle('https://amzn.to/some-short-url'), true);
+  assert.strictEqual(scraper.canHandle('https://link.amazon/B0aH5993k'), true);
   assert.strictEqual(scraper.canHandle('https://www.google.com'), false);
 
   // 2. Normal Amazon page (JSON-LD offers, description meta, title element)

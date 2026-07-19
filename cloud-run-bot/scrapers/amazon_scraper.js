@@ -8,7 +8,7 @@ class AmazonScraper extends BaseProductScraper {
 
   canHandle(url) {
     const lower = url.toLowerCase();
-    return lower.includes('amazon.') || lower.includes('amzn.');
+    return lower.includes('amazon.') || lower.includes('amzn.') || lower.includes('link.amazon');
   }
 
   scrapeImage($, url) {
