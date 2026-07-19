@@ -607,7 +607,7 @@ async function fetchHtml(url) {
       targetUrl = cleaned.toString();
       isPttavm = true;
       console.log(`[FETCH-HTML] 🔄 Pttavm linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
-    } else if (parsed.hostname.includes('amazon.') || parsed.hostname.includes('link.amazon') || parsed.hostname.includes('amzn.')) {
+    } else if (parsed.hostname.includes('amazon.')) {
       // Amazon ABD sunucumuzdan çekildiğinde teslimat adresini ABD seçer
       // ve bu durum indirimli buybox TR fiyatını gizler.
       // Microlink API'si sayesinde TR/genel proxy üzerinden çekim yapılarak indirimli fiyat başarıyla alınır.

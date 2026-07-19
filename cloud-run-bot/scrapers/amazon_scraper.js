@@ -110,8 +110,93 @@ class AmazonScraper extends BaseProductScraper {
   }
 
   scrapeTitle($) {
-    const el = $('#productTitle, #title, .a-size-large.product-title-word-break').first();
-    if (el.length) return el.text().trim();
+    // 1. Selector'lar ile çekmeyi dene
+    const selectors = [
+      '#productTitle',
+      '#title',
+      '.a-size-large.product-title-word-break',
+      'h1#title',
+      'h1.a-size-large'
+    ];
+    for (const selector of selectors) {
+      const el = $(selector).first();
+      if (el.length) {
+        const txt = el.text().trim();
+        if (txt && !this._isGenericAmazonTitle(txt)) {
+          return txt;
+        }
+      }
+    }
+
+    // 2. og:title ve twitter:title meta etiketlerini dene
+    const metaSelectors = [
+      'meta[property="og:title"]',
+      'meta[name="twitter:title"]',
+      'meta[name="title"]'
+    ];
+    for (const selector of metaSelectors) {
+      const el = $(selector).first();
+      if (el.length) {
+        const content = el.attr('content');
+        if (content) {
+          const txt = content.trim();
+          if (txt && !this._isGenericAmazonTitle(txt)) {
+            return txt;
+          }
+        }
+      }
+    }
+
+    // 3. JSON-LD Product name alanını dene
+    const scripts = $('script[type="application/ld+json"]');
+    for (let i = 0; i < scripts.length; i++) {
+      try {
+        const jsonContent = $(scripts[i]).text();
+        if (jsonContent.includes('Product') || jsonContent.includes('name')) {
+          const jsonData = JSON.parse(jsonContent);
+          const name = this._extractNameFromJson(jsonData);
+          if (name && !this._isGenericAmazonTitle(name)) {
+            return name.trim();
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 4. Standart <title> etiketini dene
+    const pageTitle = $('title').first().text().trim();
+    if (pageTitle && !this._isGenericAmazonTitle(pageTitle)) {
+      return pageTitle;
+    }
+
+    return null;
+  }
+
+  _isGenericAmazonTitle(title) {
+    if (!title) return true;
+    const lower = title.toLowerCase().trim();
+    return lower === 'amazon' || 
+           lower === 'amazon.com.tr' || 
+           lower === 'amazon.com' || 
+           lower === 'com.tr' ||
+           (lower.startsWith('amazon.com.tr:') && lower.length < 50);
+  }
+
+  _extractNameFromJson(jsonData) {
+    if (jsonData && typeof jsonData === 'object' && !Array.isArray(jsonData)) {
+      if (jsonData['name'] != null && typeof jsonData['name'] === 'string') {
+        return jsonData['name'];
+      }
+      if (Array.isArray(jsonData['@graph'])) {
+        for (const item of jsonData['@graph']) {
+          const name = this._extractNameFromJson(item);
+          if (name) return name;
+        }
+      }
+      for (const value of Object.values(jsonData)) {
+        const name = this._extractNameFromJson(value);
+        if (name) return name;
+      }
+    }
     return null;
   }
 

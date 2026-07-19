@@ -508,8 +508,14 @@ function cleanFallbackTitle(rawTitle) {
     title = title.substring(0, 80).trim() + '...';
   }
 
-  const checkLower = title.toLowerCase().trim();
-  if (!title || checkLower === 'com.tr' || checkLower === 'com' || checkLower === 'tr' || checkLower === 'net') {
+  const finalLower = title.toLowerCase().trim();
+  if (!title || 
+      finalLower === 'com.tr' || 
+      finalLower === 'com' || 
+      finalLower === 'tr' || 
+      finalLower === 'amazon' || 
+      finalLower === 'fırsat' || 
+      finalLower === 'ürün') {
     return 'Fırsat Ürünü';
   }
 
