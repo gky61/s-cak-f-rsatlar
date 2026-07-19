@@ -508,6 +508,11 @@ function cleanFallbackTitle(rawTitle) {
     title = title.substring(0, 80).trim() + '...';
   }
 
+  const lowerTitle = title.toLowerCase();
+  if (lowerTitle === 'com.tr' || lowerTitle === 'com' || lowerTitle === 'net' || lowerTitle === 'org') {
+    return 'Fırsat Ürünü';
+  }
+
   return title || 'Fırsat Ürünü';
 }
 
@@ -520,7 +525,7 @@ function extractStoreFromLink(link, text) {
 
   if (lowerLink.includes('trendyol.com') || lowerLink.includes('ty.gl')) store = 'Trendyol';
   else if (lowerLink.includes('hepsiburada.com') || lowerLink.includes('hb.biz')) store = 'Hepsiburada';
-  else if (lowerLink.includes('amazon.') || lowerLink.includes('amzn.to') || lowerLink.includes('/amzn')) store = 'Amazon';
+  else if (lowerLink.includes('amazon.') || lowerLink.includes('amzn.') || lowerLink.includes('link.amazon') || lowerLink.includes('/amzn')) store = 'Amazon';
   else if (lowerLink.includes('n11.com')) store = 'N11';
   else if (lowerLink.includes('a101.com') || lowerLink.includes('a101')) store = 'A101';
   else if (lowerLink.includes('migros.com') || lowerLink.includes('migros')) store = 'Migros';
