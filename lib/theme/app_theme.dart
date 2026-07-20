@@ -9,7 +9,7 @@ class AppTheme {
   static const Color primary = Color(0xFFFF6B35); // Vibrant Orange (Action/Highlight)
   static const Color secondary = Color(0xFF004E92); // Deep Ocean Blue (Brand/Trust)
   static const Color accent = Color(0xFF2D3436); // Dark Charcoal (Legacy support)
-  static const Color background = Color(0xFFECEFF1); // Soft Light Grey
+  static const Color background = Color(0xFFEBEBF0); // Darker Soft Grey for card contrast
   static const Color surface = Color(0xFFFFFFFF); // White (Card Background)
   static const Color textPrimary = Color(0xFF2D3436); // Dark Charcoal
   static const Color textSecondary = Color(0xFF636E72); // Grey

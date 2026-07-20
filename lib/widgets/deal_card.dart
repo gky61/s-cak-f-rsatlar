@@ -346,7 +346,7 @@ class _DealCardState extends State<DealCard> {
       opacity: isExpired ? 0.5 : 1.0,
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkSurface : const Color(0xFFF8F9FA),
+          color: isDark ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -359,7 +359,7 @@ class _DealCardState extends State<DealCard> {
           border: Border.all(
             color: deal.isEditorPick 
                 ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
-                : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFB0B8C4)),
+                : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFBDBDBD)),
             width: deal.isEditorPick ? 1.5 : 1,
           ),
         ),
@@ -987,7 +987,7 @@ class _DealCardState extends State<DealCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : const Color(0xFFF8F9FA),
+        color: isDark ? AppTheme.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(16), // rounded-2xl
         boxShadow: [
           BoxShadow(
@@ -999,7 +999,7 @@ class _DealCardState extends State<DealCard> {
         border: Border.all(
           color: deal.isEditorPick 
               ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
-              : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFB0B8C4)),
+              : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFBDBDBD)),
           width: deal.isEditorPick ? 1.5 : 1, // Tutarlı kalınlık
         ),
       ),
@@ -1021,7 +1021,7 @@ class _DealCardState extends State<DealCard> {
                     borderRadius: BorderRadius.circular(12),
                     color: Colors.white, // Beyaz arka plan
                     border: Border.all(
-                      color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFB0B8C4),
+                      color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFBDBDBD),
                       width: 1,
                     ),
                   ),
