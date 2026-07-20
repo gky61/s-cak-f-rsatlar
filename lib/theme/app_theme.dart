@@ -9,7 +9,7 @@ class AppTheme {
   static const Color primary = Color(0xFFFF6B35); // Vibrant Orange (Action/Highlight)
   static const Color secondary = Color(0xFF004E92); // Deep Ocean Blue (Brand/Trust)
   static const Color accent = Color(0xFF2D3436); // Dark Charcoal (Legacy support)
-  static const Color background = Color(0xFFEBEBF0); // Darker Soft Grey for card contrast
+  static const Color background = Color(0xFFF8F9FA); // Soft White/Light Grey
   static const Color surface = Color(0xFFFFFFFF); // White (Card Background)
   static const Color textPrimary = Color(0xFF2D3436); // Dark Charcoal
   static const Color textSecondary = Color(0xFF636E72); // Grey
@@ -84,12 +84,12 @@ class AppTheme {
         iconTheme: const IconThemeData(color: textPrimary),
       ),
       cardTheme: CardThemeData(
-        color: surface,
+        color: const Color(0xFFF1F5F9),
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24), // rounded-2xl (24px)
-          side: BorderSide(color: Colors.black.withOpacity(0.05), width: 2), // ring-2 ring-black/5
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -267,7 +267,7 @@ class AppTheme {
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: darkBorder, width: 2), // Daha belirgin border
+          side: const BorderSide(color: Color(0xFF3A3A3C), width: 1.5),
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(

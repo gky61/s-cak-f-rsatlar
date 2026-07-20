@@ -23,16 +23,16 @@ class DealCardSkeleton extends StatelessWidget {
   }
 
   Widget _buildVerticalSkeleton(BuildContext context, bool isDark) {
-    final cardBackgroundColor = isDark ? AppTheme.darkSurface : Colors.white;
-    final borderColor = isDark ? AppTheme.darkBorder : Colors.black.withValues(alpha: 0.05);
+    final cardBackgroundColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
+    final borderColor = isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1);
     
     return Container(
       decoration: BoxDecoration(
         color: cardBackgroundColor,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: borderColor,
-          width: 1,
+          width: 1.5,
           ),
       ),
       child: Column(
@@ -127,8 +127,8 @@ class DealCardSkeleton extends StatelessWidget {
   }
 
   Widget _buildHorizontalSkeleton(BuildContext context, bool isDark) {
-    final cardBackgroundColor = isDark ? AppTheme.darkSurface : Colors.white;
-    final borderColor = isDark ? AppTheme.darkBorder : Colors.black.withValues(alpha: 0.05);
+    final cardBackgroundColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
+    final borderColor = isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1);
 
     return Container(
       height: 140,
@@ -137,7 +137,7 @@ class DealCardSkeleton extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: borderColor,
-          width: 1,
+          width: 1.5,
         ),
       ),
       child: Row(
