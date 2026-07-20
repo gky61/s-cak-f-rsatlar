@@ -40,6 +40,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   final _customStoreController = TextEditingController();
   
   String? _selectedStore;
+  String? _priceLabel;
   final List<String> _stores = [
     'Trendyol',
     'Hepsiburada',
@@ -343,6 +344,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       _selectedCategory = 'elektronik';
       _selectedSubCategory = null;
       _isCategoryLockedByScraper = false;
+      _priceLabel = null;
     });
 
     _log('🔄 Otomatik ürün bilgisi çekme başlatıldı: $url');
@@ -424,6 +426,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         final cleanDesc = _cleanScrapedString(preview.description);
         if (_descriptionController.text.trim().isEmpty && cleanDesc != null) {
           _descriptionController.text = cleanDesc;
+        }
+
+        // Fiyat Etiketini al (kampanya/CRM)
+        final label = preview.priceLabel;
+        if (label != null && label.isNotEmpty) {
+          setState(() {
+            _priceLabel = label;
+          });
+          _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel');
         }
 
         // Kategori ekmek kırıntılarını (breadcrumbs) ve başlığı birleştirip sınıflandır
@@ -885,6 +896,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           imageUrl: imageUrl, // Linkten çekilen veya kullanıcının girdiği görsel
           url: _urlController.text.trim(),
           userId: user.uid,
+          priceLabel: _priceLabel,
         );
 
         if (mounted) {

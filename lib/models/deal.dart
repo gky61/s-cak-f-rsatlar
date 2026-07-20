@@ -33,6 +33,7 @@ class Deal {
   final bool isUserSubmitted; // Kullanıcı tarafından paylaşıldı mı?
   final bool isTest; // Test verisi mi?
   final String cleanUrl;
+  final String? priceLabel; // Fiyat etiket notu (CRM kampanya bilgisi vb.)
 
   Deal({
     required this.id,
@@ -58,6 +59,7 @@ class Deal {
     this.isUserSubmitted = false,
     this.isTest = false,
     this.cleanUrl = '',
+    this.priceLabel,
   });
 
 
@@ -234,6 +236,7 @@ class Deal {
       isUserSubmitted: data['isUserSubmitted'] == true,
       isTest: data['isTest'] == true,
       cleanUrl: data['cleanUrl'] ?? cleanProductUrl(data['link'] ?? data['url'] ?? ''),
+      priceLabel: data['priceLabel'],
     );
   }
 
@@ -262,6 +265,7 @@ class Deal {
       'isUserSubmitted': isUserSubmitted,
       'isTest': isTest,
       'cleanUrl': cleanUrl.isNotEmpty ? cleanUrl : cleanProductUrl(link),
+      'priceLabel': priceLabel,
     };
   }
 

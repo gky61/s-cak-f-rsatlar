@@ -166,6 +166,51 @@ class MigrosScraper extends BaseProductScraper {
     return baseDesc || null;
   }
 
+  async scrapePriceLabel($) {
+    // 1. Check DOM
+    const crmEl = $('.product-label.crm').first();
+    if (crmEl.length) {
+      const crmText = crmEl.text().trim().toLocaleUpperCase('tr-TR');
+      if (crmText) return crmText;
+    }
+
+    // 2. API fallback
+    try {
+      let imageUrl = '';
+      const product = this.findProductJsonLd($);
+      if (product && product['image']) {
+        imageUrl = this.extractImageFromProductJson(product['image']) || '';
+      }
+      if (!imageUrl) {
+        imageUrl = $('meta[property="og:image"]').attr('content') || '';
+      }
+
+      if (imageUrl) {
+        const match = imageUrl.match(/product\/(\d+)/);
+        if (match) {
+          const productId = match[1];
+          const apiRes = await fetch(`https://www.migros.com.tr/rest/hemen/products/screens/${productId}`, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            }
+          });
+          if (apiRes.ok) {
+            const json = await apiRes.json();
+            const crmTags = json.data?.storeProductInfoDTO?.crmDiscountTags;
+            if (Array.isArray(crmTags) && crmTags.length > 0) {
+              if (crmTags[0].tag) {
+                return crmTags[0].tag.trim().toLocaleUpperCase('tr-TR');
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[MigrosScraper] CRM tag API fetch failed: ${err.message}`);
+    }
+    return null;
+  }
+
   scrapeBreadcrumbs($) {
     const title = this.scrapeTitle($) || '';
     const breadcrumbs = this.extractBreadcrumbsFromJsonLd($, title, 'migros');

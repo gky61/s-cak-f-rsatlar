@@ -347,7 +347,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          childAspectRatio: 0.65,
+          childAspectRatio: 0.63,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
         ),
@@ -481,7 +481,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.65,
+        childAspectRatio: 0.63,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),

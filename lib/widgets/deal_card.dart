@@ -346,83 +346,78 @@ class _DealCardState extends State<DealCard> {
       opacity: isExpired ? 0.5 : 1.0,
       child: Container(
         decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : const Color(0xFFF5F5F0), // card-bg: #F5F5F0 (daha açık kırık beyaz)
-        borderRadius: BorderRadius.circular(12), // rounded-xl
+          color: isDark ? AppTheme.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+              color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
+              blurRadius: 16,
+              spreadRadius: 0,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(
+            color: deal.isEditorPick 
+                ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
+                : (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04)),
+            width: deal.isEditorPick ? 1.5 : 1,
           ),
-        ],
-        border: Border.all(
-          color: deal.isEditorPick 
-              ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
-              : (isDark ? Colors.grey[600]! : Colors.grey[300]!),
-          width: deal.isEditorPick ? 2.5 : 2, // Editör seçimi için biraz daha kalın
-        ),
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             onTap: _handleOnTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Görsel Container (Aspect Square)
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                child: AspectRatio(
-                  aspectRatio: 1.0, // aspect-square
-            child: Stack(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                      // Görsel
-                      Container(
-                        width: double.infinity,
-                        height: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.white, // Beyaz arka plan
-                          border: Border(
-                            bottom: BorderSide(
-                              color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
-                              width: 2,
-                            ),
+                // Görsel Container (Aspect Square yerine modern dikdörtgen)
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                  child: AspectRatio(
+                    aspectRatio: 1.2, // aspect ratio shifted to 1.2 to give text content breathing room
+                    child: Stack(
+                      children: [
+                        // Görsel
+                        Container(
+                          width: double.infinity,
+                          height: double.infinity,
+                          decoration: const BoxDecoration(
+                            color: Colors.white, // Beyaz arka plan
                           ),
-                        ),
-                        child: (isExpired || _effectiveImageUrl == null || _effectiveImageUrl!.isEmpty)
-                            ? Image.asset(_getStoreAsset(deal.store), fit: BoxFit.contain)
-                            : Padding(
-                                padding: const EdgeInsets.all(4.0),
-                                child: CachedNetworkImage(
-                                  imageUrl: _effectiveImageUrl!,
-                                  fit: BoxFit.contain,
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  memCacheWidth: 1200,
-                                  memCacheHeight: 1200,
-                                  maxHeightDiskCache: 1200,
-                                  maxWidthDiskCache: 1200,
-                                  fadeInDuration: const Duration(milliseconds: 300),
-                                  fadeOutDuration: const Duration(milliseconds: 100),
-                                  placeholder: (context, url) => Container(
-                                    color: Colors.grey[100],
-                                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                  ),
-                                  errorWidget: (context, url, error) => Image.asset(
-                                    _getStoreAsset(deal.store),
+                          child: (isExpired || _effectiveImageUrl == null || _effectiveImageUrl!.isEmpty)
+                              ? Image.asset(_getStoreAsset(deal.store), fit: BoxFit.contain)
+                              : Padding(
+                                  padding: const EdgeInsets.all(8.0), // Elegant floating padding
+                                  child: CachedNetworkImage(
+                                    imageUrl: _effectiveImageUrl!,
                                     fit: BoxFit.contain,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    memCacheWidth: 800,
+                                    memCacheHeight: 800,
+                                    maxHeightDiskCache: 800,
+                                    maxWidthDiskCache: 800,
+                                    fadeInDuration: const Duration(milliseconds: 250),
+                                    fadeOutDuration: const Duration(milliseconds: 100),
+                                    placeholder: (context, url) => Container(
+                                      color: Colors.grey[50],
+                                      child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                    ),
+                                    errorWidget: (context, url, error) => Image.asset(
+                                      _getStoreAsset(deal.store),
+                                      fit: BoxFit.contain,
+                                    ),
                                   ),
                                 ),
-                              ),
-                      ),
-                      // Zaman Rozeti (Sol Üst)
-                      Positioned(
-                        top: 8,
-                        left: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        ),
+                        // Zaman Rozeti (Sol Üst)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(4),
@@ -643,7 +638,7 @@ class _DealCardState extends State<DealCard> {
               // İçerik
               Flexible(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -829,6 +824,31 @@ class _DealCardState extends State<DealCard> {
                         ],
                       ],
                     ),
+                    if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
+                      const SizedBox(height: 6), // Increased spacing between price and label
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3E0), // Soft orange amber container
+                          borderRadius: BorderRadius.circular(6), // Rounded pill shape
+                          border: Border.all(
+                            color: const Color(0xFFFFB74D).withOpacity(0.3),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Text(
+                          deal.priceLabel!,
+                          style: const TextStyle(
+                            fontSize: 10.5, // Font size bumped from 9 to 10.5 to stand out
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.1,
+                            color: Color(0xFFE65100), // Clean deep orange tone
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                     ],
                   ),
                 ),
@@ -930,6 +950,40 @@ class _DealCardState extends State<DealCard> {
   // Horizontal kart layout'u (HTML'deki yeni tasarım)
   Widget _buildHorizontalCard(BuildContext context, Deal deal, DynamicCurrencyFormatter currencyFormat, bool isExpired, bool isDark) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final inceleButton = ElevatedButton(
+      onPressed: () => _openProductLink(deal.link),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppTheme.primary,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        minimumSize: const Size(0, 32),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(999), // rounded-full
+        ),
+        elevation: 0,
+        shadowColor: Colors.black.withValues(alpha: 0.2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            isExpired ? 'Şansını Dene' : 'İncele',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(
+            Icons.arrow_outward,
+            size: 16,
+            color: Colors.white,
+          ),
+        ],
+      ),
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -1245,7 +1299,7 @@ class _DealCardState extends State<DealCard> {
                 // Sağ tarafta içerik
                 Expanded(
                   child: SizedBox(
-                    height: 128, // Padding için yükseklik artırıldı (112 + 16)
+                    height: 140, // Height matched with the 140x140 image container
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1409,79 +1463,81 @@ class _DealCardState extends State<DealCard> {
                             ),
                               ],
                             ),
-                        // Alt kısım: Fiyat ve Buton (aynı hizada)
+                        // Alt kısım: Fiyat ve Buton (Ortak Düzen)
                         Padding(
-                          padding: const EdgeInsets.only(top: 16), // Daha aşağıya çek
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.center, // Fiyat ile aynı hizada
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                            // Fiyat
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (deal.originalPrice != null && deal.originalPrice! > deal.price)
-                                  Text(
-                                    currencyFormat.format(deal.originalPrice),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                      color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                      decoration: TextDecoration.lineThrough,
+                              // Kampanya açıklaması varsa üstte gösterilir
+                              if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFF3E0), // Soft orange amber container
+                                    borderRadius: BorderRadius.circular(6), // Rounded pill shape
+                                    border: Border.all(
+                                      color: const Color(0xFFFFB74D).withOpacity(0.3),
+                                      width: 0.5,
                                     ),
                                   ),
-                                Text(
-                                  currencyFormat.format(deal.price),
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w900,
-                                    color: isExpired
-                                        ? Colors.red[700]
-                                        : AppTheme.primary,
-                                    letterSpacing: -0.5,
-                                    height: 1.0,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            // İncele Butonu (fiyatla aynı hizada)
-                            ElevatedButton(
-                              onPressed: () => _openProductLink(deal.link),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primary,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                minimumSize: const Size(0, 32),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(999), // rounded-full
-                                ),
-                                elevation: 0,
-                                shadowColor: Colors.black.withValues(alpha: 0.2),
-                                  ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    isExpired ? 'Şansını Dene' : 'İncele',
+                                  child: Text(
+                                    deal.priceLabel!,
                                     style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.1,
+                                      color: Color(0xFFE65100), // Clean deep orange tone
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(height: 8), // Kampanya açıklaması ile fiyat/buton arası boşluk
+                              ],
+                              // Fiyat ve İncele butonu daima aynı row'da ve dikeyde ortalıdır
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.center, // Tam dikey hizalama
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (deal.originalPrice != null && deal.originalPrice! > deal.price)
+                                          Text(
+                                            currencyFormat.format(deal.originalPrice),
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w500,
+                                              color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+                                              decoration: TextDecoration.lineThrough,
+                                            ),
+                                          ),
+                                        Text(
+                                          currencyFormat.format(deal.price),
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w900,
+                                            color: isExpired
+                                                ? Colors.red[700]
+                                                : AppTheme.primary,
+                                            letterSpacing: -0.5,
+                                            height: 1.0,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(width: 4),
-                                  const Icon(
-                                    Icons.arrow_outward,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
+                                  const SizedBox(width: 8),
+                                  inceleButton,
                                 ],
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
                       ],
                     ),
                   ),

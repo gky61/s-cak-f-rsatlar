@@ -76,7 +76,7 @@ async function resolveN11ShortLink(url) {
     const parsed = new URL(targetUrl);
     const proxyHostname = parsed.hostname.replace(/\./g, '-') + '.translate.goog';
     const proxyUrl = `https://${proxyHostname}${parsed.pathname}${parsed.search || ''}${parsed.search ? '&' : '?'}_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
-    
+
     console.log(`[RESOLVE-REDIRECT] Resolving N11 short link via Google Translate Proxy: ${proxyUrl}`);
     const res = await fetch(proxyUrl, {
       method: 'GET',
@@ -85,7 +85,7 @@ async function resolveN11ShortLink(url) {
       },
       redirect: 'manual'
     });
-    
+
     const location = res.headers.get('location');
     if (location) {
       console.log(`[RESOLVE-REDIRECT] N11 short link location: ${location}`);
@@ -188,7 +188,7 @@ async function microlinkFetchHtml(targetUrl, originalUrl, fetchStartTime, preren
     const r = await fetch(microUrl, { signal: AbortSignal.timeout(18000) });
     const duration = Date.now() - fetchStartTime;
     console.log(`[FETCH-HTML] ⚡ Microlink cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${r.status}`);
-    
+
     if (r.ok) {
       const data = await r.json();
       const htmlText = data.data?.html || '';
@@ -520,7 +520,7 @@ function curlFetchGetirWayback(targetUrl, originalUrl, fetchStartTime) {
       htmlText = htmlText.replace(/https?:\/\/web\.archive\.org\/web\/\d+\/(https?:\/\/)/gi, '$1');
       // Wayback toolbar scriptlerini kaldır
       htmlText = htmlText.replace(/<!-- BEGIN WAYBACK TOOLBAR INSERT -->[\s\S]*?<!-- END WAYBACK TOOLBAR INSERT -->/gi, '');
-      
+
       console.log(`[FETCH-HTML] ✅ Wayback Machine'den Getir ürün verisi başarıyla çekildi!`);
       return htmlText;
     } else {
@@ -861,6 +861,11 @@ async function scrapeProductFromUrl(url) {
       const description = matchedScraper.scrapeDescription ? await matchedScraper.scrapeDescription($) : null;
       console.log(`[SCRAPE-SERVICE] [DESCRIPTION] Sonuç: "${description || 'BULUNAMADI'}"`);
 
+      // 6. Fiyat Etiketi / CRM Bilgisi Çekimi
+      console.log(`[SCRAPE-SERVICE] [PRICE-LABEL] Kampanya etiketi çekiliyor...`);
+      const priceLabel = matchedScraper.scrapePriceLabel ? await matchedScraper.scrapePriceLabel($) : null;
+      console.log(`[SCRAPE-SERVICE] [PRICE-LABEL] Sonuç: "${priceLabel || 'BULUNAMADI'}"`);
+
       const totalDuration = Date.now() - startTime;
       console.log(`============================================================`);
       console.log(`[SCRAPE-SERVICE] ✅ Scrape tamamlandı! Toplam süre: ${totalDuration}ms`);
@@ -872,7 +877,8 @@ async function scrapeProductFromUrl(url) {
         price: price || null,
         imageUrl: imageUrl || null,
         description: description || null,
-        breadcrumbs: breadcrumbs
+        breadcrumbs: breadcrumbs,
+        priceLabel: priceLabel || null
       };
     } else {
       console.log(`[SCRAPE-SERVICE] Genel Fallback akışı (Open Graph) başlıyor...`);

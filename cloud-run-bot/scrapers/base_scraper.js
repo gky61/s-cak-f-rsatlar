@@ -27,6 +27,9 @@ class BaseProductScraper {
   /** HTML'den breadcrumb listesini çeker */
   scrapeBreadcrumbs($) { return []; }
 
+  /** HTML'den fiyatın altında gösterilecek kampanya/CRM etiketini çeker */
+  scrapePriceLabel($) { return null; }
+
   // ─── Yardımcı Metotlar ───
 
   /** Fiyat metnini temizleyip float değere dönüştürür */

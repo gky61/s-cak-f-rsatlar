@@ -197,6 +197,7 @@ class DealService {
     required String imageUrl,
     required String url,
     required String userId,
+    String? priceLabel,
   }) async {
     try {
       final isAdmin = await _authService.isAdmin();
@@ -299,6 +300,7 @@ class DealService {
         isApproved: isApprovalRequired ? false : true,
         isUserSubmitted: true,
         cleanUrl: cleanUrl,
+        priceLabel: priceLabel,
       );
 
       final docRef = await _firestore.collection('deals').add(deal.toFirestore());

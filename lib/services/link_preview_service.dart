@@ -43,6 +43,7 @@ class LinkPreviewResult {
   final String? provider;
   final double? price;
   final List<String>? breadcrumbs;
+  final String? priceLabel;
 
   LinkPreviewResult({
     String? title,
@@ -51,6 +52,7 @@ class LinkPreviewResult {
     String? provider,
     this.price,
     this.breadcrumbs,
+    this.priceLabel,
   })  : title = (title == 'null' || title == 'NULL') ? null : title,
         description = (description == 'null' || description == 'NULL') ? null : description,
         imageUrl = (imageUrl == 'null' || imageUrl == 'NULL') ? null : imageUrl,
@@ -269,6 +271,7 @@ class LinkPreviewService {
                             
               final price = await matchedScraper.scrapePrice(document);
               final breadcrumbs = matchedScraper.scrapeBreadcrumbs(document);
+              final priceLabel = await matchedScraper.scrapePriceLabel(document);
               
               final resolvedImage = _resolveImageUrl(imageUrl, targetUrl);
               final provider = _cleanHost(targetUrl);
@@ -280,6 +283,9 @@ class LinkPreviewService {
               _log('   - Fiyat: $price');
               _log('   - Kırıntı (Breadcrumbs): $breadcrumbs');
               _log('   - Provider: $provider');
+              if (priceLabel != null && priceLabel.isNotEmpty) {
+                _log('   - Fiyat Etiketi/CRM Notu: $priceLabel');
+              }
 
               return LinkPreviewResult(
                 title: title,
@@ -288,6 +294,7 @@ class LinkPreviewService {
                 provider: provider,
                 price: price,
                 breadcrumbs: breadcrumbs,
+                priceLabel: priceLabel,
               );
             }
           }

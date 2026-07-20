@@ -30,7 +30,7 @@ function cleanProductUrl(urlStr) {
   try {
     const url = new URL(urlStr.trim());
     const host = url.hostname.toLowerCase();
-    
+
     const majorStores = [
       'amazon',
       'trendyol',
@@ -52,7 +52,7 @@ function cleanProductUrl(urlStr) {
       'incehesap',
       'havit'
     ];
-    
+
     let isMajorStore = false;
     for (const store of majorStores) {
       if (host.includes(store)) {
@@ -60,7 +60,7 @@ function cleanProductUrl(urlStr) {
         break;
       }
     }
-    
+
     if (isMajorStore) {
       // Büyük mağazalar için query parametrelerini tamamen temizle
       url.search = '';
@@ -74,7 +74,7 @@ function cleanProductUrl(urlStr) {
         }
       }
     }
-    
+
     let result = url.toString();
     if (result.endsWith('?')) {
       result = result.substring(0, result.length - 1);
@@ -118,25 +118,25 @@ const originalError = console.error;
 const originalWarn = console.warn;
 const originalInfo = console.info;
 
-console.log = function(...args) {
+console.log = function (...args) {
   originalLog.apply(console, args);
   botLogs.push(formatLogLine('info', ...args));
   if (botLogs.length > MAX_LOGS) botLogs.shift();
 };
 
-console.error = function(...args) {
+console.error = function (...args) {
   originalError.apply(console, args);
   botLogs.push(formatLogLine('error', ...args));
   if (botLogs.length > MAX_LOGS) botLogs.shift();
 };
 
-console.warn = function(...args) {
+console.warn = function (...args) {
   originalWarn.apply(console, args);
   botLogs.push(formatLogLine('warn', ...args));
   if (botLogs.length > MAX_LOGS) botLogs.shift();
 };
 
-console.info = function(...args) {
+console.info = function (...args) {
   originalInfo.apply(console, args);
   botLogs.push(formatLogLine('info', ...args));
   if (botLogs.length > MAX_LOGS) botLogs.shift();
@@ -845,6 +845,7 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       telegramChatUsername: chatIdentifier,
       rawMessage: messageText,
       isTest: isTest,
+      priceLabel: scrapeResult.priceLabel || null,
     };
 
     console.log(`💾 Kaydediliyor: ${uniqueDocId} (imageUrl: ${imageUrl ? 'VAR ✅' : 'YOK ❌'})`);
@@ -1120,7 +1121,7 @@ const PORT = process.env.PORT || 8080;
 
 const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  
+
   // Helper to send JSON responses safely with CORS
   const sendJson = (statusCode, data) => {
     res.writeHead(statusCode, {
@@ -1171,7 +1172,7 @@ const server = http.createServer(async (req, res) => {
   } else if (parsedUrl.pathname === '/test-bypass') {
     const targetUrl = parsedUrl.searchParams.get('url') || 'https://www.hepsiburada.com/gamepower-skadi-round-240-argb-240mm-sivi-islemci-sogutucu-am5-ve-lga1700-uyumlu-p-HBCV000064LQCT';
     const results = {};
-    
+
     // 1. Direct Curl
     try {
       const curl = spawnSync('curl', [
@@ -1185,7 +1186,7 @@ const server = http.createServer(async (req, res) => {
       const statusMatch = output.match(/---STATUS:(\d+)---/);
       const status = statusMatch ? parseInt(statusMatch[1]) : 0;
       results.direct_curl = { status, size: output.replace(/\n---STATUS:\d+---$/, '').length };
-    } catch(e) { results.direct_curl = { error: e.message }; }
+    } catch (e) { results.direct_curl = { error: e.message }; }
 
     // 2. Translate Proxy
     try {
@@ -1215,8 +1216,8 @@ const server = http.createServer(async (req, res) => {
         test3_raw_incehesap: { status: r3.status, size: size3 },
         test4_encoded_incehesap: { status: r4.status, size: size4 }
       };
-    } catch(e) { results.translate_proxy = { error: e.message }; }
-    
+    } catch (e) { results.translate_proxy = { error: e.message }; }
+
     // 3. Microlink HTML
     try {
       const microUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
@@ -1231,7 +1232,7 @@ const server = http.createServer(async (req, res) => {
       } else {
         results.microlink = { status: r.status };
       }
-    } catch(e) { results.microlink = { error: e.message }; }
+    } catch (e) { results.microlink = { error: e.message }; }
 
     sendJson(200, results);
     return;
@@ -1242,15 +1243,15 @@ const server = http.createServer(async (req, res) => {
       sendJson(400, { error: 'url parameter is required' });
       return;
     }
-    
+
     if (!isRunning || !client) {
       sendJson(503, { error: 'Telegram bot is not running or client is not connected' });
       return;
     }
-    
+
     try {
       console.log(`[SIMULATE] Simüle edilen url işleniyor: ${urlToScrape}${customText ? ` ile mesaj metni: "${customText}"` : ''}`);
-      
+
       // 1. Telegram'dan link önizlemesini doğrudan isteyelim
       let previewMedia = null;
       try {
@@ -1264,7 +1265,7 @@ const server = http.createServer(async (req, res) => {
       } catch (previewErr) {
         console.warn(`[SIMULATE] Telegram önizleme alma hatası: ${previewErr.message}`);
       }
-      
+
       // 2. Dummy mesaj ve chatInfo nesnesi oluşturalım
       const mockMessageId = Math.floor(Math.random() * 1000000);
       const dummyMessage = {
@@ -1273,19 +1274,19 @@ const server = http.createServer(async (req, res) => {
         entities: [],
         media: previewMedia ? previewMedia.media : null
       };
-      
+
       const dummyChatInfo = {
         id: 3423704050, // Test kanalımızın temiz ID'si
         title: 'Simulation Test Channel',
         username: 'simulation_test',
         broadcast: true
       };
-      
+
       const docId = `telegram_${dummyChatInfo.id}_${mockMessageId}`;
       console.log(`[SIMULATE] saveDealToFirebase çağrılıyor. Beklenen Belge ID: ${docId}`);
-      
+
       const success = await saveDealToFirebase(dummyMessage, dummyChatInfo, true);
-      
+
       if (success) {
         // Firestore'dan belgenin güncel halini okuyalım
         const docRef = db.collection('deals').doc(docId);
@@ -1295,9 +1296,9 @@ const server = http.createServer(async (req, res) => {
           return;
         }
       }
-      
+
       sendJson(500, { success: false, error: 'Failed to process deal or save to Firestore', docId });
-      
+
     } catch (err) {
       console.error('[SIMULATE] Simülasyon hatası:', err);
       sendJson(500, { error: err.message, stack: err.stack });

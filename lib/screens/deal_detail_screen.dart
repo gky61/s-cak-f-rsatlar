@@ -1393,7 +1393,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                 left: 20,
                 right: 20,
                 top: 16,
-                bottom: MediaQuery.of(context).padding.bottom + 16,
+                bottom: MediaQuery.of(context).padding.bottom + 
+                    (deal.priceLabel != null && deal.priceLabel!.isNotEmpty ? 22 : 16),
               ),
                             decoration: BoxDecoration(
                 color: isDark ? AppTheme.darkSurface : Colors.white,
@@ -1437,8 +1438,30 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               fontWeight: FontWeight.w900,
                               color: AppTheme.primary,
                               height: 1,
-                                    ),
-                                  ),
+                            ),
+                          ),
+                          if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
+                            const SizedBox(height: 8), // Increased spacing under price
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF3E0), // Soft orange amber container
+                                borderRadius: BorderRadius.circular(6), // Rounded pill shape
+                                border: Border.all(
+                                  color: const Color(0xFFFFB74D).withOpacity(0.3),
+                                  width: 0.5,
+                                ),
+                              ),
+                              child: Text(
+                                deal.priceLabel!,
+                                style: const TextStyle(
+                                  fontSize: 10.5, // Font size bumped from 9 to 10.5 to stand out
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFE65100), // Clean deep orange tone
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                                 ),
                       const SizedBox(width: 16),

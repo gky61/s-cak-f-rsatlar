@@ -591,6 +591,24 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     color: AppTheme.primary,
                   ),
                 ),
+                if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFECB3), // Açık sarı/turuncu arka plan
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      deal.priceLabel!,
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFE65100), // Koyu turuncu/kahverengi yazı
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
             onTap: () => Navigator.push(

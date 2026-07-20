@@ -31,6 +31,9 @@ abstract class BaseProductScraper {
   /// Belgeyi analiz ederek ürün açıklamasını döndürür
   FutureOr<String?> scrapeDescription(dom.Document document) => null;
 
+  /// Belgeyi analiz ederek ürün fiyatının altında gösterilecek kampanya/CRM etiketini döndürür
+  FutureOr<String?> scrapePriceLabel(dom.Document document) => null;
+
   /// Fiyat metnini temizleyip double değere dönüştüren yardımcı metot
   double? parsePriceText(String priceText) {
     String cleaned = priceText

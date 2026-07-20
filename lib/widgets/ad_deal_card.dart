@@ -37,22 +37,23 @@ class AdDealCard extends StatelessWidget {
     if (viewMode == CardViewMode.vertical) {
       return Container(
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkSurface : const Color(0xFFF5F5F0),
-          borderRadius: BorderRadius.circular(12),
+          color: isDark ? AppTheme.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
+              blurRadius: 16,
+              spreadRadius: 0,
+              offset: const Offset(0, 4),
             ),
           ],
           border: Border.all(
-            color: isDark ? Colors.grey[600]! : Colors.grey[300]!,
-            width: 2,
+            color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04),
+            width: 1,
           ),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           child: Stack(
             children: [
               // Reklam - Kartın tamamını kaplar, merkeze hizalı
