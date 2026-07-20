@@ -359,7 +359,7 @@ class _DealCardState extends State<DealCard> {
           border: Border.all(
             color: deal.isEditorPick 
                 ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
-                : (isDark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.08)),
+                : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFD1D5DB)),
             width: deal.isEditorPick ? 1.5 : 1,
           ),
         ),
@@ -999,7 +999,7 @@ class _DealCardState extends State<DealCard> {
         border: Border.all(
           color: deal.isEditorPick 
               ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
-              : (isDark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.08)),
+              : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFD1D5DB)),
           width: deal.isEditorPick ? 1.5 : 1, // Tutarlı kalınlık
         ),
       ),
@@ -1021,7 +1021,7 @@ class _DealCardState extends State<DealCard> {
                     borderRadius: BorderRadius.circular(12),
                     color: Colors.white, // Beyaz arka plan
                     border: Border.all(
-                      color: isDark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.08),
+                      color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFD1D5DB),
                       width: 1,
                     ),
                   ),
