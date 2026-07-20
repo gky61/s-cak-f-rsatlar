@@ -346,20 +346,20 @@ class _DealCardState extends State<DealCard> {
       opacity: isExpired ? 0.5 : 1.0,
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkSurface : Colors.white,
+          color: isDark ? AppTheme.darkSurface : const Color(0xFFF5F6F8),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
-              blurRadius: 16,
+              color: Colors.black.withOpacity(isDark ? 0.35 : 0.05),
+              blurRadius: 12,
               spreadRadius: 0,
-              offset: const Offset(0, 4),
+              offset: const Offset(0, 3),
             ),
           ],
           border: Border.all(
             color: deal.isEditorPick 
                 ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
-                : (isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.04)),
+                : (isDark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.08)),
             width: deal.isEditorPick ? 1.5 : 1,
           ),
         ),
@@ -376,7 +376,7 @@ class _DealCardState extends State<DealCard> {
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
                   child: AspectRatio(
-                    aspectRatio: 1.2, // aspect ratio shifted to 1.2 to give text content breathing room
+                    aspectRatio: (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ? 1.25 : 1.05, // dynamic aspect ratio to eliminate extra whitespace at bottom
                     child: Stack(
                       children: [
                         // Görsel
@@ -638,7 +638,7 @@ class _DealCardState extends State<DealCard> {
               // İçerik
               Flexible(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+                  padding: EdgeInsets.fromLTRB(10, 8, 10, (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ? 6 : 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -987,20 +987,20 @@ class _DealCardState extends State<DealCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : const Color(0xFFF5F5F0), // card-bg: #F5F5F0 (daha açık kırık beyaz)
+        color: isDark ? AppTheme.darkSurface : const Color(0xFFF5F6F8),
         borderRadius: BorderRadius.circular(16), // rounded-2xl
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
+            color: Colors.black.withOpacity(isDark ? 0.35 : 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
         border: Border.all(
           color: deal.isEditorPick 
               ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
-              : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05)),
-          width: deal.isEditorPick ? 2.5 : 2, // Editör seçimi için biraz daha kalın
+              : (isDark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.08)),
+          width: deal.isEditorPick ? 1.5 : 1, // Tutarlı kalınlık
         ),
       ),
       child: Material(
@@ -1021,7 +1021,7 @@ class _DealCardState extends State<DealCard> {
                     borderRadius: BorderRadius.circular(12),
                     color: Colors.white, // Beyaz arka plan
                     border: Border.all(
-                      color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+                      color: isDark ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.08),
                       width: 1,
                     ),
                   ),
