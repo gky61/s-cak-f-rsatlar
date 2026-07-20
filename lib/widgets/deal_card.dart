@@ -346,7 +346,7 @@ class _DealCardState extends State<DealCard> {
       opacity: isExpired ? 0.5 : 1.0,
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkSurface : const Color(0xFFF5F6F8),
+          color: isDark ? AppTheme.darkSurface : const Color(0xFFF8F9FA),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -359,8 +359,8 @@ class _DealCardState extends State<DealCard> {
           border: Border.all(
             color: deal.isEditorPick 
                 ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
-                : (isDark ? Colors.white.withOpacity(0.12) : const Color(0xFFE2E8F0)),
-            width: deal.isEditorPick ? 2.0 : 1.3,
+                : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFB0B8C4)),
+            width: deal.isEditorPick ? 1.5 : 1,
           ),
         ),
         child: Material(
@@ -987,7 +987,7 @@ class _DealCardState extends State<DealCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : const Color(0xFFF5F6F8),
+        color: isDark ? AppTheme.darkSurface : const Color(0xFFF8F9FA),
         borderRadius: BorderRadius.circular(16), // rounded-2xl
         boxShadow: [
           BoxShadow(
@@ -999,8 +999,8 @@ class _DealCardState extends State<DealCard> {
         border: Border.all(
           color: deal.isEditorPick 
               ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
-              : (isDark ? Colors.white.withOpacity(0.12) : const Color(0xFFE2E8F0)),
-          width: deal.isEditorPick ? 2.0 : 1.3, // Tutarlı kalınlık
+              : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFB0B8C4)),
+          width: deal.isEditorPick ? 1.5 : 1, // Tutarlı kalınlık
         ),
       ),
       child: Material(
@@ -1021,8 +1021,8 @@ class _DealCardState extends State<DealCard> {
                     borderRadius: BorderRadius.circular(12),
                     color: Colors.white, // Beyaz arka plan
                     border: Border.all(
-                      color: isDark ? Colors.white.withOpacity(0.12) : const Color(0xFFE2E8F0),
-                      width: 1.0,
+                      color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFB0B8C4),
+                      width: 1,
                     ),
                   ),
                   child: ClipRRect(
