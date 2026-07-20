@@ -1859,7 +1859,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                               radius: 28,
                               backgroundColor: primaryColor.withValues(alpha: 0.1),
                               backgroundImage: profileImageUrl.isNotEmpty
-                                  ? CachedNetworkImageProvider(profileImageUrl)
+                                  ? (profileImageUrl.startsWith('assets/')
+                                      ? AssetImage(profileImageUrl) as ImageProvider
+                                      : CachedNetworkImageProvider(profileImageUrl))
                                   : null,
                               child: profileImageUrl.isEmpty
                                   ? Text(

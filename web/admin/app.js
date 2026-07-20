@@ -24,6 +24,16 @@ try {
     throw error;
 }
 
+// Helper to clean profile image URL and format local asset paths
+function cleanProfileImageUrl(url) {
+    if (typeof url !== 'string') return '';
+    const trimmed = url.trim();
+    if (trimmed.startsWith('assets/')) {
+        return '/' + trimmed;
+    }
+    return trimmed;
+}
+
 // Categories and Subcategories Configuration mapping (synced with Category model)
 const categoriesConfig = {
     elektronik: [
@@ -1673,7 +1683,7 @@ async function showDealModal(deal) {
             if (userDoc.exists) {
                 const userData = userDoc.data();
                 userDisplayName = userData.nickname || userData.username || 'Kullanıcı';
-                userProfileImage = userData.profileImageUrl || null;
+                userProfileImage = cleanProfileImageUrl(userData.profileImageUrl) || null;
                 console.log('✅ Kullanıcı bilgileri yüklendi:', userDisplayName);
             } else {
                 console.warn('⚠️ Kullanıcı bulunamadı:', postedBy);
@@ -3140,7 +3150,7 @@ async function loadUsers() {
                     uid: userData.uid || doc.id,
                     username: userData.username || 'Bilinmeyen',
                     nickname: userData.nickname || null,
-                    profileImageUrl: userData.profileImageUrl || '',
+                    profileImageUrl: cleanProfileImageUrl(userData.profileImageUrl),
                     points: userData.points || 0,
                     dealCount: userData.dealCount || 0,
                     totalLikes: userData.totalLikes || 0,
@@ -3529,7 +3539,8 @@ async function showUserDetail(userId) {
                 user = {
                     id: userDoc.id,
                     uid: userDoc.id,
-                    ...userData
+                    ...userData,
+                    profileImageUrl: cleanProfileImageUrl(userData.profileImageUrl)
                 };
                 console.log('✅ Kullanıcı Firestore\'dan yüklendi:', user);
             } else {
@@ -3957,7 +3968,8 @@ window.showUserComments = async function (userId) {
                 user = {
                     id: userDoc.id,
                     uid: userDoc.id,
-                    ...userData
+                    ...userData,
+                    profileImageUrl: cleanProfileImageUrl(userData.profileImageUrl)
                 };
                 console.log('✅ Kullanıcı Firestore\'dan yüklendi:', user);
             } else {
@@ -4298,7 +4310,8 @@ window.addBadge = async function (userId) {
                 user = {
                     id: userDoc.id,
                     uid: userDoc.id,
-                    ...userData
+                    ...userData,
+                    profileImageUrl: cleanProfileImageUrl(userData.profileImageUrl)
                 };
                 console.log('✅ Kullanıcı Firestore\'dan yüklendi:', user);
             } else {
@@ -4359,7 +4372,8 @@ window.removeBadge = async function (userId, badgeName) {
                 user = {
                     id: userDoc.id,
                     uid: userDoc.id,
-                    ...userData
+                    ...userData,
+                    profileImageUrl: cleanProfileImageUrl(userData.profileImageUrl)
                 };
                 console.log('✅ Kullanıcı Firestore\'dan yüklendi:', user);
             } else {
@@ -5809,7 +5823,7 @@ async function loadDashboardData() {
                     const u = doc.data();
                     const name = u.nickname || u.username || 'Bilinmeyen';
                     const points = u.points || 0;
-                    const avatar = u.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=135bec&color=fff&size=32`;
+                    const avatar = cleanProfileImageUrl(u.profileImageUrl) || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=135bec&color=fff&size=32`;
                     leaderboardHtml += `
                         <tr class="text-slate-700 dark:text-slate-300">
                             <td class="py-3 font-semibold">${index}</td>

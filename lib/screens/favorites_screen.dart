@@ -24,8 +24,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    // İlk açılışta "En Çok Beğenilenler" sekmesini göster
-    _tabController = TabController(length: 3, vsync: this, initialIndex: 1);
+    // İlk açılışta "Beğendiklerim" sekmesini göster
+    _tabController = TabController(length: 3, vsync: this, initialIndex: 0);
   }
 
   @override

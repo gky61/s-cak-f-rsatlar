@@ -21,8 +21,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   final NotificationService _notificationService = NotificationService();
   
   NotificationPreferences _preferences = NotificationPreferences.defaultPreferences();
-  List<String> _watchKeywords = [];
-  final TextEditingController _keywordController = TextEditingController();
   
   String _systemPermissionStatus = 'authorized';
   bool _isLoading = true;
@@ -37,7 +35,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _keywordController.dispose();
     super.dispose();
   }
 
@@ -64,12 +61,10 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       await _checkSystemPermission();
       
       final prefs = await _notificationService.getNotificationPreferences();
-      final keywords = await _notificationService.getNotificationKeywords();
       
       if (mounted) {
         setState(() {
           _preferences = prefs;
-          _watchKeywords = keywords;
           _isLoading = false;
         });
       }
@@ -138,70 +133,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     }
   }
 
-  Future<void> _addKeyword() async {
-    final keyword = _keywordController.text.trim();
-    if (keyword.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lütfen bir kelime girin'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
 
-    final normalized = _notificationService.normalizeKeyword(keyword);
-    if (_watchKeywords.map((k) => _notificationService.normalizeKeyword(k)).contains(normalized)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bu kelime zaten ekli'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    try {
-      await _notificationService.addKeywordSubscription(keyword);
-      setState(() {
-        _watchKeywords.add(keyword);
-        _keywordController.clear();
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ "$keyword" kelimesi eklendi'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      _log('Keyword add error: $e');
-    }
-  }
-
-  Future<void> _removeKeyword(String keyword) async {
-    try {
-      await _notificationService.removeKeywordSubscription(keyword);
-      setState(() {
-        _watchKeywords.remove(keyword);
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ "$keyword" kelimesi çıkarıldı'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      _log('Keyword remove error: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -653,97 +585,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           ),
                         );
                       },
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Keywords Section
-                  Text(
-                    'TAKİP EDİLEN ANAHTAR KELİMELER',
-                    style: TextStyle(
-                      color: textSub,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isDark 
-                            ? Colors.white.withValues(alpha: 0.05) 
-                            : Colors.black.withValues(alpha: 0.05),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _keywordController,
-                                decoration: InputDecoration(
-                                  hintText: 'Kelime girin (örn: Dyson, Laptop)',
-                                  hintStyle: TextStyle(color: textSub, fontSize: 14),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                ),
-                                style: TextStyle(color: textMain, fontSize: 14),
-                                onSubmitted: (_) => _addKeyword(),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            ElevatedButton(
-                              onPressed: _addKeyword,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: primaryColor,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                              ),
-                              child: const Text('Ekle', style: TextStyle(fontWeight: FontWeight.w600)),
-                            ),
-                          ],
-                        ),
-                        if (_watchKeywords.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: _watchKeywords.map((keyword) {
-                              return Chip(
-                                label: Text(
-                                  keyword,
-                                  style: TextStyle(
-                                    color: textMain,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                deleteIcon: Icon(
-                                  Icons.close, 
-                                  size: 18, 
-                                  color: textMain,
-                                ),
-                                onDeleted: () => _removeKeyword(keyword),
-                                backgroundColor: isDark 
-                                    ? Colors.white.withValues(alpha: 0.1) 
-                                    : Colors.black.withValues(alpha: 0.05),
-                                side: BorderSide.none,
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      ],
                     ),
                   ),
                   const SizedBox(height: 24),

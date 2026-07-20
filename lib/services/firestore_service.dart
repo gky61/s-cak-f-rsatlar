@@ -222,21 +222,111 @@ class FirestoreService {
   }
 
   Stream<List<Deal>> getMostLikedDeals({int minLikes = 25}) {
-    return _dealService.getApprovedDealsStream().map((deals) {
-      final filtered = deals.where((d) => d.hotVotes >= minLikes).toList();
-      filtered.sort((a, b) => b.hotVotes.compareTo(a.hotVotes));
-      return filtered.take(50).toList();
+    return firestore
+        .collection('deals')
+        .where('isApproved', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .limit(200)
+        .snapshots()
+        .map((snapshot) {
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(days: 30)); // 30-day time window for popular deals
+      
+      final deals = snapshot.docs
+          .map((doc) {
+            try {
+              return Deal.fromFirestore(doc);
+            } catch (e) {
+              return null;
+            }
+          })
+          .where((deal) =>
+              deal != null &&
+              deal.isTest != true &&
+              deal.isExpired != true &&
+              deal.hotVotes >= minLikes &&
+              !deal.createdAt.isBefore(cutoffTime))
+          .cast<Deal>()
+          .toList();
+      deals.sort((a, b) => b.hotVotes.compareTo(a.hotVotes));
+      return deals.take(50).toList();
     });
   }
 
   Stream<List<Deal>> getFollowedCategoriesDeals(String userId) {
-    return firestore.collection('users').doc(userId).snapshots().asyncMap((doc) async {
-      final cats = List<String>.from(doc.data()?['followedCategories'] ?? []);
-      if (cats.isEmpty) return [];
-      
-      final allDeals = await _dealService.getApprovedDealsStream().first;
-      return allDeals.where((d) => cats.contains(d.category)).toList();
+    final controller = StreamController<List<Deal>>();
+    
+    StreamSubscription? subSubscription;
+    StreamSubscription? dealsSubscription;
+    
+    List<String> followedCategories = [];
+    List<Deal> approvedDeals = [];
+    
+    void updateList() {
+      if (controller.isClosed) return;
+      if (followedCategories.isEmpty) {
+        controller.add([]);
+        return;
+      }
+      final filtered = approvedDeals.where((d) => followedCategories.contains(d.category)).toList();
+      controller.add(filtered);
+    }
+    
+    subSubscription = firestore
+        .collection('notificationSubscriptions')
+        .where('uid', isEqualTo: userId)
+        .where('type', isEqualTo: 'category')
+        .where('enabled', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) {
+      followedCategories = snapshot.docs
+          .map((doc) => doc.data()['key'] as String? ?? '')
+          .where((key) => key.isNotEmpty && !key.contains(':'))
+          .toList();
+      updateList();
+    }, onError: (e) {
+      if (!controller.isClosed) controller.addError(e);
     });
+    
+    dealsSubscription = firestore
+        .collection('deals')
+        .where('isApproved', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .limit(200)
+        .snapshots()
+        .map((snapshot) {
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(days: 30)); // 30-day time window for category deals
+      
+      return snapshot.docs
+          .map((doc) {
+            try {
+              return Deal.fromFirestore(doc);
+            } catch (e) {
+              return null;
+            }
+          })
+          .where((deal) =>
+              deal != null &&
+              deal.isTest != true &&
+              deal.isExpired != true &&
+              !deal.createdAt.isBefore(cutoffTime))
+          .cast<Deal>()
+          .toList();
+    })
+    .listen((deals) {
+      approvedDeals = deals;
+      updateList();
+    }, onError: (e) {
+      if (!controller.isClosed) controller.addError(e);
+    });
+    
+    controller.onCancel = () {
+      subSubscription?.cancel();
+      dealsSubscription?.cancel();
+    };
+    
+    return controller.stream;
   }
 
   // ===========================================================================
