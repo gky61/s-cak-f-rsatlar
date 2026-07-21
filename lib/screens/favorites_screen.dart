@@ -7,6 +7,7 @@ import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
+import 'category_preferences_screen.dart';
 import 'deal_detail_screen.dart';
 
 class FavoritesScreen extends StatefulWidget {
@@ -23,17 +24,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   // Cached streams to prevent re-listening/recreating on rebuilds
   Stream<List<Deal>>? _myFavoritesStream;
-  Stream<List<Deal>>? _mostLikedStream;
+  Stream<List<Deal>>? _popularDealsStream;
   Stream<List<Deal>>? _followedCategoriesStream;
   String? _cachedUserId;
 
   @override
   void initState() {
     super.initState();
-    // İlk açılışta "Beğendiklerim" sekmesini göster
+    // İlk açılışta "Kaydettiklerim" sekmesini göster
     _tabController = TabController(length: 3, vsync: this, initialIndex: 0);
-    // En Çok Beğenilenler genel bir stream olduğundan burada başlatabiliriz
-    _mostLikedStream = _firestoreService.getMostLikedDeals(minLikes: 25);
+    // Popüler Fırsatlar genel bir stream olduğundan burada başlatıyoruz
+    _popularDealsStream = _firestoreService.getPopularDeals();
   }
 
   void _initializeStreams(String? userId) {
@@ -70,7 +71,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
         elevation: 0,
         title: Text(
-          'Beğenilenler',
+          'Kaydedilenler',
           style: TextStyle(
             color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
             fontWeight: FontWeight.w800,
@@ -110,8 +111,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               ),
               isScrollable: false,
               tabs: const [
-                Tab(text: 'Beğendiklerim'),
-                Tab(text: 'En Çok Beğenilenler'),
+                Tab(text: 'Kaydettiklerim'),
+                Tab(text: 'Popüler Fırsatlar'),
                 Tab(text: 'Favori Kategorilerim'),
               ],
             ),
@@ -121,12 +122,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Beğendiklerim
+          // Kaydettiklerim
           _buildMyFavorites(currentUser, isDark),
-          // En Çok Beğenilenler (25+)
-          _buildMostLiked(isDark),
+          // Popüler Fırsatlar
+          _buildPopularDeals(isDark),
           // Favori Kategorilerim
-          _buildFollowedCategories(currentUser, isDark),
+          _buildFollowedCategories(currentUser, isDark, primaryColor),
         ],
       ),
     );
@@ -139,7 +140,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.favorite_border,
+              Icons.bookmark_border,
               size: 64,
               color: isDark ? Colors.grey[600] : Colors.grey[400],
             ),
@@ -154,7 +155,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
             ),
             const SizedBox(height: 8),
             Text(
-              'Beğendiğiniz fırsatları görmek için\ngiriş yapın',
+              'Kaydettiğiniz fırsatları görmek için\ngiriş yapın',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -205,13 +206,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.favorite_border,
+                  Icons.bookmark_border,
                   size: 64,
                   color: isDark ? Colors.grey[600] : Colors.grey[400],
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Henüz beğendiğiniz fırsat yok',
+                  'Henüz kaydettiğiniz fırsat yok',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -220,7 +221,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Beğendiğiniz fırsatlar burada görünecek',
+                  'Kaydettiğiniz fırsatlar burada görünecek',
                   style: TextStyle(
                     fontSize: 14,
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
@@ -247,7 +248,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                           context: context,
                           builder: (context) => AlertDialog(
                             title: const Text('Temizle'),
-                            content: const Text('Süresi dolmuş tüm favori ilanları listenizden kaldırmak istediğinize emin misiniz?'),
+                            content: const Text('Süresi dolmuş tüm kayıtlı ilanları listenizden kaldırmak istediğinize emin misiniz?'),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context, false),
@@ -268,7 +269,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                           }
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Süresi dolan favoriler temizlendi')),
+                              const SnackBar(content: Text('Süresi dolan kayıtlar temizlendi')),
                             );
                           }
                         }
@@ -291,9 +292,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildMostLiked(bool isDark) {
+  Widget _buildPopularDeals(bool isDark) {
     return StreamBuilder<List<Deal>>(
-      stream: _mostLikedStream,
+      stream: _popularDealsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingGrid(isDark);
@@ -331,13 +332,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.local_fire_department_outlined,
+                  Icons.whatshot_rounded,
                   size: 64,
-                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                  color: Colors.orange[600],
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Henüz çok beğenilen fırsat yok',
+                  'Henüz popüler bir fırsat yok',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -346,7 +347,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '25+ beğeni alan fırsatlar burada görünecek',
+                  'Topluluk tarafından sıcak bakılan (AL!)\npopüler fırsatlar burada gösterilecek',
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
@@ -395,7 +397,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildFollowedCategories(User? currentUser, bool isDark) {
+  Widget _buildFollowedCategories(User? currentUser, bool isDark, Color primaryColor) {
     if (currentUser == null) {
       return Center(
         child: Column(
@@ -483,11 +485,39 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Kategori bildirimlerini açtığınız\nkategorilerin fırsatları burada görünecek',
+                  'İlgi duyduğunuz kategorileri takip ederek\nfırsatlarını burada görebilirsiniz.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CategoryPreferencesScreen(),
+                      ),
+                    ).then((_) {
+                      setState(() {
+                        _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
+                      });
+                    });
+                  },
+                  icon: const Icon(Icons.tune_rounded, size: 18),
+                  label: const Text(
+                    'Kategorileri Seç & Takip Et',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ],

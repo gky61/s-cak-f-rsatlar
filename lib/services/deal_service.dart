@@ -373,8 +373,6 @@ class DealService {
         final dealData = dealSnapshot.data() as Map<String, dynamic>;
         int hotVotes = dealData['hotVotes'] ?? 0;
         int coldVotes = dealData['coldVotes'] ?? 0;
-        int expiredVotes = dealData['expiredVotes'] ?? 0;
-        bool isExpired = dealData['isExpired'] ?? false;
         final String postedBy = dealData['postedBy'] ?? '';
 
         String? oldType;
@@ -393,8 +391,6 @@ class DealService {
             hotVotes = (hotVotes > 0) ? hotVotes - 1 : 0;
           } else if (oldType == 'cold') {
             coldVotes = (coldVotes > 0) ? coldVotes - 1 : 0;
-          } else if (oldType == 'expired') {
-            expiredVotes = (expiredVotes > 0) ? expiredVotes - 1 : 0;
           }
         }
 
@@ -404,19 +400,19 @@ class DealService {
             hotVotes += 1;
           } else if (newType == 'cold') {
             coldVotes += 1;
-          } else if (newType == 'expired') {
-            expiredVotes += 1;
-            // Alev (hotVotes) popülerliğine göre dinamik bitiş limiti (en az 5, en fazla 20)
-            final dynamicLimit = (5 + (hotVotes / 5).floor()).clamp(5, 20);
-            if (expiredVotes >= dynamicLimit) {
-              isExpired = true;
-            }
           }
         }
 
         // 3. vote doc güncelle
         if (newType == null) {
-          transaction.delete(voteRef);
+          final bool expiredVal = voteSnapshot.exists && voteSnapshot.data()?['expired'] == true;
+          if (!expiredVal) {
+            transaction.delete(voteRef);
+          } else {
+            transaction.update(voteRef, {
+              'type': FieldValue.delete(),
+            });
+          }
         } else {
           transaction.set(voteRef, {'type': newType}, SetOptions(merge: true));
         }
@@ -425,8 +421,6 @@ class DealService {
         transaction.update(dealRef, {
           'hotVotes': hotVotes,
           'coldVotes': coldVotes,
-          'expiredVotes': expiredVotes,
-          'isExpired': isExpired,
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
@@ -458,8 +452,105 @@ class DealService {
 
   Future<bool> addHotVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, 'hot');
   Future<bool> addColdVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, 'cold');
-  Future<bool> addExpiredVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, 'expired');
   Future<bool> removeVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, null);
+  Future<bool> removeHotVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, null);
+  Future<bool> removeColdVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, null);
+
+  // Bağımsız Fırsat Bitti Oylaması (votes/{userId} dokümanında 'expired': true alanı olarak tutulur)
+  Future<bool> addExpiredVote(String dealId, String userId) async {
+    try {
+      final dealRef = _firestore.collection('deals').doc(dealId);
+      final voteRef = dealRef.collection('votes').doc(userId);
+
+      return await _firestore.runTransaction((transaction) async {
+        final dealSnapshot = await transaction.get(dealRef);
+        final voteSnapshot = await transaction.get(voteRef);
+
+        if (!dealSnapshot.exists) return false;
+
+        bool alreadyVotedExpired = false;
+        if (voteSnapshot.exists) {
+          alreadyVotedExpired = voteSnapshot.data()?['expired'] == true;
+        }
+
+        if (alreadyVotedExpired) return true; // Zaten bitirme oyu verilmiş
+
+        final dealData = dealSnapshot.data() as Map<String, dynamic>;
+        int hotVotes = dealData['hotVotes'] ?? 0;
+        int expiredVotes = dealData['expiredVotes'] ?? 0;
+        bool isExpired = dealData['isExpired'] ?? false;
+
+        expiredVotes += 1;
+        final dynamicLimit = (5 + (hotVotes / 5).floor()).clamp(5, 20);
+        if (expiredVotes >= dynamicLimit) {
+          isExpired = true;
+        }
+
+        transaction.set(voteRef, {'expired': true, 'expiredAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+        transaction.update(dealRef, {
+          'expiredVotes': expiredVotes,
+          'isExpired': isExpired,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        return true;
+      });
+    } catch (e) {
+      _log('addExpiredVote hatası: $e');
+      return false;
+    }
+  }
+
+  Future<bool> removeExpiredVote(String dealId, String userId) async {
+    try {
+      final dealRef = _firestore.collection('deals').doc(dealId);
+      final voteRef = dealRef.collection('votes').doc(userId);
+
+      return await _firestore.runTransaction((transaction) async {
+        final dealSnapshot = await transaction.get(dealRef);
+        final voteSnapshot = await transaction.get(voteRef);
+
+        if (!dealSnapshot.exists || !voteSnapshot.exists) return false;
+
+        bool alreadyVotedExpired = voteSnapshot.data()?['expired'] == true;
+        if (!alreadyVotedExpired) return true;
+
+        final dealData = dealSnapshot.data() as Map<String, dynamic>;
+        int expiredVotes = dealData['expiredVotes'] ?? 0;
+        expiredVotes = (expiredVotes > 0) ? expiredVotes - 1 : 0;
+
+        // type alanı da yoksa dökümanı tamamen sil, varsa sadece expired alanını kaldır
+        final String? type = voteSnapshot.data()?['type'] as String?;
+        if (type == null) {
+          transaction.delete(voteRef);
+        } else {
+          transaction.update(voteRef, {
+            'expired': FieldValue.delete(),
+            'expiredAt': FieldValue.delete(),
+          });
+        }
+
+        transaction.update(dealRef, {
+          'expiredVotes': expiredVotes,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        return true;
+      });
+    } catch (e) {
+      _log('removeExpiredVote hatası: $e');
+      return false;
+    }
+  }
+
+  Future<bool> hasUserVotedExpired(String dealId, String userId) async {
+    try {
+      final doc = await _firestore.collection('deals').doc(dealId).collection('votes').doc(userId).get();
+      return doc.data()?['expired'] == true;
+    } catch (e) {
+      return false;
+    }
+  }
 
   Future<String?> getUserVote(String dealId, String userId) async {
     try {

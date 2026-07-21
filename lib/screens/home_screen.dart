@@ -1346,10 +1346,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                 },
               ),
-              // Beğenilenler
+              // Kaydedilenler
               _buildBottomNavItem(
-                icon: Icons.favorite,
-                label: 'Beğenilenler',
+                icon: Icons.bookmark,
+                label: 'Kaydedilenler',
                 isSelected: false,
                 onTap: () {
                   Navigator.push(

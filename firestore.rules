@@ -100,6 +100,12 @@ service cloud.firestore {
         allow write: if canWrite() && userId() == voteUserId;
       }
       
+      // Expired votes subcollection
+      match /expired_votes/{expiredUserId} {
+        allow read: if isAuthenticated();
+        allow write: if canWrite() && userId() == expiredUserId;
+      }
+      
       // Comments subcollection
       match /comments/{commentId} {
         allow read: if true;

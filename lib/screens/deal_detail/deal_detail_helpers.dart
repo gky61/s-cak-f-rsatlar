@@ -24,61 +24,87 @@ class DealDetailHelpers {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-                                        borderRadius: BorderRadius.circular(12),
-          child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
           decoration: BoxDecoration(
-            color: isDark 
-                ? Colors.white.withValues(alpha: 0.05) 
-                : AppTheme.background,
+            color: isSelected
+                ? color.withValues(alpha: isDark ? 0.18 : 0.10)
+                : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey[100]),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isSelected 
-                  ? color.withValues(alpha: 0.3) 
-                  : Colors.black.withValues(alpha: isDark ? 0.05 : 0.05),
-              width: 0.5,
-                              ),
-                            ),
+              color: isSelected
+                  ? color.withValues(alpha: 0.6)
+                  : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[300]!),
+              width: isSelected ? 1.2 : 0.8,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.18),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (isLoading)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                  ),
-                )
-              else
-                Icon(
-                  icon,
-                  size: 16,
-                  color: color,
-                            ),
-              const SizedBox(height: 3),
-              Text(
-                count.toString(),
-                                        style: TextStyle(
-                  fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : AppTheme.textPrimary,
+              // Top Row: Icon + Count
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isLoading)
+                    SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.8,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
                       ),
-                                        ),
-              const SizedBox(height: 1),
+                    )
+                  else
+                    Icon(
+                      icon,
+                      size: 15,
+                      color: isSelected ? color : (isDark ? Colors.grey[300] : AppTheme.textPrimary),
+                    ),
+                  if (count >= 0) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      count.toString(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isSelected ? color : (isDark ? Colors.white : AppTheme.textPrimary),
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              // Bottom Row: Label
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                  fontSize: 9.5,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? color : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+                  letterSpacing: 0.1,
+                  height: 1.1,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

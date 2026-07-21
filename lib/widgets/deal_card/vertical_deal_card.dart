@@ -292,9 +292,9 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
-                                    Icons.favorite,
+                                    Icons.local_fire_department,
                                     size: 10,
-                                    color: Colors.red[500],
+                                    color: Colors.deepOrange,
                                   ),
                                   const SizedBox(width: 2),
                                   Text(

@@ -221,7 +221,7 @@ class FirestoreService {
     });
   }
 
-  Stream<List<Deal>> getMostLikedDeals({int minLikes = 25}) {
+  Stream<List<Deal>> getPopularDeals({int minHotVotes = 3}) {
     return firestore
         .collection('deals')
         .where('isApproved', isEqualTo: true)
@@ -244,7 +244,7 @@ class FirestoreService {
               deal != null &&
               deal.isTest != true &&
               deal.isExpired != true &&
-              deal.hotVotes >= minLikes &&
+              deal.hotVotes >= minHotVotes &&
               !deal.createdAt.isBefore(cutoffTime))
           .cast<Deal>()
           .toList();
@@ -252,6 +252,9 @@ class FirestoreService {
       return deals.take(50).toList();
     });
   }
+
+  /// Alias for backward compatibility
+  Stream<List<Deal>> getMostLikedDeals({int minLikes = 3}) => getPopularDeals(minHotVotes: minLikes);
 
   Stream<List<Deal>> getFollowedCategoriesDeals(String userId) {
     late StreamController<List<Deal>> controller;
@@ -339,13 +342,14 @@ class FirestoreService {
   // ===========================================================================
 
   Future<String?> getUserVote(String dealId, String userId) => _dealService.getUserVote(dealId, userId);
+  Future<bool> hasUserVotedExpired(String dealId, String userId) => _dealService.hasUserVotedExpired(dealId, userId);
   Future<bool> addHotVote(String dealId, String userId) => _dealService.addHotVote(dealId, userId);
   Future<bool> addColdVote(String dealId, String userId) => _dealService.addColdVote(dealId, userId);
   Future<bool> addExpiredVote(String dealId, String userId) => _dealService.addExpiredVote(dealId, userId);
   Future<bool> removeVote(String dealId, String userId) => _dealService.removeVote(dealId, userId);
-  Future<bool> removeHotVote(String dealId, String userId) => _dealService.removeVote(dealId, userId);
-  Future<bool> removeColdVote(String dealId, String userId) => _dealService.removeVote(dealId, userId);
-  Future<bool> removeExpiredVote(String dealId, String userId) => _dealService.removeVote(dealId, userId);
+  Future<bool> removeHotVote(String dealId, String userId) => _dealService.removeHotVote(dealId, userId);
+  Future<bool> removeColdVote(String dealId, String userId) => _dealService.removeColdVote(dealId, userId);
+  Future<bool> removeExpiredVote(String dealId, String userId) => _dealService.removeExpiredVote(dealId, userId);
       
   // ===========================================================================
   // KULLANICI İŞLEMLERİ (UserService üzerinden)

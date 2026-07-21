@@ -348,9 +348,9 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
-                                    Icons.favorite,
+                                    Icons.local_fire_department,
                                     size: 9,
-                                    color: Colors.red[500],
+                                    color: Colors.deepOrange,
                                   ),
                                   const SizedBox(width: 2),
                                   Text(
