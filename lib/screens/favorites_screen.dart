@@ -21,11 +21,33 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   final ThemeService _themeService = ThemeService();
   late TabController _tabController;
 
+  // Cached streams to prevent re-listening/recreating on rebuilds
+  Stream<List<Deal>>? _myFavoritesStream;
+  Stream<List<Deal>>? _mostLikedStream;
+  Stream<List<Deal>>? _followedCategoriesStream;
+  String? _cachedUserId;
+
   @override
   void initState() {
     super.initState();
     // İlk açılışta "Beğendiklerim" sekmesini göster
     _tabController = TabController(length: 3, vsync: this, initialIndex: 0);
+    // En Çok Beğenilenler genel bir stream olduğundan burada başlatabiliriz
+    _mostLikedStream = _firestoreService.getMostLikedDeals(minLikes: 25);
+  }
+
+  void _initializeStreams(String? userId) {
+    if (userId == null) {
+      _myFavoritesStream = null;
+      _followedCategoriesStream = null;
+      _cachedUserId = null;
+      return;
+    }
+    if (_cachedUserId != userId) {
+      _cachedUserId = userId;
+      _myFavoritesStream = _firestoreService.getFavoriteDeals(userId);
+      _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(userId);
+    }
   }
 
   @override
@@ -39,6 +61,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     final isDark = _themeService.isDarkMode;
     final primaryColor = Theme.of(context).colorScheme.primary;
     final currentUser = FirebaseAuth.instance.currentUser;
+
+    _initializeStreams(currentUser?.uid);
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
@@ -143,7 +167,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     }
 
     return StreamBuilder<List<Deal>>(
-      stream: _firestoreService.getFavoriteDeals(currentUser.uid),
+      stream: _myFavoritesStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingGrid(isDark);
@@ -269,7 +293,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   Widget _buildMostLiked(bool isDark) {
     return StreamBuilder<List<Deal>>(
-      stream: _firestoreService.getMostLikedDeals(minLikes: 25),
+      stream: _mostLikedStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingGrid(isDark);
@@ -406,7 +430,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     }
 
     return StreamBuilder<List<Deal>>(
-      stream: _firestoreService.getFollowedCategoriesDeals(currentUser.uid),
+      stream: _followedCategoriesStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingGrid(isDark);

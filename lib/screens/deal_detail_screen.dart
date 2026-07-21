@@ -148,6 +148,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     final previousColdVotes = _coldVotes;
     final previousExpiredVotes = _expiredVotes;
 
+    // Daha önce hot oy vermişse ve şimdi cold'a geçiyorsa, favorilerden çıkar
+    final wasPreviouslyHot = _hasVotedHot;
+
     // Optimistic UI update
     setState(() {
       if (isHot) {
@@ -164,10 +167,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         _hasVotedHot = true;
         _hotVotes += 1;
       } else {
-        // Eğer daha önce hot vermişse, hot'u kaldır
+        // Eğer daha önce hot vermişse, hot'u kaldır ve favorilerden çıkar
         if (_hasVotedHot) {
           _hasVotedHot = false;
           _hotVotes = _hotVotes > 0 ? _hotVotes - 1 : 0;
+          _isFavorite = false;
         }
         // Eğer daha önce expired vermişse, expired'ı kaldır
         if (_hasVotedExpired) {
@@ -206,20 +210,25 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       return;
     }
 
-    // Eğer hot vote ise ve işlem başarılıysa favorilere ekle
-    if (isHot && success) {
-      await _firestoreService.addToFavorites(
-        user.uid,
-        _currentDeal!.id,
-        title: _currentDeal!.title,
-        price: _currentDeal!.price,
-        store: _currentDeal!.store,
-        link: _currentDeal!.link,
-      );
-      if (mounted) {
-        setState(() {
-          _isFavorite = true;
-        });
+    if (success) {
+      if (isHot) {
+        // Hot vote ise favorilere ekle
+        await _firestoreService.addToFavorites(
+          user.uid,
+          _currentDeal!.id,
+          title: _currentDeal!.title,
+          price: _currentDeal!.price,
+          store: _currentDeal!.store,
+          link: _currentDeal!.link,
+        );
+        if (mounted) {
+          setState(() {
+            _isFavorite = true;
+          });
+        }
+      } else if (wasPreviouslyHot) {
+        // Cold vote ise ve daha önce hot vermişse favorilerden çıkar
+        await _firestoreService.removeFromFavorites(user.uid, _currentDeal!.id);
       }
     }
 
@@ -269,12 +278,16 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     final previousColdVotes = _coldVotes;
     final previousExpiredVotes = _expiredVotes;
 
+    // Daha önce hot oy vermişse, favorilerden çıkarmak için flag'i sakla
+    final wasPreviouslyHot = _hasVotedHot;
+
     // Optimistic UI update
     setState(() {
       // Eğer daha önce hot veya cold vermişse, onları kaldır
       if (_hasVotedHot) {
         _hasVotedHot = false;
         _hotVotes = _hotVotes > 0 ? _hotVotes - 1 : 0;
+        _isFavorite = false;
       }
       if (_hasVotedCold) {
         _hasVotedCold = false;
@@ -306,6 +319,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         ),
       );
       return;
+    }
+
+    // Expired vote başarılıysa ve daha önce hot oy vermişse favorilerden çıkar
+    if (success && wasPreviouslyHot) {
+      await _firestoreService.removeFromFavorites(user.uid, _currentDeal!.id);
     }
 
     if (!mounted) return;

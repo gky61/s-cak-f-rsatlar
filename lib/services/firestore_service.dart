@@ -254,7 +254,7 @@ class FirestoreService {
   }
 
   Stream<List<Deal>> getFollowedCategoriesDeals(String userId) {
-    final controller = StreamController<List<Deal>>();
+    late StreamController<List<Deal>> controller;
     
     StreamSubscription? subSubscription;
     StreamSubscription? dealsSubscription;
@@ -272,59 +272,64 @@ class FirestoreService {
       controller.add(filtered);
     }
     
-    subSubscription = firestore
-        .collection('notificationSubscriptions')
-        .where('uid', isEqualTo: userId)
-        .where('type', isEqualTo: 'category')
-        .where('enabled', isEqualTo: true)
-        .snapshots()
-        .listen((snapshot) {
-      followedCategories = snapshot.docs
-          .map((doc) => doc.data()['key'] as String? ?? '')
-          .where((key) => key.isNotEmpty && !key.contains(':'))
-          .toList();
-      updateList();
-    }, onError: (e) {
-      if (!controller.isClosed) controller.addError(e);
-    });
-    
-    dealsSubscription = firestore
-        .collection('deals')
-        .where('isApproved', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
-        .limit(200)
-        .snapshots()
-        .map((snapshot) {
-      final now = DateTime.now();
-      final cutoffTime = now.subtract(const Duration(days: 30)); // 30-day time window for category deals
-      
-      return snapshot.docs
-          .map((doc) {
-            try {
-              return Deal.fromFirestore(doc);
-            } catch (e) {
-              return null;
-            }
-          })
-          .where((deal) =>
-              deal != null &&
-              deal.isTest != true &&
-              deal.isExpired != true &&
-              !deal.createdAt.isBefore(cutoffTime))
-          .cast<Deal>()
-          .toList();
-    })
-    .listen((deals) {
-      approvedDeals = deals;
-      updateList();
-    }, onError: (e) {
-      if (!controller.isClosed) controller.addError(e);
-    });
-    
-    controller.onCancel = () {
-      subSubscription?.cancel();
-      dealsSubscription?.cancel();
-    };
+    controller = StreamController<List<Deal>>.broadcast(
+      onListen: () {
+        subSubscription = firestore
+            .collection('notificationSubscriptions')
+            .where('uid', isEqualTo: userId)
+            .where('type', isEqualTo: 'category')
+            .where('enabled', isEqualTo: true)
+            .snapshots()
+            .listen((snapshot) {
+          followedCategories = snapshot.docs
+              .map((doc) => doc.data()['key'] as String? ?? '')
+              .where((key) => key.isNotEmpty && !key.contains(':'))
+              .toList();
+          updateList();
+        }, onError: (e) {
+          if (!controller.isClosed) controller.addError(e);
+        });
+        
+        dealsSubscription = firestore
+            .collection('deals')
+            .where('isApproved', isEqualTo: true)
+            .orderBy('createdAt', descending: true)
+            .limit(200)
+            .snapshots()
+            .map((snapshot) {
+          final now = DateTime.now();
+          final cutoffTime = now.subtract(const Duration(days: 30)); // 30-day time window for category deals
+          
+          return snapshot.docs
+              .map((doc) {
+                try {
+                  return Deal.fromFirestore(doc);
+                } catch (e) {
+                  return null;
+                }
+              })
+              .where((deal) =>
+                  deal != null &&
+                  deal.isTest != true &&
+                  deal.isExpired != true &&
+                  !deal.createdAt.isBefore(cutoffTime))
+              .cast<Deal>()
+              .toList();
+        })
+        .listen((deals) {
+          approvedDeals = deals;
+          updateList();
+        }, onError: (e) {
+          if (!controller.isClosed) controller.addError(e);
+        });
+      },
+      onCancel: () {
+        subSubscription?.cancel();
+        dealsSubscription?.cancel();
+        subSubscription = null;
+        dealsSubscription = null;
+      },
+    );
     
     return controller.stream;
   }
