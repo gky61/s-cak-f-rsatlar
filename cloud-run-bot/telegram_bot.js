@@ -420,10 +420,19 @@ function extractPrice(text) {
 /**
  * Fırsat başlığını temizle ve sadeleştir
  */
+/**
+ * Fırsat başlığını temizle ve sadeleştir
+ */
 function cleanFallbackTitle(rawTitle) {
-  if (!rawTitle) return 'Fırsat';
+  if (!rawTitle) return 'Fırsat Ürünü';
 
   let title = rawTitle.trim();
+
+  // Invalid / Generic titles (Google Search, Captcha, Just a moment, etc.)
+  const invalidTitles = ['google search', 'google', 'just a moment...', 'attention required!', 'access denied', 'robot check', 'security check', 'cloudflare', '404 not found', 'error 404', 'fırsat ürünü'];
+  if (invalidTitles.includes(title.toLowerCase())) {
+    return 'Fırsat Ürünü';
+  }
 
   // 1. Emojileri ve UTF-8 dışı sembolleri temizle
   title = title.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2700}-\u{27BF}]|[\u{2600}-\u{26FF}]/gu, '');
@@ -441,7 +450,30 @@ function cleanFallbackTitle(rawTitle) {
   // 4. Yüzdelik indirimleri temizle
   title = title.replace(/%\d+\s*(?:indirim)?/gi, '');
 
-  // 5. Ortak reklam ve mağaza kelimelerini temizle
+  // 5. Mağaza eki suffix'lerini temizle (örn: ": Amazon.com.tr: Kozmetik", ": Hepsiburada", "- Trendyol")
+  title = title.replace(/:\s*Amazon\.com\.tr.*$/gi, '');
+  title = title.replace(/:\s*Hepsiburada.*$/gi, '');
+  title = title.replace(/:\s*Trendyol.*$/gi, '');
+  title = title.replace(/:\s*N11.*$/gi, '');
+  title = title.replace(/:\s*Pazarama.*$/gi, '');
+
+  // 6. Eğer iki nokta (:) varsa ve parçalara ayrılıyorsa:
+  // Eğer ilk parça 3 karakterden uzunsa ve sadece mağaza/reklam kelimesi değilse ilk parçayı ürün adı olarak koru!
+  if (title.includes(':')) {
+    const parts = title.split(':');
+    const firstPart = parts[0].trim();
+    const secondPart = parts[1] ? parts[1].trim() : '';
+
+    if (firstPart.length >= 3 && !firstPart.toLowerCase().includes('fırsat') && !firstPart.toLowerCase().includes('indirim')) {
+      title = firstPart;
+    } else if (secondPart.length > 5) {
+      title = secondPart;
+    } else {
+      title = firstPart;
+    }
+  }
+
+  // 7. Ortak reklam ve mağaza kelimelerini temizle
   const promoWords = [
     /hepsiburada(?:'da|da)?/gi,
     /trendyol(?:'da|da)?/gi,
@@ -478,38 +510,27 @@ function cleanFallbackTitle(rawTitle) {
     title = title.replace(regex, '');
   }
 
-  // 6. İki nokta varsa sonrasını al
-  if (title.includes(':')) {
-    const parts = title.split(':');
-    const afterColon = parts[1].trim();
-    if (afterColon.length > 5) {
-      title = afterColon;
-    } else {
-      title = parts[0].trim();
-    }
-  }
-
-  // 7. Sınır boşlukları ve sembolleri temizle
+  // 8. Sınır boşlukları ve sembolleri temizle
   title = title.trim()
     .replace(/^[-:,\s!📣🚨🔥.*_]+/g, '')
     .replace(/[-:,\s!📣🚨🔥.*_]+$/g, '')
     .trim();
 
-  // 8. Çift boşlukları temizle
+  // 9. Çift boşlukları temizle
   title = title.replace(/\s+/g, ' ');
 
-  // 9. Baş harfi büyüt
+  // 10. Baş harfi büyüt
   if (title.length > 0) {
     title = title.charAt(0).toUpperCase() + title.slice(1);
   }
 
-  // 10. Karakter sınırı (max 80)
+  // 11. Karakter sınırı (max 80)
   if (title.length > 80) {
     title = title.substring(0, 80).trim() + '...';
   }
 
   const lowerTitle = title.toLowerCase();
-  if (lowerTitle === 'com.tr' || lowerTitle === 'com' || lowerTitle === 'net' || lowerTitle === 'org') {
+  if (lowerTitle === 'com.tr' || lowerTitle === 'com' || lowerTitle === 'net' || lowerTitle === 'org' || invalidTitles.includes(lowerTitle)) {
     return 'Fırsat Ürünü';
   }
 
@@ -670,11 +691,21 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       priceSource = "Mesaj Metni";
     }
 
-    if (!scrapeResult.title && webpageTitle) {
+    const isInvalidTitle = (t) => {
+      if (!t) return true;
+      const lower = t.trim().toLowerCase();
+      const invalidList = ['google search', 'google', 'just a moment...', 'attention required!', 'access denied', 'robot check', 'security check', 'cloudflare', '404 not found', 'error 404', 'fırsat ürünü'];
+      return invalidList.some(inv => lower.includes(inv));
+    };
+
+    if (isInvalidTitle(scrapeResult.title) && webpageTitle && !isInvalidTitle(webpageTitle)) {
       console.log(`💡 [${uniqueDocId}] Scraper başlık çekemedi (Akamai 403 vb.). Telegram önizleme başlığı kullanılıyor: ${webpageTitle}`);
       scrapeResult.title = webpageTitle;
       titleSource = "Telegram Link Önizleme";
+    } else if (isInvalidTitle(scrapeResult.title)) {
+      scrapeResult.title = null;
     }
+
     if (!scrapeResult.description && webpageDescription) {
       console.log(`💡 [${uniqueDocId}] Scraper açıklama çekemedi. Telegram önizleme açıklaması kullanılıyor`);
       scrapeResult.description = webpageDescription;
@@ -705,7 +736,7 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     const categoryResult = categoryDetectionService.detectCategory(
       cleanedTitle,
       scrapeResult.breadcrumbs || [],
-      scrapeResult.url || mainLink
+      scrapeResult.description || messageText || scrapeResult.url || mainLink
     );
     const finalCategory = categoryResult.categoryId || 'diger';
 
