@@ -133,7 +133,13 @@ async function resolveUrlRedirects(url) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const headers = getHeadersForUrl(targetUrl);
+    // Short link/yönlendirme çözümlerinde Chrome Desktop UA kullanılmalı.
+    // WhatsApp UA kullanıldığında amzlinks.in, link.amazon, rdrtr vb. servisler 302 yönlendirmesi yapmak yerine 200 OK önizleme sayfası döndürmektedir.
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+    };
     console.log(`[RESOLVE-REDIRECT] Giden User-Agent: "${headers['User-Agent']}"`);
 
     const response = await fetch(targetUrl, {
