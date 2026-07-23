@@ -841,13 +841,20 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       console.log('⚠️ Settings yüklenemedi, varsayılan olarak onay beklenecek:', e.message);
     }
 
+    const origPrice = scrapeResult.originalPrice || scrapeResult.original_price || null;
+    let discountRate = null;
+    if (origPrice && finalPrice && origPrice > finalPrice && finalPrice > 0) {
+      discountRate = Math.round(((origPrice - finalPrice) / origPrice) * 100);
+    }
+
     // Deal objesi
     const deal = {
       title: cleanedTitle,
       description: finalDescription || scrapeResult.description || 'Fırsat Ürünü Detayları',
       link: scrapeResult.url || mainLink,
       price: finalPrice,
-      originalPrice: (scrapeResult.originalPrice || scrapeResult.original_price || null),
+      originalPrice: origPrice,
+      discountRate: discountRate,
       discount: (scrapeResult.discount || null),
       imageUrl: imageUrl,
       store: storeFromLink,

@@ -197,6 +197,7 @@ class DealService {
     required String imageUrl,
     required String url,
     required String userId,
+    double? originalPrice,
     String? priceLabel,
     double? ratingValue,
     int? ratingCount,

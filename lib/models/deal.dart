@@ -223,8 +223,8 @@ class Deal {
       title: data['title'] ?? '',
       description: data['description'] ?? data['desc'] ?? data['rawMessage'] ?? '', // Bot 'desc' yazıyor
       price: priceValue,
-      originalPrice: data['originalPrice'] != null ? (data['originalPrice']).toDouble() : null,
-      discountRate: data['discountRate'] != null ? (data['discountRate'] as num).toInt() : null,
+      originalPrice: data['originalPrice'] != null ? (data['originalPrice'] as num).toDouble() : (data['original_price'] != null ? (data['original_price'] as num).toDouble() : null),
+      discountRate: data['discountRate'] != null ? (data['discountRate'] as num).toInt() : (data['discount_rate'] != null ? (data['discount_rate'] as num).toInt() : null),
       store: data['store'] ?? '',
       category: Category.normalizeCategoryId((data['category'] ?? '').toString()),
       subCategory: data['subCategory'],

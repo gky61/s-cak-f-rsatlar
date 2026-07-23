@@ -42,6 +42,7 @@ class LinkPreviewResult {
   final String? imageUrl;
   final String? provider;
   final double? price;
+  final double? originalPrice;
   final List<String>? breadcrumbs;
   final String? priceLabel;
   final double? ratingValue;
@@ -54,6 +55,7 @@ class LinkPreviewResult {
     String? imageUrl,
     String? provider,
     this.price,
+    this.originalPrice,
     this.breadcrumbs,
     this.priceLabel,
     this.ratingValue,
@@ -276,6 +278,7 @@ class LinkPreviewService {
                                   MetadataParser.parse(document, url: targetUrl)?.description;
                             
               final price = await matchedScraper.scrapePrice(document);
+              final originalPrice = await matchedScraper.scrapeOriginalPrice(document, price);
               final breadcrumbs = matchedScraper.scrapeBreadcrumbs(document);
               final priceLabel = await matchedScraper.scrapePriceLabel(document);
               final ratingValue = await matchedScraper.scrapeRatingValue(document);
@@ -290,6 +293,9 @@ class LinkPreviewService {
               _log('   - Açıklama: $description');
               _log('   - Görsel: $resolvedImage');
               _log('   - Fiyat: $price');
+              if (originalPrice != null && originalPrice > (price ?? 0)) {
+                _log('   - İndirimsiz (Eski) Fiyat: $originalPrice');
+              }
               _log('   - Kırıntı (Breadcrumbs): $breadcrumbs');
               _log('   - Provider: $provider');
               if (priceLabel != null && priceLabel.isNotEmpty) {
@@ -314,6 +320,7 @@ class LinkPreviewService {
                 imageUrl: resolvedImage,
                 provider: provider,
                 price: price,
+                originalPrice: originalPrice,
                 breadcrumbs: breadcrumbs,
                 priceLabel: priceLabel,
                 ratingValue: ratingValue,

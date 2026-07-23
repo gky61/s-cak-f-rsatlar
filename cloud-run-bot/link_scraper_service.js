@@ -225,6 +225,39 @@ async function microlinkFetchHtml(targetUrl, originalUrl, fetchStartTime, preren
  * Bu fonksiyon özellikle Teknosa gibi agresif Cloudflare koruması olan siteler için.
  */
 function curlFetchHtml(targetUrl, originalUrl, fetchStartTime) {
+  if (targetUrl.includes('hepsiburada.com')) {
+    try {
+      console.log(`[FETCH-HTML] 🔧 curl (Hepsiburada clean headers) ile çekiliyor: ${targetUrl}`);
+      const hbArgs = [
+        '-sL',
+        '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
+        '-H', 'Accept-Language: tr-TR,tr;q=0.9',
+        '--compressed',
+        '-w', '\n---CURL_HTTP_STATUS:%{http_code}---',
+        '--max-time', '15',
+        targetUrl
+      ];
+      const hbRes = spawnSync('curl', hbArgs, {
+        encoding: 'utf-8',
+        timeout: 18000,
+        maxBuffer: 10 * 1024 * 1024
+      });
+      if (!hbRes.error) {
+        const output = hbRes.stdout || '';
+        const statusMatch = output.match(/---CURL_HTTP_STATUS:(\d+)---/);
+        const httpStatus = statusMatch ? parseInt(statusMatch[1]) : 0;
+        const htmlText = output.replace(/\n---CURL_HTTP_STATUS:\d+---$/, '');
+        const duration = Date.now() - fetchStartTime;
+        console.log(`[FETCH-HTML] ⚡ curl (Hepsiburada) cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${httpStatus}, Boyut: ${htmlText.length}`);
+        if (httpStatus === 200 && htmlText.length > 1000) {
+          return htmlText;
+        }
+      }
+    } catch (e) {
+      console.error(`[FETCH-HTML] ❌ Hepsiburada curl hatası: ${e.message}`);
+    }
+  }
+
   const headers = getHeadersForUrl(originalUrl);
   try {
     console.log(`[FETCH-HTML] 🔧 curl ile çekiliyor: ${targetUrl}`);
@@ -863,6 +896,11 @@ async function scrapeProductFromUrl(url) {
       const price = await matchedScraper.scrapePrice($);
       console.log(`[SCRAPE-SERVICE] [PRICE] Sonuç: "${price != null ? price + ' TL' : 'BULUNAMADI'}"`);
 
+      // 2b. İndirimsiz (Eski) Fiyat Çekimi
+      console.log(`[SCRAPE-SERVICE] [ORIGINAL-PRICE] İndirimsiz fiyat çekiliyor...`);
+      const originalPrice = matchedScraper.scrapeOriginalPrice ? matchedScraper.scrapeOriginalPrice($, price) : null;
+      console.log(`[SCRAPE-SERVICE] [ORIGINAL-PRICE] Sonuç: "${originalPrice != null ? originalPrice + ' TL' : 'BULUNAMADI'}"`);
+
       // 3. Görsel Çekimi
       console.log(`[SCRAPE-SERVICE] [IMAGE] Görsel çekiliyor...`);
       const rawImage = matchedScraper.scrapeImage($, targetUrl);
@@ -900,6 +938,7 @@ async function scrapeProductFromUrl(url) {
         url: targetUrl,
         title: title || null,
         price: price || null,
+        originalPrice: originalPrice || null,
         imageUrl: imageUrl || null,
         description: description || null,
         breadcrumbs: breadcrumbs,

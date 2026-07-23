@@ -233,6 +233,76 @@ class HepsiburadaScraper extends BaseProductScraper {
     return null;
   }
 
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    final candidates = <double>[];
+
+    // 1. ReduxStore product.prices and listings
+    final script = document.getElementById('reduxStore');
+    if (script != null) {
+      try {
+        final Map<String, dynamic> reduxData = jsonDecode(script.text);
+        final productState = reduxData['productState'];
+        final product = productState?['product'];
+        if (product != null) {
+          final pricesList = product['prices'];
+          if (pricesList is List) {
+            for (final p in pricesList) {
+              if (p is Map) {
+                final val = double.tryParse(p['value']?.toString() ?? '');
+                if (val != null && val > currentPrice) {
+                  candidates.add(val);
+                }
+              }
+            }
+          }
+          final listings = product['listings'];
+          if (listings is List) {
+            for (final l in listings) {
+              if (l is Map) {
+                final orig = double.tryParse(l['originalPrice']?.toString() ?? '') ?? double.tryParse(l['listPrice']?.toString() ?? '');
+                if (orig != null && orig > currentPrice) {
+                  candidates.add(orig);
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. DOM selectors for old / crossed out prices
+    final domSelectors = [
+      'del',
+      's',
+      '[data-test-id*="price-old"]',
+      '[data-test-id*="old-price"]',
+      '[data-test-id="variant-box-price"]',
+      'span[class*="del"]',
+      'span[class*="old"]',
+      'span[class*="original"]'
+    ];
+
+    for (final selector in domSelectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final parsed = parsePriceText(el.text);
+        if (parsed != null && parsed > currentPrice) {
+          candidates.add(parsed);
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    final filtered = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+    if (filtered.isEmpty) return null;
+
+    filtered.sort();
+    return filtered.first;
+  }
+
   // --- Private Helper Methods for API Calls ---
 
   Future<double?> _fetchWithoutAffordabilityPrice(dom.Document document) async {

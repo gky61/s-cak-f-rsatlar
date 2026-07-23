@@ -34,6 +34,9 @@ abstract class BaseProductScraper {
   /// Belgeyi analiz ederek ürün fiyatının altında gösterilecek kampanya/CRM etiketini döndürür
   FutureOr<String?> scrapePriceLabel(dom.Document document) => null;
 
+  /// Belgeyi analiz ederek ürünün indirimsiz (eski/liste) fiyatını döndürür
+  FutureOr<double?> scrapeOriginalPrice(dom.Document document, double? currentPrice) => null;
+
   /// Belgeyi analiz ederek ürün puanını döndürür (ör. 4.8)
   FutureOr<double?> scrapeRatingValue(dom.Document document) => null;
 

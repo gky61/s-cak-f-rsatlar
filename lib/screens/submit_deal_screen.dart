@@ -41,6 +41,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   
   String? _selectedStore;
   String? _priceLabel;
+  double? _scrapedOriginalPrice;
   final List<String> _stores = [
     'Trendyol',
     'Hepsiburada',
@@ -440,14 +441,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel');
         }
 
-        // Rating & Marka verilerini al
-        if (preview?.ratingValue != null || preview?.ratingCount != null || preview?.brand != null) {
+        // Rating & Marka & İndirimsiz Fiyat verilerini al
+        if (preview?.ratingValue != null || preview?.ratingCount != null || preview?.brand != null || preview?.originalPrice != null) {
           setState(() {
             _scrapedRatingValue = preview?.ratingValue;
             _scrapedRatingCount = preview?.ratingCount;
             _scrapedBrand = preview?.brand;
+            _scrapedOriginalPrice = preview?.originalPrice;
           });
-          _log('⭐ Scraper rating/marka tespiti: Rating=$_scrapedRatingValue ($_scrapedRatingCount), Brand=$_scrapedBrand');
+          _log('⭐ Scraper rating/marka/eskiFiyat tespiti: Rating=$_scrapedRatingValue ($_scrapedRatingCount), Brand=$_scrapedBrand, OriginalPrice=$_scrapedOriginalPrice');
         }
 
         // Kategori ekmek kırıntılarını (breadcrumbs) ve başlığı birleştirip sınıflandır
@@ -909,6 +911,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           imageUrl: imageUrl, // Linkten çekilen veya kullanıcının girdiği görsel
           url: _urlController.text.trim(),
           userId: user.uid,
+          originalPrice: _scrapedOriginalPrice,
           priceLabel: _priceLabel,
           ratingValue: _scrapedRatingValue,
           ratingCount: _scrapedRatingCount,

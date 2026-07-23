@@ -21,6 +21,9 @@ class BaseProductScraper {
   /** HTML'den ürün fiyatını çeker */
   scrapePrice($) { return null; }
 
+  /** HTML'den ürünün indirimsiz (eski/liste) fiyatını çeker */
+  scrapeOriginalPrice($, currentPrice) { return null; }
+
   /** HTML'den ürün açıklamasını çeker */
   scrapeDescription($) { return null; }
 

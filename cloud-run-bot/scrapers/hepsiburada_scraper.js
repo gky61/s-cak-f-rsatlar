@@ -212,6 +212,69 @@ class HepsiburadaScraper extends BaseProductScraper {
     return null;
   }
 
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let candidates = [];
+
+    // 1. ReduxStore product.prices and listings
+    const script = $('#reduxStore');
+    if (script.length) {
+      try {
+        const reduxData = JSON.parse(script.text());
+        const product = reduxData?.productState?.product;
+        if (product) {
+          if (Array.isArray(product.prices)) {
+            for (const p of product.prices) {
+              const val = parseFloat(p?.value?.toString() || '');
+              if (!isNaN(val) && val > currentPrice) {
+                candidates.push(val);
+              }
+            }
+          }
+          if (Array.isArray(product.listings)) {
+            for (const l of product.listings) {
+              const orig = parseFloat(l?.originalPrice?.toString() || '') || parseFloat(l?.listPrice?.toString() || '');
+              if (!isNaN(orig) && orig > currentPrice) {
+                candidates.push(orig);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. DOM selectors for old / crossed out prices
+    const domSelectors = [
+      'del',
+      's',
+      '[data-test-id*="price-old"]',
+      '[data-test-id*="old-price"]',
+      '[data-test-id="variant-box-price"]',
+      'span[class*="del"]',
+      'span[class*="old"]',
+      'span[class*="original"]'
+    ];
+
+    for (const selector of domSelectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        const parsed = this.parsePriceText(txt);
+        if (parsed !== null && parsed > currentPrice) {
+          candidates.push(parsed);
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a - b);
+    return candidates[0];
+  }
+
   scrapeBreadcrumbs($) {
     const title = this.scrapeTitle($) || '';
     const breadcrumbs = this.extractBreadcrumbsFromJsonLd($, title, 'hepsiburada');
