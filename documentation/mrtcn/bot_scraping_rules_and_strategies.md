@@ -103,10 +103,8 @@ Sunucu ortamındaki bot korumalarını aşmak için geliştirilen 5 temel bypass
 | **N11** | 403 Forbidden (IP Engeli) & Kısa Linkler | Google Translate Proxy | `translate.goog` + `magaza` parametresi koruma. `sl.n11.com/n/` kısa linkleri `www.n11.com/n/` formatına dönüştürülerek Google Translate Proxy üzerinden çözümlenir (`resolveN11ShortLink`), böylece Adjust'ın Google Play Store yönlendirmesi tamamen bypass edilir. |
 | **Vatan Bilgisayar** | 403 Forbidden (IP Engeli) | Google Translate Proxy | `translate.goog` |
 | **Itopya** | 403 Forbidden (Cloudflare Engeli) | Google Translate Proxy | `translate.goog` (VM ve Direct curl Cloudflare tarafından engellendiği için translate proxy üzerinden Node fetch ile çekilir) |
-| **Teknosa** | 403 Forbidden (TLS Engeli) | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA |
-| **Mavi** | 403 Forbidden (TLS Engeli) | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA |
+| **Teknosa / Mavi / Amazon** | 403 Forbidden / Satıcı Fiyat Farkı | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA + `smid`/`th`/`psc` Satıcı Parametrelerini Koruma. (Amazon'da satıcı ve varyant parametreleri korunarak curl ile çekilir, başarısız olursa Microlink fallback denenir) |
 | **Pttavm** | 403 Forbidden (Tam IP Blok) | **Microlink HTML Proxy** | `api.microlink.io` custom HTML selector |
-| **Amazon** | US IP / Teslimat Adresi Engeli | **Microlink HTML Proxy** | Co-location / US adresi bypass ve Türkiye indirimli buybox fiyat çekimi |
 | **MediaMarkt** | 403 Forbidden (Bot Engeli) | Googlebot UA (Doğrudan) | `Googlebot/2.1` taklidi |
 | **Idefix** | Standart HTML Çekim | Standart Fetch | Regex filtre düzeltmesi (x.com karışıklığı giderildi) |
 | **Getir** | CloudFront WAF Captcha (405) | **Yandex Translate Proxy** & Wayback Machine | Yandex Translate tünellemesi ile WAF bypass (güncel fiyat) + Wayback arşiviyle görsel fallback kurtarma |

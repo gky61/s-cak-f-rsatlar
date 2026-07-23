@@ -651,13 +651,18 @@ async function fetchHtml(url) {
       isPttavm = true;
       console.log(`[FETCH-HTML] 🔄 Pttavm linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
     } else if (parsed.hostname.includes('amazon.') || parsed.hostname.includes('link.amazon') || parsed.hostname.includes('amzlinks.') || parsed.hostname.includes('amzn.')) {
-      // Amazon ABD sunucumuzdan çekildiğinde teslimat adresini ABD seçer
-      // ve bu durum indirimli buybox TR fiyatını gizler.
-      // Microlink API'si sayesinde TR/genel proxy üzerinden çekim yapılarak indirimli fiyat başarıyla alınır.
+      // Amazon linklerinde satıcı (smid) ve varyant (th, psc, m, isIsap) parametrelerini koru.
+      // Aksi takdirde varsayılan farklı bir satıcının indirimsiz yüksek fiyatı çekilmektedir.
+      const keepParams = ['smid', 'th', 'psc', 'm', 'isIsap', 'tag'];
       const cleaned = new URL(parsed.pathname, parsed.origin);
+      for (const key of keepParams) {
+        if (parsed.searchParams.has(key)) {
+          cleaned.searchParams.set(key, parsed.searchParams.get(key));
+        }
+      }
       targetUrl = cleaned.toString();
       isAmazon = true;
-      console.log(`[FETCH-HTML] 🔄 Amazon linki tespit edildi. Microlink API ile çekilecek: ${targetUrl}`);
+      console.log(`[FETCH-HTML] 🔄 Amazon linki tespit edildi. Satıcı/varyant parametreleri korundu: ${targetUrl}`);
     } else if (parsed.hostname.includes('havitstore.com.tr')) {
       // Havit Store: Herhangi bir bot engeli bulunmuyor, doğrudan fetch ile çekilir.
       const cleaned = new URL(parsed.pathname, parsed.origin);
@@ -688,9 +693,17 @@ async function fetchHtml(url) {
 
   console.log(`[FETCH-HTML] 📥 İstek başlatılıyor: ${targetUrl}`);
 
-  // ── Hepsiburada, Trendyol, Teknosa & Mavi: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
-  if (isHepsiburada || isTrendyol || isTeknosa || isMavi) {
-    return curlFetchHtml(targetUrl, url, fetchStartTime);
+  // ── Hepsiburada, Trendyol, Teknosa, Mavi & Amazon: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
+  if (isHepsiburada || isTrendyol || isTeknosa || isMavi || isAmazon) {
+    const html = curlFetchHtml(targetUrl, url, fetchStartTime);
+    if (html && html.length > 1000) {
+      return html;
+    }
+    if (isAmazon) {
+      console.warn(`[FETCH-HTML] ⚠️ Amazon curl çekimi başarısız/boş, Microlink fallback deneniyor...`);
+      return microlinkFetchHtml(targetUrl, url, fetchStartTime, false);
+    }
+    return html;
   }
 
   // ── Getir: curl minimal (Chrome UA + lokasyon cookie'leri) ile çek ──
@@ -699,8 +712,8 @@ async function fetchHtml(url) {
     return curlFetchGetir(targetUrl, url, fetchStartTime);
   }
 
-  // ── Amazon & Pttavm: Microlink API ile çek (Cloud Run IP engeline takıldığı için) ──
-  if (isAmazon || isPttavm) {
+  // ── Pttavm: Microlink API ile çek (Cloud Run IP engeline takıldığı için) ──
+  if (isPttavm) {
     return microlinkFetchHtml(targetUrl, url, fetchStartTime, false);
   }
 
