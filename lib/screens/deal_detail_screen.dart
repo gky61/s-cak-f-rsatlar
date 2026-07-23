@@ -1273,15 +1273,51 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 letterSpacing: 0.8,
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              currencyFormat.format(deal.price),
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w900,
-                                color: AppTheme.primary,
-                                height: 1,
-                              ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  currencyFormat.format(deal.price),
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppTheme.primary,
+                                    height: 1,
+                                  ),
+                                ),
+                                if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    currencyFormat.format(deal.originalPrice),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+                                      decoration: TextDecoration.lineThrough,
+                                      decorationThickness: 1.5,
+                                    ),
+                                  ),
+                                  if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primary,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '%${deal.effectiveDiscountRate} İndirim',
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ],
                             ),
                             if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
                               const SizedBox(height: 6),

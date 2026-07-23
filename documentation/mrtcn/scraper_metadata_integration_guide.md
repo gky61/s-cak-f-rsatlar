@@ -41,9 +41,9 @@ Bu sınıflar altyapıyı temsil eder ve yeni alanlar eklendiğinde genişletilm
 8. `lib/services/deal_service.dart` (Firestore Fırsat Oluşturma Servisi)
 9. `lib/services/firestore_service.dart` (Firestore Wrapper)
 10. `lib/screens/submit_deal_screen.dart` (Manuel Fırsat Ekleme Ekranı)
-11. `lib/widgets/deal_card/vertical_deal_card.dart` (Dikey Kart Widget'ı)
-12. `lib/widgets/deal_card/horizontal_deal_card.dart` (Yatay Kart Widget'ı)
-13. `lib/screens/deal_detail_screen.dart` (Fırsat Detay Ekranı)
+11. `lib/widgets/deal_card/vertical_deal_card.dart` (Dikey Kart Widget'ı - Fiyat yanında ~~Eski Fiyat~~ + İndirim Rozeti)
+12. `lib/widgets/deal_card/horizontal_deal_card.dart` (Yatay Kart Widget'ı - Fiyat üstünde ~~Eski Fiyat~~ + İndirim Rozeti)
+13. `lib/screens/deal_detail_screen.dart` (Fırsat Detay Ekranı - Fiyat yanında ~~Eski Fiyat~~ + %x İndirim Rozeti)
 14. `lib/screens/admin_screen.dart` (Flutter Admin Ekranı & Düzenleme Modalı)
 15. `web/admin/app.js` (Web Admin Paneli Tablo ve Modalı)
 

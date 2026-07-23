@@ -426,6 +426,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           hasPrice = true;
         }
 
+
         // Açıklamayı al (boşsa)
         final cleanDesc = _cleanScrapedString(preview.description);
         if (_descriptionController.text.trim().isEmpty && cleanDesc != null) {

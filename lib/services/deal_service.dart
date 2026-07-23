@@ -304,6 +304,7 @@ class DealService {
         isApproved: isApprovalRequired ? false : true,
         isUserSubmitted: true,
         cleanUrl: cleanUrl,
+        originalPrice: originalPrice,
         priceLabel: priceLabel,
         ratingValue: ratingValue,
         ratingCount: ratingCount,

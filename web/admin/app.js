@@ -1350,8 +1350,8 @@ function createDealRow(deal) {
 
     // Price
     const price = deal.price || 0;
-    const originalPrice = deal.originalPrice || price;
-    const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
+    const originalPrice = deal.originalPrice || deal.original_price || 0;
+    const discount = (originalPrice > price && price > 0) ? Math.round(((originalPrice - price) / originalPrice) * 100) : (deal.discountRate || deal.discount_rate || deal.discount || 0);
 
     // Image HTML - Web için optimize edilmiş görsel gösterimi, daha net görünüm için object-contain
     const imageHtml = imageUrl && imageUrl.trim() !== ''
@@ -1731,8 +1731,8 @@ async function showDealModal(deal) {
 
     // Fiyat hesaplamaları
     const price = deal.price || 0;
-    const originalPrice = deal.originalPrice || price;
-    const discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
+    const originalPrice = deal.originalPrice || deal.original_price || '';
+    const discount = (originalPrice > price && price > 0) ? Math.round(((originalPrice - price) / originalPrice) * 100) : (deal.discountRate || deal.discount_rate || deal.discount || 0);
 
     // Status seçimi
     let statusValue = 'pending';

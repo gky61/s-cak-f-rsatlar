@@ -41,7 +41,9 @@ graph TD
     *   `index.js`: Veritabanı trigger'larını (tetikleyicilerini) barındırır. Fırsat onaylandığında push bildirimi tetikleyen `onDealUpdated` buradadır.
 *   **`web/admin/`**: Firebase Hosting üzerinde barındırılan ve yöneticilerin fırsatları onayladığı basit HTML/CSS/JS tabanlı yönetim paneli.
 *   **`documentation/`**: Proje gereksinimleri, yol haritaları ve geliştirme notları.
-    *   `mrtcn/`: VM taşıması, Dockerize süreçleri ve bypass stratejilerinin yer aldığı özel mühendislik belgeleri.
+    *   `mrtcn/`: VM taşıması, Dockerize süreçleri, bypass stratejileri, scraper metadata ve indirimsiz orijinal fiyat entegrasyon belgeleri.
+        *   `original_price_scraper_integration_guide.md`: Yeni mağazalara `originalPrice` ekleme teknik adımları ve mimari yol haritası.
+        *   `scraper_metadata_integration_guide.md`: Rating, oy sayısı ve marka verilerinin uçtan uca kazınması ve gösterimi.
 
 ---
 

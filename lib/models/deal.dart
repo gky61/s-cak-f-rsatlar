@@ -217,14 +217,40 @@ class Deal {
       _log('⚠️ price parse hatası: $e, değer: ${data['price']}');
       priceValue = 0.0;
     }
-    
+    // originalPrice alanını parse et (num veya String destekle)
+    double? originalPriceValue;
+    try {
+      final origData = data['originalPrice'] ?? data['original_price'];
+      if (origData is String) {
+        final cleaned = origData.replaceAll(',', '.').replaceAll(' ', '').replaceAll('₺', '').replaceAll('TL', '');
+        originalPriceValue = double.tryParse(cleaned);
+      } else if (origData is num) {
+        originalPriceValue = origData.toDouble();
+      }
+    } catch (e) {
+      originalPriceValue = null;
+    }
+
+    // discountRate alanını parse et (num veya String destekle)
+    int? discountRateValue;
+    try {
+      final discData = data['discountRate'] ?? data['discount_rate'] ?? data['discount'];
+      if (discData is String) {
+        discountRateValue = int.tryParse(discData.replaceAll('%', '').replaceAll(' ', ''));
+      } else if (discData is num) {
+        discountRateValue = discData.toInt();
+      }
+    } catch (e) {
+      discountRateValue = null;
+    }
+
     return Deal(
       id: doc.id,
       title: data['title'] ?? '',
       description: data['description'] ?? data['desc'] ?? data['rawMessage'] ?? '', // Bot 'desc' yazıyor
       price: priceValue,
-      originalPrice: data['originalPrice'] != null ? (data['originalPrice'] as num).toDouble() : (data['original_price'] != null ? (data['original_price'] as num).toDouble() : null),
-      discountRate: data['discountRate'] != null ? (data['discountRate'] as num).toInt() : (data['discount_rate'] != null ? (data['discount_rate'] as num).toInt() : null),
+      originalPrice: originalPriceValue,
+      discountRate: discountRateValue,
       store: data['store'] ?? '',
       category: Category.normalizeCategoryId((data['category'] ?? '').toString()),
       subCategory: data['subCategory'],
@@ -256,7 +282,7 @@ class Deal {
       'description': description,
       'price': price,
       'originalPrice': originalPrice,
-      'discountRate': discountRate,
+      'discountRate': effectiveDiscountRate,
       'store': store,
       'category': category,
       'subCategory': subCategory,
@@ -283,6 +309,15 @@ class Deal {
 
   // Net Skor: Sıcak oylar ile Soğuk oylar arasındaki fark
   int get netScore => hotVotes - coldVotes;
+
+  // Etkin İndirim Oranı (%x)
+  int? get effectiveDiscountRate {
+    if (discountRate != null && discountRate! > 0) return discountRate;
+    if (originalPrice != null && originalPrice! > price && price > 0) {
+      return (((originalPrice! - price) / originalPrice!) * 100).round();
+    }
+    return null;
+  }
 
   // Wilson Score: Oy oranı ile oy hacmini dengeleyen profesyonel güven puanı
   double get wilsonScore {

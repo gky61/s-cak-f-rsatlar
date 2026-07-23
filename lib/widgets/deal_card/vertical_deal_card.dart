@@ -169,7 +169,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                             ),
                           ),
                           // İndirim Rozeti (Sağ Alt)
-                          if (deal.discountRate != null && deal.discountRate! > 0)
+                          if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
                             Positioned(
                               bottom: 8,
                               right: 8,
@@ -187,7 +187,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ),
                                 child: Text(
-                                  '%${deal.discountRate}',
+                                  '%${deal.effectiveDiscountRate}',
                                   style: const TextStyle(
                                     color: Colors.black,
                                     fontSize: 10,
@@ -525,40 +525,32 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                 ],
                               ),
                               const SizedBox(height: 8), // Başlık ile fiyat arası padding artırıldı
-                              // Fiyat
-                              Row(
+                              // Fiyat ve İndirimsiz Fiyat (Eski Fiyat)
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 4,
                                 children: [
-                                  Flexible(
-                                    child: Text(
-                                      currencyFormat.format(deal.price),
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w900,
-                                        color: isExpired 
-                                            ? Colors.red[700] 
-                                            : AppTheme.primary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                  Text(
+                                    currencyFormat.format(deal.price),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                      color: isExpired 
+                                          ? Colors.red[700] 
+                                          : AppTheme.primary,
                                     ),
                                   ),
-                                  if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                                    const SizedBox(width: 4),
-                                    Flexible(
-                                      child: Text(
-                                        currencyFormat.format(deal.originalPrice),
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w400,
-                                          color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                          decoration: TextDecoration.lineThrough,
-                                          decorationThickness: 1,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                  if (deal.originalPrice != null && deal.originalPrice! > deal.price)
+                                    Text(
+                                      currencyFormat.format(deal.originalPrice),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                        decoration: TextDecoration.lineThrough,
+                                        decorationThickness: 1.5,
                                       ),
                                     ),
-                                  ],
                                 ],
                               ),
                               if (deal.ratingValue != null || deal.ratingCount != null) ...[

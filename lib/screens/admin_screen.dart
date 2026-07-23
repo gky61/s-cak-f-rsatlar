@@ -612,13 +612,46 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ],
                   ),
                 ],
-                const SizedBox(height: 4),
-                Text(
-                  currencyFormat.format(deal.price),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: AppTheme.primary,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      currencyFormat.format(deal.price),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                    if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        currencyFormat.format(deal.originalPrice),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.grey[600],
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                      if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            '%${deal.effectiveDiscountRate}',
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
                 ),
                 if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
                   const SizedBox(height: 4),

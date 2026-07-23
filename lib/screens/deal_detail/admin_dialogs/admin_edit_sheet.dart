@@ -29,7 +29,7 @@ void showAdminEditSheet({
         : '',
   );
   final discountController = TextEditingController(
-    text: deal.discountRate != null ? deal.discountRate!.toString() : '',
+    text: deal.effectiveDiscountRate != null ? deal.effectiveDiscountRate!.toString() : '',
   );
 
   String initialCategoryId = Category.normalizeCategoryId(deal.category);
@@ -67,7 +67,10 @@ void showAdminEditSheet({
             }
 
             final originalPrice = parseDouble(originalPriceController.text);
-            final discountRate = int.tryParse(discountController.text.trim());
+            var discountRate = int.tryParse(discountController.text.trim());
+            if (discountRate == null && originalPrice != null && originalPrice > price && price > 0) {
+              discountRate = (((originalPrice - price) / originalPrice) * 100).round();
+            }
 
             setSheetState(() {
               isSaving = true;

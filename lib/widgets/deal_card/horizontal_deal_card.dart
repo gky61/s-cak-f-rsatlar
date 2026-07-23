@@ -214,7 +214,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                             ),
                           ),
                           // İndirim Rozeti (Sağ Alt)
-                          if (deal.discountRate != null && deal.discountRate! > 0)
+                          if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
                             Positioned(
                               bottom: 6,
                               right: 6,
@@ -241,7 +241,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      '%${deal.discountRate}',
+                                      '%${deal.effectiveDiscountRate}',
                                       style: const TextStyle(
                                         color: Colors.black,
                                         fontSize: 10,
