@@ -89,7 +89,14 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
     *   **Marka/Başlık Ayrımı (DOM Fallback):** Beymen'de `h1` etiketi sadece marka adını (`Apple`, `Sony`) içerir. Asıl ürün başlığı `.o-productDetail__description` etiketinden veya script `displayName` alanından alınır.
     *   **En Ucuz Kampanya Fiyatı (DOM Fallback):** Script ve şema okunamadığında normal fiyat (`ins.m-price__new`) ve Visa/Sepet kampanya fiyatı (`.m-price__campaignPrice`) taranarak en ucuzu seçilir.
 
-### 10. Vatan Bilgisayar / Teknosa / MediaMarkt / İtopya / İdefix / N11
+### 10. İdefix (`idefix.com`)
+*   **Next.js SSR vs. Dinamik Yorum/Puan Servisi:** İdefix ilk server-side HTML GET yanıtında başlık, görsel ve fiyat verilerini `application/ld+json` şemasına basarken; değerlendirme (`averageRating`) ve oy sayısı (`reviewCount`) bilgilerini sunucu tarafında HTML'e basmayıp istemci taraflı (React/Next.js) dinamik mikroservis API'si üzerinden yüklemektedir.
+*   **Çözüm (Canlı ecomapi Entegrasyonu):** 
+    1. Scraper öncelikle statik HTML içerisindeki `application/ld+json`, `<script id="__NEXT_DATA__">`, ham script regex ve HTML Microdata etiketlerini tarar.
+    2. Puan veya değerlendirme sayısı bulunamadığında, canonical URL veya DOM etiketlerinden ürün ID'si (`p-{productId}`) çıkarılır.
+    3. İdefix'in resmi e-ticaret yorum servisine (`https://ecomapi.idefix.com/api/product/{productId}/detail/review`) istek atılarak `averageRating` ve `reviewCount` alanları canlı olarak çekilir.
+
+### 11. Vatan Bilgisayar / Teknosa / MediaMarkt / İtopya / N11
 *   Bu mağazalar görece daha standart WAF yapıları kullanırlar. Ağırlıklı olarak `application/ld+json` taranır. N11'de Cloudflare engeli için `WhatsApp` UA taklidi yapılarak DOM fallback seçicileriyle veriler kurtarılır.
 
 ### 11. Getir (`getir.com`)

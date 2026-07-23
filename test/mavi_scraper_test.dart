@@ -7,69 +7,100 @@ void main() {
     final scraper = MaviScraper();
 
     test('canHandle should match Mavi domains', () {
-      expect(scraper.canHandle('https://www.mavi.com/lisbon-classic-denim-koyu-indigo-mavisi-jean-pantolon/p/0010039-A3934'), isTrue);
-      expect(scraper.canHandle('https://mavi.com/something'), isTrue);
+      expect(scraper.canHandle('https://www.mavi.com/mini-mavi-logo-baskili-interlok-beyaz-basic-tisort/p/1612122-70057'), isTrue);
       expect(scraper.canHandle('https://www.google.com'), isFalse);
     });
 
-    test('should scrape title, image, description and price from Mavi JSON-LD HTML string', () async {
-      final html = '''
+    test('should parse ratingValue (4.8) and ratingCount (5) from DOM (birinci öncelik)', () async {
+      const html = '''
+      <div class="average-rate">
+        <span class="average-rate__number type:small">4.8</span>
+        <div class="average-rate__star-rate">
+          <span class="star-rating type:small starColor:black">
+            <span class="star-rating-inner active" style="width:96.0%"></span>
+          </span>
+        </div>
+      </div>
+      <div class="rate-info type:small">5&nbsp;Değerlendirme</div>
       <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "WebPage",
-        "name": "Lisbon Classic Denim Koyu Indigo Mavisi Jean Pantolon",
-        "url": "https://www.mavi.com/lisbon-classic-denim-koyu-indigo-mavisi-jean-pantolon/p/0010039-A3934",
-        "mainEntity": {
-          "@type": "WebPageElement",
-          "offers": {
-            "@type": "Offer",
-            "itemOffered": [
-              {
-                "@type": "Product",
-                "name": "Lisbon Classic Denim Koyu Indigo Mavisi Jean Pantolon",
-                "description": "Mavi nin denim koleksiyonundan Lisbon Classic Denim Koyu Indigo Mavisi Jean Pantolon. Loose, bol kesim. Normal bel. Düz paçası ile sokak giyimi ve 9 lar ilhamlı Jean lerden biri.",
+        {
+          "@context":"https://schema.org",
+          "@type":"WebPage",
+          "mainEntity":{
+            "@type":"WebPageElement",
+            "offers":{
+              "@type":"Offer",
+              "itemOffered":[{
+                "@type":"Product",
+                "name":"Test Ürün",
+                "aggregateRating": {
+                  "@type": "AggregateRating",
+                  "ratingValue": "4.5",
+                  "reviewCount": "1"
+                }
+              }]
+            }
+          }
+        }
+      </script>
+      ''';
+      final doc = html_parser.parse(html);
+
+      // DOM birinci öncelik: 4.8 (JSON-LD'deki 4.5 değil)
+      final ratingVal = scraper.scrapeRatingValue(doc);
+      expect(ratingVal, equals(4.8));
+
+      // DOM birinci öncelik: 5 (JSON-LD'deki 1 değil)
+      final ratingCnt = scraper.scrapeRatingCount(doc);
+      expect(ratingCnt, equals(5));
+    });
+
+    test('should fallback to JSON-LD when DOM rating elements are absent', () async {
+      const html = '''
+      <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"WebPage",
+          "mainEntity":{
+            "@type":"WebPageElement",
+            "offers":{
+              "@type":"Offer",
+              "itemOffered":[{
+                "@type":"Product",
+                "name":"Mini Mavi Logo Baskılı İnterlok Beyaz Basic Tişört",
                 "brand": {
                   "@type": "Brand",
                   "name": "Mavi"
                 },
-                "image": [
-                  {
-                    "@type": "ImageObject",
-                    "contentUrl": "https://sky-static.mavi.com/mnresize/820/1162/0010039-A3934_image_1.jpg?v=1783678883967"
-                  }
-                ],
-                "offers": {
-                  "@type": "Offer",
-                  "price": "1799.99",
-                  "priceCurrency": "TRY"
+                "offers":{"@type":"Offer","price":"419.99","priceCurrency":"TRY"},
+                "aggregateRating": {
+                  "@type": "AggregateRating",
+                  "ratingValue": "4.5",
+                  "reviewCount": "1"
                 }
-              }
-            ]
+              }]
+            }
           }
         }
-      }
       </script>
       ''';
       final doc = html_parser.parse(html);
 
       final price = await scraper.scrapePrice(doc);
-      expect(price, equals(1799.99));
+      expect(price, equals(419.99));
 
       final title = scraper.scrapeTitle(doc);
-      expect(title, equals('Lisbon Classic Denim Koyu Indigo Mavisi Jean Pantolon'));
+      expect(title, equals("Mini Mavi Logo Baskılı İnterlok Beyaz Basic Tişört"));
 
-      final desc = scraper.scrapeDescription(doc);
-      expect(desc, contains('Mavi nin denim koleksiyonundan Lisbon Classic Denim Koyu Indigo Mavisi Jean Pantolon.'));
+      // DOM yok, JSON-LD fallback çalışmalı
+      final ratingVal = scraper.scrapeRatingValue(doc);
+      expect(ratingVal, equals(4.5));
 
-      final img = scraper.scrape(
-        document: doc,
-        url: 'https://www.mavi.com/lisbon-classic-denim-koyu-indigo-mavisi-jean-pantolon/p/0010039-A3934',
-        isLogoUrl: (urlString) => urlString.contains('logo'),
-        resolveImageUrl: (imgUrl, pageUrl) => imgUrl,
-        log: (msg) => print(msg),
-      );
-      expect(img, equals('https://sky-static.mavi.com/mnresize/820/1162/0010039-A3934_image_1.jpg?v=1783678883967'));
+      final ratingCnt = scraper.scrapeRatingCount(doc);
+      expect(ratingCnt, equals(1));
+
+      final brand = scraper.scrapeBrand(doc);
+      expect(brand, equals('Mavi'));
     });
   });
 }

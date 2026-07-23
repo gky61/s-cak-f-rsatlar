@@ -604,6 +604,49 @@ class HepsiburadaScraper extends BaseProductScraper {
     } catch (_) {}
     return null;
   }
+
+  scrapeRating($) {
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const rating = this.extractRatingFromProductJson(product);
+      if (rating && (rating.ratingValue != null || rating.ratingCount != null)) {
+        return rating;
+      }
+    }
+    const reduxScript = $('#reduxStore');
+    if (reduxScript.length) {
+      try {
+        const reduxData = JSON.parse(reduxScript.text());
+        const productData = reduxData?.productState?.product;
+        const ratingVal = parseFloat(productData?.customerReview?.rating || productData?.ratingValue);
+        const ratingCnt = parseInt(productData?.customerReview?.totalCount || productData?.ratingCount);
+        return {
+          ratingValue: !isNaN(ratingVal) && ratingVal > 0 ? ratingVal : null,
+          ratingCount: !isNaN(ratingCnt) && ratingCnt > 0 ? ratingCnt : null,
+        };
+      } catch (_) {}
+    }
+    return { ratingValue: null, ratingCount: null };
+  }
+
+  scrapeBrand($) {
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const brand = this.extractBrandFromProductJson(product);
+      if (brand) return brand;
+    }
+    const reduxScript = $('#reduxStore');
+    if (reduxScript.length) {
+      try {
+        const reduxData = JSON.parse(reduxScript.text());
+        const brandVal = reduxData?.productState?.product?.brand;
+        if (brandVal && typeof brandVal === 'string' && brandVal.trim().length > 0) {
+          return brandVal.trim();
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
 }
 
 module.exports = HepsiburadaScraper;

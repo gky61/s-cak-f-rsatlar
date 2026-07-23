@@ -109,6 +109,91 @@ class MediaMarktScraper extends BaseProductScraper {
     });
     return list;
   }
+
+  scrapeRating($) {
+    // 1. JSON-LD
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const rating = this.extractRatingFromProductJson(product);
+      if (rating && (rating.ratingValue != null || rating.ratingCount != null)) {
+        return rating;
+      }
+    }
+
+    // 2. DOM (data-test="mms-pdp-average-rating-summary")
+    const ratingEl = $('[data-test="mms-pdp-average-rating-summary"], [class*="mms-pdp-average-rating"]').first();
+    if (ratingEl.length) {
+      const ariaLabel = ratingEl.attr('aria-label') || ratingEl.text() || '';
+      let ratingValue = null;
+      let ratingCount = null;
+
+      const valMatch = /göre\s+([\d.,]+)/.exec(ariaLabel) || /([\d.,]+)\s*şeklindedir/.exec(ariaLabel) || /([\d.,]+)/.exec(ariaLabel);
+      if (valMatch) {
+        const p = parseFloat(valMatch[1].replace(',', '.'));
+        if (!isNaN(p) && p > 0 && p <= 5.0) ratingValue = p;
+      }
+
+      const cntMatch = /(\d+)\s+(?:inceleme|yorum|oy|değerlendirme)/.exec(ariaLabel);
+      if (cntMatch) {
+        const c = parseInt(cntMatch[1]);
+        if (!isNaN(c) && c > 0) ratingCount = c;
+      }
+
+      if (ratingValue || ratingCount) {
+        return { ratingValue, ratingCount };
+      }
+    }
+
+    // 3. Hydration script / Raw script regex search ("averageOverallRating", "totalReviewCount")
+    let ratingValue = null;
+    let ratingCount = null;
+
+    $('script').each((_, el) => {
+      const text = $(el).html() || '';
+      if (!ratingValue && (text.includes('averageOverallRating') || text.includes('ratingValue') || text.includes('averageRating'))) {
+        const match = /averageOverallRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?/.exec(text) ||
+                      /ratingValue["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?/.exec(text) ||
+                      /averageRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?/.exec(text);
+        if (match) {
+          const p = parseFloat(match[1].replace(',', '.'));
+          if (!isNaN(p) && p > 0 && p <= 5.0) {
+            ratingValue = Math.round(p * 10) / 10;
+          }
+        }
+      }
+
+      if (!ratingCount && (text.includes('totalReviewCount') || text.includes('reviewCount') || text.includes('ratingCount'))) {
+        const match = /totalReviewCount["\\]*\s*:\s*"?(\d+)"?/.exec(text) ||
+                      /(?:reviewCount|ratingCount)["\\]*\s*:\s*"?(\d+)"?/.exec(text);
+        if (match) {
+          const c = parseInt(match[1]);
+          if (!isNaN(c) && c > 0) {
+            ratingCount = c;
+          }
+        }
+      }
+    });
+
+    if (ratingValue || ratingCount) {
+      return { ratingValue, ratingCount };
+    }
+
+    return { ratingValue: null, ratingCount: null };
+  }
+
+  scrapeBrand($) {
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const brand = this.extractBrandFromProductJson(product);
+      if (brand) return brand;
+    }
+    const metaBrand = $('meta[property="product:brand"], meta[name="brand"], [data-test="mms-pdp-brand-name"]').first();
+    if (metaBrand.length) {
+      const txt = metaBrand.is('meta') ? metaBrand.attr('content') : metaBrand.text();
+      if (txt && txt.trim()) return txt.trim();
+    }
+    return null;
+  }
 }
 
 module.exports = MediaMarktScraper;

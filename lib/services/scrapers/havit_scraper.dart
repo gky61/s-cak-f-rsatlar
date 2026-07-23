@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:html/dom.dart' as dom;
+import 'package:http/http.dart' as http;
 import 'base_scraper.dart';
 
 class HavitScraper extends BaseProductScraper {
@@ -248,5 +249,317 @@ class HavitScraper extends BaseProductScraper {
       }
     }
     return [];
+  }
+
+  // Cache YG Digital API response per document invocation to avoid duplicate calls
+  Map<String, dynamic>? _ygRatingCache;
+  dom.Document? _cachedDoc;
+
+  Future<Map<String, dynamic>?> _fetchYgDigitalRating(dom.Document document) async {
+    if (_cachedDoc == document && _ygRatingCache != null) {
+      return _ygRatingCache;
+    }
+
+    try {
+      String? barcode;
+      // 1. DOM barkod
+      final barEl = document.querySelector('#divBarkod #spnBarkod') ?? document.querySelector('#spnBarkod');
+      if (barEl != null && barEl.text.trim().isNotEmpty) {
+        barcode = barEl.text.trim();
+      }
+
+      // 2. script stockCode
+      if (barcode == null || barcode.isEmpty) {
+        final scripts = document.getElementsByTagName('script');
+        for (final script in scripts) {
+          final text = script.text + ' ' + script.innerHtml;
+          final match = RegExp(r'"stockCode"\s*:\s*"([^"]+)"').firstMatch(text);
+          if (match != null) {
+            barcode = match.group(1)?.trim();
+            break;
+          }
+        }
+      }
+
+      final hddnInput = document.querySelector('#hddnUrunID');
+      final hddnVal = hddnInput?.attributes['value'];
+
+      final uri = Uri.parse('https://api.yg.digital/trendyol_api/api/commentDetail.php');
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'https://www.havitstore.com.tr',
+          'Referer': 'https://www.havitstore.com.tr/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        body: jsonEncode({
+          'barcode': barcode ?? hddnVal ?? '',
+          'productUrl': '',
+          'page': 0,
+          'rateFilter': 0,
+          'photoFilter': 0,
+          'sortOrder': 'DESC',
+          'searchText': '',
+        }),
+      ).timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map && data['product'] != null) {
+          final prod = data['product'] as Map;
+          final avgRate = (prod['avg_rate'] as num?)?.toDouble();
+          final rateCount = (prod['rate_count'] as num?)?.toInt();
+          _cachedDoc = document;
+          _ygRatingCache = {
+            'ratingValue': (avgRate != null && avgRate > 0) ? avgRate : null,
+            'ratingCount': (rateCount != null && rateCount > 0) ? rateCount : null,
+          };
+          if (_ygRatingCache!['ratingValue'] != null || _ygRatingCache!['ratingCount'] != null) {
+            print('[aggregateRating] HavitScraper: YG Digital API ile rating bulundu -> ratingValue: ${_ygRatingCache!['ratingValue']}, ratingCount: ${_ygRatingCache!['ratingCount']}');
+          }
+          return _ygRatingCache;
+        }
+      }
+    } catch (e) {
+      print('[aggregateRating] HavitScraper: YG Digital API isteğinde hata: $e');
+    }
+    return null;
+  }
+
+  @override
+  Future<double?> scrapeRatingValue(dom.Document document) async {
+    print('[aggregateRating] HavitScraper: ratingValue aranıyor...');
+    
+    // 1. Havit/Ticimax Özel DOM Seçicileri (.ctgry-avg, .comment-count.ctgry-avg, .right-stars .comment-count)
+    final ratingSelectors = [
+      '.comment-count.ctgry-avg',
+      '.ctgry-avg',
+      '.right-stars .comment-count',
+      '.comment-stars-container .comment-count',
+      '.yg-comment-rating-score',
+    ];
+
+    for (final sel in ratingSelectors) {
+      final el = document.querySelector(sel);
+      if (el != null) {
+        final text = el.text.trim().replaceAll(',', '.');
+        if (!text.startsWith('(')) {
+          final parsed = double.tryParse(text);
+          if (parsed != null && parsed > 0 && parsed <= 5.0) {
+            print('[aggregateRating] HavitScraper: DOM ($sel) ile ratingValue bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    // Fallback: Tüm .comment-count elementleri arasından parantez içermeyen ilk geçerli puanı bul
+    final allCommentCounts = document.querySelectorAll('.comment-count');
+    for (final el in allCommentCounts) {
+      final text = el.text.trim().replaceAll(',', '.');
+      if (!text.startsWith('(') && !text.endsWith(')')) {
+        final parsed = double.tryParse(text);
+        if (parsed != null && parsed > 0 && parsed <= 5.0) {
+          print('[aggregateRating] HavitScraper: DOM (.comment-count) ile ratingValue bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    // 2. Ticimax Script Model (var productDetailModel = {"rating": 4.75, ...})
+    final scripts = document.getElementsByTagName('script');
+    for (final script in scripts) {
+      final text = script.text + ' ' + script.innerHtml;
+      if (text.contains('productDetailModel') && text.contains('rating')) {
+        final match = RegExp(r'"rating"\s*:\s*([\d]+(?:[.,]\d+)?)').firstMatch(text);
+        if (match != null) {
+          final raw = match.group(1)?.replaceAll(',', '.');
+          final parsed = raw != null ? double.tryParse(raw) : null;
+          if (parsed != null && parsed > 0 && parsed <= 5.0) {
+            print('[aggregateRating] HavitScraper: Ticimax script ile ratingValue bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    // 3. YG Digital API (Ham HTML'de widget olmadığı için API'den doğrudan çek)
+    final ygRating = await _fetchYgDigitalRating(document);
+    if (ygRating != null && ygRating['ratingValue'] != null) {
+      return ygRating['ratingValue'] as double;
+    }
+
+    // 4. Genel DOM microdata fallback
+    final ratingEl = document.querySelector('[itemprop="ratingValue"]') ??
+                     document.querySelector('meta[property="product:rating:value"]') ??
+                     document.querySelector('.rating-score') ??
+                     document.querySelector('.pdp-rating-value');
+    if (ratingEl != null) {
+      final text = ratingEl.localName == 'meta'
+          ? (ratingEl.attributes['content'] ?? '')
+          : ratingEl.text;
+      final parsed = double.tryParse(text.trim().replaceAll(',', '.'));
+      if (parsed != null && parsed > 0 && parsed <= 5.0) {
+        print('[aggregateRating] HavitScraper: DOM (itemprop) ile ratingValue bulundu: $parsed');
+        return parsed;
+      }
+    }
+
+    // 5. JSON-LD Fallback
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingValue'] != null) {
+        final val = (rating!['ratingValue'] as num).toDouble();
+        print('[aggregateRating] HavitScraper: JSON-LD fallback ile ratingValue bulundu: $val');
+        return val;
+      }
+    }
+
+    print('[aggregateRating] HavitScraper: ratingValue bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  Future<int?> scrapeRatingCount(dom.Document document) async {
+    print('[aggregateRating] HavitScraper: ratingCount/reviewCount aranıyor...');
+    
+    // 1. DOM Seçicileri (.comment-count-left, #divYorumSayisi, .comment-count parantezli)
+    final countElList = [
+      document.querySelector('.comment-count-left'),
+      document.querySelector('#divYorumSayisi'),
+      document.querySelector('[itemprop="reviewCount"]'),
+      document.querySelector('[itemprop="ratingCount"]'),
+      document.querySelector('.review-count'),
+      document.querySelector('.rating-count'),
+    ];
+
+    for (final el in countElList) {
+      if (el != null) {
+        final text = el.localName == 'meta'
+            ? (el.attributes['content'] ?? '')
+            : el.text;
+        final match = RegExp(r'(\d+)').firstMatch(text);
+        if (match != null) {
+          final parsed = int.tryParse(match.group(1) ?? '');
+          if (parsed != null && parsed > 0) {
+            print('[aggregateRating] HavitScraper: DOM (${el.attributes['id'] ?? el.className}) ile ratingCount bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    // Parantez içindeki yorum sayısını ara: e.g. <div class="comment-count">(26)</div>
+    final allCommentCounts = document.querySelectorAll('.comment-count');
+    for (final el in allCommentCounts) {
+      final text = el.text.trim();
+      if (text.contains('(') || text.contains(')')) {
+        final match = RegExp(r'(\d+)').firstMatch(text);
+        if (match != null) {
+          final parsed = int.tryParse(match.group(1) ?? '');
+          if (parsed != null && parsed > 0) {
+            print('[aggregateRating] HavitScraper: DOM (.comment-count parantezli) ile ratingCount bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    // Yorum kartlarının sayısını say (.yg-comment-review)
+    final reviews = document.querySelectorAll('.yg-comment-review');
+    if (reviews.isNotEmpty) {
+      print('[aggregateRating] HavitScraper: DOM (.yg-comment-review list) ile ratingCount bulundu: ${reviews.length}');
+      return reviews.length;
+    }
+
+    // 2. YG Digital API (Ham HTML'de widget olmadığı için API'den doğrudan çek)
+    final ygRating = await _fetchYgDigitalRating(document);
+    if (ygRating != null && ygRating['ratingCount'] != null) {
+      return ygRating['ratingCount'] as int;
+    }
+
+    // 3. JSON-LD Fallback
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingCount'] != null) {
+        final cnt = (rating!['ratingCount'] as num).toInt();
+        print('[aggregateRating] HavitScraper: JSON-LD fallback ile ratingCount bulundu: $cnt');
+        return cnt;
+      }
+    }
+
+    print('[aggregateRating] HavitScraper: ratingCount bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    print('[aggregateRating] HavitScraper: brand (marka) aranıyor...');
+    
+    // 1. JSON-LD Şeması
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final brand = extractBrandFromProductJson(productJson);
+      if (brand != null && brand.isNotEmpty) {
+        print('[aggregateRating] HavitScraper: JSON-LD ile brand bulundu: $brand');
+        return brand;
+      }
+    }
+
+    // 2. Ticimax Script Model ("brandName":"Havit")
+    final scripts = document.getElementsByTagName('script');
+    for (final script in scripts) {
+      final text = script.text + ' ' + script.innerHtml;
+      if (text.contains('brandName')) {
+        final match = RegExp(r'"brandName"\s*:\s*"([^"]+)"').firstMatch(text);
+        if (match != null) {
+          final bName = match.group(1)?.trim();
+          if (bName != null && bName.isNotEmpty) {
+            print('[aggregateRating] HavitScraper: Ticimax script ile brand bulundu: $bName');
+            return bName;
+          }
+        }
+      }
+    }
+
+    // 3. DOM Microdata
+    final brandDiv = document.querySelector('[itemprop="brand"]');
+    if (brandDiv != null) {
+      final metaName = brandDiv.querySelector('meta[itemprop="name"]');
+      if (metaName != null) {
+        final content = metaName.attributes['content']?.trim();
+        if (content != null && content.isNotEmpty) {
+          print('[aggregateRating] HavitScraper: DOM (itemprop brand) ile brand bulundu: $content');
+          return content;
+        }
+      }
+      final text = brandDiv.text.trim();
+      if (text.isNotEmpty) {
+        print('[aggregateRating] HavitScraper: DOM (itemprop brand text) ile brand bulundu: $text');
+        return text;
+      }
+    }
+
+    // 4. Meta Tag / Diğer DOM
+    final brandMeta = document.querySelector('meta[property="product:brand"]') ??
+                      document.querySelector('meta[name="brand"]') ??
+                      document.querySelector('.product-brand') ??
+                      document.querySelector('[data-brand]');
+    if (brandMeta != null) {
+      final text = brandMeta.localName == 'meta'
+          ? (brandMeta.attributes['content'] ?? '')
+          : (brandMeta.attributes['data-brand'] ?? brandMeta.text);
+      final clean = text.trim();
+      if (clean.isNotEmpty) {
+        print('[aggregateRating] HavitScraper: DOM meta fallback ile brand bulundu: $clean');
+        return clean;
+      }
+    }
+
+    print('[aggregateRating] HavitScraper: brand bulunamadı (null)');
+    return null;
   }
 }

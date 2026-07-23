@@ -2,6 +2,7 @@
  * Idefix Scraper (Node.js port)
  */
 const BaseProductScraper = require('./base_scraper');
+const https = require('https');
 
 class IdefixScraper extends BaseProductScraper {
   get domain() { return 'idefix.com'; }
@@ -95,6 +96,59 @@ class IdefixScraper extends BaseProductScraper {
       }
     });
     return list;
+  }
+
+  async scrapeRating($, url) {
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const rating = this.extractRatingFromProductJson(product);
+      if (rating && (rating.ratingValue != null || rating.ratingCount != null)) {
+        return rating;
+      }
+    }
+
+    // Live ecomapi API Fallback using native https
+    try {
+      let productId = null;
+      const match = /p-(\d+)/.exec(url || '') || /p-(\d+)/.exec($('link[rel="canonical"]').attr('href') || '');
+      if (match) productId = match[1];
+
+      if (productId) {
+        const data = await new Promise((resolve) => {
+          const req = https.get(`https://ecomapi.idefix.com/api/product/${productId}/detail/review`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
+            timeout: 5000,
+          }, (res) => {
+            let body = '';
+            res.on('data', (chunk) => body += chunk);
+            res.on('end', () => {
+              try { resolve(JSON.parse(body)); } catch (_) { resolve(null); }
+            });
+          });
+          req.on('error', () => resolve(null));
+          req.on('timeout', () => { req.destroy(); resolve(null); });
+        });
+
+        if (data) {
+          const ratingValue = data.averageRating != null ? parseFloat(data.averageRating) : null;
+          const ratingCount = data.reviewCount != null ? parseInt(data.reviewCount) : null;
+          if (ratingValue || ratingCount) {
+            return { ratingValue: !isNaN(ratingValue) ? ratingValue : null, ratingCount: !isNaN(ratingCount) ? ratingCount : null };
+          }
+        }
+      }
+    } catch (_) {}
+
+    return { ratingValue: null, ratingCount: null };
+  }
+
+  scrapeBrand($) {
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const brand = this.extractBrandFromProductJson(product);
+      if (brand) return brand;
+    }
+    return null;
   }
 }
 

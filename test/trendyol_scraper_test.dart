@@ -78,5 +78,45 @@ void main() {
       final price = await scraper.scrapePrice(doc);
       expect(price, equals(486.67));
     });
+
+    test('should parse ratingValue, ratingCount, and brand from Trendyol ld+json string', () async {
+      const html = '''
+      <script type="application/ld+json">{
+       "@context": "https://schema.org",
+       "@type": "Product",
+       "name": "KTC H27T22C 27″ 1Ms(GtG) 200Hz (210Hz O.C.) 2K QHD Fast IPS Gaming Monitör",
+       "brand": {
+        "@type": "Brand",
+        "name": "KTC"
+       },
+       "offers": {
+        "@type": "Offer",
+        "price": "7899.00"
+       },
+       "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": 4.5,
+        "ratingCount": 33,
+        "reviewCount": 21
+       }
+      }</script>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(7899.00));
+
+      final title = scraper.scrapeTitle(doc);
+      expect(title, equals('KTC H27T22C 27″ 1Ms(GtG) 200Hz (210Hz O.C.) 2K QHD Fast IPS Gaming Monitör'));
+
+      final ratingVal = scraper.scrapeRatingValue(doc);
+      expect(ratingVal, equals(4.5));
+
+      final ratingCnt = scraper.scrapeRatingCount(doc);
+      expect(ratingCnt, equals(33));
+
+      final brand = scraper.scrapeBrand(doc);
+      expect(brand, equals('KTC'));
+    });
   });
 }

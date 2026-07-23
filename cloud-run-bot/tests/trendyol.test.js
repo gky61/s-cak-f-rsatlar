@@ -33,6 +33,36 @@ function run() {
   assert.strictEqual(scraper.scrapeTitle($), 'ROBEVE 550 ml Otomatik Hava Nemlendirici Buhar Makinesi Oda Nemlendirici Aroma Difüzör Beyaz');
   assert.strictEqual(scraper.scrapePrice($), 486.67);
   assert.strictEqual(scraper.scrapeImage($, 'https://www.trendyol.com/some-product'), 'https://cdn.dsmcdn.com/ty1783/prod/QC_ENRICHMENT/20251103/21/e1fbb2d1-553b-3dec-af2f-076c33520c1c/1_org_zoom.jpg');
+
+  // 3. Trendyol ld+json rating and brand
+  const html2 = `
+    <script type="application/ld+json">{
+     "@context": "https://schema.org",
+     "@type": "Product",
+     "name": "KTC H27T22C 27″ 1Ms(GtG) 200Hz (210Hz O.C.) 2K QHD Fast IPS Gaming Monitör",
+     "brand": {
+      "@type": "Brand",
+      "name": "KTC"
+     },
+     "offers": {
+      "@type": "Offer",
+      "price": "7899.00"
+     },
+     "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": 4.5,
+      "ratingCount": 33,
+      "reviewCount": 21
+     }
+    }</script>
+  `;
+  const $2 = cheerio.load(html2);
+  assert.strictEqual(scraper.scrapeTitle($2), 'KTC H27T22C 27″ 1Ms(GtG) 200Hz (210Hz O.C.) 2K QHD Fast IPS Gaming Monitör');
+  assert.strictEqual(scraper.scrapePrice($2), 7899.00);
+  const rating2 = scraper.scrapeRating($2);
+  assert.strictEqual(rating2.ratingValue, 4.5);
+  assert.strictEqual(rating2.ratingCount, 33);
+  assert.strictEqual(scraper.scrapeBrand($2), 'KTC');
 }
 
 module.exports = { run };

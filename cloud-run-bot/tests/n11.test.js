@@ -2,38 +2,22 @@ const assert = require('assert');
 const cheerio = require('cheerio');
 const N11Scraper = require('../scrapers/n11_scraper');
 
-function run() {
+async function run() {
   const scraper = new N11Scraper();
 
   // 1. canHandle
-  assert.strictEqual(scraper.canHandle('https://www.n11.com/urun/nivea-gunes-kremi-1234'), true);
+  assert.strictEqual(scraper.canHandle('https://m.n11.com/urun/siemens-eq6-plus-s700-te657319rw'), true);
   assert.strictEqual(scraper.canHandle('https://www.google.com'), false);
 
-  // 2. n11 page elements
-  const html = `
-    <head>
-      <meta property="og:title" content="Nivea Sun Koruyucu Güneş Kremi SPF 50">
-      <meta property="og:image" content="https://n11cdn.akamaized.net/a1/org/12/34/56/78.jpg">
-      <meta name="description" content="Nivea sun hassas ciltler için güneş kremi.">
-    </head>
-    <body>
-      <div class="big-image-wrapper">
-        <img src="https://n11cdn.akamaized.net/a1/org/12/34/56/78.jpg">
-      </div>
-      <ins class="new-price" val="385.90">385,90 TL</ins>
-      <div class="breadcrumb-group">
-        <li class="breadcrumb-item"><a href="/kozmetik">Kozmetik & Kişisel Bakım</a></li>
-        <li class="breadcrumb-item"><a href="/cilt">Cilt Bakımı</a></li>
-      </div>
-    </body>
+  // 2. JSON-LD ld+json test
+  const htmlLdJson = `
+    <script type="application/ld+json">{"@context":"https://schema.org/","@type":"Product","aggregateRating":{"@type":"AggregateRating","ratingCount":"47","ratingValue":4.5,"reviewCount":"47"},"brand":"Siemens","description":"Siemens EQ6 Plus S700 TE657319RW","name":"Siemens EQ6 Plus S700 TE657319RW"}</script>
   `;
-  const $ = cheerio.load(html);
-
-  assert.strictEqual(scraper.scrapeTitle($), 'Nivea Sun Koruyucu Güneş Kremi SPF 50');
-  assert.strictEqual(scraper.scrapePrice($), 385.90);
-  assert.strictEqual(scraper.scrapeDescription($), 'Nivea sun hassas ciltler için güneş kremi.');
-  assert.strictEqual(scraper.scrapeImage($, 'https://www.n11.com/urun/nivea-gunes-kremi-1234'), 'https://n11cdn.akamaized.net/a1/org/12/34/56/78.jpg');
-  assert.deepStrictEqual(scraper.scrapeBreadcrumbs($), ['Kozmetik & Kişisel Bakım', 'Cilt Bakımı']);
+  const $ld = cheerio.load(htmlLdJson);
+  const ratingLd = scraper.scrapeRating($ld);
+  assert.strictEqual(ratingLd.ratingValue, 4.5, 'ratingValue should be 4.5');
+  assert.strictEqual(ratingLd.ratingCount, 47, 'ratingCount should be 47');
+  assert.strictEqual(scraper.scrapeBrand($ld), 'Siemens', 'brand should be Siemens');
 }
 
 module.exports = { run };

@@ -648,6 +648,40 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                               height: 1.0,
                                             ),
                                           ),
+                                          if (deal.ratingValue != null || deal.ratingCount != null) ...[
+                                            const SizedBox(height: 3),
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.star_rounded,
+                                                  size: 13,
+                                                  color: Color(0xFFFFB800),
+                                                ),
+                                                const SizedBox(width: 2),
+                                                if (deal.ratingValue != null)
+                                                  Text(
+                                                    deal.ratingValue!.toStringAsFixed(1),
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w700,
+                                                      color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
+                                                    ),
+                                                  ),
+                                                if (deal.ratingCount != null) ...[
+                                                  const SizedBox(width: 2),
+                                                  Text(
+                                                    '(${deal.ratingCount})',
+                                                    style: TextStyle(
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),

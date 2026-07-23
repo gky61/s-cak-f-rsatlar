@@ -316,6 +316,160 @@ class AmazonScraper extends BaseProductScraper {
     return [];
   }
 
+  @override
+  double? scrapeRatingValue(dom.Document document) {
+    print('[aggregateRating] AmazonScraper: ratingValue aranıyor...');
+    
+    // 1. JSON-LD Şeması
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingValue'] != null) {
+        final val = (rating!['ratingValue'] as num).toDouble();
+        print('[aggregateRating] AmazonScraper: JSON-LD ile ratingValue bulundu: $val');
+        return val;
+      }
+    }
+
+    // 2. DOM Seçicileri
+    final popover = document.querySelector('#averageCustomerReviews .a-icon-alt') ??
+                    document.querySelector('#acrPopover .a-icon-alt') ??
+                    document.querySelector('span.a-icon-alt');
+    if (popover != null) {
+      final text = popover.text.trim();
+      final match = RegExp(r'([0-5][.,]\d)').firstMatch(text);
+      if (match != null) {
+        final parsed = double.tryParse(match.group(1)!.replaceAll(',', '.'));
+        if (parsed != null && parsed > 0 && parsed <= 5.0) {
+          print('[aggregateRating] AmazonScraper: DOM (.a-icon-alt) ile ratingValue bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    final ratingTextEl = document.querySelector('span[data-hook="rating-out-of-text"]');
+    if (ratingTextEl != null) {
+      final text = ratingTextEl.text.trim();
+      final match = RegExp(r'([0-5][.,]\d)').firstMatch(text);
+      if (match != null) {
+        final parsed = double.tryParse(match.group(1)!.replaceAll(',', '.'));
+        if (parsed != null && parsed > 0 && parsed <= 5.0) {
+          print('[aggregateRating] AmazonScraper: DOM (rating-out-of-text) ile ratingValue bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    final starIcon = document.querySelector('i[class*="a-star-"]');
+    if (starIcon != null) {
+      final cls = starIcon.attributes['class'] ?? '';
+      final match = RegExp(r'a-star-(\d+)(?:-(\d+))?').firstMatch(cls);
+      if (match != null) {
+        final major = match.group(1);
+        final minor = match.group(2) ?? '0';
+        final parsed = double.tryParse('$major.$minor');
+        if (parsed != null && parsed > 0 && parsed <= 5.0) {
+          print('[aggregateRating] AmazonScraper: DOM (a-star class) ile ratingValue bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    print('[aggregateRating] AmazonScraper: ratingValue bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  int? scrapeRatingCount(dom.Document document) {
+    print('[aggregateRating] AmazonScraper: ratingCount/reviewCount aranıyor...');
+
+    // 1. JSON-LD Şeması
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingCount'] != null) {
+        final cnt = (rating!['ratingCount'] as num).toInt();
+        print('[aggregateRating] AmazonScraper: JSON-LD ile ratingCount/reviewCount bulundu: $cnt');
+        return cnt;
+      }
+    }
+
+    // 2. DOM Seçicileri
+    final selectors = [
+      '#acrCustomerReviewText',
+      '#acrCustomerReviewLink',
+      'span[data-hook="total-review-count"]',
+      '#totalReviewCount',
+      '[itemprop="reviewCount"]',
+      '[itemprop="ratingCount"]',
+    ];
+
+    for (final selector in selectors) {
+      final el = document.querySelector(selector);
+      if (el != null) {
+        final text = el.text.trim();
+        final match = RegExp(r'(\d[\d.,]*)').firstMatch(text);
+        if (match != null) {
+          final clean = match.group(1)!.replaceAll('.', '').replaceAll(',', '');
+          final parsed = int.tryParse(clean);
+          if (parsed != null && parsed > 0) {
+            print('[aggregateRating] AmazonScraper: DOM ($selector) ile ratingCount bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] AmazonScraper: ratingCount bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    print('[aggregateRating] AmazonScraper: brand (marka) aranıyor...');
+
+    // 1. JSON-LD Şeması
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final brand = extractBrandFromProductJson(productJson);
+      if (brand != null && brand.isNotEmpty) {
+        print('[aggregateRating] AmazonScraper: JSON-LD ile brand bulundu: $brand');
+        return brand;
+      }
+    }
+
+    // 2. DOM Seçicileri
+    final poBrand = document.querySelector('tr.po-brand td.po-break-word') ??
+                    document.querySelector('tr.po-brand span.a-size-base');
+    if (poBrand != null) {
+      final text = poBrand.text.trim();
+      if (text.isNotEmpty && text != 'Marka') {
+        print('[aggregateRating] AmazonScraper: DOM (tr.po-brand) ile brand bulundu: $text');
+        return text;
+      }
+    }
+
+    final byline = document.querySelector('#bylineInfo') ?? document.querySelector('a#bylineInfo');
+    if (byline != null) {
+      var text = byline.text.trim();
+      text = text
+        .replaceAll(RegExp(r'Marka:\s*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'Brand:\s*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'Store’u ziyaret edin', caseSensitive: false), '')
+        .replaceAll(RegExp(r"Store'u ziyaret edin", caseSensitive: false), '')
+        .replaceAll(RegExp(r'Visit the\s*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s*Store', caseSensitive: false), '')
+        .trim();
+      if (text.isNotEmpty) {
+        print('[aggregateRating] AmazonScraper: DOM (#bylineInfo) ile brand bulundu: $text');
+        return text;
+      }
+    }
+
+    print('[aggregateRating] AmazonScraper: brand bulunamadı (null)');
+    return null;
+  }
+
   bool _hasAncestorWithClass(dom.Element element, String className) {
     dom.Element? current = element.parent;
     while (current != null) {

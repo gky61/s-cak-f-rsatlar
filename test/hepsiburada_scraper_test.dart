@@ -70,5 +70,27 @@ void main() {
       final title = scraper.scrapeTitle(doc);
       expect(title, equals('Selpak® Kağıt Havlu'));
     });
+
+    test('should scrape ratingValue, ratingCount, and brand from ld+json graph', () async {
+      final html = '''
+      <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Apple Watch Series 11","@graph":[{"@type":"Product","name":"Apple Watch Series 11","brand":{"@additionalType":"Organization","name":"Apple"},"aggregateRating":{"@type":"AggregateRating","ratingValue":4.8,"ratingCount":1173},"offers":{"@type":"Offer","price":"20999.00"}}]}</script>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(20999.00));
+
+      final title = scraper.scrapeTitle(doc);
+      expect(title, equals('Apple Watch Series 11'));
+
+      final ratingVal = scraper.scrapeRatingValue(doc);
+      expect(ratingVal, equals(4.8));
+
+      final ratingCnt = scraper.scrapeRatingCount(doc);
+      expect(ratingCnt, equals(1173));
+
+      final brand = scraper.scrapeBrand(doc);
+      expect(brand, equals('Apple'));
+    });
   });
 }

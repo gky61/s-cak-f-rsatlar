@@ -52,6 +52,37 @@ function run() {
   assert.strictEqual(scraper.scrapeDescription($), 'Asus Vivobook Laptop vatan bilgisayardan alınır.');
   assert.strictEqual(scraper.scrapeImage($, 'https://www.vatanbilgisayar.com/asus-vivobook-16.html'), 'https://vatanbilgisayar.com/product.jpg');
   assert.deepStrictEqual(scraper.scrapeBreadcrumbs($), ['Tüketici Elektroniği', 'Notebook']);
+
+  // 3. Vatan ld+json with ratingValue "4,71", reviewCount "248", brand LENOVO
+  const vatanLdJson = `
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": "Lenovo Ideapad Slim 3 13.Nesil Core i5 13420H-8Gb-512Gb Ssd-16inc-W11",
+      "brand": {
+        "@type": "Brand",
+        "name": "LENOVO"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "26999"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4,71",
+        "reviewCount": "248"
+      }
+    }
+    </script>
+  `;
+  const $2 = cheerio.load(vatanLdJson);
+  assert.strictEqual(scraper.scrapeTitle($2), 'Lenovo Ideapad Slim 3 13.Nesil Core i5 13420H-8Gb-512Gb Ssd-16inc-W11');
+  assert.strictEqual(scraper.scrapePrice($2), 26999);
+  const rating2 = scraper.scrapeRating($2);
+  assert.strictEqual(rating2.ratingValue, 4.71);
+  assert.strictEqual(rating2.ratingCount, 248);
+  assert.strictEqual(scraper.scrapeBrand($2), 'LENOVO');
 }
 
 module.exports = { run };

@@ -24,17 +24,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   // Cached streams to prevent re-listening/recreating on rebuilds
   Stream<List<Deal>>? _myFavoritesStream;
-  Stream<List<Deal>>? _popularDealsStream;
   Stream<List<Deal>>? _followedCategoriesStream;
   String? _cachedUserId;
 
   @override
   void initState() {
     super.initState();
-    // İlk açılışta "Kaydettiklerim" sekmesini göster
-    _tabController = TabController(length: 3, vsync: this, initialIndex: 0);
-    // Popüler Fırsatlar genel bir stream olduğundan burada başlatıyoruz
-    _popularDealsStream = _firestoreService.getPopularDeals();
+    _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
   }
 
   void _initializeStreams(String? userId) {
@@ -103,16 +99,15 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               unselectedLabelColor: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
               labelStyle: const TextStyle(
                 fontWeight: FontWeight.w700,
-                fontSize: 11,
+                fontSize: 12,
               ),
               unselectedLabelStyle: const TextStyle(
                 fontWeight: FontWeight.w500,
-                fontSize: 11,
+                fontSize: 12,
               ),
               isScrollable: false,
               tabs: const [
                 Tab(text: 'Kaydettiklerim'),
-                Tab(text: 'Popüler Fırsatlar'),
                 Tab(text: 'Favori Kategorilerim'),
               ],
             ),
@@ -124,8 +119,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         children: [
           // Kaydettiklerim
           _buildMyFavorites(currentUser, isDark),
-          // Popüler Fırsatlar
-          _buildPopularDeals(isDark),
           // Favori Kategorilerim
           _buildFollowedCategories(currentUser, isDark, primaryColor),
         ],
@@ -288,78 +281,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
             ),
           ],
         );
-      },
-    );
-  }
-
-  Widget _buildPopularDeals(bool isDark) {
-    return StreamBuilder<List<Deal>>(
-      stream: _popularDealsStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingGrid(isDark);
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: isDark ? Colors.grey[600] : Colors.grey[400],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Bir hata oluştu',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        final deals = snapshot.data ?? [];
-
-        if (deals.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.whatshot_rounded,
-                  size: 64,
-                  color: Colors.orange[600],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Henüz popüler bir fırsat yok',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Topluluk tarafından sıcak bakılan (AL!)\npopüler fırsatlar burada gösterilecek',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return _buildDealGrid(deals, isDark);
       },
     );
   }

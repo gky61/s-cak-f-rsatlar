@@ -65,11 +65,14 @@ Sunucu ortamındaki bot korumalarını aşmak için geliştirilen 5 temel bypass
 *   **Problem:** MediaMarkt Cloudflare koruması normal tarayıcı ve mobil UA'leri engeller.
 *   **Çözüm:** `Googlebot/2.1 (+http://www.google.com/bot.html)` User-Agent değeri doğrudan set edilerek istek atılır. MediaMarkt'ın Cloudflare ayarlarında Googlebot IP doğrulaması (DNS lookup) aktif veya sıkı olmadığı için bu imza doğrudan geçiş izni alır.
 
-### 4. Alan Adı Filtreleme İyileştirmesi (Domain Filtering)
+### 4. Alan Adı Filtreleme İyileştirmesi & Live Review API Entegrasyonu
 *   **Kullanıldığı Mağazalar:** `Idefix` (ve genel x.com yönlendirmeleri)
-*   **Problem:** Botun x.com (Twitter) paylaşımlarını filtrelerken kullandığı basit `.includes('x.com')` kontrolü, `idefix.com` linklerinin de yanlışlıkla filtrelenip atlanmasına neden oluyordu.
-*   **Çözüm:** `telegram_bot.js` ve `fetch_history.js` dosyalarındaki kontrol mekanizması URL Hostname analizine dönüştürülerek çözüldü.
-    Bu sayede Idefix linklerinin bot tarafından filtrelenmeden başarıyla işlenmesi sağlandı.
+*   **Problem:** 
+    *   Botun x.com (Twitter) paylaşımlarını filtrelerken kullandığı basit `.includes('x.com')` kontrolü, `idefix.com` linklerinin de yanlışlıkla filtrelenip atlanmasına neden oluyordu.
+    *   Ayrıca İdefix sunucuları statik HTML yanıtlarında değerlendirme (`averageRating`) ve yorum sayılarını HTML'e gömmemekteydi.
+*   **Çözüm:** 
+    *   `telegram_bot.js` ve `fetch_history.js` dosyalarındaki kontrol mekanizması URL Hostname analizine dönüştürülerek filtreleme çözüldü.
+    *   `idefix_scraper.js` içerisine İdefix'in canlı mikroservis entegrasyonu (`https://ecomapi.idefix.com/api/product/${productId}/detail/review`) eklendi. Puan ve oy sayısı HTML'de yoksa, ürün ID'si ayıklanarak bu API üzerinden canlı olarak parse edilir.
 
 ### 5. Microlink HTML API Proxy (`api.microlink.io`)
 *   **Kullanıldığı Mağazalar:** `Amazon`, `Pttavm`

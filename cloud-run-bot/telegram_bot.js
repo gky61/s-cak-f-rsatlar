@@ -846,6 +846,9 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       rawMessage: messageText,
       isTest: isTest,
       priceLabel: scrapeResult.priceLabel || null,
+      ratingValue: scrapeResult.ratingValue || null,
+      ratingCount: scrapeResult.ratingCount || null,
+      brand: scrapeResult.brand || null,
     };
 
     console.log(`💾 Kaydediliyor: ${uniqueDocId} (imageUrl: ${imageUrl ? 'VAR ✅' : 'YOK ❌'})`);

@@ -44,6 +44,9 @@ class LinkPreviewResult {
   final double? price;
   final List<String>? breadcrumbs;
   final String? priceLabel;
+  final double? ratingValue;
+  final int? ratingCount;
+  final String? brand;
 
   LinkPreviewResult({
     String? title,
@@ -53,6 +56,9 @@ class LinkPreviewResult {
     this.price,
     this.breadcrumbs,
     this.priceLabel,
+    this.ratingValue,
+    this.ratingCount,
+    this.brand,
   })  : title = (title == 'null' || title == 'NULL') ? null : title,
         description = (description == 'null' || description == 'NULL') ? null : description,
         imageUrl = (imageUrl == 'null' || imageUrl == 'NULL') ? null : imageUrl,
@@ -127,7 +133,7 @@ class LinkPreviewService {
         lowerUrl.contains('pttavm.com') ||
         lowerUrl.contains('incehesap.com')) {
       userAgent = 'WhatsApp/2.23.4.15 A';
-    } else if (lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com')) {
+    } else if (lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('havitstore.com.tr')) {
       userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
     }
 
@@ -272,6 +278,9 @@ class LinkPreviewService {
               final price = await matchedScraper.scrapePrice(document);
               final breadcrumbs = matchedScraper.scrapeBreadcrumbs(document);
               final priceLabel = await matchedScraper.scrapePriceLabel(document);
+              final ratingValue = await matchedScraper.scrapeRatingValue(document);
+              final ratingCount = await matchedScraper.scrapeRatingCount(document);
+              final brand = matchedScraper.scrapeBrand(document);
               
               final resolvedImage = _resolveImageUrl(imageUrl, targetUrl);
               final provider = _cleanHost(targetUrl);
@@ -286,6 +295,18 @@ class LinkPreviewService {
               if (priceLabel != null && priceLabel.isNotEmpty) {
                 _log('   - Fiyat Etiketi/CRM Notu: $priceLabel');
               }
+              if (ratingValue != null || ratingCount != null) {
+                _log('   - Rating: $ratingValue ($ratingCount oy)');
+                print('[aggregateRating] LinkPreviewService -> ratingValue: $ratingValue, ratingCount: $ratingCount');
+              } else {
+                print('[aggregateRating] LinkPreviewService -> ratingValue/ratingCount bulunamadı (null)');
+              }
+              if (brand != null && brand.isNotEmpty) {
+                _log('   - Marka: $brand');
+                print('[aggregateRating] LinkPreviewService -> Marka: $brand');
+              } else {
+                print('[aggregateRating] LinkPreviewService -> Marka bulunamadı (null)');
+              }
 
               return LinkPreviewResult(
                 title: title,
@@ -295,6 +316,9 @@ class LinkPreviewService {
                 price: price,
                 breadcrumbs: breadcrumbs,
                 priceLabel: priceLabel,
+                ratingValue: ratingValue,
+                ratingCount: ratingCount,
+                brand: brand,
               );
             }
           }

@@ -106,6 +106,77 @@ class MaviScraper extends BaseProductScraper {
     });
     return list;
   }
+
+  scrapeRating($) {
+    // 1. DOM Seçicileri (Öncelikli - Mavi'ye özel)
+    const ratingEl = $('.average-rate__number, [itemprop="ratingValue"], meta[property="product:rating:value"], .rating-score, .pdp-rating-value').first();
+    let ratingValue = null;
+    let ratingCount = null;
+
+    if (ratingEl.length) {
+      const txt = ratingEl.is('meta') ? ratingEl.attr('content') : ratingEl.text();
+      if (txt) {
+        const p = parseFloat(txt.trim().replace(',', '.'));
+        if (!isNaN(p) && p > 0 && p <= 5.0) ratingValue = p;
+      }
+    }
+
+    // .rate-info içinden "5 Değerlendirme" gibi metinden sayıyı çeker
+    const rateInfoEl = $('.rate-info').first();
+    if (rateInfoEl.length) {
+      const txt = rateInfoEl.text();
+      if (txt) {
+        const m = /(\d+)/.exec(txt);
+        if (m) {
+          const c = parseInt(m[1]);
+          if (!isNaN(c) && c > 0) ratingCount = c;
+        }
+      }
+    }
+
+    if (!ratingCount) {
+      const countEl = $('[itemprop="reviewCount"], [itemprop="ratingCount"], .review-count, .rating-count').first();
+      if (countEl.length) {
+        const txt = countEl.is('meta') ? countEl.attr('content') : countEl.text();
+        if (txt) {
+          const m = /(\d+)/.exec(txt);
+          if (m) {
+            const c = parseInt(m[1]);
+            if (!isNaN(c) && c > 0) ratingCount = c;
+          }
+        }
+      }
+    }
+
+    if (ratingValue || ratingCount) {
+      return { ratingValue, ratingCount };
+    }
+
+    // 2. JSON-LD (Fallback)
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const rating = this.extractRatingFromProductJson(product);
+      if (rating && (rating.ratingValue != null || rating.ratingCount != null)) {
+        return rating;
+      }
+    }
+
+    return { ratingValue: null, ratingCount: null };
+  }
+
+  scrapeBrand($) {
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const brand = this.extractBrandFromProductJson(product);
+      if (brand) return brand;
+    }
+    const metaBrand = $('meta[property="product:brand"], meta[name="brand"], .product-brand, [data-brand]').first();
+    if (metaBrand.length) {
+      const txt = metaBrand.is('meta') ? metaBrand.attr('content') : (metaBrand.attr('data-brand') || metaBrand.text());
+      if (txt && txt.trim()) return txt.trim();
+    }
+    return null;
+  }
 }
 
 module.exports = MaviScraper;

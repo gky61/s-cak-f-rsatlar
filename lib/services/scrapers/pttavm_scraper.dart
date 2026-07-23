@@ -265,4 +265,175 @@ class PttavmScraper extends BaseProductScraper {
     }
     return [];
   }
+
+  @override
+  double? scrapeRatingValue(dom.Document document) {
+    print('[aggregateRating] PttavmScraper: ratingValue aranıyor...');
+    
+    // 1. JSON-LD Şeması (@type: Product)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingValue'] != null) {
+        final val = (rating!['ratingValue'] as num).toDouble();
+        print('[aggregateRating] PttavmScraper: JSON-LD ile ratingValue bulundu: $val');
+        return val;
+      }
+    }
+
+    // 2. DOM Seçicileri / Microdata Fallback
+    final ratingEl = document.querySelector('[itemprop="ratingValue"]') ??
+                     document.querySelector('meta[property="product:rating:value"]') ??
+                     document.querySelector('.rating-score') ??
+                     document.querySelector('.pdp-rating-value');
+    if (ratingEl != null) {
+      final text = ratingEl.localName == 'meta'
+          ? (ratingEl.attributes['content'] ?? '')
+          : ratingEl.text;
+      final parsed = double.tryParse(text.trim().replaceAll(',', '.'));
+      if (parsed != null && parsed > 0 && parsed <= 5.0) {
+        print('[aggregateRating] PttavmScraper: DOM fallback ile ratingValue bulundu: $parsed');
+        return parsed;
+      }
+    }
+
+    // 3. Script Regex Fallback
+    final scripts = document.getElementsByTagName('script');
+    for (final script in scripts) {
+      final text = script.text + ' ' + script.innerHtml;
+      if (text.contains('aggregateRating') || text.contains('ratingValue')) {
+        final match = RegExp(r'ratingValue["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(text);
+        if (match != null) {
+          final raw = match.group(1)?.replaceAll(',', '.');
+          final parsed = raw != null ? double.tryParse(raw) : null;
+          if (parsed != null && parsed > 0 && parsed <= 5.0) {
+            print('[aggregateRating] PttavmScraper: Regex fallback ile ratingValue bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] PttavmScraper: ratingValue bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  int? scrapeRatingCount(dom.Document document) {
+    print('[aggregateRating] PttavmScraper: ratingCount/reviewCount aranıyor...');
+    
+    // 1. JSON-LD Şeması (@type: Product)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingCount'] != null) {
+        final cnt = (rating!['ratingCount'] as num).toInt();
+        print('[aggregateRating] PttavmScraper: JSON-LD ile ratingCount/reviewCount bulundu: $cnt');
+        return cnt;
+      }
+    }
+
+    // 2. DOM Seçicileri / Microdata Fallback
+    final countEl = document.querySelector('[itemprop="reviewCount"]') ??
+                    document.querySelector('[itemprop="ratingCount"]') ??
+                    document.querySelector('.review-count') ??
+                    document.querySelector('.rating-count');
+    if (countEl != null) {
+      final text = countEl.localName == 'meta'
+          ? (countEl.attributes['content'] ?? '')
+          : countEl.text;
+      final match = RegExp(r'(\d+)').firstMatch(text);
+      if (match != null) {
+        final parsed = int.tryParse(match.group(1) ?? '');
+        if (parsed != null && parsed > 0) {
+          print('[aggregateRating] PttavmScraper: DOM fallback ile ratingCount bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    // 3. Script Regex Fallback
+    final scripts = document.getElementsByTagName('script');
+    for (final script in scripts) {
+      final text = script.text + ' ' + script.innerHtml;
+      if (text.contains('aggregateRating') || text.contains('reviewCount') || text.contains('ratingCount')) {
+        final match = RegExp(r'(?:reviewCount|ratingCount)["\\]*\s*:\s*"?(\d+)"?').firstMatch(text);
+        if (match != null) {
+          final parsed = int.tryParse(match.group(1) ?? '');
+          if (parsed != null && parsed > 0) {
+            print('[aggregateRating] PttavmScraper: Regex fallback ile ratingCount bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] PttavmScraper: ratingCount bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    print('[aggregateRating] PttavmScraper: brand (marka) aranıyor...');
+    
+    // 1. JSON-LD: additionalProperty "External Source" (Öncelikli - PttAVM'de brand alanı satıcıyı içerir)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final additionalProps = productJson['additionalProperty'];
+      if (additionalProps is List && additionalProps.isNotEmpty) {
+        // İlk eleman "External Source" → gerçek marka
+        final firstProp = additionalProps[0];
+        if (firstProp is Map && firstProp['name'] == 'External Source') {
+          final val = firstProp['value']?.toString().trim();
+          if (val != null && val.isNotEmpty) {
+            print('[aggregateRating] PttavmScraper: JSON-LD additionalProperty ile brand bulundu: $val');
+            return val;
+          }
+        }
+      }
+
+      // 2. JSON-LD: brand alanı (Fallback - satıcı adı olabilir)
+      final brand = extractBrandFromProductJson(productJson);
+      if (brand != null && brand.isNotEmpty) {
+        print('[aggregateRating] PttavmScraper: JSON-LD brand ile bulundu: $brand');
+        return brand;
+      }
+    }
+
+    // 3. DOM Seçicileri / Meta Tag
+    final brandMeta = document.querySelector('meta[property="product:brand"]') ??
+                      document.querySelector('meta[name="brand"]') ??
+                      document.querySelector('.product-brand') ??
+                      document.querySelector('[data-brand]');
+    if (brandMeta != null) {
+      final text = brandMeta.localName == 'meta'
+          ? (brandMeta.attributes['content'] ?? '')
+          : (brandMeta.attributes['data-brand'] ?? brandMeta.text);
+      final clean = text.trim();
+      if (clean.isNotEmpty) {
+        print('[aggregateRating] PttavmScraper: DOM fallback ile brand bulundu: $clean');
+        return clean;
+      }
+    }
+
+    // 4. Script Regex Fallback
+    final scripts = document.getElementsByTagName('script');
+    for (final script in scripts) {
+      final text = script.text + ' ' + script.innerHtml;
+      if (text.contains('"brand"') || text.contains('"Brand"')) {
+        final match = RegExp(r'"brand"\s*:\s*\{\s*"@type"\s*:\s*"(?:Organization|Brand)"\s*,\s*"name"\s*:\s*"([^"]+)"').firstMatch(text) ??
+                      RegExp(r'"brand"\s*:\s*"([^"]+)"').firstMatch(text);
+        if (match != null) {
+          final bName = match.group(1)?.trim();
+          if (bName != null && bName.isNotEmpty && !bName.contains('{')) {
+            print('[aggregateRating] PttavmScraper: Regex fallback ile brand bulundu: $bName');
+            return bName;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] PttavmScraper: brand bulunamadı (null)');
+    return null;
+  }
 }

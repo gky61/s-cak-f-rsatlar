@@ -866,6 +866,12 @@ async function scrapeProductFromUrl(url) {
       const priceLabel = matchedScraper.scrapePriceLabel ? await matchedScraper.scrapePriceLabel($) : null;
       console.log(`[SCRAPE-SERVICE] [PRICE-LABEL] Sonuç: "${priceLabel || 'BULUNAMADI'}"`);
 
+      // 7. Rating ve Marka Bilgisi Çekimi
+      console.log(`[SCRAPE-SERVICE] [RATING & BRAND] Rating ve Marka bilgisi çekiliyor...`);
+      const rating = matchedScraper.scrapeRating ? matchedScraper.scrapeRating($) : { ratingValue: null, ratingCount: null };
+      const brand = matchedScraper.scrapeBrand ? matchedScraper.scrapeBrand($) : null;
+      console.log(`[SCRAPE-SERVICE] [RATING & BRAND] Rating: ${JSON.stringify(rating)}, Brand: "${brand || 'BULUNAMADI'}"`);
+
       const totalDuration = Date.now() - startTime;
       console.log(`============================================================`);
       console.log(`[SCRAPE-SERVICE] ✅ Scrape tamamlandı! Toplam süre: ${totalDuration}ms`);
@@ -878,7 +884,10 @@ async function scrapeProductFromUrl(url) {
         imageUrl: imageUrl || null,
         description: description || null,
         breadcrumbs: breadcrumbs,
-        priceLabel: priceLabel || null
+        priceLabel: priceLabel || null,
+        ratingValue: rating?.ratingValue || null,
+        ratingCount: rating?.ratingCount || null,
+        brand: brand || null,
       };
     } else {
       console.log(`[SCRAPE-SERVICE] Genel Fallback akışı (Open Graph) başlıyor...`);

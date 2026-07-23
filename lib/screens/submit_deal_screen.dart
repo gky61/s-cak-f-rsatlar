@@ -182,6 +182,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   Timer? _urlDebounceTimer;
   Timer? _textDebounceTimer;
   bool _isCategoryLockedByScraper = false;
+  double? _scrapedRatingValue;
+  int? _scrapedRatingCount;
+  String? _scrapedBrand;
   
   String _lastProcessedUrl = '';
   String _lastProcessedTitle = '';
@@ -435,6 +438,16 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             _priceLabel = label;
           });
           _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel');
+        }
+
+        // Rating & Marka verilerini al
+        if (preview?.ratingValue != null || preview?.ratingCount != null || preview?.brand != null) {
+          setState(() {
+            _scrapedRatingValue = preview?.ratingValue;
+            _scrapedRatingCount = preview?.ratingCount;
+            _scrapedBrand = preview?.brand;
+          });
+          _log('⭐ Scraper rating/marka tespiti: Rating=$_scrapedRatingValue ($_scrapedRatingCount), Brand=$_scrapedBrand');
         }
 
         // Kategori ekmek kırıntılarını (breadcrumbs) ve başlığı birleştirip sınıflandır
@@ -897,6 +910,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           url: _urlController.text.trim(),
           userId: user.uid,
           priceLabel: _priceLabel,
+          ratingValue: _scrapedRatingValue,
+          ratingCount: _scrapedRatingCount,
+          brand: _scrapedBrand,
         );
 
         if (mounted) {

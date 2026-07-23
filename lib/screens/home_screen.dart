@@ -27,6 +27,7 @@ import 'kuponlar_page.dart';
 import 'aktuel_magazalar_page.dart';
 import 'notification_settings_screen.dart';
 import 'admin_notifications_screen.dart';
+import 'popular_deals_screen.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -1077,10 +1078,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   }).toList();
                 }
 
-                // Profesyonel Oylama ve Sıcaklık Algoritması ile Sırala
-                // (Sıcak fırsatlar en üstte, normaller/yeniler ortada, çöpler en altta)
+                // Ana sayfada HER ZAMAN en yeni eklenen fırsatlar en üstte yer alır (Freshness First)
                 final List<Deal> sortedDeals = List<Deal>.from(filteredDeals);
-                sortedDeals.sort(Deal.compareDeals);
+                sortedDeals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
                 filteredDeals = sortedDeals;
 
                 // Pagination için deal'leri güncelle
@@ -1310,11 +1310,10 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SafeArea(
           top: false,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // Ana Sayfa - Çift tıklama ile "Tümü" kategorisine geç
+              // 1. Ana Sayfa - Çift tıklama ile "Tümü" kategorisine geç
               _buildBottomNavItem(
-                icon: Icons.home,
+                icon: Icons.home_rounded,
                 label: 'Ana Sayfa',
                 isSelected: true,
                 onTap: () {
@@ -1346,9 +1345,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                 },
               ),
-              // Kaydedilenler
+              // 2. Kaydedilenler
               _buildBottomNavItem(
-                icon: Icons.bookmark,
+                icon: Icons.bookmark_rounded,
                 label: 'Kaydedilenler',
                 isSelected: false,
                 onTap: () {
@@ -1358,9 +1357,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
-              // Fırsat Paylaş
+              // 3. Popüler Fırsatlar (Tam Ortada)
               _buildBottomNavItem(
-                icon: Icons.add_circle_outline,
+                icon: Icons.whatshot_rounded,
+                label: 'Popüler',
+                isSelected: false,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PopularDealsScreen()),
+                  );
+                },
+              ),
+              // 4. Fırsat Paylaş
+              _buildBottomNavItem(
+                icon: Icons.add_circle_outline_rounded,
                 label: 'Fırsat Paylaş',
                 isSelected: false,
                 onTap: () {
@@ -1370,9 +1381,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
-              // Profil
+              // 5. Profil
               _buildBottomNavItem(
-                icon: Icons.person,
+                icon: Icons.person_rounded,
                 label: 'Profil',
                 isSelected: false,
                 badgeCount: _unreadMessageCount + _unreadAdminMessageCount,
@@ -1410,66 +1421,71 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Dokunma alanını genişlet
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 36,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: isSelected 
-                        ? primaryColor.withValues(alpha: isDark ? 0.1 : 0.2)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: isSelected 
+                          ? primaryColor.withValues(alpha: isDark ? 0.1 : 0.2)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: isSelected 
+                          ? (isDark ? primaryColor : Colors.black)
+                          : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+                      size: 18,
+                    ),
                   ),
-                  child: Icon(
-                    icon,
-                    color: isSelected 
-                        ? (isDark ? primaryColor : Colors.black)
-                        : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
-                    size: 18,
-                  ),
-                ),
-                // Sağ alt köşede kırmızı nokta (bildirim göstergesi)
-                if (badgeCount > 0)
-                  Positioned(
-                    right: -2,
-                    bottom: -2,
-                    child: Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isDark ? AppTheme.darkSurface : Colors.white,
-                          width: 2,
+                  // Sağ alt köşede kırmızı nokta (bildirim göstergesi)
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isDark ? AppTheme.darkSurface : Colors.white,
+                            width: 2,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 1),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected 
-                    ? (isDark ? primaryColor : Colors.black)
-                    : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected 
+                      ? (isDark ? primaryColor : Colors.black)
+                      : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );

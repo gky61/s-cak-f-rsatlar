@@ -224,4 +224,164 @@ class IncehesapScraper extends BaseProductScraper {
 
     return [];
   }
+
+  @override
+  double? scrapeRatingValue(dom.Document document) {
+    print('[aggregateRating] IncehesapScraper: ratingValue aranıyor...');
+    
+    // 1. DOM Microdata (Öncelikli - İncehesap'ta rating JSON-LD'de yok)
+    final ratingEl = document.querySelector('[itemprop="ratingValue"]') ??
+                     document.querySelector('meta[property="product:rating:value"]') ??
+                     document.querySelector('.rating-score') ??
+                     document.querySelector('.pdp-rating-value');
+    if (ratingEl != null) {
+      final text = ratingEl.localName == 'meta'
+          ? (ratingEl.attributes['content'] ?? '')
+          : ratingEl.text;
+      final parsed = double.tryParse(text.trim().replaceAll(',', '.'));
+      if (parsed != null && parsed > 0 && parsed <= 5.0) {
+        print('[aggregateRating] IncehesapScraper: DOM (itemprop) ile ratingValue bulundu: $parsed');
+        return parsed;
+      }
+    }
+
+    // 2. JSON-LD Fallback
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingValue'] != null) {
+        final val = (rating!['ratingValue'] as num).toDouble();
+        print('[aggregateRating] IncehesapScraper: JSON-LD fallback ile ratingValue bulundu: $val');
+        return val;
+      }
+    }
+
+    // 3. Script Regex Fallback
+    final scripts = document.getElementsByTagName('script');
+    for (final script in scripts) {
+      final text = script.text + ' ' + script.innerHtml;
+      if (text.contains('aggregateRating') || text.contains('ratingValue')) {
+        final match = RegExp(r'ratingValue["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(text);
+        if (match != null) {
+          final raw = match.group(1)?.replaceAll(',', '.');
+          final parsed = raw != null ? double.tryParse(raw) : null;
+          if (parsed != null && parsed > 0 && parsed <= 5.0) {
+            print('[aggregateRating] IncehesapScraper: Regex fallback ile ratingValue bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] IncehesapScraper: ratingValue bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  int? scrapeRatingCount(dom.Document document) {
+    print('[aggregateRating] IncehesapScraper: ratingCount/reviewCount aranıyor...');
+    
+    // 1. DOM Microdata (Öncelikli - İncehesap'ta rating JSON-LD'de yok)
+    final countEl = document.querySelector('[itemprop="reviewCount"]') ??
+                    document.querySelector('[itemprop="ratingCount"]') ??
+                    document.querySelector('.review-count') ??
+                    document.querySelector('.rating-count');
+    if (countEl != null) {
+      final text = countEl.localName == 'meta'
+          ? (countEl.attributes['content'] ?? '')
+          : countEl.text;
+      final match = RegExp(r'(\d+)').firstMatch(text);
+      if (match != null) {
+        final parsed = int.tryParse(match.group(1) ?? '');
+        if (parsed != null && parsed > 0) {
+          print('[aggregateRating] IncehesapScraper: DOM (itemprop) ile ratingCount bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    // 2. JSON-LD Fallback
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingCount'] != null) {
+        final cnt = (rating!['ratingCount'] as num).toInt();
+        print('[aggregateRating] IncehesapScraper: JSON-LD fallback ile ratingCount bulundu: $cnt');
+        return cnt;
+      }
+    }
+
+    // 3. Script Regex Fallback
+    final scripts = document.getElementsByTagName('script');
+    for (final script in scripts) {
+      final text = script.text + ' ' + script.innerHtml;
+      if (text.contains('aggregateRating') || text.contains('reviewCount') || text.contains('ratingCount')) {
+        final match = RegExp(r'(?:reviewCount|ratingCount)["\\]*\s*:\s*"?(\d+)"?').firstMatch(text);
+        if (match != null) {
+          final parsed = int.tryParse(match.group(1) ?? '');
+          if (parsed != null && parsed > 0) {
+            print('[aggregateRating] IncehesapScraper: Regex fallback ile ratingCount bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] IncehesapScraper: ratingCount bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    print('[aggregateRating] IncehesapScraper: brand (marka) aranıyor...');
+    
+    // 1. DOM Microdata (Öncelikli - itemprop="brand" > meta[itemprop="name"])
+    final brandDiv = document.querySelector('[itemprop="brand"]');
+    if (brandDiv != null) {
+      // İç meta etiketi: <meta itemprop="name" content="James Donkey">
+      final metaName = brandDiv.querySelector('meta[itemprop="name"]');
+      if (metaName != null) {
+        final content = metaName.attributes['content']?.trim();
+        if (content != null && content.isNotEmpty) {
+          print('[aggregateRating] IncehesapScraper: DOM (itemprop brand > meta) ile brand bulundu: $content');
+          return content;
+        }
+      }
+      // Fallback: span veya text
+      final text = brandDiv.text.trim();
+      if (text.isNotEmpty) {
+        print('[aggregateRating] IncehesapScraper: DOM (itemprop brand text) ile brand bulundu: $text');
+        return text;
+      }
+    }
+
+    // 2. JSON-LD Fallback
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final brand = extractBrandFromProductJson(productJson);
+      if (brand != null && brand.isNotEmpty) {
+        print('[aggregateRating] IncehesapScraper: JSON-LD fallback ile brand bulundu: $brand');
+        return brand;
+      }
+    }
+
+    // 3. Diğer DOM / Meta Tag
+    final brandMeta = document.querySelector('meta[property="product:brand"]') ??
+                      document.querySelector('meta[name="brand"]') ??
+                      document.querySelector('.product-brand') ??
+                      document.querySelector('[data-brand]');
+    if (brandMeta != null) {
+      final text = brandMeta.localName == 'meta'
+          ? (brandMeta.attributes['content'] ?? '')
+          : (brandMeta.attributes['data-brand'] ?? brandMeta.text);
+      final clean = text.trim();
+      if (clean.isNotEmpty) {
+        print('[aggregateRating] IncehesapScraper: DOM meta fallback ile brand bulundu: $clean');
+        return clean;
+      }
+    }
+
+    print('[aggregateRating] IncehesapScraper: brand bulunamadı (null)');
+    return null;
+  }
 }

@@ -2,54 +2,51 @@ const assert = require('assert');
 const cheerio = require('cheerio');
 const TeknosaScraper = require('../scrapers/teknosa_scraper');
 
-function run() {
+async function run() {
   const scraper = new TeknosaScraper();
 
   // 1. canHandle
-  assert.strictEqual(scraper.canHandle('https://www.teknosa.com/sony-playstation.html'), true);
+  assert.strictEqual(scraper.canHandle('https://www.teknosa.com/apple-iphone-17-pro-max-256gb-kozmik-turuncu-akilli-telefon-p-100000058776'), true);
   assert.strictEqual(scraper.canHandle('https://www.google.com'), false);
 
-  // 2. Teknosa elements
+  // 2. User Provided JSON-LD sample
   const html = `
-    <head>
-      <meta property="og:image" content="https://images.teknosa.com/123.jpg">
-      <meta name="description" content="Sony Playstation 5 Konsolu Teknosa kalitesiyle.">
-      <script id="schemaJSON" type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "WebPage",
-        "name": "Sony Playstation 5 Slim 1 TB",
-        "breadcrumb": {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {"@type": "ListItem", "position": 1, "name": "Anasayfa", "item": "https://www.teknosa.com"},
-            {"@type": "ListItem", "position": 2, "name": "Bilgisayar & Tablet", "item": "https://www.teknosa.com/playstation"},
-            {"@type": "ListItem", "position": 3, "name": "Konsol", "item": "https://www.teknosa.com/playstation"}
-          ]
-        }
-      }
-      </script>
-      <script type="application/ld+json">
-      {
+    <script id="schemaJSON" type="application/ld+json" async="">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Apple iPhone 17 Pro Max 256GB Kozmik Turuncu Akıllı Telefon",
+      "description": "Apple iPhone 17 Pro Max 256GB Kozmik Turuncu Akıllı Telefon özelliklerini incelemek ve en uygun fiyata satın almak için hemen tıkla!",
+      "url": "https://www.teknosa.com/apple-iphone-17-pro-max-256gb-kozmik-turuncu-akilli-telefon-p-100000058776",
+      "@graph":{
         "@type": "Product",
-        "name": "Sony Playstation 5 Slim 1 TB",
+        "name": "Apple iPhone 17 Pro Max 256GB Kozmik Turuncu Akıllı Telefon",
+        "sku":"100000058776",
+        "brand": {
+          "@type": "Brand",
+          "name": "Apple"
+        },
+        "aggregateRating":{
+          "@type":"AggregateRating",
+          "ratingValue":"4.3",
+          "reviewCount":"39"
+        },
         "offers": {
-          "price": "18999.00"
+          "@type": "Offer",
+          "price": "122499.00",
+          "priceCurrency": "TRY"
         }
       }
-      </script>
-    </head>
-    <body>
-      <h1 class="product-title">Sony Playstation 5 Slim 1 TB</h1>
-    </body>
+    }
+    </script>
   `;
   const $ = cheerio.load(html);
-
-  assert.strictEqual(scraper.scrapeTitle($), 'Sony Playstation 5 Slim 1 TB');
-  assert.strictEqual(scraper.scrapePrice($), 18999.0);
-  assert.strictEqual(scraper.scrapeDescription($), 'Sony Playstation 5 Konsolu Teknosa kalitesiyle.');
-  assert.strictEqual(scraper.scrapeImage($, 'https://www.teknosa.com/sony-playstation.html'), 'https://images.teknosa.com/123.jpg');
-  assert.deepStrictEqual(scraper.scrapeBreadcrumbs($), ['Bilgisayar & Tablet', 'Konsol']);
+  assert.strictEqual(scraper.scrapeTitle($), 'Apple iPhone 17 Pro Max 256GB Kozmik Turuncu Akıllı Telefon');
+  assert.strictEqual(scraper.scrapePrice($), 122499.0);
+  const rating = await scraper.scrapeRating($);
+  assert.strictEqual(rating.ratingValue, 4.3);
+  assert.strictEqual(rating.ratingCount, 39);
+  assert.strictEqual(scraper.scrapeBrand($), 'Apple');
 }
 
 module.exports = { run };

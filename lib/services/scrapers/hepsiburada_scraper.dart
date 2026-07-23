@@ -769,4 +769,71 @@ class HepsiburadaScraper extends BaseProductScraper {
     }
     return [];
   }
+
+  @override
+  double? scrapeRatingValue(dom.Document document) {
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final ratingData = extractRatingFromProductJson(productJson);
+      if (ratingData != null && ratingData['ratingValue'] != null) {
+        return (ratingData['ratingValue'] as num).toDouble();
+      }
+    }
+    final script = document.getElementById('reduxStore');
+    if (script != null) {
+      try {
+        final Map<String, dynamic> reduxData = jsonDecode(script.text);
+        final product = reduxData['productState']?['product'];
+        final ratingVal = product?['customerReview']?['rating'] ?? product?['ratingValue'];
+        if (ratingVal != null) {
+          final parsed = double.tryParse(ratingVal.toString());
+          if (parsed != null && parsed > 0) return parsed;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  @override
+  int? scrapeRatingCount(dom.Document document) {
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final ratingData = extractRatingFromProductJson(productJson);
+      if (ratingData != null && ratingData['ratingCount'] != null) {
+        return (ratingData['ratingCount'] as num).toInt();
+      }
+    }
+    final script = document.getElementById('reduxStore');
+    if (script != null) {
+      try {
+        final Map<String, dynamic> reduxData = jsonDecode(script.text);
+        final product = reduxData['productState']?['product'];
+        final reviewCount = product?['customerReview']?['totalCount'] ?? product?['ratingCount'];
+        if (reviewCount != null) {
+          final parsed = int.tryParse(reviewCount.toString());
+          if (parsed != null && parsed > 0) return parsed;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final brandVal = extractBrandFromProductJson(productJson);
+      if (brandVal != null && brandVal.isNotEmpty) return brandVal;
+    }
+    final script = document.getElementById('reduxStore');
+    if (script != null) {
+      try {
+        final Map<String, dynamic> reduxData = jsonDecode(script.text);
+        final product = reduxData['productState']?['product'];
+        final brandVal = product?['brand']?.toString().trim();
+        if (brandVal != null && brandVal.isNotEmpty) return brandVal;
+      } catch (_) {}
+    }
+    return null;
+  }
 }

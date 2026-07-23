@@ -199,6 +199,96 @@ class N11Scraper extends BaseProductScraper {
     if (breadcrumbs.length > 0) return breadcrumbs;
     return this.extractBreadcrumbsFromJsonLd($, title, 'n11');
   }
+
+  scrapeRating($) {
+    let ratingValue = null;
+    let ratingCount = null;
+
+    // 1. JSON-LD Şeması
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const rating = this.extractRatingFromProductJson(product);
+      if (rating && (rating.ratingValue != null || rating.ratingCount != null)) {
+        return rating;
+      }
+    }
+
+    // 2. window.model Fallback
+    const model = this._getN11Model($);
+    if (model) {
+      const ratingScore = this._findValueRecursive(model, 'ratingScore') ||
+                          this._findValueRecursive(model, 'ratingValue') ||
+                          this._findValueRecursive(model, 'averageRating');
+      if (ratingScore != null) {
+        const val = parseFloat(ratingScore.toString().replace(',', '.'));
+        if (!isNaN(val) && val > 0 && val <= 5.0) ratingValue = val;
+      }
+
+      const reviewCount = this._findValueRecursive(model, 'reviewCount') ||
+                          this._findValueRecursive(model, 'ratingCount') ||
+                          this._findValueRecursive(model, 'commentCount');
+      if (reviewCount != null) {
+        const cnt = parseInt(reviewCount.toString(), 10);
+        if (!isNaN(cnt) && cnt > 0) ratingCount = cnt;
+      }
+    }
+
+    // 3. DOM Fallback
+    if (!ratingValue) {
+      const ratingEl = $('.ratingScore, [itemprop="ratingValue"], .rating-score, .rating-cont .rating-text').first();
+      if (ratingEl.length) {
+        const text = ratingEl.text().trim();
+        const match = text.match(/([0-5][.,]\d)/);
+        if (match) {
+          const val = parseFloat(match[1].replace(',', '.'));
+          if (!isNaN(val) && val > 0 && val <= 5.0) ratingValue = val;
+        }
+      }
+    }
+
+    if (!ratingCount) {
+      const countEl = $('.ratingCount, [itemprop="reviewCount"], [itemprop="ratingCount"], .review-count').first();
+      if (countEl.length) {
+        const text = countEl.text().trim();
+        const match = text.match(/(\d+)/);
+        if (match) {
+          const cnt = parseInt(match[1], 10);
+          if (!isNaN(cnt) && cnt > 0) ratingCount = cnt;
+        }
+      }
+    }
+
+    return { ratingValue, ratingCount };
+  }
+
+  scrapeBrand($) {
+    // 1. JSON-LD Şeması
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const brand = this.extractBrandFromProductJson(product);
+      if (brand) return brand;
+    }
+
+    // 2. window.model Fallback
+    const model = this._getN11Model($);
+    if (model) {
+      const brand = model?.product?.brand?.name ||
+                    model?.product?.brandName ||
+                    this._findValueRecursive(model, 'brandName');
+      if (brand && brand.toString().trim().length > 0) {
+        return brand.toString().trim();
+      }
+    }
+
+    // 3. DOM Fallback
+    const brandEl = $('.brand-name, [itemprop="brand"], .unf-p-detail-brand').first();
+    if (brandEl.length) {
+      const text = brandEl.text().trim();
+      if (text.length > 0) return text;
+    }
+
+    return null;
+  }
 }
 
 module.exports = N11Scraper;

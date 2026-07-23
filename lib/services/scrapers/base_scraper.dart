@@ -34,6 +34,15 @@ abstract class BaseProductScraper {
   /// Belgeyi analiz ederek ürün fiyatının altında gösterilecek kampanya/CRM etiketini döndürür
   FutureOr<String?> scrapePriceLabel(dom.Document document) => null;
 
+  /// Belgeyi analiz ederek ürün puanını döndürür (ör. 4.8)
+  FutureOr<double?> scrapeRatingValue(dom.Document document) => null;
+
+  /// Belgeyi analiz ederek ürün değerlendirme sayısını döndürür (ör. 1173)
+  FutureOr<int?> scrapeRatingCount(dom.Document document) => null;
+
+  /// Belgeyi analiz ederek ürün markasını döndürür (ör. Apple)
+  String? scrapeBrand(dom.Document document) => null;
+
   /// Fiyat metnini temizleyip double değere dönüştüren yardımcı metot
   double? parsePriceText(String priceText) {
     String cleaned = priceText
@@ -67,12 +76,18 @@ abstract class BaseProductScraper {
       final type = script.attributes['type']?.trim().toLowerCase();
       if (type == 'application/ld+json') {
         try {
-          // Sunucuların JSON-LD içerisine hatalı yerleştirdiği raw satır sonu (\n, \r) karakterlerini temizliyoruz.
-          final sanitizedText = script.text.replaceAll('\r\n', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
+          // Sunucuların JSON-LD içerisine hatalı yerleştirdiği raw satır sonu (\n, \r, \t) karakterlerini temizliyoruz.
+          final sanitizedText = script.text
+              .replaceAll('\r\n', ' ')
+              .replaceAll('\n', ' ')
+              .replaceAll('\r', ' ')
+              .replaceAll('\t', ' ');
           final data = jsonDecode(sanitizedText);
           final product = findProductInJson(data);
           if (product != null) return product;
-        } catch (_) {}
+        } catch (e) {
+          print('[aggregateRating] JSON-LD parse uyarısı: $e (Uzunluk: ${script.text.length})');
+        }
       }
     }
     return null;
@@ -153,4 +168,37 @@ abstract class BaseProductScraper {
 
   /// Belgeyi analiz ederek ürünün kırıntı (breadcrumb) listesini döndürür
   List<String> scrapeBreadcrumbs(dom.Document document) => [];
+
+  /// Product JSON-LD'den aggregateRating nesnesini ve ratingValue/ratingCount değerlerini çeker
+  Map<String, dynamic>? extractRatingFromProductJson(Map<String, dynamic> product) {
+    final ratingObj = product['aggregateRating'];
+    if (ratingObj is Map) {
+      final rawValue = ratingObj['ratingValue'];
+      final rawCount = ratingObj['ratingCount'] ?? ratingObj['reviewCount'];
+      
+      final double? value = rawValue != null ? double.tryParse(rawValue.toString().replaceAll(',', '.')) : null;
+      final int? count = rawCount != null ? int.tryParse(rawCount.toString()) : null;
+      
+      return {
+        'ratingValue': value,
+        'ratingCount': count,
+      };
+    }
+    return null;
+  }
+
+  /// Product JSON-LD'den brand (marka) ismini çeker
+  String? extractBrandFromProductJson(Map<String, dynamic> product) {
+    final brandObj = product['brand'];
+    if (brandObj is String && brandObj.trim().isNotEmpty) {
+      return brandObj.trim();
+    }
+    if (brandObj is Map) {
+      final nameVal = brandObj['name'] ?? brandObj['@name'];
+      if (nameVal != null && nameVal.toString().trim().isNotEmpty) {
+        return nameVal.toString().trim();
+      }
+    }
+    return null;
+  }
 }

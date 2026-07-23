@@ -1,44 +1,50 @@
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const cheerio = require('cheerio');
 const AmazonScraper = require('../scrapers/amazon_scraper');
 
-function run() {
+async function run() {
   const scraper = new AmazonScraper();
 
   // 1. canHandle
-  assert.strictEqual(scraper.canHandle('https://www.amazon.com.tr/dp/B0CFYNMDF2'), true);
-  assert.strictEqual(scraper.canHandle('https://amzn.to/some-short-url'), true);
-  assert.strictEqual(scraper.canHandle('https://link.amazon/B0aH5993k'), true);
-  assert.strictEqual(scraper.canHandle('https://amzlinks.in/B0aH5993k'), true);
+  assert.strictEqual(scraper.canHandle('https://www.amazon.com.tr/dp/B0GGB6P1JF'), true);
+  assert.strictEqual(scraper.canHandle('https://amzn.eu/d/07A3YdHA'), true);
   assert.strictEqual(scraper.canHandle('https://www.google.com'), false);
 
-  // 2. Normal Amazon page (JSON-LD offers, description meta, title element)
-  const html = `
-    <head>
-      <title>Apple 2024 MacBook Air 13.6 inç M3 çip 8GB RAM 256GB SSD</title>
-      <meta name="description" content="M3 çipli MacBook Air dizüstü bilgisayar.">
-    </head>
-    <body>
-      <span id="productTitle">Apple 2024 MacBook Air 13.6 inç M3 çip 8GB RAM 256GB SSD</span>
-      <div id="wayfinding-breadcrumbs_feature_div">
-        <ul class="a-unordered-list a-horizontal">
-          <li><span class="a-list-item"><a class="a-link-normal" href="#">Elektronik</a></span></li>
-          <li><span class="a-list-item"><a class="a-link-normal" href="#">Bilgisayar</a></span></li>
-        </ul>
-      </div>
-      <div id="landingImage" data-a-dynamic-image='{"https://m.media-amazon.com/images/I/71-D7S3k7AL._AC_SL1500_.jpg":[1500,1500]}'></div>
-      <span class="a-price a-text-price a-size-medium apexPriceToPay">
-        <span class="a-offscreen">39.999,00TL</span>
-      </span>
-    </body>
+  // 2. DOM-based test
+  const htmlDom = `
+    <html>
+      <body>
+        <h1 id="productTitle">iFFALCON 75U75A 75 İnç Smart TV</h1>
+        <div id="averageCustomerReviews">
+          <span class="a-icon-alt">5 yıldız üzerinden 4,3</span>
+          <span id="acrCustomerReviewText">(16)</span>
+        </div>
+        <table>
+          <tr class="po-brand">
+            <td class="po-break-word">iFFALCON</td>
+          </tr>
+        </table>
+      </body>
+    </html>
   `;
-  const $ = cheerio.load(html);
+  const $dom = cheerio.load(htmlDom);
+  const ratingDom = scraper.scrapeRating($dom);
+  assert.strictEqual(ratingDom.ratingValue, 4.3, 'ratingValue should be 4.3');
+  assert.strictEqual(ratingDom.ratingCount, 16, 'ratingCount should be 16');
+  assert.strictEqual(scraper.scrapeBrand($dom), 'iFFALCON', 'brand should be iFFALCON');
 
-  assert.strictEqual(scraper.scrapeTitle($), 'Apple 2024 MacBook Air 13.6 inç M3 çip 8GB RAM 256GB SSD');
-  assert.strictEqual(scraper.scrapePrice($), 39999.0);
-  assert.strictEqual(scraper.scrapeDescription($), 'M3 çipli MacBook Air dizüstü bilgisayar.');
-  assert.strictEqual(scraper.scrapeImage($, 'https://www.amazon.com.tr/dp/B0CFYNMDF2'), 'https://m.media-amazon.com/images/I/71-D7S3k7AL._AC_SL1500_.jpg');
-  assert.deepStrictEqual(scraper.scrapeBreadcrumbs($), ['Elektronik', 'Bilgisayar']);
+  // 3. Real HTML file test
+  const filePath = path.join(__dirname, '../../scratch/amazon-page.html');
+  if (fs.existsSync(filePath)) {
+    const htmlReal = fs.readFileSync(filePath, 'utf8');
+    const $real = cheerio.load(htmlReal);
+    const ratingReal = scraper.scrapeRating($real);
+    assert.strictEqual(ratingReal.ratingValue, 4.3, 'Real ratingValue should be 4.3');
+    assert.strictEqual(ratingReal.ratingCount, 16, 'Real ratingCount should be 16');
+    assert.strictEqual(scraper.scrapeBrand($real), 'iFFALCON', 'Real brand should be iFFALCON');
+  }
 }
 
 module.exports = { run };

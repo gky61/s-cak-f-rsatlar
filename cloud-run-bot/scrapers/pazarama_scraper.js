@@ -133,6 +133,26 @@ class PazaramaScraper extends BaseProductScraper {
     });
     return list;
   }
+
+  scrapeRating($) {
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const rating = this.extractRatingFromProductJson(product);
+      if (rating && (rating.ratingValue != null || rating.ratingCount != null)) {
+        return rating;
+      }
+    }
+    return { ratingValue: null, ratingCount: null };
+  }
+
+  scrapeBrand($) {
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const brand = this.extractBrandFromProductJson(product);
+      if (brand) return brand;
+    }
+    return null;
+  }
 }
 
 module.exports = PazaramaScraper;

@@ -170,6 +170,106 @@ class VatanScraper extends BaseProductScraper {
   }
 
   @override
+  double? scrapeRatingValue(dom.Document document) {
+    print('[aggregateRating] VatanScraper: ratingValue aranıyor...');
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingValue'] != null) {
+        final val = (rating!['ratingValue'] as num).toDouble();
+        print('[aggregateRating] VatanScraper: JSON-LD ile ratingValue bulundu: $val');
+        return val;
+      }
+    }
+
+    // Fallback: Raw Script Regex Arama
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('aggregateRating') || text.contains('ratingValue')) {
+        final match = RegExp(r'"ratingValue"\s*:\s*"?([\d.,]+)"?').firstMatch(text);
+        if (match != null) {
+          final raw = match.group(1)?.replaceAll(',', '.');
+          final parsed = raw != null ? double.tryParse(raw) : null;
+          if (parsed != null) {
+            print('[aggregateRating] VatanScraper: Regex fallback ile ratingValue bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] VatanScraper: ratingValue bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  int? scrapeRatingCount(dom.Document document) {
+    print('[aggregateRating] VatanScraper: ratingCount/reviewCount aranıyor...');
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingCount'] != null) {
+        final cnt = (rating!['ratingCount'] as num).toInt();
+        print('[aggregateRating] VatanScraper: JSON-LD ile ratingCount/reviewCount bulundu: $cnt');
+        return cnt;
+      }
+    }
+
+    // Fallback: Raw Script Regex Arama
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('aggregateRating') || text.contains('reviewCount')) {
+        final match = RegExp(r'"(?:reviewCount|ratingCount)"\s*:\s*"?(\d+)"?').firstMatch(text);
+        if (match != null) {
+          final parsed = int.tryParse(match.group(1) ?? '');
+          if (parsed != null) {
+            print('[aggregateRating] VatanScraper: Regex fallback ile ratingCount/reviewCount bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] VatanScraper: ratingCount bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    print('[aggregateRating] VatanScraper: brand (marka) aranıyor...');
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final brand = extractBrandFromProductJson(productJson);
+      if (brand != null && brand.isNotEmpty) {
+        print('[aggregateRating] VatanScraper: JSON-LD ile brand bulundu: $brand');
+        return brand;
+      }
+    }
+
+    // Fallback: Raw Script Regex Arama
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('"brand"') || text.contains('"Brand"')) {
+        final match = RegExp(r'"brand"\s*:\s*\{\s*"@type"\s*:\s*"Brand"\s*,\s*"name"\s*:\s*"([^"]+)"').firstMatch(text) ??
+                      RegExp(r'"brand"\s*:\s*"([^"]+)"').firstMatch(text);
+        if (match != null) {
+          final bName = match.group(1)?.trim();
+          if (bName != null && bName.isNotEmpty && !bName.contains('{')) {
+            print('[aggregateRating] VatanScraper: Regex fallback ile brand bulundu: $bName');
+            return bName;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] VatanScraper: brand bulunamadı (null)');
+    return null;
+  }
+
+  @override
   List<String> scrapeBreadcrumbs(dom.Document document) {
     final scripts = document.querySelectorAll('script');
     final productTitle = scrapeTitle(document) ?? '';

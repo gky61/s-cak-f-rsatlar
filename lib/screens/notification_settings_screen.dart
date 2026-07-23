@@ -265,51 +265,21 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                       value: _preferences.pushMasterEnabled,
                       activeColor: primaryColor,
                       onChanged: (val) {
-                        if (!val) {
-                          // Save current state to lastStates, and set active fields to false
-                          final currentActive = {
-                            'dealNotificationsEnabled': _preferences.dealNotificationsEnabled,
-                            'categoryNotificationsEnabled': _preferences.categoryNotificationsEnabled,
-                            'keywordNotificationsEnabled': _preferences.keywordNotificationsEnabled,
-                            'communityNotificationsEnabled': _preferences.communityNotificationsEnabled,
-                            'submissionStatusNotificationsEnabled': _preferences.submissionStatusNotificationsEnabled,
-                            'marketingNotificationsEnabled': _preferences.marketingNotificationsEnabled,
-                            'quietHoursEnabled': _preferences.quietHoursEnabled,
-                          };
-                          _updatePrefs(NotificationPreferences(
-                            pushMasterEnabled: false,
-                            dealNotificationsEnabled: false,
-                            categoryNotificationsEnabled: false,
-                            keywordNotificationsEnabled: false,
-                            communityNotificationsEnabled: false,
-                            submissionStatusNotificationsEnabled: false,
-                            marketingNotificationsEnabled: false,
-                            quietHoursEnabled: false,
-                            quietHoursStart: _preferences.quietHoursStart,
-                            quietHoursEnd: _preferences.quietHoursEnd,
-                            timezone: _preferences.timezone,
-                            updatedAt: DateTime.now(),
-                            lastStates: currentActive,
-                          ));
-                        } else {
-                          // Restore active fields from lastStates
-                          final last = _preferences.lastStates;
-                          _updatePrefs(NotificationPreferences(
-                            pushMasterEnabled: true,
-                            dealNotificationsEnabled: last['dealNotificationsEnabled'] ?? true,
-                            categoryNotificationsEnabled: last['categoryNotificationsEnabled'] ?? true,
-                            keywordNotificationsEnabled: last['keywordNotificationsEnabled'] ?? true,
-                            communityNotificationsEnabled: last['communityNotificationsEnabled'] ?? true,
-                            submissionStatusNotificationsEnabled: last['submissionStatusNotificationsEnabled'] ?? true,
-                            marketingNotificationsEnabled: last['marketingNotificationsEnabled'] ?? false,
-                            quietHoursEnabled: last['quietHoursEnabled'] ?? false,
-                            quietHoursStart: _preferences.quietHoursStart,
-                            quietHoursEnd: _preferences.quietHoursEnd,
-                            timezone: _preferences.timezone,
-                            updatedAt: DateTime.now(),
-                            lastStates: Map<String, bool>.from(last),
-                          ));
-                        }
+                        _updatePrefs(NotificationPreferences(
+                          pushMasterEnabled: val,
+                          dealNotificationsEnabled: val,
+                          categoryNotificationsEnabled: val,
+                          keywordNotificationsEnabled: val,
+                          communityNotificationsEnabled: val,
+                          submissionStatusNotificationsEnabled: val,
+                          marketingNotificationsEnabled: val,
+                          quietHoursEnabled: val,
+                          quietHoursStart: _preferences.quietHoursStart,
+                          quietHoursEnd: _preferences.quietHoursEnd,
+                          timezone: _preferences.timezone,
+                          updatedAt: DateTime.now(),
+                          lastStates: _preferences.lastStates,
+                        ));
                       },
                     ),
                   ),

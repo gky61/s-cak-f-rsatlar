@@ -223,4 +223,190 @@ class MediaMarktScraper extends BaseProductScraper {
     }
     return [];
   }
+
+  @override
+  double? scrapeRatingValue(dom.Document document) {
+    print('[aggregateRating] MediaMarktScraper: ratingValue aranıyor...');
+    
+    // 1. JSON-LD Şeması (@type: Product)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingValue'] != null) {
+        final val = (rating!['ratingValue'] as num).toDouble();
+        print('[aggregateRating] MediaMarktScraper: JSON-LD ile ratingValue bulundu: $val');
+        return val;
+      }
+    }
+
+    // 2. DOM / Microdata Fallback (data-test="mms-pdp-average-rating-summary")
+    final ratingEl = document.querySelector('[data-test="mms-pdp-average-rating-summary"]') ??
+                     document.querySelector('[class*="mms-pdp-average-rating"]');
+    if (ratingEl != null) {
+      final ariaLabel = ratingEl.attributes['aria-label'] ?? ratingEl.text;
+      final match = RegExp(r'göre\s+([\d.,]+)').firstMatch(ariaLabel) ??
+                    RegExp(r'([\d.,]+)\s*şeklindedir').firstMatch(ariaLabel) ??
+                    RegExp(r'([\d.,]+)').firstMatch(ariaLabel);
+      if (match != null) {
+        final raw = match.group(1)?.replaceAll(',', '.');
+        final parsed = raw != null ? double.tryParse(raw) : null;
+        if (parsed != null && parsed > 0 && parsed <= 5.0) {
+          print('[aggregateRating] MediaMarktScraper: DOM fallback (aria-label) ile ratingValue bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    // 3. Script / Hydration Data / Document Regex Arama ("averageOverallRating", "ratingValue", "averageRating")
+    final scripts = document.getElementsByTagName('script');
+    for (final script in scripts) {
+      final text = script.text + ' ' + script.innerHtml;
+      if (text.contains('averageOverallRating') || text.contains('ratingValue') || text.contains('averageRating')) {
+        final match = RegExp(r'averageOverallRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(text) ??
+                      RegExp(r'ratingValue["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(text) ??
+                      RegExp(r'averageRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(text);
+        if (match != null) {
+          final raw = match.group(1)?.replaceAll(',', '.');
+          final parsed = raw != null ? double.tryParse(raw) : null;
+          if (parsed != null && parsed > 0 && parsed <= 5.0) {
+            final rounded = (parsed * 10).round() / 10.0;
+            print('[aggregateRating] MediaMarktScraper: Hydration Script/Regex ile ratingValue bulundu: $rounded');
+            return rounded;
+          }
+        }
+      }
+    }
+
+    // 4. Fallback: Full Document HTML Search
+    final fullHtml = document.outerHtml;
+    final match = RegExp(r'averageOverallRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(fullHtml) ??
+                  RegExp(r'ratingValue["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(fullHtml) ??
+                  RegExp(r'averageRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(fullHtml);
+    if (match != null) {
+      final raw = match.group(1)?.replaceAll(',', '.');
+      final parsed = raw != null ? double.tryParse(raw) : null;
+      if (parsed != null && parsed > 0 && parsed <= 5.0) {
+        final rounded = (parsed * 10).round() / 10.0;
+        print('[aggregateRating] MediaMarktScraper: Full HTML Regex ile ratingValue bulundu: $rounded');
+        return rounded;
+      }
+    }
+
+    print('[aggregateRating] MediaMarktScraper: ratingValue bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  int? scrapeRatingCount(dom.Document document) {
+    print('[aggregateRating] MediaMarktScraper: ratingCount/reviewCount aranıyor...');
+    
+    // 1. JSON-LD Şeması (@type: Product)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingCount'] != null) {
+        final cnt = (rating!['ratingCount'] as num).toInt();
+        print('[aggregateRating] MediaMarktScraper: JSON-LD ile ratingCount/reviewCount bulundu: $cnt');
+        return cnt;
+      }
+    }
+
+    // 2. DOM / Microdata Fallback (data-test="mms-pdp-average-rating-summary")
+    final ratingEl = document.querySelector('[data-test="mms-pdp-average-rating-summary"]') ??
+                     document.querySelector('[class*="mms-pdp-average-rating"]');
+    if (ratingEl != null) {
+      final ariaLabel = ratingEl.attributes['aria-label'] ?? ratingEl.text;
+      final match = RegExp(r'(\d+)\s+(?:inceleme|yorum|oy|değerlendirme)').firstMatch(ariaLabel);
+      if (match != null) {
+        final parsed = int.tryParse(match.group(1) ?? '');
+        if (parsed != null && parsed > 0) {
+          print('[aggregateRating] MediaMarktScraper: DOM fallback (aria-label) ile ratingCount bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    // 3. Script / Hydration Data Regex Arama ("totalReviewCount", "reviewCount", "ratingCount")
+    final scripts = document.getElementsByTagName('script');
+    for (final script in scripts) {
+      final text = script.text + ' ' + script.innerHtml;
+      if (text.contains('totalReviewCount') || text.contains('reviewCount') || text.contains('ratingCount')) {
+        final match = RegExp(r'totalReviewCount["\\]*\s*:\s*"?(\d+)"?').firstMatch(text) ??
+                      RegExp(r'(?:reviewCount|ratingCount)["\\]*\s*:\s*"?(\d+)"?').firstMatch(text);
+        if (match != null) {
+          final parsed = int.tryParse(match.group(1) ?? '');
+          if (parsed != null && parsed > 0) {
+            print('[aggregateRating] MediaMarktScraper: Hydration Script/Regex ile ratingCount bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    // 4. Fallback: Full Document HTML Search
+    final fullHtml = document.outerHtml;
+    final cntMatch = RegExp(r'totalReviewCount["\\]*\s*:\s*"?(\d+)"?').firstMatch(fullHtml) ??
+                     RegExp(r'(?:reviewCount|ratingCount)["\\]*\s*:\s*"?(\d+)"?').firstMatch(fullHtml);
+    if (cntMatch != null) {
+      final parsed = int.tryParse(cntMatch.group(1) ?? '');
+      if (parsed != null && parsed > 0) {
+        print('[aggregateRating] MediaMarktScraper: Full HTML Regex ile ratingCount bulundu: $parsed');
+        return parsed;
+      }
+    }
+
+    print('[aggregateRating] MediaMarktScraper: ratingCount bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    print('[aggregateRating] MediaMarktScraper: brand (marka) aranıyor...');
+    
+    // 1. JSON-LD Şeması
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final brand = extractBrandFromProductJson(productJson);
+      if (brand != null && brand.isNotEmpty) {
+        print('[aggregateRating] MediaMarktScraper: JSON-LD ile brand bulundu: $brand');
+        return brand;
+      }
+    }
+
+    // 2. DOM Seçicileri / Meta Tag
+    final brandMeta = document.querySelector('meta[property="product:brand"]') ??
+                      document.querySelector('meta[name="brand"]') ??
+                      document.querySelector('[data-test="mms-pdp-brand-name"]') ??
+                      document.querySelector('[class*="brand"]');
+    if (brandMeta != null) {
+      final text = brandMeta.localName == 'meta'
+          ? (brandMeta.attributes['content'] ?? '')
+          : brandMeta.text;
+      final clean = text.trim();
+      if (clean.isNotEmpty) {
+        print('[aggregateRating] MediaMarktScraper: DOM fallback ile brand bulundu: $clean');
+        return clean;
+      }
+    }
+
+    // 3. Raw Script Regex Arama
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('"brand"') || text.contains('"Brand"')) {
+        final match = RegExp(r'"brand"\s*:\s*\{\s*"@type"\s*:\s*"(?:Organization|Brand)"\s*,\s*"name"\s*:\s*"([^"]+)"').firstMatch(text) ??
+                      RegExp(r'"brand"\s*:\s*"([^"]+)"').firstMatch(text);
+        if (match != null) {
+          final bName = match.group(1)?.trim();
+          if (bName != null && bName.isNotEmpty && !bName.contains('{')) {
+            print('[aggregateRating] MediaMarktScraper: Regex fallback ile brand bulundu: $bName');
+            return bName;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] MediaMarktScraper: brand bulunamadı (null)');
+    return null;
+  }
 }

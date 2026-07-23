@@ -52,7 +52,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   
   AppUser? _user;
   bool _isLoading = false;
-  bool _notificationsEnabled = true;
   bool _isAdmin = false;
   bool _isOwnProfile = true;
   int _unreadMessageCount = 0;
@@ -70,7 +69,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _checkAdminStatus();
     _loadUserData();
     if (_isOwnProfile) {
-      _loadNotificationSettings();
       _loadUnreadMessageCount();
       _loadUnreadAdminMessageCount();
     } else {
@@ -318,54 +316,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _loadNotificationSettings() async {
-    try {
-      final enabled = await NotificationService().getGeneralNotificationsEnabled();
-      if (mounted) {
-        setState(() {
-          _notificationsEnabled = enabled;
-        });
-      }
-    } catch (e) {
-      _log('Bildirim ayarları yükleme hatası: $e');
-    }
-  }
-
-  Future<void> _toggleNotifications(bool value) async {
-    try {
-      // NotificationService ile aynı alanı kullan (allNotificationsEnabled)
-      final notificationService = NotificationService();
-      
-      // Optimistic UI update
-      setState(() {
-        _notificationsEnabled = value;
-      });
-      
-      // Arka planda Firestore'a kaydet
-      await notificationService.setGeneralNotifications(value);
-      
-      // Tüm kategorileri batch olarak işle (paralel)
-      final categories = Category.categories.where((c) => c.id != 'tumu').toList();
-      final futures = <Future>[];
-      
-      for (var category in categories) {
-        if (value) {
-          futures.add(notificationService.subscribeToCategory(category.id));
-        } else {
-          futures.add(notificationService.unsubscribeFromCategory(category.id));
-        }
-      }
-      
-      // Tüm işlemleri paralel olarak çalıştır (arka planda)
-      await Future.wait(futures);
-    } catch (e) {
-      _log('Bildirim ayarı güncelleme hatası: $e');
-      // Hata durumunda mevcut durumu yeniden yükle
-      if (mounted) {
-        await _loadNotificationSettings();
-      }
-    }
-  }
 
   Future<void> _showProfileImagePicker(BuildContext context) async {
     // Kullanıcı kendi profilini görüntülüyorsa veya admin ise profil fotoğrafı değiştirilebilir
@@ -1211,29 +1161,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           title: 'Bildirim Ayarları',
                           iconBgColor: primaryColor.withValues(alpha: 0.2),
                           iconColor: isDark ? Colors.yellow[200]! : Colors.yellow[800]!,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Switch(
-                                value: _notificationsEnabled,
-                                onChanged: _toggleNotifications,
-                                activeColor: primaryColor,
-                                activeTrackColor: primaryColor.withValues(alpha: 0.5),
-                              ),
-                              Icon(Icons.chevron_right, color: Colors.grey[400]),
-                            ],
-                          ),
-                          onTap: () async {
-                            await Navigator.push(
+                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+                          onTap: () {
+                            Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => const NotificationSettingsScreen(),
                               ),
                             );
-                            // Bildirim ayarları ekranından dönüldüğünde ayarları yeniden yükle
-                            if (_isOwnProfile && mounted) {
-                              await _loadNotificationSettings();
-                            }
                           },
                           isDark: isDark,
                         ),

@@ -39,6 +39,31 @@ async function run() {
   const $2 = cheerio.load(html2);
   assert.strictEqual(scraper.scrapeTitle($2), 'Selpak® Kağıt Havlu');
   assert.strictEqual(await scraper.scrapePrice($2), 282.67);
+
+  // 4. rating and brand
+  const html3 = `
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Product",
+          "name": "Apple Watch Series 11",
+          "brand": { "@additionalType": "Organization", "name": "Apple" },
+          "aggregateRating": { "@type": "AggregateRating", "ratingValue": 4.8, "ratingCount": 1173 },
+          "offers": { "price": "20999.00" }
+        }
+      ]
+    }
+    </script>
+  `;
+  const $3 = cheerio.load(html3);
+  assert.strictEqual(scraper.scrapeTitle($3), 'Apple Watch Series 11');
+  assert.strictEqual(await scraper.scrapePrice($3), 20999.00);
+  const rating3 = scraper.scrapeRating($3);
+  assert.strictEqual(rating3.ratingValue, 4.8);
+  assert.strictEqual(rating3.ratingCount, 1173);
+  assert.strictEqual(scraper.scrapeBrand($3), 'Apple');
 }
 
 module.exports = { run };

@@ -583,6 +583,35 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   '${deal.store} • ${_getCategoryDisplayName(deal.category)}',
                   style: const TextStyle(fontSize: 12),
                 ),
+                if (deal.brand != null && deal.brand!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Marka: ${deal.brand}',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[700]),
+                  ),
+                ],
+                if (deal.ratingValue != null || deal.ratingCount != null) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.star_rounded, size: 14, color: Color(0xFFFFB800)),
+                      const SizedBox(width: 2),
+                      if (deal.ratingValue != null)
+                        Text(
+                          deal.ratingValue!.toStringAsFixed(1),
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      if (deal.ratingCount != null) ...[
+                        const SizedBox(width: 2),
+                        Text(
+                          '(${deal.ratingCount})',
+                          style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Text(
                   currencyFormat.format(deal.price),
@@ -1187,6 +1216,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           : '',
     );
     final storeController = TextEditingController(text: deal.store);
+    final brandController = TextEditingController(text: deal.brand ?? '');
+    final ratingValueController = TextEditingController(
+      text: deal.ratingValue != null ? deal.ratingValue.toString() : '',
+    );
+    final ratingCountController = TextEditingController(
+      text: deal.ratingCount != null ? deal.ratingCount.toString() : '',
+    );
     final linkController = TextEditingController(text: deal.link);
     final imageUrlController = TextEditingController(text: deal.imageUrl);
 
@@ -1507,6 +1543,49 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   ),
                   const SizedBox(height: 16),
                   TextField(
+                    controller: brandController,
+                    style: TextStyle(color: textColor),
+                    decoration: InputDecoration(
+                      labelText: 'Marka (Opsiyonel)',
+                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: ratingValueController,
+                          style: TextStyle(color: textColor),
+                          decoration: InputDecoration(
+                            labelText: 'Rating Puanı (ör. 4.8)',
+                            border: const OutlineInputBorder(),
+                            filled: true,
+                            fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextField(
+                          controller: ratingCountController,
+                          style: TextStyle(color: textColor),
+                          decoration: InputDecoration(
+                            labelText: 'Oy Sayısı (ör. 1173)',
+                            border: const OutlineInputBorder(),
+                            filled: true,
+                            fillColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
                     controller: imageUrlController,
                     style: TextStyle(color: textColor),
                     decoration: InputDecoration(
@@ -1608,11 +1687,28 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   'description': descriptionController.text.trim(),
                   'price': price,
                   'store': storeController.text.trim(),
+                  'brand': brandController.text.trim().isNotEmpty ? brandController.text.trim() : null,
                   'link': linkController.text.trim(),
                   'imageUrl': imageUrlController.text.trim(),
                   // Kategori ID'sinden kategori adına çevir (Firestore'da kategori adı saklanıyor)
                   'category': Category.getNameById(selectedCategoryId!),
                 };
+
+                final ratingValStr = ratingValueController.text.trim();
+                if (ratingValStr.isNotEmpty) {
+                  final parsedVal = double.tryParse(ratingValStr.replaceAll(',', '.'));
+                  updates['ratingValue'] = parsedVal;
+                } else {
+                  updates['ratingValue'] = null;
+                }
+
+                final ratingCntStr = ratingCountController.text.trim();
+                if (ratingCntStr.isNotEmpty) {
+                  final parsedCnt = int.tryParse(ratingCntStr);
+                  updates['ratingCount'] = parsedCnt;
+                } else {
+                  updates['ratingCount'] = null;
+                }
 
                 // Eski fiyat varsa ekle
                 final originalPrice = originalPriceController.text.trim();

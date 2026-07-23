@@ -30,6 +30,12 @@ class BaseProductScraper {
   /** HTML'den fiyatın altında gösterilecek kampanya/CRM etiketini çeker */
   scrapePriceLabel($) { return null; }
 
+  /** HTML'den rating (puan ve değerlendirme sayısı) verisini çeker: { ratingValue, ratingCount } */
+  scrapeRating($) { return { ratingValue: null, ratingCount: null }; }
+
+  /** HTML'den ürün markasını çeker */
+  scrapeBrand($) { return null; }
+
   // ─── Yardımcı Metotlar ───
 
   /** Fiyat metnini temizleyip float değere dönüştürür */
@@ -282,6 +288,41 @@ class BaseProductScraper {
       }
     }
     return [];
+  }
+
+  /** Product JSON-LD'den aggregateRating nesnesini ve ratingValue/ratingCount değerlerini çeker */
+  extractRatingFromProductJson(product) {
+    if (!product) return null;
+    const ratingObj = product['aggregateRating'];
+    if (ratingObj && typeof ratingObj === 'object') {
+      const rawValue = ratingObj['ratingValue'];
+      const rawCount = ratingObj['ratingCount'] || ratingObj['reviewCount'];
+
+      const value = rawValue != null ? parseFloat(rawValue.toString().replace(',', '.')) : null;
+      const count = rawCount != null ? parseInt(rawCount.toString()) : null;
+
+      return {
+        ratingValue: !isNaN(value) ? value : null,
+        ratingCount: !isNaN(count) ? count : null,
+      };
+    }
+    return null;
+  }
+
+  /** Product JSON-LD'den brand (marka) ismini çeker */
+  extractBrandFromProductJson(product) {
+    if (!product) return null;
+    const brandObj = product['brand'];
+    if (typeof brandObj === 'string' && brandObj.trim().length > 0) {
+      return brandObj.trim();
+    }
+    if (brandObj && typeof brandObj === 'object') {
+      const nameVal = brandObj['name'] || brandObj['@name'];
+      if (nameVal && nameVal.toString().trim().length > 0) {
+        return nameVal.toString().trim();
+      }
+    }
+    return null;
   }
 }
 

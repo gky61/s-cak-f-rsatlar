@@ -163,6 +163,77 @@ class IncehesapScraper extends BaseProductScraper {
     });
     return list;
   }
+
+  scrapeRating($) {
+    // 1. DOM Microdata (Öncelikli - İncehesap'ta rating JSON-LD'de yok)
+    const ratingEl = $('[itemprop="ratingValue"], meta[property="product:rating:value"], .rating-score, .pdp-rating-value').first();
+    let ratingValue = null;
+    let ratingCount = null;
+
+    if (ratingEl.length) {
+      const txt = ratingEl.is('meta') ? ratingEl.attr('content') : ratingEl.text();
+      if (txt) {
+        const p = parseFloat(txt.trim().replace(',', '.'));
+        if (!isNaN(p) && p > 0 && p <= 5.0) ratingValue = p;
+      }
+    }
+
+    const countEl = $('[itemprop="reviewCount"], [itemprop="ratingCount"], .review-count, .rating-count').first();
+    if (countEl.length) {
+      const txt = countEl.is('meta') ? countEl.attr('content') : countEl.text();
+      if (txt) {
+        const m = /(\d+)/.exec(txt);
+        if (m) {
+          const c = parseInt(m[1]);
+          if (!isNaN(c) && c > 0) ratingCount = c;
+        }
+      }
+    }
+
+    if (ratingValue || ratingCount) {
+      return { ratingValue, ratingCount };
+    }
+
+    // 2. JSON-LD Fallback
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const rating = this.extractRatingFromProductJson(product);
+      if (rating && (rating.ratingValue != null || rating.ratingCount != null)) {
+        return rating;
+      }
+    }
+
+    return { ratingValue: null, ratingCount: null };
+  }
+
+  scrapeBrand($) {
+    // 1. DOM Microdata (Öncelikli - itemprop="brand" > meta[itemprop="name"])
+    const brandDiv = $('[itemprop="brand"]').first();
+    if (brandDiv.length) {
+      const metaName = brandDiv.find('meta[itemprop="name"]');
+      if (metaName.length) {
+        const content = metaName.attr('content');
+        if (content && content.trim()) return content.trim();
+      }
+      const txt = brandDiv.text().trim();
+      if (txt) return txt;
+    }
+
+    // 2. JSON-LD Fallback
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const brand = this.extractBrandFromProductJson(product);
+      if (brand) return brand;
+    }
+
+    // 3. Diğer DOM / Meta Tag
+    const metaBrand = $('meta[property="product:brand"], meta[name="brand"], .product-brand, [data-brand]').first();
+    if (metaBrand.length) {
+      const txt = metaBrand.is('meta') ? metaBrand.attr('content') : (metaBrand.attr('data-brand') || metaBrand.text());
+      if (txt && txt.trim()) return txt.trim();
+    }
+    return null;
+  }
 }
 
 module.exports = IncehesapScraper;

@@ -582,6 +582,10 @@ async function saveDealToFirebase(message, chatInfo) {
       telegramChatTitle: chatInfo.title || chatIdentifier,
       telegramChatUsername: chatIdentifier,
       rawMessage: messageText,
+      priceLabel: scrapeResult.priceLabel || null,
+      ratingValue: scrapeResult.ratingValue || null,
+      ratingCount: scrapeResult.ratingCount || null,
+      brand: scrapeResult.brand || null,
     };
 
     console.log(`💾 Kaydediliyor: ${uniqueDocId} (imageUrl: ${imageUrl ? 'VAR ✅' : 'YOK ❌'})`);

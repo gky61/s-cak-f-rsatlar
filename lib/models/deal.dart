@@ -34,6 +34,9 @@ class Deal {
   final bool isTest; // Test verisi mi?
   final String cleanUrl;
   final String? priceLabel; // Fiyat etiket notu (CRM kampanya bilgisi vb.)
+  final double? ratingValue; // Değerlendirme puanı (ör. 4.8)
+  final int? ratingCount; // Değerlendirme sayısı (ör. 1173)
+  final String? brand; // Marka (ör. Apple)
 
   Deal({
     required this.id,
@@ -60,6 +63,9 @@ class Deal {
     this.isTest = false,
     this.cleanUrl = '',
     this.priceLabel,
+    this.ratingValue,
+    this.ratingCount,
+    this.brand,
   });
 
 
@@ -237,6 +243,9 @@ class Deal {
       isTest: data['isTest'] == true,
       cleanUrl: data['cleanUrl'] ?? cleanProductUrl(data['link'] ?? data['url'] ?? ''),
       priceLabel: data['priceLabel'],
+      ratingValue: data['ratingValue'] != null ? (data['ratingValue'] as num).toDouble() : null,
+      ratingCount: data['ratingCount'] != null ? (data['ratingCount'] as num).toInt() : null,
+      brand: data['brand']?.toString(),
     );
   }
 
@@ -266,6 +275,9 @@ class Deal {
       'isTest': isTest,
       'cleanUrl': cleanUrl.isNotEmpty ? cleanUrl : cleanProductUrl(link),
       'priceLabel': priceLabel,
+      'ratingValue': ratingValue,
+      'ratingCount': ratingCount,
+      'brand': brand,
     };
   }
 

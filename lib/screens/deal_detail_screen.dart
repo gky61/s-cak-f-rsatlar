@@ -60,6 +60,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   int _coldVotes = 0;
   int _expiredVotes = 0;
   bool _dealNotFound = false;
+  bool _hasAutoOpenedComments = false; // Bildirimden açılan yorum penceresinin tekrar tekrar açılmasını engeller
 
   @override
   void initState() {
@@ -482,9 +483,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           _fetchImageFromLink(deal.link);
         }
         
-        // Eğer scrollToCommentId varsa, yorumlar bottom sheet'ini otomatik aç
-        if (widget.scrollToCommentId != null && mounted) {
-          Future.delayed(const Duration(milliseconds: 500), () {
+        // Eğer scrollToCommentId varsa ve henüz otomatik açılmadıysa, yorumlar bottom sheet'ini tam 1 defa aç
+        if (widget.scrollToCommentId != null && !_hasAutoOpenedComments && mounted) {
+          _hasAutoOpenedComments = true;
+          Future.delayed(const Duration(milliseconds: 400), () {
             if (mounted && _currentDeal != null) {
               final navigatorContext = navigatorKey.currentContext;
               if (navigatorContext != null) {
@@ -870,6 +872,44 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ],
                               ),
 
+                              if (deal.brand != null && deal.brand!.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: primaryColor.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: primaryColor.withValues(alpha: 0.25),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.verified_rounded, size: 14, color: primaryColor),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        'Marka: ',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      Text(
+                                        deal.brand!,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark ? Colors.white : AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+
                               // PostedBy User Tag (If user submitted)
                               if (deal.postedBy.isNotEmpty && deal.isUserSubmitted) ...[
                                 const SizedBox(height: 12),
@@ -1000,6 +1040,56 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   height: 1.25,
                                 ),
                               ),
+
+                              if (deal.ratingValue != null || deal.ratingCount != null) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF2C2517) : const Color(0xFFFFF8E1),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: const Color(0xFFFFD54F).withValues(alpha: 0.5),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.star_rounded,
+                                            size: 16,
+                                            color: Color(0xFFFFB800),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          if (deal.ratingValue != null)
+                                            Text(
+                                              deal.ratingValue!.toStringAsFixed(1),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800,
+                                                color: isDark ? const Color(0xFFFFD54F) : const Color(0xFFE65100),
+                                              ),
+                                            ),
+                                          if (deal.ratingCount != null) ...[
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '(${deal.ratingCount} değerlendirme)',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w500,
+                                                color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
 
                               const SizedBox(height: 20),
 

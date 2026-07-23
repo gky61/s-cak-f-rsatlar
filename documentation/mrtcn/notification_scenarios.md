@@ -48,14 +48,15 @@ Push bildirimlerinin telefona ulaşma karar ağacı Cloud Functions `onNotificat
 ### Tercihler ve Eşleşen Karar Senaryoları:
 
 #### A. Telefon Bildirimleri (Master Switch - `pushMasterEnabled`)
+* **Uygulama İçi Menü Değişikliği:** Profilim ekranındaki "Bildirim Ayarları" satırındaki switch kaldırılmış, sadece detay sayfasına yönlendiren bir buton (`chevron_right`) yerleştirilmiştir. Asıl master kontrol "Bildirim Ayarları" sayfasındaki "Telefon Bildirimleri" şalteri üzerinden yapılır.
 * **Senaryo PUSH-MASTER-OFF:** `pushMasterEnabled: false` yapıldığında:
-  * Tüm alt bildirim ayarları otomatik olarak kapalı konuma getirilir (`false` olarak Firestore'a yazılır).
-  * Kullanıcıların eski tercihleri `lastStates` adında bir harita (Map) içerisinde yedeklenir.
-  * Master switch kapalı olsa bile kullanıcı alt ayarları tek tek elle manuel olarak açabilir (açılanlar Firestore'da `true` olarak güncellenir ve `lastStates` haritasına da yansıtılır).
-  * *Karar Mekanizması:* Alt ayarı kapalı olan tüm bildirimler `pushEligible: false`, `pushStatus: 'disabled_by_user_master_switch'` olarak engellenir. Manuel olarak açılan alt kanallar ise Master kapalı olsa dahi push uyarısı almaya devam eder (`pushEligible: true`).
+  * Eski tercihlere veya hafızaya (`lastStates`) bakılmaksızın **TÜM alt bildirim ayarları** (yazar, topluluk, kampanya, kategori, anahtar kelime, sessiz saatler) otomatik olarak kapalı konuma getirilir (`false` olarak Firestore'a yazılır).
+  * Master switch kapalı olsa bile kullanıcı alt ayarları tek tek elle manuel olarak bağımsız şekilde açıp kapatabilir.
+  * *Karar Mekanizması:* Alt ayarı kapalı olan tüm bildirimler `pushEligible: false`, `pushStatus: 'disabled_by_user_master_switch'` olarak engellenir. Master kapalıyken manuel olarak açılan alt kanallar ise push uyarısı almaya devam eder (`pushEligible: true`).
 * **Senaryo PUSH-MASTER-ON:** `pushMasterEnabled: true` yapıldığında:
-  * Tüm alt bildirim kanalları, kullanıcının en son seçtiği veya kaydettiği durumlarına (yani `lastStates` haritasındaki yedek değerlerine) otomatik olarak geri döndürülür.
-  * *Karar Mekanizması:* Diğer alt kanal, limit ve sessiz saat kuralları olağan şekilde denetlenmeye başlar.
+  * Eski tercihlere veya hafızaya (`lastStates`) bakılmaksızın **TÜM alt bildirim ayarları** otomatik olarak **AÇIK (`true`)** konuma getirilir.
+  * Master switch açıkken de kullanıcı alt ayarları tek tek elle manuel olarak bağımsız şekilde açıp kapatabilir.
+  * *Karar Mekanizması:* Alt kanallar, limit ve sessiz saat kuralları olağan şekilde denetlenmeye başlar.
 
 #### B. Kanal Bazlı Filtreler (`groupEnabled` Kontrolleri)
 Master Switch açık olduğunda veya Master Switch kapalıyken ilgili alt ayar manuel olarak açıldığında, bildirim türüne göre alt kanal ayarı kontrol edilir:

@@ -1369,7 +1369,17 @@ function createDealRow(deal) {
                 </div>
                 <div class="flex flex-col gap-0.5 min-w-0 flex-1">
                     <p class="text-slate-900 dark:text-white font-medium line-clamp-2 leading-tight">${escapeHtml(deal.title || 'Başlıksız')}</p>
-                    <p class="text-slate-500 dark:text-slate-400 text-xs mt-0.5">${escapeHtml(deal.category || 'Genel')} • ${escapeHtml(deal.store || 'Bilinmeyen')}</p>
+                    <p class="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
+                        ${escapeHtml(deal.category || 'Genel')} • ${escapeHtml(deal.store || 'Bilinmeyen')}
+                        ${deal.brand ? ` • <span class="font-semibold text-slate-700 dark:text-slate-300">Marka: ${escapeHtml(deal.brand)}</span>` : ''}
+                    </p>
+                    ${(deal.ratingValue || deal.ratingCount) ? `
+                        <div class="flex items-center gap-1 text-amber-500 font-bold text-xs mt-0.5">
+                            <span class="material-symbols-outlined text-[14px]">star</span>
+                            <span>${deal.ratingValue != null ? deal.ratingValue : '-'}</span>
+                            <span class="text-slate-400 font-normal">(${deal.ratingCount != null ? deal.ratingCount : 0})</span>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         </td>
@@ -1818,6 +1828,20 @@ async function showDealModal(deal) {
                             <input id="editPrice" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white font-bold h-12 pl-8 pr-4 text-base" type="number" value="${price}"/>
                         </div>
                         <span id="discountDisplay" class="text-xs text-green-600 dark:text-green-400 font-medium px-1 text-right">${discount > 0 ? `%${discount} İndirim` : 'İndirim yok'}</span>
+                    </label>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                    <label class="flex flex-col gap-2">
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Marka (Opsiyonel)</span>
+                        <input id="editBrand" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-12 px-4 text-base" type="text" placeholder="ör. Apple" value="${escapeHtml(deal.brand || '')}"/>
+                    </label>
+                    <label class="flex flex-col gap-2">
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Rating Puanı (ör. 4.8)</span>
+                        <input id="editRatingValue" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-12 px-4 text-base" type="number" step="0.1" placeholder="ör. 4.8" value="${deal.ratingValue != null ? deal.ratingValue : ''}"/>
+                    </label>
+                    <label class="flex flex-col gap-2">
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Oy Sayısı (ör. 1173)</span>
+                        <input id="editRatingCount" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-12 px-4 text-base" type="number" placeholder="ör. 1173" value="${deal.ratingCount != null ? deal.ratingCount : ''}"/>
                     </label>
                 </div>
                 <div class="h-px bg-slate-200 dark:bg-slate-700 w-full"></div>
@@ -2411,6 +2435,11 @@ async function saveDealChanges() {
         const isHot = document.getElementById('editIsHot')?.checked || false;
         const couponCode = document.getElementById('editCouponCode')?.value || '';
         const shipping = document.getElementById('editShipping')?.value || 'unknown';
+        const brand = document.getElementById('editBrand')?.value?.trim() || null;
+        const ratingValStr = document.getElementById('editRatingValue')?.value;
+        const ratingValue = (ratingValStr !== undefined && ratingValStr !== '') ? parseFloat(ratingValStr) : null;
+        const ratingCntStr = document.getElementById('editRatingCount')?.value;
+        const ratingCount = (ratingCntStr !== undefined && ratingCntStr !== '') ? parseInt(ratingCntStr) : null;
 
         // Mevcut görselleri al (yeni görsel yüklenmişse güncellenmiş olacak)
         let imageUrls = currentDeal.imageUrls || [];
@@ -2479,7 +2508,10 @@ async function saveDealChanges() {
             commentCount: isNewDeal ? 0 : (currentDeal.commentCount || 0),
             isUserSubmitted: isNewDeal ? false : (currentDeal.isUserSubmitted || false),
             createdAt: isNewDeal ? firebase.firestore.FieldValue.serverTimestamp() : (isCreatedAtValid ? firebase.firestore.Timestamp.fromDate(createdAtDate) : firebase.firestore.FieldValue.serverTimestamp()),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            brand: brand,
+            ratingValue: (ratingValue !== null && !isNaN(ratingValue)) ? ratingValue : null,
+            ratingCount: (ratingCount !== null && !isNaN(ratingCount)) ? ratingCount : null,
         };
 
         // Track approvedAt when transitioning to active/approved state

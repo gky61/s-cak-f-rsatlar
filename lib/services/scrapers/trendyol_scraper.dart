@@ -103,6 +103,106 @@ class TrendyolScraper extends BaseProductScraper {
   }
 
   @override
+  double? scrapeRatingValue(dom.Document document) {
+    print('[aggregateRating] TrendyolScraper: ratingValue aranıyor...');
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingValue'] != null) {
+        final val = (rating!['ratingValue'] as num).toDouble();
+        print('[aggregateRating] TrendyolScraper: JSON-LD ile ratingValue bulundu: $val');
+        return val;
+      }
+    }
+
+    // Fallback: Raw Script Regex Arama
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('aggregateRating') || text.contains('ratingValue')) {
+        final match = RegExp(r'"ratingValue"\s*:\s*"?([\d.,]+)"?').firstMatch(text);
+        if (match != null) {
+          final raw = match.group(1)?.replaceAll(',', '.');
+          final parsed = raw != null ? double.tryParse(raw) : null;
+          if (parsed != null) {
+            print('[aggregateRating] TrendyolScraper: Regex fallback ile ratingValue bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] TrendyolScraper: ratingValue bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  int? scrapeRatingCount(dom.Document document) {
+    print('[aggregateRating] TrendyolScraper: ratingCount/reviewCount aranıyor...');
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingCount'] != null) {
+        final cnt = (rating!['ratingCount'] as num).toInt();
+        print('[aggregateRating] TrendyolScraper: JSON-LD ile ratingCount/reviewCount bulundu: $cnt');
+        return cnt;
+      }
+    }
+
+    // Fallback: Raw Script Regex Arama
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('aggregateRating') || text.contains('reviewCount') || text.contains('ratingCount')) {
+        final match = RegExp(r'"(?:ratingCount|reviewCount)"\s*:\s*"?(\d+)"?').firstMatch(text);
+        if (match != null) {
+          final parsed = int.tryParse(match.group(1) ?? '');
+          if (parsed != null) {
+            print('[aggregateRating] TrendyolScraper: Regex fallback ile ratingCount/reviewCount bulundu: $parsed');
+            return parsed;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] TrendyolScraper: ratingCount bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    print('[aggregateRating] TrendyolScraper: brand (marka) aranıyor...');
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final brand = extractBrandFromProductJson(productJson);
+      if (brand != null && brand.isNotEmpty) {
+        print('[aggregateRating] TrendyolScraper: JSON-LD ile brand bulundu: $brand');
+        return brand;
+      }
+    }
+
+    // Fallback: Raw Script Regex Arama
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('"brand"') || text.contains('"Brand"')) {
+        final match = RegExp(r'"brand"\s*:\s*\{\s*"@type"\s*:\s*"Brand"\s*,\s*"name"\s*:\s*"([^"]+)"').firstMatch(text) ??
+                      RegExp(r'"brand"\s*:\s*"([^"]+)"').firstMatch(text);
+        if (match != null) {
+          final bName = match.group(1)?.trim();
+          if (bName != null && bName.isNotEmpty && !bName.contains('{')) {
+            print('[aggregateRating] TrendyolScraper: Regex fallback ile brand bulundu: $bName');
+            return bName;
+          }
+        }
+      }
+    }
+
+    print('[aggregateRating] TrendyolScraper: brand bulunamadı (null)');
+    return null;
+  }
+
+  @override
   List<String> scrapeBreadcrumbs(dom.Document document) {
     final scripts = document.querySelectorAll('script');
     final productTitle = scrapeTitle(document) ?? '';

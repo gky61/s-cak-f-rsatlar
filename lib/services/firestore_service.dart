@@ -76,6 +76,9 @@ class FirestoreService {
     required String url,
     required String userId,
     String? priceLabel,
+    double? ratingValue,
+    int? ratingCount,
+    String? brand,
   }) => _dealService.createDeal(
         title: title,
         description: description,
@@ -87,6 +90,9 @@ class FirestoreService {
         url: url,
         userId: userId,
         priceLabel: priceLabel,
+        ratingValue: ratingValue,
+        ratingCount: ratingCount,
+        brand: brand,
       );
 
   Future<bool> updateDeal(String dealId, Map<String, dynamic> updates) => _dealService.updateDeal(dealId, updates);

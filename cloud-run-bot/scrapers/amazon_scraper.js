@@ -250,6 +250,113 @@ class AmazonScraper extends BaseProductScraper {
     }
     return [];
   }
+
+  scrapeRating($) {
+    let ratingValue = null;
+    let ratingCount = null;
+
+    // 1. JSON-LD
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const rating = this.extractRatingFromProductJson(product);
+      if (rating && (rating.ratingValue != null || rating.ratingCount != null)) {
+        return rating;
+      }
+    }
+
+    // 2. DOM ratingValue
+    const popover = $('#averageCustomerReviews .a-icon-alt, #acrPopover .a-icon-alt, span.a-icon-alt').first();
+    if (popover.length) {
+      const text = popover.text().trim();
+      const match = text.match(/([0-5][.,]\d)/);
+      if (match) {
+        const val = parseFloat(match[1].replace(',', '.'));
+        if (!isNaN(val) && val > 0 && val <= 5.0) ratingValue = val;
+      }
+    }
+
+    if (!ratingValue) {
+      const ratingText = $('span[data-hook="rating-out-of-text"]').first().text().trim();
+      if (ratingText) {
+        const match = ratingText.match(/([0-5][.,]\d)/);
+        if (match) {
+          const val = parseFloat(match[1].replace(',', '.'));
+          if (!isNaN(val) && val > 0 && val <= 5.0) ratingValue = val;
+        }
+      }
+    }
+
+    if (!ratingValue) {
+      const starIcon = $('i[class*="a-star-"]').first();
+      if (starIcon.length) {
+        const cls = starIcon.attr('class') || '';
+        const match = cls.match(/a-star-(\d+)(?:-(\d+))?/);
+        if (match) {
+          const major = match[1];
+          const minor = match[2] || '0';
+          const val = parseFloat(`${major}.${minor}`);
+          if (!isNaN(val) && val > 0 && val <= 5.0) ratingValue = val;
+        }
+      }
+    }
+
+    // 3. DOM ratingCount
+    const countSelectors = [
+      '#acrCustomerReviewText',
+      '#acrCustomerReviewLink',
+      'span[data-hook="total-review-count"]',
+      '#totalReviewCount',
+      '[itemprop="reviewCount"]',
+      '[itemprop="ratingCount"]'
+    ];
+
+    for (const sel of countSelectors) {
+      const el = $(sel).first();
+      if (el.length) {
+        const text = el.text().trim();
+        const match = text.match(/(\d[\d.,]*)/);
+        if (match) {
+          const clean = match[1].replace(/\./g, '').replace(/,/g, '');
+          const val = parseInt(clean, 10);
+          if (!isNaN(val) && val > 0) {
+            ratingCount = val;
+            break;
+          }
+        }
+      }
+    }
+
+    return { ratingValue, ratingCount };
+  }
+
+  scrapeBrand($) {
+    // 1. JSON-LD
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const brand = this.extractBrandFromProductJson(product);
+      if (brand) return brand;
+    }
+
+    // 2. DOM Table tr.po-brand
+    const poBrand = $('tr.po-brand td.po-break-word, tr.po-brand span.a-size-base').last().text().trim();
+    if (poBrand && poBrand !== 'Marka') return poBrand;
+
+    // 3. #bylineInfo
+    const byline = $('#bylineInfo, a#bylineInfo').first().text().trim();
+    if (byline) {
+      let clean = byline
+        .replace(/Marka:\s*/i, '')
+        .replace(/Brand:\s*/i, '')
+        .replace(/Store’u ziyaret edin/i, '')
+        .replace(/Store'u ziyaret edin/i, '')
+        .replace(/Visit the\s*/i, '')
+        .replace(/\s*Store/i, '')
+        .trim();
+      if (clean) return clean;
+    }
+
+    return null;
+  }
 }
 
 module.exports = AmazonScraper;

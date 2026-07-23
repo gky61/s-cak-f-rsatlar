@@ -381,46 +381,38 @@ class _KuponlarPageState extends State<KuponlarPage> {
       basariOrani = (displayHot / toplamOy) * 100;
     }
 
+    final canManage = currentUser != null && (kupon.paylasanKullaniciId == currentUser.uid || _isAdmin);
+    final hasUsername = kupon.kaynakTipi == 'topluluk' && kupon.paylasanKullaniciAdi.isNotEmpty;
+
     return Opacity(
       opacity: isInvalid ? 0.4 : 1.0,
       child: Card(
         elevation: 1,
         margin: const EdgeInsets.only(bottom: 12),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           side: BorderSide(
             color: isDark ? AppTheme.darkBorder : const Color(0xFFEEEEEE),
             width: 1,
           ),
         ),
         color: isDark ? AppTheme.darkSurface : Colors.white,
-        child: Stack(
-          children: [
-            // Sağ Üst Köşe: Paylaşan kullanıcı adı (sadece topluluk kuponlarında)
-            if (kupon.kaynakTipi == 'topluluk' && kupon.paylasanKullaniciAdi.isNotEmpty)
-              Positioned(
-                top: 6,
-                right: 10,
-                child: Text(
-                  '@${kupon.paylasanKullaniciAdi}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: isDark ? Colors.grey[600] : Colors.grey[400],
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.only(left: 12.0, top: 12.0, bottom: 24.0, right: 12.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Top Row: Logo + Info + Code Box ────────────────────────
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Sol Alan: Mağaza Logosu
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     child: Container(
-                      width: 50,
-                      height: 50,
+                      width: 46,
+                      height: 46,
                       color: isDark ? Colors.grey[900] : Colors.grey[100],
                       child: Image.asset(
                         _getStoreAsset(kupon.magazaAdi),
@@ -434,89 +426,84 @@ class _KuponlarPageState extends State<KuponlarPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
 
-                  // Orta Alan: İçerik ve Oylama Alanı
+                  // Orta Alan: Mağaza Adı, Başlık, Açıklama ve Kullanıcı Adı
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          kupon.magazaAdi,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primary,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              kupon.magazaAdi,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                            if (hasUsername) ...[
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  '@${kupon.paylasanKullaniciAdi}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isDark ? Colors.grey[500] : Colors.grey[400],
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
                           kupon.baslik,
                           style: TextStyle(
-                            fontSize: 15,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                             color: isDark ? Colors.white : AppTheme.textPrimary,
+                            height: 1.2,
                           ),
                         ),
                         if (kupon.aciklama.isNotEmpty) ...[
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 3),
                           Text(
                             kupon.aciklama,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11.5,
                               color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
-                        const SizedBox(height: 8),
-                        // Oylama Butonları + Güven Rozeti
-                        Row(
-                          children: [
-                            _buildVoteButton(
-                              label: '🔥 $displayHot',
-                              isSelected: isHotSelected,
-                              selectedColor: Colors.redAccent,
-                              onTap: () => _handleVote(kupon.id, currentUser, 'hot'),
-                              isDark: isDark,
-                            ),
-                            const SizedBox(width: 8),
-                            _buildVoteButton(
-                              label: '❄️ $displayCold',
-                              isSelected: isColdSelected,
-                              selectedColor: Colors.blueAccent,
-                              onTap: () => _handleVote(kupon.id, currentUser, 'cold'),
-                              isDark: isDark,
-                            ),
-                            // Güven Eşiği Rozeti (toplam oy >= 3 ise)
-                            if (guvenEsigineUlasti) ...[
-                              const SizedBox(width: 10),
-                              _buildTrustBadge(basariOrani, isDark),
-                            ],
-                          ],
-                        ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
 
-                  // Sağ Alan: Aksiyon Alanı (Tıklanabilir Kod Kutusu)
+                  // Sağ Alan: Kupon Kodu Kutusu
                   InkWell(
                     onTap: () => _copyToClipboard(kupon.id, kupon.kuponKodu),
                     borderRadius: BorderRadius.circular(8),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
                       decoration: BoxDecoration(
                         color: isCopied
-                            ? AppTheme.success.withOpacity(0.08)
-                            : (isDark ? Colors.white.withOpacity(0.05) : Colors.grey[50]),
+                            ? AppTheme.success.withValues(alpha: 0.08)
+                            : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[100]),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isCopied
                               ? AppTheme.success
-                              : (isDark ? Colors.white.withOpacity(0.1) : Colors.grey[300]!),
-                          width: 1.5,
+                              : (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.grey[300]!),
+                          width: 1.2,
                         ),
                       ),
                       child: Row(
@@ -526,20 +513,20 @@ class _KuponlarPageState extends State<KuponlarPage> {
                             kupon.kuponKodu,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              letterSpacing: 0.5,
+                              fontSize: 12,
+                              letterSpacing: 0.4,
                               color: isCopied
                                   ? AppTheme.success
                                   : (isDark ? Colors.white : AppTheme.textPrimary),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           AnimatedSwitcher(
                             duration: const Duration(milliseconds: 200),
                             child: Icon(
                               isCopied ? Icons.check_circle_rounded : Icons.copy_rounded,
                               key: ValueKey<bool>(isCopied),
-                              size: 16,
+                              size: 15,
                               color: isCopied
                                   ? AppTheme.success
                                   : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
@@ -551,93 +538,127 @@ class _KuponlarPageState extends State<KuponlarPage> {
                   ),
                 ],
               ),
-            ),
-            // Sağ Alt Köşe: Düzenleme ve Silme Butonları (vote stiliyle uyumlu pill tasarımı)
-            if (currentUser != null && (kupon.paylasanKullaniciId == currentUser.uid || _isAdmin))
-              Positioned(
-                bottom: 6,
-                right: 12,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Düzenle butonu
-                    Material(
-                      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(20),
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => KuponFormPage(
-                                userId: currentUser.uid,
-                                kupon: kupon,
+
+              const SizedBox(height: 10),
+
+              // ── Bottom Row: Oylama Butonları + Güven Rozeti + Yönetim ────
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Sol: Oylama Butonları ve Rozet
+                  Expanded(
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        _buildVoteButton(
+                          label: '🔥 $displayHot',
+                          isSelected: isHotSelected,
+                          selectedColor: Colors.redAccent,
+                          onTap: () => _handleVote(kupon.id, currentUser, 'hot'),
+                          isDark: isDark,
+                        ),
+                        _buildVoteButton(
+                          label: '❄️ $displayCold',
+                          isSelected: isColdSelected,
+                          selectedColor: Colors.blueAccent,
+                          onTap: () => _handleVote(kupon.id, currentUser, 'cold'),
+                          isDark: isDark,
+                        ),
+                        if (guvenEsigineUlasti)
+                          _buildTrustBadge(basariOrani, isDark),
+                      ],
+                    ),
+                  ),
+
+                  // Sağ: Düzenle / Sil Butonları (gerekli ise)
+                  if (canManage) ...[
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Düzenle
+                        Material(
+                          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.grey[100],
+                          borderRadius: BorderRadius.circular(20),
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => KuponFormPage(
+                                    userId: currentUser.uid,
+                                    kupon: kupon,
+                                  ),
+                                ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.grey[300]!,
+                                  width: 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.edit_outlined, size: 11,
+                                      color: isDark ? Colors.grey[300] : Colors.grey[600]),
+                                  const SizedBox(width: 3),
+                                  Text('Düzenle',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                      )),
+                                ],
                               ),
                             ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.grey[300]!,
-                              width: 1.2,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.edit_outlined, size: 12,
-                                  color: isDark ? Colors.grey[300] : Colors.grey[600]),
-                              const SizedBox(width: 4),
-                              Text('Düzenle',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark ? Colors.grey[300] : Colors.grey[700],
-                                  )),
-                            ],
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    // Sil butonu
-                    Material(
-                      color: isDark ? Colors.redAccent.withValues(alpha: 0.12) : Colors.red[50],
-                      borderRadius: BorderRadius.circular(20),
-                      child: InkWell(
-                        onTap: () => _confirmDelete(kupon.id),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
+                        const SizedBox(width: 5),
+                        // Sil
+                        Material(
+                          color: isDark ? Colors.redAccent.withValues(alpha: 0.12) : Colors.red[50],
+                          borderRadius: BorderRadius.circular(20),
+                          child: InkWell(
+                            onTap: () => _confirmDelete(kupon.id),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isDark ? Colors.redAccent.withValues(alpha: 0.35) : Colors.red[200]!,
-                              width: 1.2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isDark ? Colors.redAccent.withValues(alpha: 0.35) : Colors.red[200]!,
+                                  width: 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.delete_outline_rounded, size: 11, color: Colors.redAccent),
+                                  const SizedBox(width: 3),
+                                  const Text('Sil',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: Colors.redAccent,
+                                      )),
+                                ],
+                              ),
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.delete_outline_rounded, size: 12, color: Colors.redAccent),
-                              const SizedBox(width: 4),
-                              const Text('Sil',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.redAccent,
-                                  )),
-                            ],
-                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
-                ),
+                ],
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );

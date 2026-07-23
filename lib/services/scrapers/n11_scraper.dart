@@ -291,4 +291,149 @@ class N11Scraper extends BaseProductScraper {
 
     return [];
   }
+
+  @override
+  double? scrapeRatingValue(dom.Document document) {
+    print('[aggregateRating] N11Scraper: ratingValue aranıyor...');
+
+    // 1. JSON-LD Şeması
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingValue'] != null) {
+        final val = (rating!['ratingValue'] as num).toDouble();
+        print('[aggregateRating] N11Scraper: JSON-LD ile ratingValue bulundu: $val');
+        return val;
+      }
+    }
+
+    // 2. window.model Fallback
+    final model = _getN11Model(document);
+    if (model != null) {
+      final ratingScore = _findValueRecursive(model, 'ratingScore') ??
+                          _findValueRecursive(model, 'ratingValue') ??
+                          _findValueRecursive(model, 'averageRating');
+      if (ratingScore != null) {
+        final parsed = double.tryParse(ratingScore.toString().replaceAll(',', '.'));
+        if (parsed != null && parsed > 0 && parsed <= 5.0) {
+          print('[aggregateRating] N11Scraper: window.model ile ratingValue bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    // 3. DOM Fallback
+    final ratingEl = document.querySelector('.ratingScore') ??
+                     document.querySelector('[itemprop="ratingValue"]') ??
+                     document.querySelector('.rating-score') ??
+                     document.querySelector('.rating-cont .rating-text');
+    if (ratingEl != null) {
+      final text = ratingEl.text.trim();
+      final match = RegExp(r'([0-5][.,]\d)').firstMatch(text);
+      if (match != null) {
+        final parsed = double.tryParse(match.group(1)!.replaceAll(',', '.'));
+        if (parsed != null && parsed > 0 && parsed <= 5.0) {
+          print('[aggregateRating] N11Scraper: DOM ile ratingValue bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    print('[aggregateRating] N11Scraper: ratingValue bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  int? scrapeRatingCount(dom.Document document) {
+    print('[aggregateRating] N11Scraper: ratingCount/reviewCount aranıyor...');
+
+    // 1. JSON-LD Şeması
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating?['ratingCount'] != null) {
+        final cnt = (rating!['ratingCount'] as num).toInt();
+        print('[aggregateRating] N11Scraper: JSON-LD ile ratingCount/reviewCount bulundu: $cnt');
+        return cnt;
+      }
+    }
+
+    // 2. window.model Fallback
+    final model = _getN11Model(document);
+    if (model != null) {
+      final reviewCount = _findValueRecursive(model, 'reviewCount') ??
+                          _findValueRecursive(model, 'ratingCount') ??
+                          _findValueRecursive(model, 'commentCount');
+      if (reviewCount != null) {
+        final parsed = int.tryParse(reviewCount.toString());
+        if (parsed != null && parsed > 0) {
+          print('[aggregateRating] N11Scraper: window.model ile ratingCount bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    // 3. DOM Fallback
+    final countEl = document.querySelector('.ratingCount') ??
+                    document.querySelector('[itemprop="reviewCount"]') ??
+                    document.querySelector('[itemprop="ratingCount"]') ??
+                    document.querySelector('.review-count');
+    if (countEl != null) {
+      final text = countEl.text.trim();
+      final match = RegExp(r'(\d+)').firstMatch(text);
+      if (match != null) {
+        final parsed = int.tryParse(match.group(1)!);
+        if (parsed != null && parsed > 0) {
+          print('[aggregateRating] N11Scraper: DOM ile ratingCount bulundu: $parsed');
+          return parsed;
+        }
+      }
+    }
+
+    print('[aggregateRating] N11Scraper: ratingCount bulunamadı (null)');
+    return null;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    print('[aggregateRating] N11Scraper: brand (marka) aranıyor...');
+
+    // 1. JSON-LD Şeması
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final brand = extractBrandFromProductJson(productJson);
+      if (brand != null && brand.isNotEmpty) {
+        print('[aggregateRating] N11Scraper: JSON-LD ile brand bulundu: $brand');
+        return brand;
+      }
+    }
+
+    // 2. window.model Fallback
+    final model = _getN11Model(document);
+    if (model != null) {
+      final brand = model['product']?['brand']?['name'] ??
+                    model['product']?['brandName'] ??
+                    _findValueRecursive(model, 'brandName');
+      if (brand != null && brand.toString().trim().isNotEmpty) {
+        final text = brand.toString().trim();
+        print('[aggregateRating] N11Scraper: window.model ile brand bulundu: $text');
+        return text;
+      }
+    }
+
+    // 3. DOM Fallback
+    final brandEl = document.querySelector('.brand-name') ??
+                    document.querySelector('[itemprop="brand"]') ??
+                    document.querySelector('.unf-p-detail-brand');
+    if (brandEl != null) {
+      final text = brandEl.text.trim();
+      if (text.isNotEmpty) {
+        print('[aggregateRating] N11Scraper: DOM ile brand bulundu: $text');
+        return text;
+      }
+    }
+
+    print('[aggregateRating] N11Scraper: brand bulunamadı (null)');
+    return null;
+  }
 }

@@ -2,43 +2,23 @@ const assert = require('assert');
 const cheerio = require('cheerio');
 const PttavmScraper = require('../scrapers/pttavm_scraper');
 
-function run() {
+async function run() {
   const scraper = new PttavmScraper();
 
   // 1. canHandle
-  assert.strictEqual(scraper.canHandle('https://www.pttavm.com/apple-airpods-pro-p-1462157482'), true);
+  assert.strictEqual(scraper.canHandle('https://www.pttavm.com/dijitsu-db120rre-retro-kirmizi-mini-buzdolabi-p-1458599324'), true);
   assert.strictEqual(scraper.canHandle('https://www.google.com'), false);
 
-  // 2. PttAVM elements
+  // 2. JSON-LD with numeric ratingValue and additionalProperty brand
   const html = `
-    <head>
-      <meta data-rh="true" name="description" content="Metal Ayakkabılık 4'lü Kilitli Model Siyah yorumları.">
-      <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "Product",
-        "name": "Apple AirPods Pro 3. Nesil",
-        "image": [
-          "https://cdn-s3.pttavm.com/pimages/592/146/215/de3a460e-154a-4959-afbb-9154bc6e0c96.webp"
-        ],
-        "offers": {
-          "@type": "Offer",
-          "price": 10999.58,
-          "highPrice": 12865,
-          "lowPrice": 10999.58
-        }
-      }
-      </script>
-    </head>
-    <body>
-    </body>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Dijitsu DB120RRE Retro Kırmızı Mini Buzdolabı","brand":{"@type":"Brand","name":"FIRSATLARALEMİ"},"offers":{"@type":"Offer","price":6699,"priceCurrency":"TRY"},"aggregateRating":{"@type":"AggregateRating","ratingValue":1.8,"reviewCount":5,"bestRating":5,"worstRating":1},"additionalProperty":[{"@type":"PropertyValue","name":"External Source","value":"Dijitsu"},{"@type":"PropertyValue","name":"External ID","value":"Dijitsu DB120RRE"}]}</script>
   `;
   const $ = cheerio.load(html);
-
-  assert.strictEqual(scraper.scrapeTitle($), 'Apple AirPods Pro 3. Nesil');
-  assert.strictEqual(scraper.scrapePrice($), 10999.58);
-  assert.strictEqual(scraper.scrapeDescription($), "Metal Ayakkabılık 4'lü Kilitli Model Siyah yorumları.");
-  assert.strictEqual(scraper.scrapeImage($, 'https://www.pttavm.com/apple-airpods-pro-p-1462157482'), 'https://cdn-s3.pttavm.com/pimages/592/146/215/de3a460e-154a-4959-afbb-9154bc6e0c96.webp');
+  const rating = await scraper.scrapeRating($);
+  assert.strictEqual(rating.ratingValue, 1.8, 'ratingValue should be 1.8');
+  assert.strictEqual(rating.ratingCount, 5, 'ratingCount should be 5');
+  // Brand: additionalProperty "External Source" -> "Dijitsu" (not seller "FIRSATLARALEMİ")
+  assert.strictEqual(scraper.scrapeBrand($), 'Dijitsu', 'brand should be Dijitsu from additionalProperty');
 }
 
 module.exports = { run };
