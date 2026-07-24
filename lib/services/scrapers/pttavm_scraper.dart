@@ -68,23 +68,34 @@ class PttavmScraper extends BaseProductScraper {
 
   @override
   String? scrapeTitle(dom.Document document) {
+    String? title;
+
     // 1. JSON-LD şemasından (Öncelikli)
     final productJson = findProductJsonLd(document);
     if (productJson != null && productJson['name'] != null) {
-      return productJson['name'].toString().trim();
+      title = productJson['name'].toString().trim();
     }
 
     // 2. DOM Seçicileri (Fallback)
-    final titleEl = document.querySelector('h1.product-title') ??
-                    document.querySelector('.product-name') ??
-                    document.querySelector('meta[property="og:title"]');
-    if (titleEl != null) {
-      if (titleEl is dom.Element && titleEl.localName == 'meta') {
-        return titleEl.attributes['content']?.trim();
+    if (title == null || title.isEmpty) {
+      final titleEl = document.querySelector('h1.product-title') ??
+                      document.querySelector('.product-name') ??
+                      document.querySelector('h1') ??
+                      document.querySelector('meta[property="og:title"]');
+      if (titleEl != null) {
+        if (titleEl is dom.Element && titleEl.localName == 'meta') {
+          title = titleEl.attributes['content']?.trim();
+        } else {
+          title = titleEl.text.trim();
+        }
       }
-      return titleEl.text.trim();
     }
-    return null;
+
+    if (title != null) {
+      title = title.replaceAll(RegExp(r'^PTTAVM:\s*', caseSensitive: false), '').trim();
+    }
+
+    return title;
   }
 
   @override
@@ -116,6 +127,56 @@ class PttavmScraper extends BaseProductScraper {
     }
 
     return null;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    // 1. DOM Regular price container
+    final regularContainer = document.querySelector('[class*="regularPriceValue"]') ??
+                             document.querySelector('.regularPriceValue__I3siB');
+    if (regularContainer != null) {
+      final fullText = regularContainer.text.trim();
+      final val = parsePriceText(fullText);
+      if (val != null && val > currentPrice) return val;
+    }
+
+    // 2. JSON-LD highPrice
+    final productJson = findProductJsonLd(document);
+    if (productJson != null && productJson['offers'] is Map) {
+      final offers = productJson['offers'] as Map;
+      if (offers['highPrice'] != null) {
+        final hp = double.tryParse(offers['highPrice'].toString());
+        if (hp != null && hp > currentPrice) return hp;
+      }
+    }
+
+    // 3. Fallback DOM selectors
+    final candidates = <double>[];
+    final selectors = [
+      '[class*="regularPrice"]',
+      '.regularPriceValue__I3siB',
+      '.line-through',
+      'del',
+      's',
+    ];
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) => b.compareTo(a));
+    return candidates.first;
   }
 
   @override

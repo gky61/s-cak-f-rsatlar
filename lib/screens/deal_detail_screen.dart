@@ -610,7 +610,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   Widget _buildDealDetail(BuildContext context, Deal deal) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final currencyFormat = DynamicCurrencyFormatter();
     // Bot'tan gelen kategori ID olarak geliyor ("elektronik", "moda" vb.)
     // Önce ID olarak kontrol et, bulunamazsa name olarak dene
     Category category;
@@ -778,224 +777,225 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Store + Category + PostedBy Row
+                              // Info Section - 2 Column Layout
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Store Badge
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: isDark 
-                                              ? Colors.white.withValues(alpha: 0.06) 
-                                              : primaryColor.withValues(alpha: 0.08),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: primaryColor.withValues(alpha: 0.2),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Icon(
-                                          Icons.storefront_rounded,
-                                          size: 20,
-                                          color: primaryColor,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Satıcı',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
-                                              color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                              letterSpacing: 1,
+                                  // Sol grup: Satıcı + Marka + Editör Seçimi
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Satıcı Pill (Marka ile aynı stil)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: isDark 
+                                                ? Colors.white.withValues(alpha: 0.06) 
+                                                : primaryColor.withValues(alpha: 0.08),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: primaryColor.withValues(alpha: 0.25),
+                                              width: 1,
                                             ),
                                           ),
-                                          const SizedBox(height: 1),
-                                          Text(
-                                            deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w800,
-                                              color: isDark ? Colors.white : AppTheme.textPrimary,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.storefront_rounded, size: 14, color: primaryColor),
+                                              const SizedBox(width: 5),
+                                              Text(
+                                                'Satıcı: ',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                                ),
+                                              ),
+                                              Flexible(
+                                                child: Text(
+                                                  deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: isDark ? Colors.white : AppTheme.textPrimary,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        // Marka Pill
+                                        if (deal.brand != null && deal.brand!.isNotEmpty) ...[
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                            decoration: BoxDecoration(
+                                              color: primaryColor.withValues(alpha: 0.08),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: primaryColor.withValues(alpha: 0.25),
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.verified_rounded, size: 14, color: primaryColor),
+                                                const SizedBox(width: 5),
+                                                Text(
+                                                  'Marka: ',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                                  ),
+                                                ),
+                                                Flexible(
+                                                  child: Text(
+                                                    deal.brand!,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w700,
+                                                      color: isDark ? Colors.white : AppTheme.textPrimary,
+                                                    ),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
-                                      ),
-                                    ],
-                                  ),
-
-                                  // Category Pill
-                                  InkWell(
-                                    onTap: _isAdmin ? () => _showCategoryEditDialog(deal) : null,
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: isDark 
-                                              ? [Colors.grey[850]!, Colors.grey[800]!]
-                                              : [Colors.grey[100]!, Colors.grey[200]!],
-                                        ),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            category.name.toUpperCase(),
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w800,
-                                              color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
-                                              letterSpacing: 0.8,
-                                            ),
-                                          ),
-                                          if (_isAdmin) ...[
-                                            const SizedBox(width: 4),
-                                            Icon(Icons.edit_rounded, size: 12, color: primaryColor),
-                                          ],
-                                        ],
-                                      ),
+                                      ],
                                     ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Sağ grup: Kategori + Paylaşan
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      // Category Pill
+                                      InkWell(
+                                        onTap: _isAdmin ? () => _showCategoryEditDialog(deal) : null,
+                                        borderRadius: BorderRadius.circular(20),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: isDark 
+                                                  ? [Colors.grey[850]!, Colors.grey[800]!]
+                                                  : [Colors.grey[100]!, Colors.grey[200]!],
+                                            ),
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(
+                                              color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                category.name.toUpperCase(),
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
+                                                  letterSpacing: 0.6,
+                                                ),
+                                              ),
+                                              if (_isAdmin) ...[
+                                                const SizedBox(width: 4),
+                                                Icon(Icons.edit_rounded, size: 12, color: primaryColor),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      // PostedBy User Tag
+                                      if (deal.postedBy.isNotEmpty && deal.isUserSubmitted) ...[
+                                        const SizedBox(height: 8),
+                                        StreamBuilder<DocumentSnapshot>(
+                                          stream: FirebaseFirestore.instance
+                                              .collection('users')
+                                              .doc(deal.postedBy)
+                                              .snapshots(),
+                                          builder: (context, snapshot) {
+                                            if (!snapshot.hasData || !snapshot.data!.exists) {
+                                              return const SizedBox.shrink();
+                                            }
+                                            final userData = snapshot.data!.data() as Map<String, dynamic>;
+                                            final username = userData['username']?.toString() ?? 'Kullanıcı';
+                                            final profileImageUrl = userData['profileImageUrl']?.toString() ?? '';
+
+                                            return InkWell(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => ProfileScreen(userId: deal.postedBy),
+                                                  ),
+                                                );
+                                              },
+                                              borderRadius: BorderRadius.circular(16),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[100],
+                                                  borderRadius: BorderRadius.circular(16),
+                                                  border: Border.all(
+                                                    color: primaryColor.withValues(alpha: 0.3),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    ClipOval(
+                                                      child: profileImageUrl.isNotEmpty
+                                                          ? (profileImageUrl.startsWith('assets/')
+                                                              ? Image.asset(profileImageUrl, width: 16, height: 16, fit: BoxFit.cover)
+                                                              : CachedNetworkImage(
+                                                                  imageUrl: profileImageUrl,
+                                                                  width: 16,
+                                                                  height: 16,
+                                                                  fit: BoxFit.cover,
+                                                                ))
+                                                          : Container(
+                                                              width: 16,
+                                                              height: 16,
+                                                              color: primaryColor.withOpacity(0.15),
+                                                              child: Icon(Icons.person_rounded, size: 10, color: primaryColor),
+                                                            ),
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      username,
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: primaryColor,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ],
                               ),
 
-                              if (deal.brand != null && deal.brand!.isNotEmpty) ...[
-                                const SizedBox(height: 10),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: primaryColor.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: primaryColor.withValues(alpha: 0.25),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.verified_rounded, size: 14, color: primaryColor),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        'Marka: ',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                          color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                      Text(
-                                        deal.brand!,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: isDark ? Colors.white : AppTheme.textPrimary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-
-                              // PostedBy User Tag (If user submitted)
-                              if (deal.postedBy.isNotEmpty && deal.isUserSubmitted) ...[
-                                const SizedBox(height: 12),
-                                StreamBuilder<DocumentSnapshot>(
-                                  stream: FirebaseFirestore.instance
-                                      .collection('users')
-                                      .doc(deal.postedBy)
-                                      .snapshots(),
-                                  builder: (context, snapshot) {
-                                    if (!snapshot.hasData || !snapshot.data!.exists) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    final userData = snapshot.data!.data() as Map<String, dynamic>;
-                                    final username = userData['username']?.toString() ?? 'Kullanıcı';
-                                    final profileImageUrl = userData['profileImageUrl']?.toString() ?? '';
-
-                                    return InkWell(
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => ProfileScreen(userId: deal.postedBy),
-                                          ),
-                                        );
-                                      },
-                                      borderRadius: BorderRadius.circular(16),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                        decoration: BoxDecoration(
-                                          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[100],
-                                          borderRadius: BorderRadius.circular(16),
-                                          border: Border.all(
-                                            color: primaryColor.withValues(alpha: 0.3),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            ClipOval(
-                                              child: profileImageUrl.isNotEmpty
-                                                  ? (profileImageUrl.startsWith('assets/')
-                                                      ? Image.asset(profileImageUrl, width: 18, height: 18, fit: BoxFit.cover)
-                                                      : CachedNetworkImage(
-                                                          imageUrl: profileImageUrl,
-                                                          width: 18,
-                                                          height: 18,
-                                                          fit: BoxFit.cover,
-                                                        ))
-                                                  : Container(
-                                                      width: 18,
-                                                      height: 18,
-                                                      color: primaryColor.withOpacity(0.15),
-                                                      child: Icon(Icons.person_rounded, size: 12, color: primaryColor),
-                                                    ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              'Paylaşan: ',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: isDark ? Colors.grey[400] : Colors.grey[600],
-                                              ),
-                                            ),
-                                            Text(
-                                              username,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                                color: primaryColor,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 14),
 
                               // Editor's Pick Badge
                               if (deal.isEditorPick)
                                 Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.only(top: 4, bottom: 12),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
@@ -1034,10 +1034,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               Text(
                                 deal.title,
                                 style: TextStyle(
-                                  fontSize: 22,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w800,
                                   color: isDark ? Colors.white : AppTheme.textPrimary,
-                                  height: 1.25,
+                                  height: 1.3,
                                 ),
                               ),
 
@@ -1258,133 +1258,135 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Price Column
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Fırsat Fiyatı',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(
-                                  currencyFormat.format(deal.price),
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w900,
-                                    color: AppTheme.primary,
-                                    height: 1,
-                                  ),
-                                ),
-                                if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    currencyFormat.format(deal.originalPrice),
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                      decoration: TextDecoration.lineThrough,
-                                      decorationThickness: 1.5,
+                        // Price Column (Sol: İndirimli Fiyat font 24, Sağ: [İndirim Etiketi üstte, İndirimsiz Fiyat altta])
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  // Sol: İndirimli (Fırsat) Fiyatı - Dikeyde Ortalı, Font Size: 24
+                                  FormattedPriceText(
+                                    value: deal.price,
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppTheme.primary,
+                                      height: 1.0,
                                     ),
                                   ),
-                                  if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.primary,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        '%${deal.effectiveDiscountRate} İndirim',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.black,
+                                  // Sağ: [İndirim Etiketi üstte, İndirimsiz (eski) Fiyat altta] Sütunu
+                                  if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                                    const SizedBox(width: 10),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // İndirim Etiketi (tam indirimsiz fiyatın üstünde)
+                                        if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
+                                          Container(
+                                            margin: const EdgeInsets.only(bottom: 2),
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: isDark ? AppTheme.primary : const Color(0xFFE53935),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '%${deal.effectiveDiscountRate} İndirim',
+                                              style: TextStyle(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w900,
+                                                color: isDark ? Colors.black : Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        // İndirimsiz (Eski) Fiyat (üstü çizili)
+                                        FormattedPriceText(
+                                          value: deal.originalPrice,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+                                            decoration: TextDecoration.lineThrough,
+                                            decorationThickness: 1.5,
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ),
                                   ],
                                 ],
-                              ],
-                            ),
-                            if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
-                              const SizedBox(height: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF3E0),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: const Color(0xFFFFB74D).withValues(alpha: 0.5),
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: Text(
-                                  deal.priceLabel!,
-                                  style: const TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFFE65100),
-                                  ),
-                                ),
                               ),
+                              if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFF3E0),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: const Color(0xFFFFB74D).withValues(alpha: 0.5),
+                                      width: 0.5,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    deal.priceLabel!,
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFE65100),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
 
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 12),
 
-                        // Main CTA Button ("Mağazaya Git")
-                        Expanded(
-                          child: Container(
-                            height: 52,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              gradient: LinearGradient(
-                                colors: deal.isExpired 
-                                    ? [Colors.grey[700]!, Colors.grey[800]!]
-                                    : [AppTheme.primary, const Color(0xFFFF9800)],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (deal.isExpired ? Colors.black : AppTheme.primary).withValues(alpha: 0.35),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                        // Main CTA Button ("Mağazaya Git") - Dolgulu Turuncu/Sarı Marka Rengi ve Büyütülmüş
+                        Container(
+                          height: 48,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            gradient: LinearGradient(
+                              colors: deal.isExpired 
+                                  ? [Colors.grey[700]!, Colors.grey[800]!]
+                                  : [AppTheme.primary, const Color(0xFFFF9800)],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
                             ),
-                            child: ElevatedButton.icon(
-                              onPressed: () => _openLink(context, deal.link),
-                              icon: const Icon(Icons.open_in_new_rounded, size: 20),
-                              label: Text(
-                                deal.isExpired ? 'Şansını Dene / Mağazaya Git' : 'Mağazaya Git',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.3,
-                                ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: (deal.isExpired ? Colors.black : AppTheme.primary).withValues(alpha: 0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
                               ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                foregroundColor: Colors.white,
-                                shadowColor: Colors.transparent,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
+                            ],
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () => _openLink(context, deal.link),
+                            icon: const Icon(Icons.open_in_new_rounded, size: 18, color: Colors.white),
+                            label: Text(
+                              deal.isExpired ? 'Şansını Dene' : 'Mağazaya Git',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              shadowColor: Colors.transparent,
+                              padding: const EdgeInsets.symmetric(horizontal: 18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
                               ),
                             ),
                           ),

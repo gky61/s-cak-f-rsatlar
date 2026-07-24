@@ -614,8 +614,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 ],
                 Row(
                   children: [
-                    Text(
-                      currencyFormat.format(deal.price),
+                    FormattedPriceText(
+                      value: deal.price,
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         color: AppTheme.primary,
@@ -623,8 +623,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ),
                     if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
                       const SizedBox(width: 6),
-                      Text(
-                        currencyFormat.format(deal.originalPrice),
+                      FormattedPriceText(
+                        value: deal.originalPrice,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w400,

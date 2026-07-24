@@ -94,12 +94,30 @@ class BeymenScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. Script BEYMEN.productMain promotedOrActualPrice değerinden (Öncelikli)
+    // 1. DOM Campaign / Sepette price (Öncelikli)
+    final campaignPriceEl = document.querySelector('.m-price__campaignPrice') ??
+                            document.querySelector('[id="priceCampaign"]');
+    if (campaignPriceEl != null) {
+      final val = parsePriceText(campaignPriceEl.text);
+      if (val != null && val > 0) return val;
+    }
+
+    // 2. DOM New price
+    final newPriceEl = document.querySelector('ins.m-price__new') ??
+                       document.querySelector('.m-price__new') ??
+                       document.querySelector('[id="priceNew"]');
+    if (newPriceEl != null) {
+      final val = parsePriceText(newPriceEl.text);
+      if (val != null && val > 0) return val;
+    }
+
+    // 3. Script BEYMEN.productMain promotedOrActualPrice
     final scripts = document.querySelectorAll('script');
     for (final script in scripts) {
       final text = script.text;
-      if (text.contains('BEYMEN.productMain') || text.contains('promotedOrActualPrice')) {
-        final match = RegExp(r'"promotedOrActualPrice"\s*:\s*([0-9.]+)').firstMatch(text);
+      if (text.contains('BEYMEN.productMain')) {
+        final match = RegExp(r'"promotedOrActualPrice"\s*:\s*([0-9.]+)').firstMatch(text) ??
+                      RegExp(r'"actualPrice"\s*:\s*([0-9.]+)').firstMatch(text);
         if (match != null) {
           final val = double.tryParse(match.group(1)!);
           if (val != null && val > 0) return val;
@@ -107,7 +125,7 @@ class BeymenScraper extends BaseProductScraper {
       }
     }
 
-    // 2. JSON-LD şemasından fiyat çekmeyi dene (Fallback 1)
+    // 4. JSON-LD şemasından
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
       final priceLd = extractPriceFromProductJson(productJson);
@@ -116,7 +134,7 @@ class BeymenScraper extends BaseProductScraper {
       }
     }
 
-    // 3. DOM Seçicileri (Fallback 2 - En ucuz sepette indirimli/Visa kampanya fiyatını seçer)
+    // 5. DOM campaign/discount/Visa prices fallback
     final priceSelectors = [
       '.m-price__campaignPrice',
       'ins.m-price__new',
@@ -138,6 +156,75 @@ class BeymenScraper extends BaseProductScraper {
     }
 
     return lowestPrice;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    // 1. DOM old strikethrough price (.m-price__old, del.m-price__old)
+    final oldPriceEl = document.querySelector('.m-price__old') ??
+                       document.querySelector('del.m-price__old') ??
+                       document.querySelector('[id="priceOld"]');
+    if (oldPriceEl != null) {
+      final val = parsePriceText(oldPriceEl.text);
+      if (val != null && val > currentPrice) return val;
+    }
+
+    // 2. DOM .m-price__new (Eğer kampanya fiyatı varsa, normal satış fiyatı .m-price__new üzerindedir)
+    final newPriceEl = document.querySelector('ins.m-price__new') ??
+                       document.querySelector('.m-price__new') ??
+                       document.querySelector('[id="priceNew"]');
+    if (newPriceEl != null) {
+      final val = parsePriceText(newPriceEl.text);
+      if (val != null && val > currentPrice) return val;
+    }
+
+    // 3. Script BEYMEN.productMain strikeThroughPrice veya actualPrice
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('BEYMEN.productMain')) {
+        final strikeMatch = RegExp(r'"strikeThroughPriceText"\s*:\s*"([^"]+)"').firstMatch(text);
+        if (strikeMatch != null) {
+          final val = parsePriceText(strikeMatch.group(1)!);
+          if (val != null && val > currentPrice) return val;
+        }
+
+        final actualMatch = RegExp(r'"actualPriceText"\s*:\s*"([^"]+)"').firstMatch(text);
+        if (actualMatch != null) {
+          final val = parsePriceText(actualMatch.group(1)!);
+          if (val != null && val > currentPrice) return val;
+        }
+      }
+    }
+
+    // 4. Fallback selectors
+    final candidates = <double>[];
+    final selectors = [
+      '.m-price__old',
+      '.m-price__new',
+      'del',
+      's',
+      '.old-price',
+      '.original-price',
+    ];
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) => b.compareTo(a));
+    return candidates.first;
   }
 
   @override

@@ -72,13 +72,20 @@ class MangoScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. Next.js __next_f script push verisi içerisinden (Öncelikli)
+    // 1. DOM finalPrice (İndirimli yeni fiyat)
+    final finalPriceEl = document.querySelector('span[class*="finalPrice"]') ??
+                         document.querySelector('[class*="SinglePrice"][class*="finalPrice"]');
+    if (finalPriceEl != null) {
+      final val = parsePriceText(finalPriceEl.text);
+      if (val != null && val > 0) return val;
+    }
+
+    // 2. Next.js script push data
     final scripts = document.querySelectorAll('script');
     for (final script in scripts) {
       final text = script.text;
-      if (text.contains('price') || text.contains('amount')) {
-        // Hem kaçış karakterli (escaped) hem de kaçış karaktersiz (unescaped) tırnakları destekler.
-        final match = RegExp(r'\\?"price\\?"\s*:\s*\{\s*\\?"amount\\?"\s*:\s*\\?"?([0-9.]+)\\?"?').firstMatch(text) ??
+      if (text.contains('price')) {
+        final match = RegExp(r'\\?"price\\?"\s*:\s*\{\s*\\?"amount\\?"\s*:\s*([0-9.]+)').firstMatch(text) ??
                       RegExp(r'\\?"price\\?"\s*:\s*\\?"?([0-9.]+)\\?"?').firstMatch(text);
         if (match != null) {
           final val = double.tryParse(match.group(1)!);
@@ -87,7 +94,16 @@ class MangoScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
+    // 3. JSON-LD şemasından
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final priceVal = extractPriceFromProductJson(productJson);
+      if (priceVal != null && priceVal > 0) {
+        return priceVal;
+      }
+    }
+
+    // 4. DOM Seçicileri (Fallback)
     final priceSelectors = [
       '[data-testid="pdp.productInfo.price"]',
       '.pdp-price',
@@ -103,6 +119,58 @@ class MangoScraper extends BaseProductScraper {
     }
 
     return null;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    // 1. DOM crossed out price (İndirimsiz çizili fiyat)
+    final crossedEl = document.querySelector('span[class*="crossed"]') ??
+                      document.querySelector('[class*="SinglePrice"][class*="crossed"]');
+    if (crossedEl != null) {
+      final val = parsePriceText(crossedEl.text);
+      if (val != null && val > currentPrice) return val;
+    }
+
+    // 2. Next.js script crossedOutPrices
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('crossedOutPrices')) {
+        final match = RegExp(r'\\?"crossedOutPrices\\?"\s*:\s*\[\{\s*\\?"amount\\?"\s*:\s*([0-9.]+)').firstMatch(text);
+        if (match != null) {
+          final val = double.tryParse(match.group(1)!);
+          if (val != null && val > currentPrice) return val;
+        }
+      }
+    }
+
+    // 3. Fallback selectors
+    final candidates = <double>[];
+    final selectors = [
+      'span[class*="crossed"]',
+      'del',
+      's',
+      '.old-price',
+      '.original-price',
+    ];
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) => b.compareTo(a));
+    return candidates.first;
   }
 
   @override

@@ -58,9 +58,15 @@ class TeknosaScraper extends BaseProductScraper {
 
   scrapePrice($) {
     // 1. DOM Seçicileri - Öncelikli: span.prc-third (Hem indirimli hem indirimsiz doğru fiyatı içerir)
-    const priceThirdEl = $('span.prc-third').first();
+    const priceThirdEl = $('.pdp-prices span.prc-third, span.prc-third').first();
     if (priceThirdEl.length) {
       const v = this.parsePriceText(priceThirdEl.text());
+      if (v && v > 0) return v;
+    }
+
+    const priceLastEl = $('.pdp-prices span.prc-last, span.prc-last').first();
+    if (priceLastEl.length) {
+      const v = this.parsePriceText(priceLastEl.text());
       if (v && v > 0) return v;
     }
 
@@ -78,6 +84,45 @@ class TeknosaScraper extends BaseProductScraper {
       if (v && v > 0) return v;
     }
     return null;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let candidates = [];
+
+    const selectors = [
+      '.pdp-prices .pdp-prc1 span.prc',
+      '.pdp-prices span.prc-first',
+      '.pdp-prices span.generalPrice',
+      'span.prc-first',
+      'span.generalPrice',
+      'span.prc.generalPrice',
+      '.pdp-prc1 span',
+      '.line-through',
+      'del',
+      's'
+    ];
+
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        if (txt.includes('TL') || txt.includes('₺')) {
+          const parsed = this.parsePriceText(txt);
+          if (parsed !== null && parsed > currentPrice) {
+            candidates.push(parsed);
+          }
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b - a);
+    return candidates[0];
   }
 
   scrapeDescription($) {

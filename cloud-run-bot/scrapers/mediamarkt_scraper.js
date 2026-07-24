@@ -58,27 +58,109 @@ class MediaMarktScraper extends BaseProductScraper {
     return og ? og.trim() : null;
   }
 
-  scrapePrice($) {
-    // 1. JSON-LD
-    const product = this.findProductJsonLd($);
-    if (product) {
-      const p = this.extractPriceFromProductJson(product);
-      if (p && p > 0) return p;
-    }
-    // 2. DOM
-    const priceSelectors = [
-      '[data-test="branded-price-whole-value"]',
-      'meta[property="product:price:amount"]',
-      'meta[property="og:price:amount"]'
-    ];
-    for (const sel of priceSelectors) {
-      const el = $(sel).first();
-      if (el.length) {
-        const text = el.is('meta') ? el.attr('content') : el.text();
-        const val = this.parsePriceText(text || '');
-        if (val && val > 0) return val;
+  extractBasketDiscount($) {
+    const promoEl = $('[data-test="mms-promoflag"]').first();
+    if (promoEl.length) {
+      const text = promoEl.text().trim();
+      if (text.includes('Sepette indirim') || text.includes('sepette')) {
+        const match = /-([\d.,]+)/.exec(text);
+        if (match) {
+          return this.parsePriceText(match[1]);
+        }
       }
     }
+    return null;
+  }
+
+  scrapePrice($) {
+    let mainPrice = null;
+
+    // 1. Check main price on page
+    const wholeValEl = $('[data-test="branded-price-whole-value"]').first();
+    if (wholeValEl.length) {
+      let wholeTxt = wholeValEl.text().trim();
+      const decimalValEl = $('[data-test="branded-price-decimal-value"]').first();
+      let decTxt = decimalValEl.length ? decimalValEl.text().trim() : '';
+      if (decTxt === '–' || !decTxt) decTxt = '00';
+
+      const fullPriceTxt = `${wholeTxt}${decTxt}`;
+      const val = this.parsePriceText(fullPriceTxt);
+      if (val && val > 0) mainPrice = val;
+    }
+
+    if (!mainPrice) {
+      const product = this.findProductJsonLd($);
+      if (product) {
+        const p = this.extractPriceFromProductJson(product);
+        if (p && p > 0) mainPrice = p;
+      }
+    }
+
+    if (!mainPrice) {
+      const meta = $('meta[property="product:price:amount"], meta[property="og:price:amount"]').first();
+      if (meta.length) {
+        const val = this.parsePriceText(meta.attr('content') || '');
+        if (val && val > 0) mainPrice = val;
+      }
+    }
+
+    if (!mainPrice) return null;
+
+    // Check if basket discount exists
+    const basketDiscount = this.extractBasketDiscount($);
+    if (basketDiscount && mainPrice) {
+      return Math.round((mainPrice - basketDiscount) * 100) / 100;
+    }
+
+    return mainPrice;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let mainPrice = null;
+    const wholeValEl = $('[data-test="branded-price-whole-value"]').first();
+    if (wholeValEl.length) {
+      let wholeTxt = wholeValEl.text().trim();
+      const decimalValEl = $('[data-test="branded-price-decimal-value"]').first();
+      let decTxt = decimalValEl.length ? decimalValEl.text().trim() : '';
+      if (decTxt === '–' || !decTxt) decTxt = '00';
+
+      const fullPriceTxt = `${wholeTxt}${decTxt}`;
+      const val = this.parsePriceText(fullPriceTxt);
+      if (val && val > 0) mainPrice = val;
+    }
+
+    const basketDiscount = this.extractBasketDiscount($);
+    if (basketDiscount && mainPrice && mainPrice > currentPrice) {
+      return mainPrice;
+    }
+
+    // Standard strikethrough price
+    const strikeSelectors = [
+      '[data-test*="strike-price"]',
+      '[data-test="mms-strike-price-type-lop"]',
+      'p.sc-59b6826e-0.jrBeuL',
+      'span.sc-59b6826e-0.jrurFT',
+      'span.sc-59b6826e-0.jCGxOY',
+      '.line-through',
+      'del',
+      's'
+    ];
+
+    for (const sel of strikeSelectors) {
+      const el = $(sel).first();
+      if (el.length) {
+        const txt = el.text().trim();
+        if (txt.includes('TL') || txt.includes('₺')) {
+          const val = this.parsePriceText(txt);
+          if (val && val > currentPrice) {
+            return val;
+          }
+        }
+      }
+    }
+
     return null;
   }
 

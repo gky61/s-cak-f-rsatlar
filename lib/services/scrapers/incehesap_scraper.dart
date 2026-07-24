@@ -169,6 +169,57 @@ class IncehesapScraper extends BaseProductScraper {
   }
 
   @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    // 1. Önce ana fiyat elementinin parent/container'ında strikethrough fiyatı ara
+    final priceEl = document.querySelector('div.price') ??
+                    document.querySelector('p.price') ??
+                    document.querySelector('.price') ??
+                    document.querySelector('[class*="price"]');
+
+    if (priceEl != null) {
+      dom.Element? curr = priceEl.parent;
+      int depth = 0;
+      while (curr != null && depth < 4) {
+        final strikeEl = curr.querySelector('.line-through') ??
+                         curr.querySelector('[class*="line-through"]') ??
+                         curr.querySelector('del') ??
+                         curr.querySelector('s');
+        if (strikeEl != null) {
+          final parsed = parsePriceText(strikeEl.text);
+          if (parsed != null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            return parsed;
+          }
+        }
+        curr = curr.parent;
+        depth++;
+      }
+    }
+
+    // 2. Global fallback
+    final candidates = <double>[];
+    final selectors = ['.line-through', '[class*="line-through"]', 'del', 's'];
+
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) => a.compareTo(b));
+    return candidates.first;
+  }
+
+  @override
   String? scrapeDescription(dom.Document document) {
     final descEl = document.querySelector('meta[name="description"]') ?? 
                    document.querySelector('meta[property="og:description"]');

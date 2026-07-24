@@ -55,19 +55,88 @@ class IdefixScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // 1. JSON-LD
+    // 1. __NEXT_DATA__
+    const nextScript = $('#__NEXT_DATA__').html();
+    if (nextScript) {
+      try {
+        const json = JSON.parse(nextScript);
+        const cp = json.props?.pageProps?.productDetail?.currentPrice;
+        if (cp) {
+          const eff = cp.effectivePrice || cp.discountedPrice;
+          if (eff && eff > 0) return parseFloat(eff);
+        }
+      } catch (_) {}
+    }
+
+    // 2. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
       const p = this.extractPriceFromProductJson(product);
       if (p && p > 0) return p;
     }
-    // 2. DOM
-    const el = $('meta[property="og:price:sale_price"], meta[property="product:price:amount"]').first();
+
+    // 3. DOM
+    const el = $('span.text-title-2xl.text-secondary-600, meta[property="og:price:sale_price"], meta[property="product:price:amount"]').first();
     if (el.length) {
-      const v = this.parsePriceText(el.attr('content') || '');
+      const v = this.parsePriceText(el.is('meta') ? el.attr('content') : el.text());
       if (v && v > 0) return v;
     }
     return null;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let candidates = [];
+
+    // 1. __NEXT_DATA__
+    const nextScript = $('#__NEXT_DATA__').html();
+    if (nextScript) {
+      try {
+        const json = JSON.parse(nextScript);
+        const cp = json.props?.pageProps?.productDetail?.currentPrice;
+        if (cp) {
+          if (cp.price != null) {
+            const val = parseFloat(cp.price);
+            if (val > currentPrice) candidates.push(val);
+          }
+          if (cp.comparePrice != null) {
+            const val = parseFloat(cp.comparePrice);
+            if (val > currentPrice) candidates.push(val);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. DOM selectors for strikethrough price
+    const selectors = [
+      'span.line-through',
+      'span.text-title-md.text-neutral-500',
+      'span.text-neutral-500',
+      '.line-through',
+      'del',
+      's'
+    ];
+
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        if (txt.includes('TL')) {
+          const parsed = this.parsePriceText(txt);
+          if (parsed !== null && parsed > currentPrice) {
+            candidates.push(parsed);
+          }
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a - b);
+    return candidates[0];
   }
 
   scrapeDescription($) {

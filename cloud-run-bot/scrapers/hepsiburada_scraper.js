@@ -217,34 +217,25 @@ class HepsiburadaScraper extends BaseProductScraper {
 
     let candidates = [];
 
-    // 1. ReduxStore product.prices and listings
+    // 1. ReduxStore product.prices (SADECE ana ürünün liste/eski fiyatları)
+    // Diğer satıcıların (product.listings) yüksek fiyatlarını HARİÇ tutuyoruz.
     const script = $('#reduxStore');
     if (script.length) {
       try {
         const reduxData = JSON.parse(script.text());
         const product = reduxData?.productState?.product;
-        if (product) {
-          if (Array.isArray(product.prices)) {
-            for (const p of product.prices) {
-              const val = parseFloat(p?.value?.toString() || '');
-              if (!isNaN(val) && val > currentPrice) {
-                candidates.push(val);
-              }
-            }
-          }
-          if (Array.isArray(product.listings)) {
-            for (const l of product.listings) {
-              const orig = parseFloat(l?.originalPrice?.toString() || '') || parseFloat(l?.listPrice?.toString() || '');
-              if (!isNaN(orig) && orig > currentPrice) {
-                candidates.push(orig);
-              }
+        if (product && Array.isArray(product.prices)) {
+          for (const p of product.prices) {
+            const val = parseFloat(p?.value?.toString() || '');
+            if (!isNaN(val) && val > currentPrice) {
+              candidates.push(val);
             }
           }
         }
       } catch (_) {}
     }
 
-    // 2. DOM selectors for old / crossed out prices
+    // 2. DOM selectors for old / crossed out prices (Diğer satıcılar bloğu hariç)
     const domSelectors = [
       'del',
       's',
@@ -258,7 +249,13 @@ class HepsiburadaScraper extends BaseProductScraper {
 
     for (const selector of domSelectors) {
       $(selector).each((_, el) => {
-        const txt = $(el).text().trim();
+        // Diğer satıcılar ("other-merchants") alanındaki fiyatları hariç tut
+        const $el = $(el);
+        if ($el.closest('[class*="otherMerchant"], [data-test-id*="merchant"], .other-merchants, #otherMerchants').length > 0) {
+          return;
+        }
+
+        const txt = $el.text().trim();
         const parsed = this.parsePriceText(txt);
         if (parsed !== null && parsed > currentPrice) {
           candidates.push(parsed);

@@ -33,7 +33,6 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
   @override
   Widget build(BuildContext context) {
     final deal = widget.deal;
-    final currencyFormat = DynamicCurrencyFormatter();
     final isExpired = deal.isExpired;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
@@ -176,7 +175,9 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: primaryColor,
+                                  color: isDark 
+                                      ? primaryColor 
+                                      : const Color(0xFFE53935),
                                   borderRadius: BorderRadius.circular(4),
                                   boxShadow: [
                                     BoxShadow(
@@ -188,8 +189,8 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                 ),
                                 child: Text(
                                   '%${deal.effectiveDiscountRate}',
-                                  style: const TextStyle(
-                                    color: Colors.black,
+                                  style: TextStyle(
+                                    color: isDark ? Colors.black : Colors.white,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -524,37 +525,9 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                     ),
                                 ],
                               ),
-                              const SizedBox(height: 8), // Başlık ile fiyat arası padding artırıldı
-                              // Fiyat ve İndirimsiz Fiyat (Eski Fiyat)
-                              Wrap(
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 4,
-                                children: [
-                                  Text(
-                                    currencyFormat.format(deal.price),
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w900,
-                                      color: isExpired 
-                                          ? Colors.red[700] 
-                                          : AppTheme.primary,
-                                    ),
-                                  ),
-                                  if (deal.originalPrice != null && deal.originalPrice! > deal.price)
-                                    Text(
-                                      currencyFormat.format(deal.originalPrice),
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                        decoration: TextDecoration.lineThrough,
-                                        decorationThickness: 1.5,
-                                      ),
-                                    ),
-                                ],
-                              ),
+                              // Rating (Başlık altında, fiyat üstünde)
                               if (deal.ratingValue != null || deal.ratingCount != null) ...[
-                                const SizedBox(height: 3),
+                                const SizedBox(height: 4),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -587,6 +560,35 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ),
                               ],
+                              const SizedBox(height: 6),
+                              // Fiyat ve İndirimsiz Fiyat (Eski Fiyat)
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 4,
+                                children: [
+                                  FormattedPriceText(
+                                    value: deal.price,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                      color: isExpired 
+                                          ? Colors.red[700] 
+                                          : AppTheme.primary,
+                                    ),
+                                  ),
+                                  if (deal.originalPrice != null && deal.originalPrice! > deal.price)
+                                    FormattedPriceText(
+                                      value: deal.originalPrice,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                        decoration: TextDecoration.lineThrough,
+                                        decorationThickness: 1.5,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ],
                           ),
                           if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty)

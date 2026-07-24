@@ -70,12 +70,27 @@ class BeymenScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // 1. Script promotedOrActualPrice
+    // 1. DOM Campaign / Sepette price (Öncelikli)
+    const campaignPriceEl = $('.m-price__campaignPrice, [id="priceCampaign"]').first();
+    if (campaignPriceEl.length) {
+      const val = this.parsePriceText(campaignPriceEl.text());
+      if (val && val > 0) return val;
+    }
+
+    // 2. DOM New price
+    const newPriceEl = $('ins.m-price__new, .m-price__new, [id="priceNew"]').first();
+    if (newPriceEl.length) {
+      const val = this.parsePriceText(newPriceEl.text());
+      if (val && val > 0) return val;
+    }
+
+    // 3. Script BEYMEN.productMain promotedOrActualPrice
     const scripts = $('script');
     for (let i = 0; i < scripts.length; i++) {
       const text = $(scripts[i]).text() || '';
-      if (text.includes('BEYMEN.productMain') || text.includes('promotedOrActualPrice')) {
-        const match = text.match(/"promotedOrActualPrice"\s*:\s*([0-9.]+)/);
+      if (text.includes('BEYMEN.productMain')) {
+        const match = text.match(/"promotedOrActualPrice"\s*:\s*([0-9.]+)/) ||
+                      text.match(/"actualPrice"\s*:\s*([0-9.]+)/);
         if (match) {
           const val = parseFloat(match[1]);
           if (!isNaN(val) && val > 0) return val;
@@ -83,14 +98,14 @@ class BeymenScraper extends BaseProductScraper {
       }
     }
 
-    // 2. JSON-LD
+    // 4. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
       const p = this.extractPriceFromProductJson(product);
       if (p && p > 0) return p;
     }
 
-    // 3. DOM campaign/discount/Visa prices
+    // 5. DOM campaign/discount/Visa prices fallback
     const priceSelectors = [
       '.m-price__campaignPrice',
       'ins.m-price__new',
@@ -112,6 +127,70 @@ class BeymenScraper extends BaseProductScraper {
     }
 
     return lowestPrice;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    // 1. DOM old strikethrough price (.m-price__old, del.m-price__old)
+    const oldPriceEl = $('.m-price__old, del.m-price__old, [id="priceOld"]').first();
+    if (oldPriceEl.length) {
+      const val = this.parsePriceText(oldPriceEl.text());
+      if (val && val > currentPrice) return val;
+    }
+
+    // 2. DOM .m-price__new (Eğer kampanya fiyatı varsa, normal satış fiyatı .m-price__new üzerindedir)
+    const newPriceEl = $('ins.m-price__new, .m-price__new, [id="priceNew"]').first();
+    if (newPriceEl.length) {
+      const val = this.parsePriceText(newPriceEl.text());
+      if (val && val > currentPrice) return val;
+    }
+
+    // 3. Script BEYMEN.productMain strikeThroughPrice veya actualPrice
+    const scripts = $('script');
+    for (let i = 0; i < scripts.length; i++) {
+      const text = $(scripts[i]).text() || '';
+      if (text.includes('BEYMEN.productMain')) {
+        const strikeMatch = text.match(/"strikeThroughPriceText"\s*:\s*"([^"]+)"/);
+        if (strikeMatch) {
+          const val = this.parsePriceText(strikeMatch[1]);
+          if (val && val > currentPrice) return val;
+        }
+
+        const actualMatch = text.match(/"actualPriceText"\s*:\s*"([^"]+)"/);
+        if (actualMatch) {
+          const val = this.parsePriceText(actualMatch[1]);
+          if (val && val > currentPrice) return val;
+        }
+      }
+    }
+
+    // 4. Fallback selectors
+    let candidates = [];
+    const selectors = [
+      '.m-price__old',
+      '.m-price__new',
+      'del',
+      's',
+      '.old-price',
+      '.original-price'
+    ];
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        if (txt.includes('TL') || txt.includes('₺')) {
+          const parsed = this.parsePriceText(txt);
+          if (parsed !== null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.push(parsed);
+          }
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b - a);
+    return candidates[0];
   }
 
   scrapeDescription($) {

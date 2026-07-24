@@ -64,7 +64,14 @@ class DefactoScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // 1. Script
+    // 1. DOM campaing-base-price (Sepette / Kampanyalı indirimli fiyat)
+    const campaingEl = $('[class*="campaing-base-price"], .campaing-base-price, .product-price__discount').first();
+    if (campaingEl.length) {
+      const val = this.parsePriceText(campaingEl.text());
+      if (val && val > 0) return val;
+    }
+
+    // 2. Script bloğundan
     const scripts = $('script');
     for (let i = 0; i < scripts.length; i++) {
       const text = $(scripts[i]).text() || '';
@@ -90,17 +97,17 @@ class DefactoScraper extends BaseProductScraper {
       }
     }
 
-    // 2. JSON-LD
+    // 3. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
       const p = this.extractPriceFromProductJson(product);
       if (p && p > 0) return p;
     }
 
-    // 3. DOM
+    // 4. DOM fallback
     const priceSelectors = [
-      '.product-price__discount',
       '.product-price',
+      '.product-info__price--new',
       'span[class*="price"]'
     ];
     for (const sel of priceSelectors) {
@@ -111,6 +118,52 @@ class DefactoScraper extends BaseProductScraper {
       }
     }
     return null;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    // 1. DOM lined-base-price (İndirimsiz çizili fiyat)
+    const linedEl = $('[class*="lined-base-price"], .lined-base-price').first();
+    if (linedEl.length) {
+      const txt = linedEl.text().trim();
+      const val = this.parsePriceText(txt);
+      if (val && val > currentPrice) return val;
+    }
+
+    // 2. JSON-LD price (DeFacto JSON-LD genellikle indirim öncesi liste fiyatını verir)
+    const product = this.findProductJsonLd($);
+    if (product && product.offers && product.offers.price != null) {
+      const p = parseFloat(product.offers.price);
+      if (!isNaN(p) && p > currentPrice) return p;
+    }
+
+    // 3. Fallback selectors
+    let candidates = [];
+    const selectors = [
+      '[class*="lined-base-price"]',
+      '.lined-base-price',
+      'del',
+      's',
+      '.old-price',
+      '.original-price'
+    ];
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        if (txt.includes('TL') || txt.includes('₺')) {
+          const parsed = this.parsePriceText(txt);
+          if (parsed !== null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.push(parsed);
+          }
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b - a);
+    return candidates[0];
   }
 
   scrapeDescription($) {

@@ -79,23 +79,23 @@ class PazaramaScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. Pazarama Plus Fiyat Kontrolü (Plus'a özel indirimli fiyat önceliklidir)
-    final plusImgs = document.querySelectorAll('img[alt="plus-icon"], img[src*="pz-plus-icon"]');
-    for (final plusImg in plusImgs) {
-      var parent = plusImg.parent;
-      while (parent != null && parent.localName != 'div') {
-        parent = parent.parent;
+    // 1. Pazarama Plus / Sepet / Mavi indirimli özel fiyat
+    final bluePriceEls = document.querySelectorAll('span.text-blue-500.font-bold, span[class*="text-blue-500"], img[alt="plus-icon"], img[src*="pz-plus-icon"]');
+    for (final el in bluePriceEls) {
+      dom.Element container = el;
+      if (el.localName == 'img') {
+        var parent = el.parent;
+        while (parent != null && parent.localName != 'div') {
+          parent = parent.parent;
+        }
+        if (parent != null) container = parent;
       }
-      if (parent != null) {
-        final spans = parent.querySelectorAll('span');
-        for (final span in spans) {
-          final text = span.text.trim();
-          if (text.contains('TL') && !text.contains('ile')) {
-            final parsedPrice = parsePriceText(text);
-            if (parsedPrice != null && parsedPrice > 0) {
-              return parsedPrice;
-            }
-          }
+      final spans = container.querySelectorAll('span');
+      for (final span in spans) {
+        final text = span.text.trim();
+        if (text.contains('TL') && !text.contains('ile')) {
+          final val = parsePriceText(text);
+          if (val != null && val > 0) return val;
         }
       }
     }
@@ -109,9 +109,10 @@ class PazaramaScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
+    // 3. DOM Seçicileri (Fallback)
     final selectors = [
       'div[class*="text-4xl"][class*="text-black"][class*="font-bold"]',
+      'p.text-4xl.font-bold',
       'div.text-4xl.text-black.font-bold',
       'div.text-4xl.text-black',
       'span[class*="text-lg"][class*="font-bold"][class*="text-red-600"]',
@@ -128,6 +129,44 @@ class PazaramaScraper extends BaseProductScraper {
       }
     }
     return null;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    final candidates = <double>[];
+
+    final selectors = [
+      '.line-through',
+      'span.text-gray-400.line-through',
+      'p.text-base.font-normal.text-gray-400.line-through',
+      'p.text-lg.font-bold.text-red-600',
+      'p.text-gray-400',
+      '[class*="text-gray-400"]',
+      'del',
+      's',
+    ];
+
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    final valid = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+    if (valid.isEmpty) return null;
+
+    valid.sort((a, b) => b.compareTo(a));
+    return valid.first;
   }
 
   @override

@@ -97,17 +97,24 @@ class ZaraScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // 1. Script regex matching
+    // 1. DOM ins.price-current (İndirimli yeni fiyat)
+    const insEl = $('ins.price-current .money-amount__main, ins.price-current, .price-current__amount').first();
+    if (insEl.length) {
+      const val = this.parsePriceText(insEl.text());
+      if (val && val > 0) return val;
+    }
+
+    // 2. Script mainPrice / analyticsData
     const scripts = $('script');
     for (let i = 0; i < scripts.length; i++) {
       const text = $(scripts[i]).text() || '';
-      // A) mainPrice
-      const m1 = text.match(/"mainPrice"\s*:\s*([0-9.]+)/);
-      if (m1) {
-        const val = parseFloat(m1[1]);
-        if (!isNaN(val) && val > 0) return val;
+      if (text.includes('mainPrice') || text.includes('analyticsData')) {
+        const match = text.match(/"mainPrice"\s*:\s*([0-9.]+)/);
+        if (match) {
+          const val = parseFloat(match[1]);
+          if (!isNaN(val) && val > 0) return val;
+        }
       }
-      // B) price
       const m2 = text.match(/"price"\s*:\s*"([0-9.]+)"/) ||
                  text.match(/"price"\s*:\s*([0-9.]+)/);
       if (m2) {
@@ -116,7 +123,7 @@ class ZaraScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM selectors
+    // 3. DOM selectors
     const priceSelectors = [
       '.price-current__amount',
       '.price__amount',
@@ -131,7 +138,7 @@ class ZaraScraper extends BaseProductScraper {
       }
     }
 
-    // 3. JSON-LD / Meta tags
+    // 4. JSON-LD / Meta tags
     const product = this.findProductJsonLd($);
     if (product) {
       const p = this.extractPriceFromProductJson(product);
@@ -144,6 +151,44 @@ class ZaraScraper extends BaseProductScraper {
     }
 
     return null;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    // 1. DOM del.price__amount--old-price-wrapper / .price-old__amount (İndirimsiz çizili fiyat)
+    const oldPriceEl = $('del.price__amount--old-price-wrapper .money-amount__main, del.price__amount--old-price-wrapper, .price-old__amount, .price__amount-old').first();
+    if (oldPriceEl.length) {
+      const val = this.parsePriceText(oldPriceEl.text());
+      if (val && val > currentPrice) return val;
+    }
+
+    // 2. Fallback selectors
+    let candidates = [];
+    const selectors = [
+      'del',
+      's',
+      '.price-old__amount',
+      '.price__amount-old',
+      '.old-price',
+      '.original-price'
+    ];
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        if (txt.includes('TL') || txt.includes('₺')) {
+          const parsed = this.parsePriceText(txt);
+          if (parsed !== null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.push(parsed);
+          }
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b - a);
+    return candidates[0];
   }
 
   scrapeDescription($) {

@@ -7,6 +7,13 @@ class MediaMarktScraper extends BaseProductScraper {
   String get domain => 'mediamarkt.com.tr';
 
   @override
+  double? parsePriceText(String? text) {
+    if (text == null || text.isEmpty) return null;
+    final cleaned = text.replaceAll('–', '').replaceAll('-', '').replaceAll('—', '');
+    return super.parsePriceText(cleaned);
+  }
+
+  @override
   String? scrape({
     required dom.Document document,
     required String url,
@@ -83,28 +90,111 @@ class MediaMarktScraper extends BaseProductScraper {
     return null;
   }
 
+  double? _extractBasketDiscount(dom.Document document) {
+    final promoEl = document.querySelector('[data-test="mms-promoflag"]');
+    if (promoEl != null) {
+      final text = promoEl.text.trim();
+      if (text.contains('Sepette indirim') || text.contains('sepette')) {
+        final match = RegExp(r'-([\d.,]+)').firstMatch(text);
+        if (match != null && match.group(1) != null) {
+          return parsePriceText(match.group(1)!);
+        }
+      }
+    }
+    return null;
+  }
+
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. JSON-LD şemasından (Öncelikli)
-    final productJson = findProductJsonLd(document);
-    if (productJson != null) {
-      final priceVal = extractPriceFromProductJson(productJson);
-      if (priceVal != null && priceVal > 0) {
-        return priceVal;
+    double? mainPrice;
+
+    // 1. DOM branded price whole + decimal
+    final wholeValEl = document.querySelector('[data-test="branded-price-whole-value"]');
+    if (wholeValEl != null) {
+      String wholeTxt = wholeValEl.text.trim();
+      final decimalValEl = document.querySelector('[data-test="branded-price-decimal-value"]');
+      String decTxt = decimalValEl != null ? decimalValEl.text.trim() : '';
+      if (decTxt == '–' || decTxt.isEmpty) decTxt = '00';
+
+      final fullPriceTxt = '$wholeTxt$decTxt';
+      final val = parsePriceText(fullPriceTxt);
+      if (val != null && val > 0) mainPrice = val;
+    }
+
+    if (mainPrice == null) {
+      final productJson = findProductJsonLd(document);
+      if (productJson != null) {
+        final priceVal = extractPriceFromProductJson(productJson);
+        if (priceVal != null && priceVal > 0) {
+          mainPrice = priceVal;
+        }
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
-    final priceEl = document.querySelector('[data-test="branded-price-whole-value"]') ??
-                    document.querySelector('meta[property="product:price:amount"]') ??
-                    document.querySelector('meta[property="og:price:amount"]');
-                    
-    if (priceEl != null) {
-      if (priceEl.localName == 'meta') {
-        return parsePriceText(priceEl.attributes['content'] ?? '');
+    if (mainPrice == null) {
+      final priceEl = document.querySelector('meta[property="product:price:amount"]') ??
+                      document.querySelector('meta[property="og:price:amount"]');
+      if (priceEl != null) {
+        mainPrice = parsePriceText(priceEl.attributes['content'] ?? '');
       }
-      return parsePriceText(priceEl.text);
     }
+
+    if (mainPrice == null) return null;
+
+    final basketDiscount = _extractBasketDiscount(document);
+    if (basketDiscount != null && mainPrice > 0) {
+      return ((mainPrice - basketDiscount) * 100).roundToDouble() / 100;
+    }
+
+    return mainPrice;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    double? mainPrice;
+    final wholeValEl = document.querySelector('[data-test="branded-price-whole-value"]');
+    if (wholeValEl != null) {
+      String wholeTxt = wholeValEl.text.trim();
+      final decimalValEl = document.querySelector('[data-test="branded-price-decimal-value"]');
+      String decTxt = decimalValEl != null ? decimalValEl.text.trim() : '';
+      if (decTxt == '–' || decTxt.isEmpty) decTxt = '00';
+
+      final fullPriceTxt = '$wholeTxt$decTxt';
+      final val = parsePriceText(fullPriceTxt);
+      if (val != null && val > 0) mainPrice = val;
+    }
+
+    final basketDiscount = _extractBasketDiscount(document);
+    if (basketDiscount != null && mainPrice != null && mainPrice > currentPrice) {
+      return mainPrice;
+    }
+
+    // Standard strikethrough price
+    final strikeSelectors = [
+      '[data-test*="strike-price"]',
+      '[data-test="mms-strike-price-type-lop"]',
+      'p.sc-59b6826e-0.jrBeuL',
+      'span.sc-59b6826e-0.jrurFT',
+      'span.sc-59b6826e-0.jCGxOY',
+      '.line-through',
+      'del',
+      's',
+    ];
+
+    for (final selector in strikeSelectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺')) {
+          final val = parsePriceText(txt);
+          if (val != null && val > currentPrice) {
+            return val;
+          }
+        }
+      }
+    }
+
     return null;
   }
 

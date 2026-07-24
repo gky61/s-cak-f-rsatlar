@@ -113,10 +113,23 @@ class N11Scraper extends BaseProductScraper {
     // 1. window.model JSON'ından fiyatı çekmeyi dene (Öncelikli)
     const model = this._getN11Model($);
     if (model) {
-      for (const key of ['finalPriceFloat', 'finalPrice', 'priceFloat', 'price', 'displayPriceFloat', 'displayPrice']) {
-        const val = this._findValueRecursive(model, key);
-        if (val != null) {
-          const parsed = key.includes('Float') ? parseFloat(val.toString()) : this.parsePriceText(val.toString());
+      const p = model.product;
+      const pers = p?.personalizedData;
+
+      const candidates = [
+        pers?.instantDiscountedPrice,
+        pers?.product?.finalPrice,
+        p?.finalPriceFloat,
+        p?.finalPrice,
+        p?.priceFloat,
+        p?.price,
+        p?.displayPriceFloat,
+        p?.displayPrice
+      ];
+
+      for (const val of candidates) {
+        if (val !== undefined && val !== null) {
+          const parsed = typeof val === 'number' ? val : this.parsePriceText(val.toString());
           if (parsed && parsed > 0) return parsed;
         }
       }
@@ -142,6 +155,67 @@ class N11Scraper extends BaseProductScraper {
       return this.parsePriceText(text || '');
     }
     return null;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let candidates = [];
+
+    // 1. window.model JSON'ından eski / liste fiyatlarını çek
+    const model = this._getN11Model($);
+    if (model) {
+      const p = model.product;
+      const pers = p?.personalizedData;
+
+      const modelCandidates = [
+        pers?.product?.oldPrice,
+        pers?.product?.displayPrice,
+        p?.displayPriceFloat,
+        p?.displayPrice,
+        p?.oldPriceFloat,
+        p?.oldPrice,
+        p?.priceFloat,
+        p?.price
+      ];
+
+      for (const val of modelCandidates) {
+        if (val !== undefined && val !== null) {
+          const parsed = typeof val === 'number' ? val : this.parsePriceText(val.toString());
+          if (parsed !== null && parsed > currentPrice) {
+            candidates.push(parsed);
+          }
+        }
+      }
+    }
+
+    // 2. DOM selectors for old / strikethrough / original prices
+    const selectors = [
+      '.oldPrice',
+      '.old-price',
+      '[class*="oldPrice"]',
+      '[class*="old-price"]',
+      'del',
+      's'
+    ];
+
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        const parsed = this.parsePriceText(txt);
+        if (parsed !== null && parsed > currentPrice) {
+          candidates.push(parsed);
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a - b);
+    return candidates[0];
   }
 
   scrapeDescription($) {

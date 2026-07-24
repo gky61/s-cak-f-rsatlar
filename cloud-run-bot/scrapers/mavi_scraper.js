@@ -55,17 +55,22 @@ class MaviScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // 1. JSON-LD
-    const product = this.findProductJsonLd($);
-    if (product) {
-      const p = this.extractPriceFromProductJson(product);
-      if (p && p > 0) return p;
+    // 1. DOM .price inside .product__pricing-info
+    const pricingInfo = $('.product__pricing-info, .js-product-price').first();
+    if (pricingInfo.length) {
+      const priceEl = pricingInfo.find('.price, ins.price').first();
+      if (priceEl.length) {
+        const val = this.parsePriceText(priceEl.text());
+        if (val && val > 0) return val;
+      }
     }
-    // 2. DOM
+
+    // 2. DOM fallback
     const priceSelectors = [
       'ins.price',
       '.product-price',
       '.price-value',
+      '.price',
       'span[class*="price"]'
     ];
     for (const sel of priceSelectors) {
@@ -76,7 +81,53 @@ class MaviScraper extends BaseProductScraper {
         if (v && v > 0) return v;
       }
     }
+
+    // 3. JSON-LD
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const p = this.extractPriceFromProductJson(product);
+      if (p && p > 0) return p;
+    }
+
     return null;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    // 1. DOM .nodiscount-price
+    const nodiscountEl = $('.nodiscount-price, .product__pricing-info .nodiscount-price, del.nodiscount-price').first();
+    if (nodiscountEl.length) {
+      const txt = nodiscountEl.text().trim();
+      const val = this.parsePriceText(txt);
+      if (val && val > currentPrice) return val;
+    }
+
+    // 2. Fallback selectors
+    let candidates = [];
+    const selectors = [
+      '.nodiscount-price',
+      'del',
+      's',
+      '.old-price',
+      '.original-price'
+    ];
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        if (txt.includes('TL') || txt.includes('₺')) {
+          const parsed = this.parsePriceText(txt);
+          if (parsed !== null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.push(parsed);
+          }
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b - a);
+    return candidates[0];
   }
 
   scrapeDescription($) {

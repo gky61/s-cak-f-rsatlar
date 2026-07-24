@@ -130,9 +130,32 @@ class IdefixScraper extends BaseProductScraper {
     return null;
   }
 
+  Map<String, dynamic>? _getIdefixNextData(dom.Document document) {
+    final nextScript = document.querySelector('script#__NEXT_DATA__');
+    if (nextScript != null) {
+      try {
+        return jsonDecode(nextScript.text);
+      } catch (_) {}
+    }
+    return null;
+  }
+
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. JSON-LD şemasından fiyat çekmeyi dene (Öncelikli)
+    // 1. __NEXT_DATA__ JSON
+    final nextData = _getIdefixNextData(document);
+    if (nextData != null) {
+      final cp = nextData['props']?['pageProps']?['productDetail']?['currentPrice'];
+      if (cp is Map) {
+        final eff = cp['effectivePrice'] ?? cp['discountedPrice'];
+        if (eff != null) {
+          final val = double.tryParse(eff.toString());
+          if (val != null && val > 0) return val;
+        }
+      }
+    }
+
+    // 2. JSON-LD şemasından fiyat çekmeyi dene (Öncelikli)
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
       final priceLd = extractPriceFromProductJson(productJson);
@@ -141,7 +164,13 @@ class IdefixScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
+    // 3. DOM Seçicileri (Fallback)
+    final priceEl = document.querySelector('span.text-title-2xl.text-secondary-600');
+    if (priceEl != null) {
+      final val = parsePriceText(priceEl.text);
+      if (val != null && val > 0) return val;
+    }
+
     final salePriceMeta = document.querySelector('meta[property="og:price:sale_price"]') ??
                           document.querySelector('meta[property="product:price:amount"]');
     if (salePriceMeta != null) {
@@ -152,6 +181,60 @@ class IdefixScraper extends BaseProductScraper {
     }
 
     return null;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    final candidates = <double>[];
+
+    // 1. __NEXT_DATA__ JSON
+    final nextData = _getIdefixNextData(document);
+    if (nextData != null) {
+      final cp = nextData['props']?['pageProps']?['productDetail']?['currentPrice'];
+      if (cp is Map) {
+        final prices = [cp['price'], cp['comparePrice']];
+        for (final p in prices) {
+          if (p != null) {
+            final val = double.tryParse(p.toString());
+            if (val != null && val > currentPrice) {
+              candidates.add(val);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. DOM selectors for strikethrough price
+    final selectors = [
+      'span.line-through',
+      'span.text-title-md.text-neutral-500',
+      'span.text-neutral-500',
+      '.line-through',
+      'del',
+      's',
+    ];
+
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    final valid = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+    if (valid.isEmpty) return null;
+
+    valid.sort();
+    return valid.first;
   }
 
   @override

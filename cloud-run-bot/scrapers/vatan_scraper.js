@@ -115,6 +115,49 @@ class VatanScraper extends BaseProductScraper {
     return null;
   }
 
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let candidates = [];
+
+    // 1. Main product price container: .product-detail-price-big .product-list__price or .product-detail-price .product-list__price
+    $('.product-detail-price-big .product-list__price, .product-detail-price .product-list__price, .product-list__price').each((_, el) => {
+      if ($(el).closest('.fancy-modal, .buyback-modal, .extrawarrantyD-modal, .garanti-price-footer, .short-price, .basketMobile_price').length === 0) {
+        const parsed = this.parsePriceText($(el).text());
+        if (parsed !== null && parsed > currentPrice) {
+          candidates.push(parsed);
+        }
+      }
+    });
+
+    // 2. UpdateProductDetayItem.ProductPrice
+    const detay = this._parseUpdateProductDetayItem($);
+    if (detay && detay['ProductPrice']) {
+      const parsed = this.parsePriceText(detay['ProductPrice'].toString());
+      if (parsed !== null && parsed > currentPrice) {
+        candidates.push(parsed);
+      }
+    }
+
+    // 3. #mobilePrice outside modals
+    $('#mobilePrice').each((_, el) => {
+      if ($(el).closest('.fancy-modal, .buyback-modal, .extrawarrantyD-modal, .garanti-price-footer, .short-price, .basketMobile_price').length === 0) {
+        const parsed = this.parsePriceText($(el).text());
+        if (parsed !== null && parsed > currentPrice) {
+          candidates.push(parsed);
+        }
+      }
+    });
+
+    if (candidates.length === 0) return null;
+
+    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b - a);
+    return candidates[0];
+  }
+
   scrapeDescription($) {
     // 1. JSON-LD
     const product = this.findProductJsonLd($);

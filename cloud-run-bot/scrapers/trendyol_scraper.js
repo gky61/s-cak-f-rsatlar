@@ -118,6 +118,72 @@ class TrendyolScraper extends BaseProductScraper {
     }
     return null;
   }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let candidates = [];
+
+    // 1. DOM selectors for old / strikethrough / original prices (Öncelikli)
+    const domSelectors = [
+      '.old-price',
+      '.prc-org',
+      '.ty-plus-price-original-price',
+      '[class*="price-original"]',
+      '[class*="original-price"]',
+      '[class*="prc-org"]',
+      '[class*="old-price"]',
+      'del',
+      's'
+    ];
+
+    for (const selector of domSelectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        const parsed = this.parsePriceText(txt);
+        if (parsed !== null && parsed > currentPrice) {
+          candidates.push(parsed);
+        }
+      });
+    }
+
+    if (candidates.length > 0) {
+      candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => a - b);
+        return candidates[0];
+      }
+    }
+
+    // 2. Initial State Script Search (Fallback)
+    $('script').each((_, el) => {
+      const text = $(el).text();
+      if (text.includes('__PRODUCT_DETAIL_APP_INITIAL_STATE__') || text.includes('product":{')) {
+        try {
+          const matches = text.match(/"(?:originalPrice|sellingPrice|marketPrice)"\s*:\s*\{[^\}]*?"value"\s*:\s*([\d.]+)/g);
+          if (matches) {
+            for (const m of matches) {
+              const valMatch = m.match(/"value"\s*:\s*([\d.]+)/);
+              if (valMatch) {
+                const val = parseFloat(valMatch[1]);
+                if (!isNaN(val) && val > currentPrice) {
+                  candidates.push(val);
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    });
+
+    if (candidates.length === 0) return null;
+
+    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a - b);
+    return candidates[0];
+  }
 }
 
 module.exports = TrendyolScraper;

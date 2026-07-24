@@ -33,7 +33,6 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
   @override
   Widget build(BuildContext context) {
     final deal = widget.deal;
-    final currencyFormat = DynamicCurrencyFormatter();
     final isExpired = deal.isExpired;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
@@ -182,80 +181,11 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                     ),
                                   ),
                                 ),
-                          // Zaman Rozeti (Sol Alt)
+                          // Zaman Rozeti KALDIRILDI - yerine alev simgesi buraya taşındı
+                          // 🔥 Fırsat Termometresi Emoji (Sol Alt) - Gerçek Zamanlı
                           Positioned(
                             bottom: 6,
                             left: 6,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.schedule,
-                                    size: 9,
-                                    color: Colors.white,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    formatRelativeTime(deal.createdAt),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          // İndirim Rozeti (Sağ Alt)
-                          if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
-                            Positioned(
-                              bottom: 6,
-                              right: 6,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withValues(alpha: 0.9),
-                                  borderRadius: BorderRadius.circular(999),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: primaryColor.withValues(alpha: 0.3),
-                                      blurRadius: 2,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.trending_down,
-                                      size: 10,
-                                      color: Colors.black,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      '%${deal.effectiveDiscountRate}',
-                                      style: const TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          // 🔥 Fırsat Termometresi Emoji (Sağ Alt) - Gerçek Zamanlı
-                          Positioned(
-                            bottom: 6,
-                            right: 6,
                             child: StreamBuilder<DocumentSnapshot>(
                               stream: FirebaseFirestore.instance
                                   .collection('deals')
@@ -319,6 +249,48 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                               },
                             ),
                           ),
+                          // İndirim Rozeti (Sağ Alt)
+                          if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
+                            Positioned(
+                              bottom: 6,
+                              right: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: isDark 
+                                      ? primaryColor.withValues(alpha: 0.9)
+                                      : const Color(0xFFE53935),
+                                  borderRadius: BorderRadius.circular(999),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: (isDark ? primaryColor : const Color(0xFFE53935)).withValues(alpha: 0.3),
+                                      blurRadius: 2,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.trending_down,
+                                      size: 10,
+                                      color: isDark ? Colors.black : Colors.white,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '%${deal.effectiveDiscountRate}',
+                                      style: TextStyle(
+                                        color: isDark ? Colors.black : Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
                           // Favorite ve Comment Rozeti (Sağ Üst - Glassmorphism)
                           Positioned(
                             top: 6,
@@ -581,6 +553,41 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                     ),
                                 ],
                               ),
+                              // Rating (Başlık altında)
+                              if (deal.ratingValue != null || deal.ratingCount != null) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.star_rounded,
+                                      size: 13,
+                                      color: Color(0xFFFFB800),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    if (deal.ratingValue != null)
+                                      Text(
+                                        deal.ratingValue!.toStringAsFixed(1),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                    if (deal.ratingCount != null) ...[
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        '(${deal.ratingCount})',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w500,
+                                          color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                           // Alt kısım: Fiyat ve Buton (Ortak Düzen)
@@ -627,8 +634,8 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           if (deal.originalPrice != null && deal.originalPrice! > deal.price)
-                                            Text(
-                                              currencyFormat.format(deal.originalPrice),
+                                            FormattedPriceText(
+                                              value: deal.originalPrice,
                                               style: TextStyle(
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w500,
@@ -636,8 +643,8 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                                 decoration: TextDecoration.lineThrough,
                                               ),
                                             ),
-                                          Text(
-                                            currencyFormat.format(deal.price),
+                                          FormattedPriceText(
+                                            value: deal.price,
                                             style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.w900,
@@ -648,40 +655,6 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                               height: 1.0,
                                             ),
                                           ),
-                                          if (deal.ratingValue != null || deal.ratingCount != null) ...[
-                                            const SizedBox(height: 3),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                  Icons.star_rounded,
-                                                  size: 13,
-                                                  color: Color(0xFFFFB800),
-                                                ),
-                                                const SizedBox(width: 2),
-                                                if (deal.ratingValue != null)
-                                                  Text(
-                                                    deal.ratingValue!.toStringAsFixed(1),
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.w700,
-                                                      color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
-                                                    ),
-                                                  ),
-                                                if (deal.ratingCount != null) ...[
-                                                  const SizedBox(width: 2),
-                                                  Text(
-                                                    '(${deal.ratingCount})',
-                                                    style: TextStyle(
-                                                      fontSize: 9,
-                                                      fontWeight: FontWeight.w500,
-                                                      color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                          ],
                                         ],
                                       ),
                                     ),

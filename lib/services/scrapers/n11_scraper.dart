@@ -139,46 +139,25 @@ class N11Scraper extends BaseProductScraper {
     // 1. window.model JSON'ından fiyatı çekmeyi dene (Öncelikli)
     final model = _getN11Model(document);
     if (model != null) {
-      // En öncelikli: Sepetteki nihai indirimli fiyat float değeri (finalPriceFloat)
-      final finalPriceFloat = _findValueRecursive(model, 'finalPriceFloat');
-      if (finalPriceFloat != null) {
-        final val = double.tryParse(finalPriceFloat.toString());
-        if (val != null && val > 0) return val;
-      }
+      final p = model['product'];
+      final pers = p is Map ? p['personalizedData'] : null;
 
-      // İkinci öncelik: Sepetteki nihai indirimli fiyat metin değeri (finalPrice)
-      final finalPrice = _findValueRecursive(model, 'finalPrice');
-      if (finalPrice != null) {
-        final val = parsePriceText(finalPrice.toString());
-        if (val != null && val > 0) return val;
-      }
+      final candidates = [
+        if (pers is Map) pers['instantDiscountedPrice'],
+        if (pers is Map && pers['product'] is Map) pers['product']['finalPrice'],
+        if (p is Map) p['finalPriceFloat'],
+        if (p is Map) p['finalPrice'],
+        if (p is Map) p['priceFloat'],
+        if (p is Map) p['price'],
+        if (p is Map) p['displayPriceFloat'],
+        if (p is Map) p['displayPrice'],
+      ];
 
-      // Üçüncü öncelik: İndirimli gerçek fiyat float değeri (priceFloat)
-      final priceFloat = _findValueRecursive(model, 'priceFloat');
-      if (priceFloat != null) {
-        final val = double.tryParse(priceFloat.toString());
-        if (val != null && val > 0) return val;
-      }
-
-      // Dördüncü öncelik: İndirimli gerçek fiyat metin değeri (price)
-      final price = _findValueRecursive(model, 'price');
-      if (price != null) {
-        final val = parsePriceText(price.toString());
-        if (val != null && val > 0) return val;
-      }
-
-      // Beşinci öncelik: Liste fiyatı float değeri (displayPriceFloat)
-      final displayPriceFloat = _findValueRecursive(model, 'displayPriceFloat');
-      if (displayPriceFloat != null) {
-        final val = double.tryParse(displayPriceFloat.toString());
-        if (val != null && val > 0) return val;
-      }
-
-      // Altıncı öncelik: Liste fiyatı metin değeri (displayPrice)
-      final displayPrice = _findValueRecursive(model, 'displayPrice');
-      if (displayPrice != null) {
-        final val = parsePriceText(displayPrice.toString());
-        if (val != null && val > 0) return val;
+      for (final val in candidates) {
+        if (val != null) {
+          final parsed = val is num ? val.toDouble() : parsePriceText(val.toString());
+          if (parsed != null && parsed > 0) return parsed;
+        }
       }
     }
 
@@ -211,6 +190,67 @@ class N11Scraper extends BaseProductScraper {
       return parsePriceText(priceEl.text);
     }
     return null;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    final candidates = <double>[];
+
+    // 1. window.model JSON'ından eski / liste fiyatlarını çek
+    final model = _getN11Model(document);
+    if (model != null) {
+      final p = model['product'];
+      final pers = p is Map ? p['personalizedData'] : null;
+
+      final modelCandidates = [
+        if (pers is Map && pers['product'] is Map) pers['product']['oldPrice'],
+        if (pers is Map && pers['product'] is Map) pers['product']['displayPrice'],
+        if (p is Map) p['displayPriceFloat'],
+        if (p is Map) p['displayPrice'],
+        if (p is Map) p['oldPriceFloat'],
+        if (p is Map) p['oldPrice'],
+        if (p is Map) p['priceFloat'],
+        if (p is Map) p['price'],
+      ];
+
+      for (final val in modelCandidates) {
+        if (val != null) {
+          final parsed = val is num ? val.toDouble() : parsePriceText(val.toString());
+          if (parsed != null && parsed > currentPrice) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    // 2. DOM selectors for old / strikethrough / original prices
+    final selectors = [
+      '.oldPrice',
+      '.old-price',
+      '[class*="oldPrice"]',
+      '[class*="old-price"]',
+      'del',
+      's',
+    ];
+
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final parsed = parsePriceText(el.text);
+        if (parsed != null && parsed > currentPrice) {
+          candidates.add(parsed);
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    final valid = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+    if (valid.isEmpty) return null;
+
+    valid.sort();
+    return valid.first;
   }
 
   @override

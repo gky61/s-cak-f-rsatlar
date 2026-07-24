@@ -58,26 +58,28 @@ class PazaramaScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // 1. Pazarama Plus Fiyat Kontrolü
-    let plusPrice = null;
-    $('img[alt="plus-icon"], img[src*="pz-plus-icon"]').each((_, plusImg) => {
-      let parent = $(plusImg).parent();
-      while (parent.length && parent.prop('tagName') !== 'DIV') {
-        parent = parent.parent();
+    // 1. Pazarama Plus / Sepet / Mavi indirimli özel fiyat
+    let bluePrice = null;
+    $('span.text-blue-500.font-bold, span[class*="text-blue-500"], img[alt="plus-icon"], img[src*="pz-plus-icon"]').each((_, el) => {
+      let targetSpan = $(el);
+      if ($(el).is('img')) {
+        let parent = $(el).parent();
+        while (parent.length && parent.prop('tagName') !== 'DIV') {
+          parent = parent.parent();
+        }
+        targetSpan = parent.find('span');
       }
-      if (parent.length) {
-        parent.find('span').each((_, span) => {
-          const text = $(span).text().trim();
-          if (text.includes('TL') && !text.includes('ile')) {
-            const val = this.parsePriceText(text);
-            if (val && val > 0) {
-              plusPrice = val;
-            }
+      targetSpan.each((_, s) => {
+        const text = $(s).text().trim();
+        if (text.includes('TL') && !text.includes('ile')) {
+          const val = this.parsePriceText(text);
+          if (val && val > 0) {
+            bluePrice = val;
           }
-        });
-      }
+        }
+      });
     });
-    if (plusPrice && plusPrice > 0) return plusPrice;
+    if (bluePrice && bluePrice > 0) return bluePrice;
 
     // 2. JSON-LD
     const product = this.findProductJsonLd($);
@@ -89,6 +91,7 @@ class PazaramaScraper extends BaseProductScraper {
     // 3. DOM
     const selectors = [
       'div[class*="text-4xl"][class*="text-black"][class*="font-bold"]',
+      'p.text-4xl.font-bold',
       'div.text-4xl.text-black.font-bold',
       'div.text-4xl.text-black',
       'span[class*="text-lg"][class*="font-bold"][class*="text-red-600"]',
@@ -104,6 +107,43 @@ class PazaramaScraper extends BaseProductScraper {
       }
     }
     return null;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let candidates = [];
+
+    const selectors = [
+      '.line-through',
+      'span.text-gray-400.line-through',
+      'p.text-base.font-normal.text-gray-400.line-through',
+      'p.text-lg.font-bold.text-red-600',
+      'p.text-gray-400',
+      '[class*="text-gray-400"]',
+      'del',
+      's'
+    ];
+
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        if (txt.includes('TL')) {
+          const parsed = this.parsePriceText(txt);
+          if (parsed !== null && parsed > currentPrice) {
+            candidates.push(parsed);
+          }
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b - a);
+    return candidates[0];
   }
 
   scrapeDescription($) {

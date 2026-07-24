@@ -153,6 +153,69 @@ class VatanScraper extends BaseProductScraper {
   }
 
   @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    final candidates = <double>[];
+
+    bool isIgnored(dom.Element el) {
+      dom.Element? current = el.parent;
+      while (current != null) {
+        final cls = current.attributes['class'] ?? '';
+        final id = current.attributes['id'] ?? '';
+        if (cls.contains('fancy-modal') ||
+            cls.contains('buyback-modal') ||
+            cls.contains('extrawarrantyD-modal') ||
+            cls.contains('garanti-price-footer') ||
+            cls.contains('short-price') ||
+            cls.contains('basketMobile_price') ||
+            id.contains('extrawarrantyD-modal') ||
+            id.contains('corporateOfferModal')) {
+          return true;
+        }
+        current = current.parent;
+      }
+      return false;
+    }
+
+    final priceEls = document.querySelectorAll('.product-detail-price-big .product-list__price, .product-detail-price .product-list__price, .product-list__price');
+    for (final el in priceEls) {
+      if (!isIgnored(el)) {
+        final parsed = parsePriceText(el.text);
+        if (parsed != null && parsed > currentPrice) {
+          candidates.add(parsed);
+        }
+      }
+    }
+
+    final detay = _parseUpdateProductDetayItem(document);
+    if (detay != null && detay['ProductPrice'] != null) {
+      final parsed = parsePriceText(detay['ProductPrice'].toString());
+      if (parsed != null && parsed > currentPrice) {
+        candidates.add(parsed);
+      }
+    }
+
+    final mobileEls = document.querySelectorAll('#mobilePrice');
+    for (final el in mobileEls) {
+      if (!isIgnored(el)) {
+        final parsed = parsePriceText(el.text);
+        if (parsed != null && parsed > currentPrice) {
+          candidates.add(parsed);
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    final valid = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+    if (valid.isEmpty) return null;
+
+    valid.sort((a, b) => b.compareTo(a));
+    return valid.first;
+  }
+
+  @override
   String? scrapeDescription(dom.Document document) {
     // 1. JSON-LD şemasından açıklama çekmeyi dene (Öncelikli)
     final productJson = findProductJsonLd(document);

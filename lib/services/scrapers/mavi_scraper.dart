@@ -86,12 +86,15 @@ class MaviScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. JSON-LD şemasından (Öncelikli)
-    final productJson = findProductJsonLd(document);
-    if (productJson != null) {
-      final priceVal = extractPriceFromProductJson(productJson);
-      if (priceVal != null && priceVal > 0) {
-        return priceVal;
+    // 1. DOM .price inside .product__pricing-info (Öncelikli)
+    final pricingInfo = document.querySelector('.product__pricing-info') ??
+                        document.querySelector('.js-product-price');
+    if (pricingInfo != null) {
+      final priceEl = pricingInfo.querySelector('.price') ??
+                      pricingInfo.querySelector('ins.price');
+      if (priceEl != null) {
+        final val = parsePriceText(priceEl.text);
+        if (val != null && val > 0) return val;
       }
     }
 
@@ -100,6 +103,7 @@ class MaviScraper extends BaseProductScraper {
       'ins.price',
       '.product-price',
       '.price-value',
+      '.price',
       'span[class*="price"]',
     ];
     for (final selector in priceSelectors) {
@@ -110,7 +114,57 @@ class MaviScraper extends BaseProductScraper {
       }
     }
 
+    // 3. JSON-LD şemasından
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final priceVal = extractPriceFromProductJson(productJson);
+      if (priceVal != null && priceVal > 0) {
+        return priceVal;
+      }
+    }
+
     return null;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    // 1. DOM .nodiscount-price
+    final nodiscountEl = document.querySelector('.nodiscount-price') ??
+                         document.querySelector('.product__pricing-info .nodiscount-price') ??
+                         document.querySelector('del.nodiscount-price');
+    if (nodiscountEl != null) {
+      final txt = nodiscountEl.text.trim();
+      final val = parsePriceText(txt);
+      if (val != null && val > currentPrice) return val;
+    }
+
+    // 2. Fallback selectors
+    final candidates = <double>[];
+    final selectors = [
+      '.nodiscount-price',
+      'del',
+      's',
+      '.old-price',
+      '.original-price',
+    ];
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) => b.compareTo(a));
+    return candidates.first;
   }
 
   @override

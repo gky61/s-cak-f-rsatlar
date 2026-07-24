@@ -84,27 +84,32 @@ class DefactoScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. Script bloğundan (Öncelikli)
+    // 1. DOM campaing-base-price (Sepette / Kampanyalı indirimli fiyat)
+    final campaingEl = document.querySelector('[class*="campaing-base-price"]') ??
+                       document.querySelector('.campaing-base-price') ??
+                       document.querySelector('.product-price__discount');
+    if (campaingEl != null) {
+      final val = parsePriceText(campaingEl.text);
+      if (val != null && val > 0) return val;
+    }
+
+    // 2. Script bloğundan
     final scripts = document.querySelectorAll('script');
     for (final script in scripts) {
       final text = script.text;
       if (text.contains('PRODUCT_DETAIL_LASTVISITED') || text.contains('CampaignBadge')) {
-        // Fiyat belirleme algoritması:
-        // A) Sepette indirimli fiyat (DiscountPrice) varsa bunu kullan
         final discountPriceMatch = RegExp(r'"?DiscountPrice"?\s*:\s*([0-9.]+)').firstMatch(text);
         if (discountPriceMatch != null) {
           final val = double.tryParse(discountPriceMatch.group(1)!);
           if (val != null && val > 0) return val;
         }
 
-        // B) DataLayer altındaki CampaignDiscountedPrice varsa bunu kullan
         final campaignDiscountMatch = RegExp(r'"?CampaignDiscountedPrice"?\s*:\s*([0-9.]+)').firstMatch(text);
         if (campaignDiscountMatch != null) {
           final val = double.tryParse(campaignDiscountMatch.group(1)!);
           if (val != null && val > 0) return val;
         }
 
-        // C) Ürünün standart indirimli fiyatı (ProductVariantMiniDiscountedPriceInclTax)
         final miniDiscountMatch = RegExp(r'"?ProductVariantMiniDiscountedPriceInclTax"?\s*:\s*"([0-9.]+)"').firstMatch(text);
         if (miniDiscountMatch != null) {
           final val = double.tryParse(miniDiscountMatch.group(1)!);
@@ -113,10 +118,19 @@ class DefactoScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
+    // 3. JSON-LD şemasından
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final priceVal = extractPriceFromProductJson(productJson);
+      if (priceVal != null && priceVal > 0) {
+        return priceVal;
+      }
+    }
+
+    // 4. DOM Seçicileri (Fallback)
     final priceSelectors = [
-      '.product-price__discount',
       '.product-price',
+      '.product-info__price--new',
       'span[class*="price"]',
     ];
     for (final selector in priceSelectors) {
@@ -128,6 +142,57 @@ class DefactoScraper extends BaseProductScraper {
     }
 
     return null;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    // 1. DOM lined-base-price (İndirimsiz çizili fiyat)
+    final linedEl = document.querySelector('[class*="lined-base-price"]') ??
+                    document.querySelector('.lined-base-price');
+    if (linedEl != null) {
+      final txt = linedEl.text.trim();
+      final val = parsePriceText(txt);
+      if (val != null && val > currentPrice) return val;
+    }
+
+    // 2. JSON-LD price (DeFacto JSON-LD genellikle indirim öncesi liste fiyatını verir)
+    final productJson = findProductJsonLd(document);
+    if (productJson != null && productJson['offers'] is Map) {
+      final offers = productJson['offers'] as Map;
+      if (offers['price'] != null) {
+        final p = double.tryParse(offers['price'].toString());
+        if (p != null && p > currentPrice) return p;
+      }
+    }
+
+    // 3. Fallback selectors
+    final candidates = <double>[];
+    final selectors = [
+      '[class*="lined-base-price"]',
+      '.lined-base-price',
+      'del',
+      's',
+      '.old-price',
+      '.original-price',
+    ];
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) => b.compareTo(a));
+    return candidates.first;
   }
 
   @override

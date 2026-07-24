@@ -93,19 +93,33 @@ class PttavmScraper extends BaseProductScraper {
   }
 
   scrapeTitle($) {
+    let title = null;
+
     // 1. JSON-LD
     const product = this.findProductJsonLd($);
-    if (product && product['name']) return product['name'].toString().trim();
+    if (product && product['name']) title = product['name'].toString().trim();
     
     // 2. dataLayerYM fallback
-    const ymData = this.findDataLayerYmProduct($);
-    if (ymData && ymData.name) return ymData.name.trim();
+    if (!title) {
+      const ymData = this.findDataLayerYmProduct($);
+      if (ymData && ymData.name) title = ymData.name.trim();
+    }
 
     // 3. DOM
-    const el = $('h1.product-title, .product-name').first();
-    if (el.length) return el.text().trim();
-    const og = $('meta[property="og:title"]').attr('content');
-    return og ? og.trim() : null;
+    if (!title) {
+      const el = $('h1.product-title, .product-name, h1').first();
+      if (el.length) title = el.text().trim();
+      else {
+        const og = $('meta[property="og:title"]').attr('content');
+        if (og) title = og.trim();
+      }
+    }
+
+    if (title) {
+      title = title.replace(/^PTTAVM:\s*/i, '').trim();
+    }
+
+    return title;
   }
 
   scrapePrice($) {
@@ -139,6 +153,65 @@ class PttavmScraper extends BaseProductScraper {
       }
     }
     return null;
+  }
+
+  extractOriginalPriceFromJsonLd($, currentPrice) {
+    let highPrice = null;
+    $('script[type="application/ld+json"]').each((_, el) => {
+      try {
+        const json = JSON.parse($(el).html() || '{}');
+        if (json['@type'] === 'Product' && json.offers) {
+          const offers = json.offers;
+          if (offers.highPrice != null) {
+            const hp = parseFloat(offers.highPrice);
+            if (hp > (currentPrice || 0)) highPrice = hp;
+          }
+        }
+      } catch (_) {}
+    });
+    return highPrice;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    // 1. DOM Regular price container
+    const regularContainer = $('[class*="regularPriceValue"], .regularPriceValue__I3siB').first();
+    if (regularContainer.length) {
+      const fullText = regularContainer.text().trim();
+      const val = this.parsePriceText(fullText);
+      if (val && val > currentPrice) return val;
+    }
+
+    // 2. JSON-LD highPrice
+    const jsonLdHighPrice = this.extractOriginalPriceFromJsonLd($, currentPrice);
+    if (jsonLdHighPrice && jsonLdHighPrice > currentPrice) return jsonLdHighPrice;
+
+    // 3. Fallback DOM selectors
+    let candidates = [];
+    const selectors = [
+      '[class*="regularPrice"]',
+      '.regularPriceValue__I3siB',
+      '.line-through',
+      'del',
+      's'
+    ];
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        if (txt.includes('TL') || txt.includes('₺')) {
+          const parsed = this.parsePriceText(txt);
+          if (parsed !== null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.push(parsed);
+          }
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b - a);
+    return candidates[0];
   }
 
   scrapeDescription($) {

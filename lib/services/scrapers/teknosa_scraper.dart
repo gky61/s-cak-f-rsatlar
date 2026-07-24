@@ -73,8 +73,9 @@ class TeknosaScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. DOM Seçicileri - Öncelikli: span.prc-third (Hem indirimli hem indirimsiz doğru fiyatı içerir)
-    final priceThirdEl = document.querySelector('span.prc-third');
+    // 1. DOM Seçicileri - Öncelikli: span.prc-third
+    final priceThirdEl = document.querySelector('.pdp-prices span.prc-third') ??
+                         document.querySelector('span.prc-third');
     if (priceThirdEl != null) {
       final val = parsePriceText(priceThirdEl.text);
       if (val != null && val > 0) {
@@ -82,7 +83,16 @@ class TeknosaScraper extends BaseProductScraper {
       }
     }
 
-    // 2. JSON-LD şemasından fiyat çekmeyi dene (Yedek 1)
+    final priceLastEl = document.querySelector('.pdp-prices span.prc-last') ??
+                        document.querySelector('span.prc-last');
+    if (priceLastEl != null) {
+      final val = parsePriceText(priceLastEl.text);
+      if (val != null && val > 0) {
+        return val;
+      }
+    }
+
+    // 2. JSON-LD şemasından fiyat çekmeyi dene
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
       final priceLd = extractPriceFromProductJson(productJson);
@@ -91,7 +101,7 @@ class TeknosaScraper extends BaseProductScraper {
       }
     }
 
-    // 3. Diğer DOM Seçicileri (Yedek 2)
+    // 3. Diğer DOM Seçicileri
     final priceEl = document.querySelector('span.prc') ??
                     document.querySelector('.price') ??
                     document.querySelector('.product-price');
@@ -103,6 +113,46 @@ class TeknosaScraper extends BaseProductScraper {
     }
 
     return null;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    final candidates = <double>[];
+
+    final selectors = [
+      '.pdp-prices .pdp-prc1 span.prc',
+      '.pdp-prices span.prc-first',
+      '.pdp-prices span.generalPrice',
+      'span.prc-first',
+      'span.generalPrice',
+      'span.prc.generalPrice',
+      '.pdp-prc1 span',
+      '.line-through',
+      'del',
+      's',
+    ];
+
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    final valid = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+    if (valid.isEmpty) return null;
+
+    valid.sort((a, b) => b.compareTo(a));
+    return valid.first;
   }
 
   @override

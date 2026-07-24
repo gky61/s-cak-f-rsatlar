@@ -1,8 +1,120 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:html/dom.dart' as dom;
+import 'package:http/http.dart' as http;
 import 'base_scraper.dart';
 
 class ItopyaScraper extends BaseProductScraper {
+  final Map<String, Map<String, dynamic>> _apiCache = {};
+
+  Future<Map<String, dynamic>?> _fetchRatingFromApi(dom.Document document) async {
+    try {
+      final canonical = document.querySelector('link[rel="canonical"]')?.attributes['href'] ??
+                        document.querySelector('meta[property="og:url"]')?.attributes['content'] ?? '';
+      final matchUrl = RegExp(r'_u(\d+)', caseSensitive: false).firstMatch(canonical);
+      final htmlText = document.outerHtml;
+      final matchHtml = RegExp(r'urunId\s*[:=]\s*["'']?(\d+)["'']?', caseSensitive: false).firstMatch(htmlText);
+      final urunId = matchUrl?.group(1) ?? matchHtml?.group(1);
+      if (urunId == null) return null;
+
+      if (_apiCache.containsKey(urunId)) return _apiCache[urunId];
+
+      final uri = Uri.parse('https://www.itopya.com/Urun/UrunYorum?id=$urunId');
+      final res = await http.get(uri, headers: {
+        'User-Agent': 'WhatsApp/2.23.4.15 A',
+      }).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        final List data = jsonDecode(res.body);
+        if (data.isNotEmpty) {
+          double totalPuan = 0;
+          int count = 0;
+          for (final item in data) {
+            if (item is Map && item['puan'] != null) {
+              final p = double.tryParse(item['puan'].toString());
+              if (p != null) {
+                totalPuan += p;
+                count++;
+              }
+            }
+          }
+          if (count > 0) {
+            final cacheResult = {
+              'ratingValue': double.parse((totalPuan / count).toStringAsFixed(1)),
+              'ratingCount': data.length,
+            };
+            _apiCache[urunId] = cacheResult;
+            return cacheResult;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  @override
+  FutureOr<double?> scrapeRatingValue(dom.Document document) async {
+    // 1. JSON-LD
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating != null && rating['ratingValue'] != null) {
+        final val = double.tryParse(rating['ratingValue'].toString());
+        if (val != null && val > 0) return val;
+      }
+    }
+
+    // 2. DOM ratingValue (data-rateyo-rating)
+    final rateyoEl = document.querySelector('[data-rateyo-rating]');
+    if (rateyoEl != null) {
+      final attr = rateyoEl.attributes['data-rateyo-rating'];
+      if (attr != null && attr.isNotEmpty && attr != 'undefined') {
+        final val = double.tryParse(attr);
+        if (val != null && val > 0) return val;
+      }
+    }
+
+    // 3. Fallback: API Call
+    final apiData = await _fetchRatingFromApi(document);
+    if (apiData != null && apiData['ratingValue'] != null) {
+      return apiData['ratingValue'] as double;
+    }
+
+    return null;
+  }
+
+  @override
+  FutureOr<int?> scrapeRatingCount(dom.Document document) async {
+    // 1. JSON-LD
+    final productJson = findProductJsonLd(document);
+    if (productJson != null) {
+      final rating = extractRatingFromProductJson(productJson);
+      if (rating != null && rating['ratingCount'] != null) {
+        final count = int.tryParse(rating['ratingCount'].toString());
+        if (count != null) return count;
+      }
+    }
+
+    // 2. DOM ratingCount (a.seeAll e.g. "(4)")
+    final seeAllEl = document.querySelector('a.seeAll') ??
+                     document.querySelector('a[onclick*="FocusYorum"]');
+    if (seeAllEl != null) {
+      final match = RegExp(r'\((\d+)\)').firstMatch(seeAllEl.text);
+      if (match != null) {
+        final count = int.tryParse(match.group(1)!);
+        if (count != null) return count;
+      }
+    }
+
+    // 3. Fallback: API Call
+    final apiData = await _fetchRatingFromApi(document);
+    if (apiData != null && apiData['ratingCount'] != null) {
+      return apiData['ratingCount'] as int;
+    }
+
+    return null;
+  }
   @override
   String get domain => 'itopya.com';
 
@@ -72,7 +184,21 @@ class ItopyaScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. JSON-LD şemasından fiyat çekmeyi dene (Öncelikli)
+    // 1. DOM Sepette indirimli fiyat (.product-price-warning-detail span)
+    final sepetteEl = document.querySelector('.product-price-warning-detail span');
+    if (sepetteEl != null) {
+      final val = parsePriceText(sepetteEl.text);
+      if (val != null && val > 0) return val;
+    }
+
+    // 2. DOM newprice
+    final newPriceEl = document.querySelector('.product-details__sidebar_newprice');
+    if (newPriceEl != null) {
+      final val = parsePriceText(newPriceEl.text);
+      if (val != null && val > 0) return val;
+    }
+
+    // 3. JSON-LD şemasından fiyat çekmeyi dene
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
       final priceLd = extractPriceFromProductJson(productJson);
@@ -81,9 +207,8 @@ class ItopyaScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
-    final priceEl = document.querySelector('.product-price-warning-detail span') ??
-                    document.querySelector('.product-price-warning-detail') ??
+    // 4. DOM Seçicileri (Fallback)
+    final priceEl = document.querySelector('.product-price-warning-detail') ??
                     document.querySelector('.amount');
     if (priceEl != null) {
       final val = parsePriceText(priceEl.text);
@@ -94,6 +219,74 @@ class ItopyaScraper extends BaseProductScraper {
 
     return null;
   }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    // 1. DOM .product-details__sidebar_oldprice (Çizili eski fiyat)
+    final oldPriceEl = document.querySelector('.product-details__sidebar_oldprice');
+    if (oldPriceEl != null) {
+      final val = parsePriceText(oldPriceEl.text);
+      if (val != null && val > currentPrice) return val;
+    }
+
+    // 2. DOM .product-details__sidebar_newprice (Eğer sepette indirim varsa, liste fiyatı bu alandadır)
+    final newPriceEl = document.querySelector('.product-details__sidebar_newprice');
+    if (newPriceEl != null) {
+      final val = parsePriceText(newPriceEl.text);
+      if (val != null && val > currentPrice) return val;
+    }
+
+    // 3. Fallback selectors
+    final candidates = <double>[];
+    final selectors = [
+      '.product-details__sidebar_oldprice',
+      '.product-details__sidebar_newprice',
+      'del',
+      's',
+      '.old-price',
+      '.original-price',
+    ];
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺') || RegExp(r'\d').hasMatch(txt)) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) => b.compareTo(a));
+    return candidates.first;
+  }
+
+  @override
+  String? scrapeBrand(dom.Document document) {
+    final productJson = findProductJsonLd(document);
+    if (productJson != null && productJson['brand'] != null) {
+      final b = productJson['brand'];
+      if (b is String && b.trim().isNotEmpty) return b.trim();
+      if (b is Map && b['name'] != null && b['name'].toString().trim().isNotEmpty) {
+        return b['name'].toString().trim();
+      }
+    }
+
+    final brandEl = document.querySelector('.product-details-brand') ??
+                    document.querySelector('[itemprop="brand"]');
+    if (brandEl != null && brandEl.text.trim().isNotEmpty) {
+      return brandEl.text.trim();
+    }
+
+    return null;
+  }
+
+
 
   @override
   String? scrapeDescription(dom.Document document) {

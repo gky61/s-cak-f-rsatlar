@@ -249,6 +249,44 @@ class AmazonScraper extends BaseProductScraper {
   }
 
   @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    final candidates = <double>[];
+
+    final selectors = [
+      '#corePrice_desktop .a-text-price span.a-offscreen',
+      '#corePrice_feature_div .a-text-price span.a-offscreen',
+      '#corePriceDisplay_desktop_feature_div .a-text-price span.a-offscreen',
+      '#apex_desktop .a-text-price span.a-offscreen',
+      '.basisPrice .a-text-price span.a-offscreen',
+      '.listPrice .a-text-price span.a-offscreen',
+      'span.a-price[data-a-strike="true"] span.a-offscreen',
+      'span.a-text-price[data-a-strike="true"] span.a-offscreen',
+      '.a-text-strike',
+      '#priceBlock_listPrice',
+      '#listPrice',
+    ];
+
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final parsed = parsePriceText(el.text);
+        if (parsed != null && parsed > currentPrice) {
+          candidates.add(parsed);
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    final valid = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+    if (valid.isEmpty) return null;
+
+    valid.sort();
+    return valid.first;
+  }
+
+  @override
   String? scrapeDescription(dom.Document document) {
     // meta[name="description"] veya og:description içerisinden çek
     final descEl = document.querySelector('meta[name="description"]') ??

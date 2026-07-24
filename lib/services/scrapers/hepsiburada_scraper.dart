@@ -239,13 +239,13 @@ class HepsiburadaScraper extends BaseProductScraper {
 
     final candidates = <double>[];
 
-    // 1. ReduxStore product.prices and listings
+    // 1. ReduxStore product.prices (SADECE ana ürünün liste/eski fiyatları)
+    // Diğer satıcıların (product.listings) yüksek fiyatlarını HARİÇ tutuyoruz.
     final script = document.getElementById('reduxStore');
     if (script != null) {
       try {
         final Map<String, dynamic> reduxData = jsonDecode(script.text);
-        final productState = reduxData['productState'];
-        final product = productState?['product'];
+        final product = reduxData['productState']?['product'];
         if (product != null) {
           final pricesList = product['prices'];
           if (pricesList is List) {
@@ -258,22 +258,11 @@ class HepsiburadaScraper extends BaseProductScraper {
               }
             }
           }
-          final listings = product['listings'];
-          if (listings is List) {
-            for (final l in listings) {
-              if (l is Map) {
-                final orig = double.tryParse(l['originalPrice']?.toString() ?? '') ?? double.tryParse(l['listPrice']?.toString() ?? '');
-                if (orig != null && orig > currentPrice) {
-                  candidates.add(orig);
-                }
-              }
-            }
-          }
         }
       } catch (_) {}
     }
 
-    // 2. DOM selectors for old / crossed out prices
+    // 2. DOM selectors for old / crossed out prices (Diğer satıcılar bloğu hariç)
     final domSelectors = [
       'del',
       's',
@@ -287,6 +276,24 @@ class HepsiburadaScraper extends BaseProductScraper {
 
     for (final selector in domSelectors) {
       for (final el in document.querySelectorAll(selector)) {
+        // Diğer satıcılar ("other-merchants") alanındaki fiyatları hariç tut
+        bool isOtherMerchant = false;
+        dom.Element? current = el.parent;
+        while (current != null) {
+          final className = current.className.toLowerCase();
+          final testId = (current.attributes['data-test-id'] ?? '').toLowerCase();
+          final id = current.id.toLowerCase();
+          if (className.contains('othermerchant') ||
+              className.contains('other-merchants') ||
+              testId.contains('merchant') ||
+              id.contains('othermerchant')) {
+            isOtherMerchant = true;
+            break;
+          }
+          current = current.parent;
+        }
+        if (isOtherMerchant) continue;
+
         final parsed = parsePriceText(el.text);
         if (parsed != null && parsed > currentPrice) {
           candidates.add(parsed);

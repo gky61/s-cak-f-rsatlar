@@ -124,6 +124,52 @@ class IncehesapScraper extends BaseProductScraper {
     return null;
   }
 
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    // 1. Önce ana fiyat elementinin parent/container'ında strikethrough fiyatı ara
+    const priceEl = $('div.price, p.price, .price, [class*="price"]').first();
+    if (priceEl.length) {
+      const containers = [
+        priceEl.parent(),
+        priceEl.parent().parent(),
+        priceEl.closest('div[class*="flex"]'),
+        priceEl.closest('div[class*="price"]'),
+        priceEl.closest('.product-detail')
+      ];
+
+      for (const container of containers) {
+        if (container.length) {
+          const strikeEl = container.find('.line-through, [class*="line-through"], del, s').first();
+          if (strikeEl.length) {
+            const parsed = this.parsePriceText(strikeEl.text());
+            if (parsed && parsed > currentPrice && parsed <= currentPrice * 5) {
+              return parsed;
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Global fallback
+    let candidates = [];
+    $('.line-through, [class*="line-through"], del, s').each((_, el) => {
+      const txt = $(el).text().trim();
+      if (txt.includes('TL') || txt.includes('₺')) {
+        const parsed = this.parsePriceText(txt);
+        if (parsed !== null && parsed > currentPrice && parsed <= currentPrice * 5) {
+          candidates.push(parsed);
+        }
+      }
+    });
+
+    if (candidates.length === 0) return null;
+
+    // İlgisiz önerilen ürün fiyatlarını seçmemek için currentPrice'a en yakın olan aday tercih edilir
+    candidates.sort((a, b) => a - b);
+    return candidates[0];
+  }
+
   scrapeDescription($) {
     const descEl = $('meta[name="description"], meta[property="og:description"]').first();
     return descEl.length ? descEl.attr('content')?.trim() : null;

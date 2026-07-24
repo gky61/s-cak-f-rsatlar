@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:intl/intl.dart';
@@ -381,9 +382,78 @@ class DynamicCurrencyFormatter {
 
   String format(num? value) {
     if (value == null) return '';
-    final dValue = value.toDouble();
-    final decimalDigits = dValue == dValue.toInt() ? 0 : 2;
-    return NumberFormat.currency(symbol: symbol, decimalDigits: decimalDigits).format(value);
+
+    final double roundVal = (value.toDouble() * 100).round() / 100;
+    final double absVal = roundVal.abs();
+    final int wholePart = absVal.truncate();
+    final int cents = ((absVal - wholePart) * 100).round();
+
+    // Binlik ayırıcı olarak Nokta (.) kullanılır
+    final String wholeStr = wholePart.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]}.',
+    );
+
+    final String sign = roundVal < 0 ? '-' : '';
+
+    if (cents == 0) {
+      // 1. Tam Sayı Fiyatlar (Kuruşsuz): ₺75, ₺1.500, ₺25.000
+      return '$symbol$sign$wholeStr';
+    } else {
+      // 2. Kuruşlu Fiyatlar (Ondalıklı): ₺75,50, ₺1.999,90, ₺9.509,50, ₺12,99
+      final String centsStr = cents.toString().padLeft(2, '0');
+      return '$symbol$sign$wholeStr,$centsStr';
+    }
   }
 }
+
+/// Türk Lirası fiyat gösterimi için özel widget.
+/// ₺ Simgesi rakamın solunda, rakamdan %10 daha küçük boyutta render edilir.
+class FormattedPriceText extends StatelessWidget {
+  final num? value;
+  final TextStyle style;
+  final String symbol;
+  final TextOverflow overflow;
+  final int maxLines;
+
+  const FormattedPriceText({
+    super.key,
+    required this.value,
+    required this.style,
+    this.symbol = '₺',
+    this.overflow = TextOverflow.ellipsis,
+    this.maxLines = 1,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (value == null) return const SizedBox.shrink();
+
+    final formatter = DynamicCurrencyFormatter(symbol: '');
+    final priceStr = formatter.format(value);
+
+    final double baseFontSize = style.fontSize ?? 14.0;
+    final double symbolFontSize = baseFontSize * 0.90; // %10 daha küçük
+
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: symbol,
+            style: style.copyWith(
+              fontSize: symbolFontSize,
+            ),
+          ),
+          TextSpan(
+            text: priceStr,
+            style: style,
+          ),
+        ],
+      ),
+      overflow: overflow,
+      maxLines: maxLines,
+    );
+  }
+}
+
 

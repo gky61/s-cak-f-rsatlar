@@ -4,7 +4,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:sicak_firsatlar/services/scrapers/hepsiburada_scraper.dart';
 
 void main() {
-  test('Hepsiburada Original Price Scraper Test (All 4 Links)', () async {
+  test('Hepsiburada Original Price Scraper Test (All 6 Links)', () async {
     final scraper = HepsiburadaScraper();
 
     final testCases = [
@@ -32,6 +32,18 @@ void main() {
         'expectedDiscounted': 399.01,
         'expectedOriginal': 498.76,
       },
+      {
+        'name': 'Link 5 (Apple MacBook Pro M5 - İndirim Yok)',
+        'url': 'https://www.hepsiburada.com/apple-macbook-pro-m5-pro-24gb-2tb-ssd-macos-14-tasinabilir-bilgisayar-uzay-siyahi-mjlw4tua-p-HBCV0000D5WX1P?url_src=and-product-detail',
+        'expectedDiscounted': 166499.00,
+        'expectedOriginal': null,
+      },
+      {
+        'name': 'Link 6 (Lego Futbol Topu - İndirim Yok)',
+        'url': 'https://www.hepsiburada.com/lego--editions-futbol-topu-43019---10-cocuklar-icin-yaratici-oyuncak-yapim-seti---dunya-kupasi-koleksiyonu-1498-parca-p-HBCV0000CT57NP?magaza=Toyzz+Shop&url_src=and-product-detail',
+        'expectedDiscounted': 5699.00,
+        'expectedOriginal': null,
+      },
     ];
 
     for (final tc in testCases) {
@@ -57,8 +69,10 @@ void main() {
       expect(price, equals(tc['expectedDiscounted']));
       expect(originalPrice, equals(tc['expectedOriginal']));
 
-      final discountPercent = (((originalPrice! - price!) / originalPrice) * 100).round();
-      print('Discount Percentage: %$discountPercent');
+      if (originalPrice != null && price != null && originalPrice > price) {
+        final discountPercent = (((originalPrice - price) / originalPrice) * 100).round();
+        print('Discount Percentage: %$discountPercent');
+      }
       print('✅ PASSED: ${tc['name']}\n');
     }
   });

@@ -357,6 +357,44 @@ class AmazonScraper extends BaseProductScraper {
 
     return null;
   }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let candidates = [];
+
+    const selectors = [
+      '#corePrice_desktop .a-text-price span.a-offscreen',
+      '#corePrice_feature_div .a-text-price span.a-offscreen',
+      '#corePriceDisplay_desktop_feature_div .a-text-price span.a-offscreen',
+      '#apex_desktop .a-text-price span.a-offscreen',
+      '.basisPrice .a-text-price span.a-offscreen',
+      '.listPrice .a-text-price span.a-offscreen',
+      'span.a-price[data-a-strike="true"] span.a-offscreen',
+      'span.a-text-price[data-a-strike="true"] span.a-offscreen',
+      '.a-text-strike',
+      '#priceBlock_listPrice',
+      '#listPrice'
+    ];
+
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        const parsed = this.parsePriceText(txt);
+        if (parsed !== null && parsed > currentPrice) {
+          candidates.push(parsed);
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a - b);
+    return candidates[0];
+  }
 }
 
 module.exports = AmazonScraper;

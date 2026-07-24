@@ -26,6 +26,18 @@ const testCases = [
     expectedDiscounted: 399.01,
     expectedOriginal: 498.76,
   },
+  {
+    name: 'Link 5 (Apple MacBook Pro M5 - İndirim Yok)',
+    url: 'https://www.hepsiburada.com/apple-macbook-pro-m5-pro-24gb-2tb-ssd-macos-14-tasinabilir-bilgisayar-uzay-siyahi-mjlw4tua-p-HBCV0000D5WX1P?url_src=and-product-detail',
+    expectedDiscounted: 166499.00,
+    expectedOriginal: null,
+  },
+  {
+    name: 'Link 6 (Lego Futbol Topu - İndirim Yok)',
+    url: 'https://www.hepsiburada.com/lego--editions-futbol-topu-43019---10-cocuklar-icin-yaratici-oyuncak-yapim-seti---dunya-kupasi-koleksiyonu-1498-parca-p-HBCV0000CT57NP?magaza=Toyzz+Shop&url_src=and-product-detail',
+    expectedDiscounted: 5699.00,
+    expectedOriginal: null,
+  },
 ];
 
 async function run() {
@@ -43,11 +55,12 @@ async function run() {
 
     assert.ok(result.price !== null, 'Discounted price should not be null');
     assert.strictEqual(result.price, tc.expectedDiscounted, `Discounted price should match ${tc.expectedDiscounted}`);
-    assert.ok(result.originalPrice !== null, 'Original price should not be null');
     assert.strictEqual(result.originalPrice, tc.expectedOriginal, `Original price should match ${tc.expectedOriginal}`);
 
-    const discountPercent = Math.round(((result.originalPrice - result.price) / result.originalPrice) * 100);
-    console.log(`Calculated Discount Percentage: %${discountPercent}`);
+    if (result.originalPrice !== null && result.price !== null && result.originalPrice > result.price) {
+      const discountPercent = Math.round(((result.originalPrice - result.price) / result.originalPrice) * 100);
+      console.log(`Calculated Discount Percentage: %${discountPercent}`);
+    }
     console.log(`✅ PASSED: ${tc.name}\n`);
     passed++;
   }

@@ -63,12 +63,19 @@ class MangoScraper extends BaseProductScraper {
   }
 
   scrapePrice($) {
-    // 1. Next.js __next_f script push data regex match
+    // 1. DOM finalPrice (İndirimli yeni fiyat)
+    const finalPriceEl = $('span[class*="finalPrice"], [class*="SinglePrice"][class*="finalPrice"]').first();
+    if (finalPriceEl.length) {
+      const val = this.parsePriceText(finalPriceEl.text());
+      if (val && val > 0) return val;
+    }
+
+    // 2. Next.js script push data
     const scripts = $('script');
     for (let i = 0; i < scripts.length; i++) {
       const text = $(scripts[i]).text() || '';
-      if (text.includes('price') || text.includes('amount')) {
-        const match = text.match(/\\?"price\\?"\s*:\s*\{\s*\\?"amount\\?"\s*:\s*\\?"?([0-9.]+)\\?"?/) ||
+      if (text.includes('price')) {
+        const match = text.match(/\\?"price\\?"\s*:\s*\{\s*\\?"amount\\?"\s*:\s*([0-9.]+)/) ||
                       text.match(/\\?"price\\?"\s*:\s*\\?"?([0-9.]+)\\?"?/);
         if (match) {
           const val = parseFloat(match[1]);
@@ -77,14 +84,14 @@ class MangoScraper extends BaseProductScraper {
       }
     }
 
-    // 2. JSON-LD fallback
+    // 3. JSON-LD fallback
     const product = this.findProductJsonLd($);
     if (product) {
       const p = this.extractPriceFromProductJson(product);
       if (p && p > 0) return p;
     }
 
-    // 3. DOM selectors
+    // 4. DOM selectors fallback
     const priceSelectors = [
       '[data-testid="pdp.productInfo.price"]',
       '.pdp-price',
@@ -100,6 +107,56 @@ class MangoScraper extends BaseProductScraper {
     }
 
     return null;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    // 1. DOM crossed out price (İndirimsiz çizili fiyat)
+    const crossedEl = $('span[class*="crossed"], [class*="SinglePrice"][class*="crossed"]').first();
+    if (crossedEl.length) {
+      const val = this.parsePriceText(crossedEl.text());
+      if (val && val > currentPrice) return val;
+    }
+
+    // 2. Next.js script crossedOutPrices
+    const scripts = $('script');
+    for (let i = 0; i < scripts.length; i++) {
+      const text = $(scripts[i]).text() || '';
+      if (text.includes('crossedOutPrices')) {
+        const match = text.match(/\\?"crossedOutPrices\\?"\s*:\s*\[\{\s*\\?"amount\\?"\s*:\s*([0-9.]+)/);
+        if (match) {
+          const val = parseFloat(match[1]);
+          if (!isNaN(val) && val > currentPrice) return val;
+        }
+      }
+    }
+
+    // 3. Fallback selectors
+    let candidates = [];
+    const selectors = [
+      'span[class*="crossed"]',
+      'del',
+      's',
+      '.old-price',
+      '.original-price'
+    ];
+    for (const selector of selectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        if (txt.includes('TL') || txt.includes('₺')) {
+          const parsed = this.parsePriceText(txt);
+          if (parsed !== null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.push(parsed);
+          }
+        }
+      });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b - a);
+    return candidates[0];
   }
 
   scrapeDescription($) {

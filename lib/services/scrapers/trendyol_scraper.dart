@@ -103,6 +103,71 @@ class TrendyolScraper extends BaseProductScraper {
   }
 
   @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    final candidates = <double>[];
+
+    // 1. DOM Seçicileri (Öncelikli)
+    final domSelectors = [
+      '.old-price',
+      '.prc-org',
+      '.ty-plus-price-original-price',
+      '[class*="price-original"]',
+      '[class*="original-price"]',
+      '[class*="prc-org"]',
+      '[class*="old-price"]',
+      'del',
+      's',
+    ];
+
+    for (final selector in domSelectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final parsed = parsePriceText(el.text);
+        if (parsed != null && parsed > currentPrice) {
+          candidates.add(parsed);
+        }
+      }
+    }
+
+    if (candidates.isNotEmpty) {
+      final valid = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+      if (valid.isNotEmpty) {
+        valid.sort();
+        return valid.first;
+      }
+    }
+
+    // 2. Initial State Script Search (Fallback)
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('__PRODUCT_DETAIL_APP_INITIAL_STATE__') || text.contains('product":{')) {
+        try {
+          final matches = RegExp(r'"(?:originalPrice|sellingPrice|marketPrice)"\s*:\s*\{[^\}]*?"value"\s*:\s*([\d.]+)').allMatches(text);
+          for (final m in matches) {
+            final raw = m.group(1);
+            if (raw != null) {
+              final val = double.tryParse(raw);
+              if (val != null && val > currentPrice) {
+                candidates.add(val);
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    final valid = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+    if (valid.isEmpty) return null;
+
+    valid.sort();
+    return valid.first;
+  }
+
+  @override
   double? scrapeRatingValue(dom.Document document) {
     print('[aggregateRating] TrendyolScraper: ratingValue aranıyor...');
     final productJson = findProductJsonLd(document);

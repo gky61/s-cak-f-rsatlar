@@ -225,12 +225,16 @@ async function microlinkFetchHtml(targetUrl, originalUrl, fetchStartTime, preren
  * Bu fonksiyon özellikle Teknosa gibi agresif Cloudflare koruması olan siteler için.
  */
 function curlFetchHtml(targetUrl, originalUrl, fetchStartTime) {
-  if (targetUrl.includes('hepsiburada.com')) {
+  if (targetUrl.includes('hepsiburada.com') || targetUrl.includes('trendyol.com') || targetUrl.includes('ty.gl') || targetUrl.includes('n11.com') || targetUrl.includes('vatanbilgisayar.com') || targetUrl.includes('pazarama.com') || targetUrl.includes('idefix.com') || targetUrl.includes('mediamarkt.com.tr') || targetUrl.includes('teknosa.com') || targetUrl.includes('incehesap.com') || targetUrl.includes('pttavm.com')) {
     try {
-      console.log(`[FETCH-HTML] 🔧 curl (Hepsiburada clean headers) ile çekiliyor: ${targetUrl}`);
+      console.log(`[FETCH-HTML] 🔧 curl (Clean headers) ile çekiliyor: ${targetUrl}`);
+      let userAgent = 'WhatsApp/2.23.4.15 A';
+      if (targetUrl.includes('incehesap.com')) {
+        userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1';
+      }
       const hbArgs = [
         '-sL',
-        '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
+        '-H', `User-Agent: ${userAgent}`,
         '-H', 'Accept-Language: tr-TR,tr;q=0.9',
         '--compressed',
         '-w', '\n---CURL_HTTP_STATUS:%{http_code}---',
@@ -585,6 +589,7 @@ async function fetchHtml(url) {
   let isTrendyol = false;
   let isAmazon = false;
   let isGetir = false;
+  let isIncehesap = false;
 
   try {
     const parsed = new URL(url);
@@ -672,9 +677,17 @@ async function fetchHtml(url) {
       // curl farklı TLS stack kullandığı için Cloudflare'i geçebiliyor.
       // Tracking parametrelerini temizle, URL'yi sadeleştir.
       const cleaned = new URL(parsed.pathname, parsed.origin);
+      if (parsed.searchParams.has('shopId')) {
+        cleaned.searchParams.set('shopId', parsed.searchParams.get('shopId'));
+      }
       targetUrl = cleaned.toString();
       isTeknosa = true;
       console.log(`[FETCH-HTML] 🔄 Teknosa linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
+    } else if (parsed.hostname.includes('incehesap.com')) {
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      targetUrl = cleaned.toString();
+      isIncehesap = true;
+      console.log(`[FETCH-HTML] 🔄 İncehesap linki tespit edildi. Tracking params temizlendi. iPhone UA ile curl kullanılacak: ${targetUrl}`);
     } else if (parsed.hostname.includes('mavi.com')) {
       // Mavi Cloudflare, Node.js fetch TLS fingerprint'ini engelliyor.
       // curl ile doğrudan çekim 200 OK alıyor.
@@ -732,8 +745,8 @@ async function fetchHtml(url) {
 
   console.log(`[FETCH-HTML] 📥 İstek başlatılıyor: ${targetUrl}`);
 
-  // ── Hepsiburada, Trendyol, Teknosa, Mavi & Amazon: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
-  if (isHepsiburada || isTrendyol || isTeknosa || isMavi || isAmazon) {
+  // ── Hepsiburada, Trendyol, Teknosa, İncehesap, Mavi, PttAVM & Amazon: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
+  if (isHepsiburada || isTrendyol || isTeknosa || isIncehesap || isMavi || isPttavm || isAmazon) {
     const html = curlFetchHtml(targetUrl, url, fetchStartTime);
     if (html && html.length > 1000) {
       return html;

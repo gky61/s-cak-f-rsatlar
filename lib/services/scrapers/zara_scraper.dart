@@ -113,19 +113,27 @@ class ZaraScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. Script bloğu regex aramaları (Tüm script varyasyonları için ortak ve güvenli)
+    // 1. DOM ins.price-current (İndirimli yeni fiyat)
+    final insEl = document.querySelector('ins.price-current .money-amount__main') ??
+                  document.querySelector('ins.price-current') ??
+                  document.querySelector('.price-current__amount');
+    if (insEl != null) {
+      final val = parsePriceText(insEl.text);
+      if (val != null && val > 0) return val;
+    }
+
+    // 2. Script mainPrice / analyticsData
     final scripts = document.querySelectorAll('script');
     for (final script in scripts) {
       final text = script.text;
-      
-      // A) mainPrice (analyticsData script bloğu)
-      final mainPriceMatch = RegExp(r'"mainPrice"\s*:\s*([0-9.]+)').firstMatch(text);
-      if (mainPriceMatch != null) {
-        final val = double.tryParse(mainPriceMatch.group(1)!);
-        if (val != null && val > 0) return val;
+      if (text.contains('mainPrice') || text.contains('analyticsData')) {
+        final mainPriceMatch = RegExp(r'"mainPrice"\s*:\s*([0-9.]+)').firstMatch(text);
+        if (mainPriceMatch != null) {
+          final val = double.tryParse(mainPriceMatch.group(1)!);
+          if (val != null && val > 0) return val;
+        }
       }
 
-      // B) Offers içindeki price (JSON-LD script bloğu)
       final priceMatch = RegExp(r'"price"\s*:\s*"([0-9.]+)"').firstMatch(text) ??
                          RegExp(r'"price"\s*:\s*([0-9.]+)').firstMatch(text);
       if (priceMatch != null) {
@@ -134,7 +142,7 @@ class ZaraScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
+    // 3. DOM Seçicileri (Fallback)
     final priceSelectors = [
       '.price-current__amount',
       '.price__amount',
@@ -150,6 +158,48 @@ class ZaraScraper extends BaseProductScraper {
     }
 
     return null;
+  }
+
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    // 1. DOM del.price__amount--old-price-wrapper / .price-old__amount (İndirimsiz çizili fiyat)
+    final oldPriceEl = document.querySelector('del.price__amount--old-price-wrapper .money-amount__main') ??
+                       document.querySelector('del.price__amount--old-price-wrapper') ??
+                       document.querySelector('.price-old__amount') ??
+                       document.querySelector('.price__amount-old');
+    if (oldPriceEl != null) {
+      final val = parsePriceText(oldPriceEl.text);
+      if (val != null && val > currentPrice) return val;
+    }
+
+    // 2. Fallback selectors
+    final candidates = <double>[];
+    final selectors = [
+      'del',
+      's',
+      '.price-old__amount',
+      '.price__amount-old',
+      '.old-price',
+      '.original-price',
+    ];
+    for (final selector in selectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final txt = el.text.trim();
+        if (txt.contains('TL') || txt.contains('₺')) {
+          final parsed = parsePriceText(txt);
+          if (parsed != null && parsed > currentPrice && parsed <= currentPrice * 5) {
+            candidates.add(parsed);
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) => b.compareTo(a));
+    return candidates.first;
   }
 
   @override
