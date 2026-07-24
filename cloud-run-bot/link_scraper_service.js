@@ -111,6 +111,33 @@ async function resolveUrlRedirects(url) {
   }
   const lowerUrl = targetUrl.toLowerCase();
 
+  // Trendyol kısa linkleri (ty.gl) için WhatsApp UA ile curl kullanarak yönlendirmeyi çöz
+  if (lowerUrl.includes('ty.gl')) {
+    try {
+      console.log(`[RESOLVE-REDIRECT] 🔗 ty.gl kısa linki curl (WhatsApp UA) ile çözülüyor: ${targetUrl}`);
+      const curlArgs = [
+        '-sL',
+        '-o', 'NUL',
+        '-w', '%{url_effective}',
+        '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
+        '-H', 'Accept-Language: tr-TR,tr;q=0.9',
+        '-H', 'Cookie: storefrontId=1; countryCode=TR; language=tr',
+        '--max-time', '10',
+        targetUrl
+      ];
+      const res = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: 12000 });
+      if (!res.error && res.stdout) {
+        const finalUrl = res.stdout.trim();
+        if (finalUrl && finalUrl.startsWith('http') && finalUrl !== targetUrl) {
+          console.log(`[RESOLVE-REDIRECT] ✅ ty.gl kısa linki çözüldü: ${finalUrl}`);
+          return extractAdjustFallback(finalUrl);
+        }
+      }
+    } catch (err) {
+      console.warn(`[RESOLVE-REDIRECT] ⚠️ ty.gl short link resolution hatası: ${err.message}`);
+    }
+  }
+
   const isShortOrRedirect = lowerUrl.includes('amzn.eu') ||
     lowerUrl.includes('amzn.to') ||
     lowerUrl.includes('link.amazon') ||
@@ -123,8 +150,7 @@ async function resolveUrlRedirects(url) {
     lowerUrl.includes('rebrand.ly') ||
     lowerUrl.includes('rdrtr.com') ||
     lowerUrl.includes('onelink.me') ||
-    lowerUrl.includes('sl.n11.com') ||
-    lowerUrl.includes('ty.gl');
+    lowerUrl.includes('sl.n11.com');
 
   if (!isShortOrRedirect) return targetUrl;
 
@@ -133,8 +159,6 @@ async function resolveUrlRedirects(url) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    // Short link/yönlendirme çözümlerinde Chrome Desktop UA kullanılmalı.
-    // WhatsApp UA kullanıldığında amzlinks.in, link.amazon, rdrtr vb. servisler 302 yönlendirmesi yapmak yerine 200 OK önizleme sayfası döndürmektedir.
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -238,9 +262,12 @@ function curlFetchHtml(targetUrl, originalUrl, fetchStartTime) {
         '-H', 'Accept-Language: tr-TR,tr;q=0.9',
         '--compressed',
         '-w', '\n---CURL_HTTP_STATUS:%{http_code}---',
-        '--max-time', '15',
-        targetUrl
+        '--max-time', '15'
       ];
+      if (targetUrl.includes('trendyol.com') || targetUrl.includes('ty.gl')) {
+        hbArgs.push('-H', 'Cookie: storefrontId=1; countryCode=TR; language=tr');
+      }
+      hbArgs.push(targetUrl);
       const hbRes = spawnSync('curl', hbArgs, {
         encoding: 'utf-8',
         timeout: 18000,

@@ -1,5 +1,6 @@
 /**
  * Trendyol Scraper (Node.js port)
+ * Enhanced for full compatibility & robust extraction
  */
 const BaseProductScraper = require('./base_scraper');
 
@@ -12,7 +13,7 @@ class TrendyolScraper extends BaseProductScraper {
   }
 
   scrapeImage($, url) {
-    // 1. JSON-LD şemasından görsel çekmeyi dene (Öncelikli)
+    // 1. JSON-LD şemasından (Öncelikli)
     const product = this.findProductJsonLd($);
     if (product && product['image']) {
       const img = this.extractImageFromProductJson(product['image']);
@@ -21,22 +22,37 @@ class TrendyolScraper extends BaseProductScraper {
         if (resolved) return resolved;
       }
     }
-    
-    // 2. Open Graph (Fallback 1)
-    const ogImg = $('meta[property="og:image"]').attr('content');
-    if (ogImg && !this.isLogoUrl(ogImg)) {
-      const resolved = this.resolveImageUrl(ogImg, url);
-      if (resolved) return resolved;
-    }
-    
-    // 3. Main Product Image (Fallback 2)
-    const imgElements = $('.product-image-container img, .detail-main-img img, img.main-img');
-    for (let i = 0; i < imgElements.length; i++) {
-      const el = $(imgElements[i]);
-      const src = el.attr('src') || el.attr('data-src');
-      if (src && !this.isLogoUrl(src)) {
-        const resolved = this.resolveImageUrl(src, url);
+
+    // 2. Open Graph / Meta Tags
+    const metaImages = [
+      $('meta[property="og:image"]').attr('content'),
+      $('meta[name="twitter:image"]').attr('content')
+    ];
+    for (const ogImg of metaImages) {
+      if (ogImg && !this.isLogoUrl(ogImg)) {
+        const resolved = this.resolveImageUrl(ogImg, url);
         if (resolved) return resolved;
+      }
+    }
+
+    // 3. DOM Seçicileri
+    const imgSelectors = [
+      '.product-image-container img',
+      '.detail-main-img img',
+      'img.main-img',
+      '.gallery-container img',
+      '.base-product-image img',
+      '[data-testid="product-image"] img'
+    ];
+    for (const sel of imgSelectors) {
+      const imgElements = $(sel);
+      for (let i = 0; i < imgElements.length; i++) {
+        const el = $(imgElements[i]);
+        const src = el.attr('src') || el.attr('data-src') || el.attr('data-original');
+        if (src && !this.isLogoUrl(src)) {
+          const resolved = this.resolveImageUrl(src, url);
+          if (resolved) return resolved;
+        }
       }
     }
     return null;
@@ -45,11 +61,31 @@ class TrendyolScraper extends BaseProductScraper {
   scrapeTitle($) {
     // 1. JSON-LD şemasından (Öncelikli)
     const product = this.findProductJsonLd($);
-    if (product && product['name']) return product['name'].toString().trim();
-    
-    // 2. DOM Seçicileri (Fallback)
-    const el = $('[data-testid="product-title"], .product-title, h1.product-title').first();
-    if (el.length) return el.text().trim();
+    if (product && product['name']) {
+      const name = product['name'].toString().trim();
+      if (name.length > 0) return name;
+    }
+
+    // 2. DOM Seçicileri
+    const titleSelectors = [
+      '[data-testid="product-title"]',
+      'h1.pr-new-br',
+      '.product-title',
+      'h1.product-title',
+      'h1'
+    ];
+    for (const sel of titleSelectors) {
+      const el = $(sel).first();
+      if (el.length) {
+        const txt = el.text().trim();
+        if (txt.length > 0) return txt;
+      }
+    }
+
+    // 3. Meta Tags
+    const ogTitle = $('meta[property="og:title"]').attr('content');
+    if (ogTitle && ogTitle.trim()) return ogTitle.trim();
+
     return null;
   }
 
@@ -63,16 +99,126 @@ class TrendyolScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
-    const priceEl = $('.discounted, .prc-dsc, .price-container span').first();
-    if (priceEl.length) {
-      const val = this.parsePriceText(priceEl.text());
-      if (val !== null && val > 0) {
-        return val;
+    // 2. DOM Seçicileri (Fallback 1)
+    const priceSelectors = [
+      '.discounted',
+      '.prc-dsc',
+      '.price-container span',
+      '.prc-slg',
+      '.pr-bx-w .prc-dsc',
+      '.product-price-container span',
+      '.prc-box-dsc',
+      '.prc-box-sll',
+      '[class*="price-discounted"]',
+      '[class*="prc-dsc"]',
+      '[class*="selling-price"]'
+    ];
+    for (const sel of priceSelectors) {
+      const el = $(sel).first();
+      if (el.length) {
+        const val = this.parsePriceText(el.text());
+        if (val !== null && val > 0) return val;
       }
     }
 
-    return null;
+    // 3. Script Search (Fallback 2: Initial State / Next Data)
+    let foundPrice = null;
+    $('script').each((_, el) => {
+      const text = $(el).text();
+      if (text && (text.includes('__PRODUCT_DETAIL_APP_INITIAL_STATE__') || text.includes('product":{') || text.includes('__NEXT_DATA__'))) {
+        try {
+          const m = text.match(/"(?:discountedPrice|sellingPrice|price|salePrice)"\s*:\s*\{[^\}]*?"value"\s*:\s*([\d.]+)/);
+          if (m) {
+            const val = parseFloat(m[1]);
+            if (!isNaN(val) && val > 0) {
+              foundPrice = val;
+              return false;
+            }
+          }
+        } catch (_) {}
+      }
+    });
+
+    return foundPrice;
+  }
+
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    let candidates = [];
+
+    // 1. DOM selectors for old / strikethrough / original prices (Öncelikli)
+    const domSelectors = [
+      '.old-price',
+      '.prc-org',
+      '.ty-plus-price-original-price',
+      '[class*="price-original"]',
+      '[class*="original-price"]',
+      '[class*="prc-org"]',
+      '[class*="old-price"]',
+      '.prc-box-org',
+      'del',
+      's'
+    ];
+
+    for (const selector of domSelectors) {
+      $(selector).each((_, el) => {
+        const txt = $(el).text().trim();
+        const parsed = this.parsePriceText(txt);
+        if (parsed !== null && parsed > currentPrice) {
+          candidates.push(parsed);
+        }
+      });
+    }
+
+    if (candidates.length > 0) {
+      candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => a - b);
+        return candidates[0];
+      }
+    }
+
+    // 2. JSON-LD High Price (Fallback 1)
+    const productJson = this.findProductJsonLd($);
+    if (productJson && productJson['offers']) {
+      const offers = Array.isArray(productJson['offers']) ? productJson['offers'] : [productJson['offers']];
+      for (const offer of offers) {
+        if (offer['highPrice']) {
+          const hp = parseFloat(offer['highPrice']);
+          if (!isNaN(hp) && hp > currentPrice) candidates.push(hp);
+        }
+      }
+    }
+
+    // 3. Initial State Script Search (Fallback 2)
+    $('script').each((_, el) => {
+      const text = $(el).text();
+      if (text && (text.includes('__PRODUCT_DETAIL_APP_INITIAL_STATE__') || text.includes('product":{') || text.includes('__NEXT_DATA__'))) {
+        try {
+          const matches = text.match(/"(?:originalPrice|marketPrice|crossedOutPrices)"\s*:\s*\{[^\}]*?"value"\s*:\s*([\d.]+)/g);
+          if (matches) {
+            for (const m of matches) {
+              const valMatch = m.match(/"value"\s*:\s*([\d.]+)/);
+              if (valMatch) {
+                const val = parseFloat(valMatch[1]);
+                if (!isNaN(val) && val > currentPrice) {
+                  candidates.push(val);
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    });
+
+    if (candidates.length === 0) return null;
+
+    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a - b);
+    return candidates[0];
   }
 
   scrapeDescription($) {
@@ -107,82 +253,58 @@ class TrendyolScraper extends BaseProductScraper {
         return rating;
       }
     }
-    return { ratingValue: null, ratingCount: null };
-  }
 
-  scrapeBrand($) {
-    const product = this.findProductJsonLd($);
-    if (product) {
-      const brand = this.extractBrandFromProductJson(product);
-      if (brand) return brand;
-    }
-    return null;
-  }
+    let ratingValue = null;
+    let ratingCount = null;
 
-  scrapeOriginalPrice($, currentPrice) {
-    if (!currentPrice || currentPrice <= 0) return null;
-
-    let candidates = [];
-
-    // 1. DOM selectors for old / strikethrough / original prices (Öncelikli)
-    const domSelectors = [
-      '.old-price',
-      '.prc-org',
-      '.ty-plus-price-original-price',
-      '[class*="price-original"]',
-      '[class*="original-price"]',
-      '[class*="prc-org"]',
-      '[class*="old-price"]',
-      'del',
-      's'
-    ];
-
-    for (const selector of domSelectors) {
-      $(selector).each((_, el) => {
-        const txt = $(el).text().trim();
-        const parsed = this.parsePriceText(txt);
-        if (parsed !== null && parsed > currentPrice) {
-          candidates.push(parsed);
-        }
-      });
-    }
-
-    if (candidates.length > 0) {
-      candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
-      if (candidates.length > 0) {
-        candidates.sort((a, b) => a - b);
-        return candidates[0];
-      }
-    }
-
-    // 2. Initial State Script Search (Fallback)
     $('script').each((_, el) => {
       const text = $(el).text();
-      if (text.includes('__PRODUCT_DETAIL_APP_INITIAL_STATE__') || text.includes('product":{')) {
-        try {
-          const matches = text.match(/"(?:originalPrice|sellingPrice|marketPrice)"\s*:\s*\{[^\}]*?"value"\s*:\s*([\d.]+)/g);
-          if (matches) {
-            for (const m of matches) {
-              const valMatch = m.match(/"value"\s*:\s*([\d.]+)/);
-              if (valMatch) {
-                const val = parseFloat(valMatch[1]);
-                if (!isNaN(val) && val > currentPrice) {
-                  candidates.push(val);
-                }
-              }
-            }
+      if (text && (text.includes('ratingValue') || text.includes('averageRating'))) {
+        if (!ratingValue) {
+          const vm = text.match(/"(?:ratingValue|averageRating)"\s*:\s*"?([\d.,]+)"?/);
+          if (vm) {
+            const parsed = parseFloat(vm[1].replace(',', '.'));
+            if (!isNaN(parsed) && parsed > 0 && parsed <= 5) ratingValue = parsed;
           }
-        } catch (_) {}
+        }
+        if (!ratingCount) {
+          const cm = text.match(/"(?:ratingCount|totalRatingCount|reviewCount)"\s*:\s*"?(\d+)"?/);
+          if (cm) {
+            const parsed = parseInt(cm[1]);
+            if (!isNaN(parsed) && parsed > 0) ratingCount = parsed;
+          }
+        }
       }
     });
 
-    if (candidates.length === 0) return null;
+    return { ratingValue, ratingCount };
+  }
 
-    candidates = candidates.filter(c => c > currentPrice && c <= currentPrice * 5);
-    if (candidates.length === 0) return null;
+  scrapeBrand($) {
+    // 1. JSON-LD (Öncelikli)
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const brand = this.extractBrandFromProductJson(product);
+      if (brand && brand.trim()) return brand.trim();
+    }
 
-    candidates.sort((a, b) => a - b);
-    return candidates[0];
+    // 2. DOM Seçicileri
+    const brandSelectors = [
+      'h1.pr-new-br a',
+      'a.product-brand',
+      'span.pr-new-br',
+      '.brand-name',
+      '[data-testid="brand-name"]'
+    ];
+    for (const sel of brandSelectors) {
+      const el = $(sel).first();
+      if (el.length) {
+        const txt = el.text().trim();
+        if (txt.length > 0) return txt;
+      }
+    }
+
+    return null;
   }
 }
 
