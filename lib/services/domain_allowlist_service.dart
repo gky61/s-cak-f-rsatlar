@@ -83,7 +83,7 @@ class DomainAllowlistService {
     // Kısa link yönlendirmesini çöz ve tekrar kontrol et
     try {
       final linkPreviewService = LinkPreviewService();
-      String resolved = await linkPreviewService.extractAdjustFallback(urlStr);
+      String resolved = linkPreviewService.extractAdjustFallback(urlStr);
       if (resolved.toLowerCase().contains('sl.n11.com/n/') || resolved.toLowerCase().contains('n11.com/n/')) {
         resolved = await linkPreviewService.resolveN11ShortLink(resolved);
       }

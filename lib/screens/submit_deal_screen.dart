@@ -288,7 +288,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: const [
               Text(
                 'Girdiğiniz ürün linki topluluk tarafından desteklenen 20 mağazadan birine ait değildir.',
