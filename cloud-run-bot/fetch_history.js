@@ -486,7 +486,7 @@ async function saveDealToFirebase(message, chatInfo) {
     const finalCategory = categoryResult.categoryId || 'diger';
 
     const storeFromLink = extractStoreFromLink(scrapeResult.url || mainLink, messageText);
-    const finalDescription = getDescriptionWithoutLinks(messageText, links);
+    const finalDescription = getDescriptionWithoutLinks(messageText, rawLinks);
 
     // ========================================
     // 📷 GÖRSEL KONTROLÜ VE YÜKLEME
