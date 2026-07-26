@@ -11,6 +11,7 @@ const admin = require('firebase-admin');
 // Scraper ve Kategori servisleri
 const linkScraperService = require('./link_scraper_service');
 const categoryDetectionService = require('./category_detection_service');
+const domainAllowlist = require('./domain_allowlist');
 
 // Firebase Admin başlat
 // Cloud Run'da otomatik authentication kullanır
@@ -370,14 +371,34 @@ function getDescriptionWithoutLinks(messageText, links) {
 async function saveDealToFirebase(message, chatInfo) {
   try {
     const messageText = message.message || '';
-    const links = getAllLinks(message);
+    const rawLinks = getAllLinks(message);
 
-    if (!links.length) {
+    if (!rawLinks.length) {
       console.log('ℹ️ Mesajda link bulunamadı (Metin veya Buton)');
       return false;
     }
 
-    const mainLink = links[0];
+    // 🎯 DOMAIN ALLOWLIST İLE DESTEKLENEN MAĞAZA ÜRÜN LİNKİNİ TESPİT ET
+    let mainLink = null;
+    for (const rawLink of rawLinks) {
+      // 1. Yönlendirme veya kısa link varsa çöz
+      const resolvedLink = await linkScraperService.resolveUrlRedirects(rawLink);
+      
+      // 2. Çözülen URL'nin domain'i allowlist'te var mı?
+      if (domainAllowlist.isDomainAllowed(resolvedLink)) {
+        mainLink = resolvedLink;
+        console.log(`🎯 [ALLOWLIST MATCH] Desteklenen mağaza ürün linki bulundu: ${mainLink} (Orijinal: ${rawLink})`);
+        break;
+      } else {
+        console.log(`⏩ [ALLOWLIST SKIP] Allowlist dışı link atlandı: ${resolvedLink} (Orijinal: ${rawLink})`);
+      }
+    }
+
+    if (!mainLink) {
+      console.log('ℹ️ Mesajdaki hiçbir link desteklenen mağaza allowlist\'inde yer almadı. İşlem iptal ediliyor.');
+      return false;
+    }
+
     const messageId = message.id;
     const chatIdentifier = chatInfo.username ? `@${chatInfo.username}` : chatInfo.id.toString();
     const uniqueDocId = `telegram_${chatInfo.id}_${messageId}`;

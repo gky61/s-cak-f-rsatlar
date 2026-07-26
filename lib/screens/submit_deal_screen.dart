@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/category_detection_service.dart';
 import '../services/ai_service.dart';
 import '../services/link_preview_service.dart';
+import '../services/domain_allowlist_service.dart';
 import '../models/category.dart';
 import '../widgets/category_selector_widget.dart';
 import '../theme/app_theme.dart';
@@ -266,6 +267,58 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     );
   }
 
+  void _showUnsupportedStoreDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: const [
+              Icon(Icons.warning_amber_rounded, color: Color(0xFFEF6C00), size: 28),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Desteklenmeyen Mağaza Linki',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAlignment.start,
+            children: const [
+              Text(
+                'Girdiğiniz ürün linki topluluk tarafından desteklenen 20 mağazadan birine ait değildir.',
+                style: TextStyle(fontSize: 14, height: 1.4),
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Güvenli bir topluluk için sadece aşağıdaki desteklenen mağazalara ait geçerli ürün linkleri paylaşılabilir:\n\n'
+                '• Trendyol, Hepsiburada, Amazon TR, N11, Pazarama, Idefix, PttAVM\n'
+                '• Teknosa, MediaMarkt, Vatan Bilgisayar, İtopya, İncehesap\n'
+                '• Mavi, DeFacto, Zara, Mango, Beymen\n'
+                '• Migros, Getir, Havit',
+                style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.3),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text(
+                'Anladım',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFF6B35)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   String? _cleanScrapedString(String? value) {
     if (value == null) return null;
     final trimmed = value.trim();
@@ -332,6 +385,19 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   
   Future<void> _autoFetchProductData(String url) async {
     if (_isAutoDetecting || _isLoadingImage) return;
+
+    // Domain Allowlist Kontrolü
+    final isAllowed = await DomainAllowlistService.isResolvedUrlAllowed(url);
+    if (!isAllowed) {
+      if (mounted) {
+        setState(() {
+          _isAutoDetecting = false;
+          _isLoadingImage = false;
+        });
+        _showUnsupportedStoreDialog();
+      }
+      return;
+    }
 
     // Yeni URL analizine başlamadan önce eski verileri temizle
     setState(() {
@@ -831,6 +897,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       return;
     }
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final urlControllerText = _urlController.text.trim();
+    final isAllowed = await DomainAllowlistService.isResolvedUrlAllowed(urlControllerText);
+    if (!isAllowed) {
+      _showUnsupportedStoreDialog();
       return;
     }
 

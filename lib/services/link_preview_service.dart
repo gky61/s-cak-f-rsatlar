@@ -8,6 +8,8 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
 
+import 'domain_allowlist_service.dart';
+
 // Scrapers
 import 'scrapers/base_scraper.dart';
 import 'scrapers/amazon_scraper.dart';
@@ -239,6 +241,12 @@ class LinkPreviewService {
       targetUrl = _normalizeGetirUrl(targetUrl);
 
       _log('🔍 LinkPreviewService: URL çekiliyor: $targetUrl');
+
+      // Domain Allowlist Kontrolü
+      if (!DomainAllowlistService.isDomainAllowed(targetUrl)) {
+        _log('🛑 [ALLOWLIST REJECT] URL desteklenen mağaza domain allowlist\'inde bulunamadı: $targetUrl');
+        return null;
+      }
       
       // Eşleşen bir scraper var mı kontrol et
       BaseProductScraper? matchedScraper;
