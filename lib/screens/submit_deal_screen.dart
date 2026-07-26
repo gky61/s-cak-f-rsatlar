@@ -289,12 +289,19 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text(
-                'Girdiğiniz ürün linki topluluk tarafından desteklenen 20 mağazadan birine ait değildir.',
+            children: [
+              const Text(
+                'Girdiğiniz ürün linki topluluk tarafından desteklenen mağazalardan birine ait değildir veya otomatik algılanamadı.',
                 style: TextStyle(fontSize: 14, height: 1.4),
               ),
-              SizedBox(height: 12),
+              if (_lastProcessedUrl.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '🔗 URL: $_lastProcessedUrl',
+                  style: const TextStyle(fontSize: 13, color: Colors.grey, fontStyle: FontStyle.italic),
+                ),
+              ],
+              const SizedBox(height: 12),
               Text(
                 'Güvenli bir topluluk için sadece aşağıdaki desteklenen mağazalara ait geçerli ürün linkleri paylaşılabilir:\n\n'
                 '• Trendyol, Hepsiburada, Amazon TR, N11, Pazarama, Idefix, PttAVM\n'
