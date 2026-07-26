@@ -35,7 +35,8 @@ graph TD
     *   `link_scraper_service.js`: Gelen bağlantıların yönlendirmelerini takip eden ve bypass stratejilerini yöneten katman.
     *   `category_detection_service.js`: Ürün başlığı ve açıklamasına göre kategoriyi otomatik saptayan servis.
     *   `scrapers/`: Botun kullandığı **JS tabanlı tarayıcı (Scraper)** sınıfları (Örn: `hepsiburada_scraper.js`).
-    *   `deploy_to_vm.py`: Güncellemeleri Google Cloud Build ile derleyip VM'e otomatik kuran deployment betiği.
+    *   `deploy_to_vm.py`: Güncellemeleri Google Cloud Build servisi ile bulutta derleyip VM'e kuran standart deployment betiği.
+    *   `deploy_direct_vm.py`: Google Cloud Build servisini/APIsini bypass ederek yerel kodları SCP ile doğrudan VM'e aktaran ve Docker derlemesini (`docker build`) doğrudan VM sunucusunun kendi içinde ücretsiz koşturan alternatif deployment betiği.
     *   `dev.env` / `prod.env`: Ortam değişkenleri (Secret şifreleri barındırmaz, sadece konfigürasyonel veri taşır).
 *   **`functions/`**: Firebase Cloud Functions kodları.
     *   `index.js`: Veritabanı trigger'larını (tetikleyicilerini) barındırır. Fırsat onaylandığında push bildirimi tetikleyen `onDealUpdated` buradadır.
@@ -114,29 +115,34 @@ E-ticaret siteleri bulut IP bloklarından (GCP/AWS) gelen bot isteklerini sert g
 
 ## 🚀 6. Canlıya Alma ve Güncelleme İş Akışları (Deployment Pipelines)
 
-### A. Telegram Botu VM Deployment (`deploy_to_vm.py`):
-Bot üzerinde bir kod değişikliği yapıldığında deployment şu adımlarla koşturulur:
-1.  Yerel terminalde `cloud-run-bot` dizinine gidilir.
-2.  DEV botu için: `python deploy_to_vm.py dev` veya PROD botu için `python deploy_to_vm.py prod` çalıştırılır.
-3.  **Betik Arka Planda Ne Yapar?**
-    *   `gcloud builds submit` ile kodları Google Cloud Build'e gönderir. Kod bulutta Dockerfile referansıyla derlenir ve GCP Container Registry'ye (`gcr.io`) yeni sürüm imaj push edilir.
-    *   Sanal makineye SSH bağlantısı kurulur.
-    *   Eski Docker konteyneri durdurulup silinir (`docker stop dev-bot || true && docker rm dev-bot || true`).
-    *   Registry'den yeni Docker imajı çekilir ve çalıştırılır.
-    *   Port yönlendirmesi (`8081:8080` veya `8082:8080`) yapılarak ayağa kaldırılır.
-    *   Eski imajlar disk alanı kaplamaması için otomatik temizlenir (`docker image prune -a -f || true`).
+### A. Telegram Botu VM Deployment (`deploy_to_vm.py` vs `deploy_direct_vm.py`):
+Bot üzerinde bir kod değişikliği yapıldığında deployment için 2 farklı yöntem kullanılabilir:
+
+#### 1. Yöntem: Bulut Derlemeli Standart Deployment (`python cloud-run-bot/deploy_to_vm.py [dev|prod]`)
+- **Kullanım Senaryosu:** GCP Billing hesabı aktif ve Google Cloud Build servisi kotası müsait olduğunda tercih edilen standart yöntemdir.
+- **İş Akışı:**
+  1. Kodlar `gcloud builds submit` ile Google Cloud Build'e gönderilir ve bulutta Docker imajı derlenerek GCP Container Registry'ye (`gcr.io`) yüklenir.
+  2. VM'e SSH ile bağlanılarak yeni imaj çekilir (`docker pull gcr.io/firsatkolik-prod-e6eae/telegram-bot:latest`).
+  3. Konteyner durdurulup yenilenir (`docker stop` -> `docker rm` -> `docker run`).
+
+#### 2. Yöntem: Doğrudan VM İçi Derleme (`python cloud-run-bot/deploy_direct_vm.py [dev|prod]`)
+- **Kullanım Senaryosu:** 
+  - GCP Fatura Hesabı askıya alındığında (`delinquent billing account` uyarısı/403 hatası durumunda),
+  - Cloud Build API kota sınırlarına takılındığında veya bulut derleme süresini/maliyetini sıfırlamak istendiğinde kullanılır.
+- **İş Akışı:**
+  1. Yerel koddaki `node_modules` ve `.git` dizinleri hariç tutularak kodlar geçici bir `bot_code.tar.gz` arşivine paketlenir.
+  2. `gcloud compute scp` komutuyla arşiv dosyası doğrudan sanal makineye (`telegram-bot-server`) aktarılır.
+  3. VM sunucusuna SSH üzerinden tek komut dizisi gönderilerek:
+     - Arşiv açılır (`tar -xzf`),
+     - Docker imajı doğrudan VM'in kendi işlemci/bellek kaynaklarıyla ücretsiz olarak derlenir (`docker build -t telegram-bot-local:latest .`),
+     - Eski konteyner zorla silinir (`docker stop` -> `docker rm -f`),
+     - Yeni imaj ilgili port (`8081` / `8082`) ve volume bağlantılarıyla (`firebase_key.json` & `.env`) ayağa kaldırılır.
 
 > [!IMPORTANT]
-> **GCR Registry Eşitleme Gecikmesi (Tag Latency Warning):**
+> **GCR Registry Eşitleme Gecikmesi (Tag Latency Warning - Sadece `deploy_to_vm.py` için geçerlidir):**
 > Google Cloud Build imajı başarıyla derleyip `gcr.io` üzerine `latest` etiketiyle push etse dahi, GCP registry'nin edge sunucularındaki tag metaverisinin güncellenmesi **30 ila 90 saniye arasında sürebilir (eventual consistency)**.
 > 
-> Betik biter bitmez VM üzerinde çalıştırılan `docker pull` komutu bazen bu gecikmeden ötürü eski imajı çekip `Status: Image is up to date` yanıtı verebilir. Bu durumda VM'in eski kodları çalıştırmaya devam etme riski oluşur.
-> 
-> **Güvenli Canlıya Alma Çözümü:**
-> Betik tamamlandıktan yaklaşık 1-2 dakika sonra VM'e SSH bağlantısı kurularak `docker inspect [dev-bot|prod-bot]` ile çalışan konteynerin imaj hash'inin güncel GCP derleme hash'iyle eşleşip eşleşmediği kontrol edilmelidir. Eğer eski imaj çalışıyorsa sırasıyla:
-> 1. `docker pull gcr.io/firsatkolik-prod-e6eae/telegram-bot:latest` ile yeni imaj çekilmeye zorlanır.
-> 2. `docker stop [dev-bot|prod-bot]` ve `docker rm [dev-bot|prod-bot]` komutları koşturulur.
-> 3. İlgili port ve env dosyası parametreleriyle `docker run` yapılarak konteyner taze katmanlarla yeniden başlatılır.
+> `deploy_direct_vm.py` kullanıldığında imaj doğrudan VM içinde yerel derlendiği için bu registry gecikmesi yaşanmaz ve yeni kodlar anında canlıya geçer.
 
 
 ### B. Firebase Cloud Functions Deployment:
@@ -152,6 +158,17 @@ Bot üzerinde bir kod değişikliği yapıldığında deployment şu adımlarla 
 ---
 
 ## 🛠️ 7. Geliştirici ve Yönetici Komutları Referansı
+
+### Telegram Botu Dağıtım (Deployment) Komutları:
+```bash
+# Standart Cloud Build ile Deployment (GCP Billing / Cloud Build aktifken)
+python cloud-run-bot/deploy_to_vm.py dev
+python cloud-run-bot/deploy_to_vm.py prod
+
+# Doğrudan VM İçi Docker Build ile Deployment (Cloud Build Bypass / Billing Askı durumunda)
+python cloud-run-bot/deploy_direct_vm.py dev
+python cloud-run-bot/deploy_direct_vm.py prod
+```
 
 ### Sanal Makineye SSH ile Bağlanma:
 ```bash
