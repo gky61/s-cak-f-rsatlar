@@ -690,17 +690,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             ),
                           ),
                         ),
-                        // Floating Money Badge (Bottom Left over Image for Migros)
-                        if (MoneyBadge.isMoneyDeal(deal))
-                          Positioned(
-                            bottom: 32,
-                            left: 16,
-                            child: const MoneyBadge(
-                              fontSize: 12,
-                              iconSize: 15,
-                              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            ),
-                          ),
                         // Floating Discount Badge (Bottom Right over Image)
                         if (deal.discountRate != null && deal.discountRate! > 0)
                           Positioned(
@@ -1094,6 +1083,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                 fontWeight: FontWeight.w500,
                                                 color: isDark ? Colors.grey[300] : Colors.grey[700],
                                               ),
+                                            ),
+                                          ],
+                                          if (MoneyBadge.isMoneyDeal(deal)) ...[
+                                            const SizedBox(width: 4),
+                                            const MoneyBadge(
+                                              fontSize: 11,
+                                              iconSize: 13,
+                                              padding: EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
                                             ),
                                           ],
                                         ],

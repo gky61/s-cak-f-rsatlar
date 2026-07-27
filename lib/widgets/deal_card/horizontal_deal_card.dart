@@ -182,17 +182,6 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                     ),
                                   ),
                                 ),
-                          // Money ile Rozeti (Sol Üst)
-                          if (MoneyBadge.isMoneyDeal(deal))
-                            Positioned(
-                              top: 6,
-                              left: 6,
-                              child: const MoneyBadge(
-                                fontSize: 8.5,
-                                iconSize: 11,
-                                padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
-                              ),
-                            ),
                           // 🔥 Fırsat Termometresi Emoji (Sol Alt) - Gerçek Zamanlı
                           Positioned(
                             bottom: 6,
@@ -608,6 +597,14 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                if (MoneyBadge.isMoneyDeal(deal)) ...[
+                                  const MoneyBadge(
+                                    fontSize: 8.5,
+                                    iconSize: 11,
+                                    padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                                  ),
+                                  const SizedBox(height: 4),
+                                ],
                                 // Kampanya açıklaması varsa üstte gösterilir
                                 if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
                                   Container(

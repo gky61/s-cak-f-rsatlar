@@ -137,20 +137,9 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                     ),
                                   ),
                           ),
-                          // Money ile Rozeti (Sol Üst)
-                          if (MoneyBadge.isMoneyDeal(deal))
-                            Positioned(
-                              top: 8,
-                              left: 8,
-                              child: const MoneyBadge(
-                                fontSize: 8.5,
-                                iconSize: 11,
-                                padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
-                              ),
-                            ),
                           // Zaman Rozeti (Sol Üst)
                           Positioned(
-                            top: MoneyBadge.isMoneyDeal(deal) ? 34 : 8,
+                            top: 8,
                             left: 8,
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -572,8 +561,16 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ),
                               ],
-                              const SizedBox(height: 6),
-                              // Fiyat ve İndirimsiz Fiyat (Eski Fiyat)
+                               if (MoneyBadge.isMoneyDeal(deal)) ...[
+                                 const SizedBox(height: 4),
+                                 const MoneyBadge(
+                                   fontSize: 9,
+                                   iconSize: 11,
+                                   padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                                 ),
+                               ],
+                               const SizedBox(height: 6),
+                               // Fiyat ve İndirimsiz Fiyat (Eski Fiyat)
                               Wrap(
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 spacing: 4,
