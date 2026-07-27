@@ -1275,6 +1275,15 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              // Money ile Rozeti (Fiyatın tam üstünde)
+                              if (MoneyBadge.isMoneyDeal(deal)) ...[
+                                const MoneyBadge(
+                                  fontSize: 10,
+                                  iconSize: 13,
+                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                ),
+                                const SizedBox(height: 5),
+                              ],
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
