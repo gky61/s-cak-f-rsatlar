@@ -179,7 +179,7 @@ class ItopyaScraper extends BaseProductScraper {
       return { ratingValue, ratingCount };
     }
 
-    // 4. Fallback: API Call to /Urun/UrunYorum?id={urunId}
+    // 4. Fallback: API Call to /Urun/UrunYorum?id={urunId} (Cloudflare Bypass via Google Translate Proxy)
     try {
       const canonical = $('link[rel="canonical"]').attr('href') || $('meta[property="og:url"]').attr('content') || '';
       const matchCanonical = canonical.match(/_u(\d+)/i);
@@ -190,8 +190,20 @@ class ItopyaScraper extends BaseProductScraper {
 
       if (urunId) {
         const { execSync } = require('child_process');
-        const apiUrl = `https://www.itopya.com/Urun/UrunYorum?id=${urunId}`;
-        const raw = execSync(`curl -sL --compressed -H "User-Agent: WhatsApp/2.23.4.15 A" "${apiUrl}"`, { timeout: 4000 }).toString();
+        const proxyApiUrl = `https://www-itopya-com.translate.goog/Urun/UrunYorum?id=${urunId}&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
+        const directApiUrl = `https://www.itopya.com/Urun/UrunYorum?id=${urunId}`;
+
+        let raw = null;
+        try {
+          raw = execSync(`curl -sL --compressed -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "${proxyApiUrl}"`, { timeout: 4000 }).toString();
+        } catch (_) {}
+
+        if (!raw || !raw.trim().startsWith('[')) {
+          try {
+            raw = execSync(`curl -sL --compressed -H "User-Agent: WhatsApp/2.23.4.15 A" "${directApiUrl}"`, { timeout: 4000 }).toString();
+          } catch (_) {}
+        }
+
         if (raw && raw.trim().startsWith('[')) {
           const data = JSON.parse(raw);
           if (Array.isArray(data) && data.length > 0) {
