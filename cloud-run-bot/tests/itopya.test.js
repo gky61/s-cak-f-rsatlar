@@ -51,7 +51,7 @@ async function run() {
   const testUrl = 'https://www.itopya.com/aoc-q27g41zdf-27-240hz-003ms-hdmi-dp-adaptive-sync-hdr10-qhd-qd-oled-gaming-monitor_u32391';
   const realHtml = `<head><link rel="canonical" href="${testUrl}"></head>`;
   const $real = cheerio.load(realHtml);
-  const rating = await scraper.scrapeRating($real, testUrl, realHtml);
+  const rating = scraper.scrapeRating($real, testUrl, realHtml);
   assert.notStrictEqual(rating, null, 'Itopya rating should not be null for rated product');
   assert.strictEqual(typeof rating.ratingValue, 'number', 'ratingValue should be a number');
   assert.strictEqual(typeof rating.ratingCount, 'number', 'ratingCount should be a number');
