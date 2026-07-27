@@ -102,7 +102,7 @@ Sunucu ortamındaki bot korumalarını aşmak için geliştirilen 5 temel bypass
 | **Trendyol** | Yurt dışı IP & Ülke Engeli | `curl` spawnSync (Doğrudan) | `storefrontId=1; countryCode=TR; language=tr` Cookie Entegrasyonu |
 | **N11** | 403 Forbidden (IP Engeli) & Kısa Linkler | Google Translate Proxy | `translate.goog` + `magaza` parametresi koruma. `sl.n11.com/n/` kısa linkleri `www.n11.com/n/` formatına dönüştürülerek Google Translate Proxy üzerinden çözümlenir (`resolveN11ShortLink`), böylece Adjust'ın Google Play Store yönlendirmesi tamamen bypass edilir. |
 | **Vatan Bilgisayar** | 403 Forbidden (IP Engeli) | Google Translate Proxy | `translate.goog` |
-| **Itopya** | 403 Forbidden (Cloudflare Engeli) | Google Translate Proxy | `translate.goog` (VM ve Direct curl Cloudflare tarafından engellendiği için translate proxy üzerinden Node fetch ile çekilir) |
+| **Itopya** | 403 Forbidden (Cloudflare Engeli) | Standart Fetch / `translate.goog` | Ürün HTML çekimi `translate.goog` ile yapılır; Değerlendirme/Rating API isteği (`/Urun/UrunYorum?id=...`) ise İdefix mimarisinde olduğu gibi öncelikle doğrudan (proxy'siz) Node `fetch` ile yapılır, sadece engellenirse 2.5s Translate Proxy fallback'i devreye girer. |
 | **Teknosa / Mavi / Amazon** | 403 Forbidden / Satıcı Fiyat Farkı | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA + `smid`/`th`/`psc` Satıcı Parametrelerini Koruma. (Amazon'da satıcı ve varyant parametreleri korunarak curl ile çekilir, başarısız olursa Microlink fallback denenir) |
 | **Pttavm** | 403 Forbidden (Tam IP Blok) | **Microlink HTML Proxy** | `api.microlink.io` custom HTML selector |
 | **MediaMarkt** | 403 Forbidden (Bot Engeli) | Googlebot UA (Doğrudan) | `Googlebot/2.1` taklidi |
