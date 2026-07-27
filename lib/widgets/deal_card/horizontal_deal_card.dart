@@ -5,6 +5,7 @@ import '../../models/deal.dart';
 import '../../models/user.dart';
 import '../../theme/app_theme.dart';
 import '../../screens/profile_screen.dart';
+import '../money_badge.dart';
 import 'deal_card_helpers.dart';
 
 class HorizontalDealCard extends StatefulWidget {
@@ -181,7 +182,17 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                     ),
                                   ),
                                 ),
-                          // Zaman Rozeti KALDIRILDI - yerine alev simgesi buraya taşındı
+                          // Money ile Rozeti (Sol Üst)
+                          if (MoneyBadge.isMoneyDeal(deal))
+                            Positioned(
+                              top: 6,
+                              left: 6,
+                              child: const MoneyBadge(
+                                fontSize: 8.5,
+                                iconSize: 11,
+                                padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                              ),
+                            ),
                           // 🔥 Fırsat Termometresi Emoji (Sol Alt) - Gerçek Zamanlı
                           Positioned(
                             bottom: 6,

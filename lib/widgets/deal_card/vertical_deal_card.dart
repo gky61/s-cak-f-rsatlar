@@ -5,6 +5,7 @@ import '../../models/deal.dart';
 import '../../models/user.dart';
 import '../../theme/app_theme.dart';
 import '../../screens/profile_screen.dart';
+import '../money_badge.dart';
 import 'deal_card_helpers.dart';
 
 class VerticalDealCard extends StatefulWidget {
@@ -136,9 +137,20 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                     ),
                                   ),
                           ),
+                          // Money ile Rozeti (Sol Üst)
+                          if (MoneyBadge.isMoneyDeal(deal))
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: const MoneyBadge(
+                                fontSize: 8.5,
+                                iconSize: 11,
+                                padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                              ),
+                            ),
                           // Zaman Rozeti (Sol Üst)
                           Positioned(
-                            top: 8,
+                            top: MoneyBadge.isMoneyDeal(deal) ? 34 : 8,
                             left: 8,
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),

@@ -16,6 +16,7 @@ import '../main.dart'; // navigatorKey için
 import '../widgets/report_dialog.dart';
 import '../widgets/comments_bottom_sheet.dart';
 import '../widgets/deal_thermometer.dart';
+import '../widgets/money_badge.dart';
 import 'deal_detail/deal_detail_helpers.dart';
 import 'deal_detail/deal_detail_image.dart';
 import 'deal_detail/deal_share_sheet.dart';
@@ -689,6 +690,17 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             ),
                           ),
                         ),
+                        // Floating Money Badge (Bottom Left over Image for Migros)
+                        if (MoneyBadge.isMoneyDeal(deal))
+                          Positioned(
+                            bottom: 32,
+                            left: 16,
+                            child: const MoneyBadge(
+                              fontSize: 12,
+                              iconSize: 15,
+                              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            ),
+                          ),
                         // Floating Discount Badge (Bottom Right over Image)
                         if (deal.discountRate != null && deal.discountRate! > 0)
                           Positioned(
@@ -1765,50 +1777,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       );
     }
 
-    // Eğer Migros fırsatıysa ve açıklama birden fazla satırdan oluşuyorsa ilk satırı CRM etiketi olarak biçimlendir
-    if (store.toLowerCase() == 'migros') {
-      final parts = text.split('\n\n');
-      if (parts.isNotEmpty) {
-        final firstLine = parts[0].trim();
-        final rest = parts.skip(1).join('\n\n');
-
-        // Temizlik koruması (HTML tagları ve yıldızları temizle)
-        final cleanFirstLine = firstLine
-            .replaceAll(RegExp(r'<[^>]*>'), '')
-            .replaceAll('**', '');
-
-        final List<InlineSpan> spans = [];
-        spans.add(TextSpan(
-          text: cleanFirstLine,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontStyle: FontStyle.italic,
-            fontSize: 16,
-            color: isDark ? Colors.amber[300] : const Color(0xFFFF7F00),
-          ),
-        ));
-
-        if (rest.isNotEmpty) {
-          spans.add(const TextSpan(text: '\n\n'));
-          spans.add(TextSpan(
-            text: rest.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll('**', ''),
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-              height: 1.6,
-            ),
-          ));
-        }
-
-        return Text.rich(
-          TextSpan(
-            children: spans,
-          ),
-        );
-      }
-    }
-
     final baseStyle = TextStyle(
       fontSize: 14,
       fontWeight: FontWeight.w500,
@@ -1816,9 +1784,50 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       height: 1.6,
     );
 
-    // Diğer mağazalar için düz metin olarak render et
+    // Eğer Migros fırsatıysa ve ilk satır bilinen bir CRM etiketi ise sadece ilk satırı biçimlendir
+    if (store.toLowerCase() == 'migros' && text.contains('\n\n')) {
+      final parts = text.split('\n\n');
+      if (parts.length > 1) {
+        final firstLine = parts[0].trim();
+        final rest = parts.skip(1).join('\n\n');
+
+        final cleanFirstLine = firstLine
+            .replaceAll(RegExp(r'<[^>]*>'), '')
+            .replaceAll('**', '');
+
+        final upperFirst = cleanFirstLine.toUpperCase();
+        final isCrmLabel = upperFirst.contains('MONEY') ||
+            upperFirst.contains('SEPETTE') ||
+            upperFirst.contains('SADECE MİGROS') ||
+            upperFirst.contains('İNDİRİM') ||
+            upperFirst.contains('HEDİYE') ||
+            upperFirst.contains('BEDAVA');
+
+        if (isCrmLabel) {
+          final List<InlineSpan> spans = [];
+          spans.add(TextSpan(
+            text: cleanFirstLine,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontStyle: FontStyle.italic,
+              fontSize: 15,
+              color: isDark ? Colors.amber[300] : const Color(0xFFFF7F00),
+            ),
+          ));
+
+          spans.add(const TextSpan(text: '\n\n'));
+          spans.add(TextSpan(
+            text: rest.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll('**', ''),
+            style: baseStyle,
+          ));
+
+          return Text.rich(TextSpan(children: spans));
+        }
+      }
+    }
+
     return Text(
-      text,
+      text.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll('**', ''),
       style: baseStyle,
     );
   }
