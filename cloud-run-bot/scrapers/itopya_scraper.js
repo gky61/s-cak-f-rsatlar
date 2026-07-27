@@ -143,7 +143,7 @@ class ItopyaScraper extends BaseProductScraper {
     return null;
   }
 
-  scrapeRating($, url, html) {
+  async scrapeRating($, url, html) {
     // 1. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
@@ -179,7 +179,7 @@ class ItopyaScraper extends BaseProductScraper {
       return { ratingValue, ratingCount };
     }
 
-    // 4. Fallback: Fast Single Curl Call to /Urun/UrunYorum?id={urunId} via Google Translate Proxy
+    // 4. Product ID Extraction & Live UrunYorum API Call
     try {
       const canonical = $('link[rel="canonical"]').attr('href') || $('meta[property="og:url"]').attr('content') || '';
       const matchCanonical = canonical.match(/_u(\d+)/i);
@@ -189,46 +189,71 @@ class ItopyaScraper extends BaseProductScraper {
       const urunId = matchCanonical ? matchCanonical[1] : (matchUrl ? matchUrl[1] : (matchHtml ? matchHtml[1] : null));
 
       if (urunId) {
-        const { spawnSync } = require('child_process');
-        const proxyApiUrl = `https://www-itopya-com.translate.goog/Urun/UrunYorum?id=${urunId}&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
-        
-        const curlRes = spawnSync('curl', [
-          '-sL',
-          '--compressed',
-          '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          '--max-time', '3',
-          proxyApiUrl
-        ], { encoding: 'utf-8', timeout: 3500 });
+        let data = null;
 
-        if (!curlRes.error && curlRes.stdout) {
-          const raw = curlRes.stdout.trim();
-          if (raw.startsWith('[')) {
-            const data = JSON.parse(raw);
-            if (Array.isArray(data) && data.length > 0) {
-              let totalPuan = 0;
-              let count = 0;
-              for (const item of data) {
-                if (item.puan !== undefined && item.puan !== null) {
-                  const p = parseFloat(item.puan);
-                  if (!isNaN(p)) {
-                    totalPuan += p;
-                    count++;
-                  }
-                }
-              }
-              if (count > 0) {
-                return {
-                  ratingValue: Math.round((totalPuan / count) * 10) / 10,
-                  ratingCount: data.length
-                };
+        // Step A: Direct API fetch without proxy (like Idefix)
+        try {
+          const directApiUrl = `https://www.itopya.com/Urun/UrunYorum?id=${urunId}`;
+          const res = await fetch(directApiUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'application/json, text/plain, */*'
+            },
+            signal: AbortSignal.timeout(2000)
+          });
+          if (res.ok) {
+            const raw = await res.text();
+            if (raw.trim().startsWith('[')) {
+              data = JSON.parse(raw);
+            }
+          }
+        } catch (_) {}
+
+        // Step B: Fallback via Google Translate Proxy if direct API is blocked by Cloudflare
+        if (!Array.isArray(data)) {
+          try {
+            const { spawnSync } = require('child_process');
+            const proxyApiUrl = `https://www-itopya-com.translate.goog/Urun/UrunYorum?id=${urunId}&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
+            const curlRes = spawnSync('curl', [
+              '-sL',
+              '--compressed',
+              '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              '--max-time', '2.5',
+              proxyApiUrl
+            ], { encoding: 'utf-8', timeout: 3000 });
+
+            if (!curlRes.error && curlRes.stdout) {
+              const raw = curlRes.stdout.trim();
+              if (raw.startsWith('[')) {
+                data = JSON.parse(raw);
               }
             }
+          } catch (_) {}
+        }
+
+        if (Array.isArray(data) && data.length > 0) {
+          let totalPuan = 0;
+          let count = 0;
+          for (const item of data) {
+            if (item.puan !== undefined && item.puan !== null) {
+              const p = parseFloat(item.puan);
+              if (!isNaN(p)) {
+                totalPuan += p;
+                count++;
+              }
+            }
+          }
+          if (count > 0) {
+            return {
+              ratingValue: Math.round((totalPuan / count) * 10) / 10,
+              ratingCount: data.length
+            };
           }
         }
       }
     } catch (_) {}
 
-    return null;
+    return { ratingValue: null, ratingCount: null };
   }
 
   scrapeDescription($) {
