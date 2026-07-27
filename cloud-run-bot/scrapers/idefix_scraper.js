@@ -167,7 +167,8 @@ class IdefixScraper extends BaseProductScraper {
     return list;
   }
 
-  scrapeRating($, url) {
+  async scrapeRating($, url, html) {
+    // 1. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
       const rating = this.extractRatingFromProductJson(product);
@@ -176,61 +177,91 @@ class IdefixScraper extends BaseProductScraper {
       }
     }
 
-    // Live ecomapi API Fallback using spawnSync curl & Google Translate Proxy (Cloudflare / Datacenter IP bypass)
-    try {
-      const match = /p-(\d+)/.exec(url || '') ||
-                    /p-(\d+)/.exec($('link[rel="canonical"]').attr('href') || '') ||
-                    /p-(\d+)/.exec($('meta[property="og:url"]').attr('content') || '');
-      const productId = match ? match[1] : null;
+    // 2. Product ID Extraction
+    let productId = null;
 
-      if (productId) {
-        const { spawnSync } = require('child_process');
-        const proxyApiUrl = `https://ecomapi-idefix-com.translate.goog/api/product/${productId}/detail/review?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
-        const directApiUrl = `https://ecomapi.idefix.com/api/product/${productId}/detail/review`;
+    // Source A: URL or Canonical / OG URL
+    const canonical = $('link[rel="canonical"]').attr('href') || $('meta[property="og:url"]').attr('content') || '';
+    const matchCanonical = canonical.match(/p-(\d+)/i);
+    const matchUrl = (url || '').match(/p-(\d+)/i);
+    if (matchCanonical) {
+      productId = matchCanonical[1];
+    } else if (matchUrl) {
+      productId = matchUrl[1];
+    }
 
-        let raw = null;
-
-        // 1. Google Translate Proxy üzerinden ultra hızlı deneme (500ms)
-        const proxyRes = spawnSync('curl', [
-          '-sL', '--compressed',
-          '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          '--max-time', '3',
-          proxyApiUrl
-        ], { encoding: 'utf-8', timeout: 3500 });
-
-        if (!proxyRes.error && proxyRes.stdout && proxyRes.stdout.trim().startsWith('{')) {
-          raw = proxyRes.stdout.trim();
-        }
-
-        // 2. Fallback: Doğrudan API isteği (curl ile)
-        if (!raw) {
-          const directRes = spawnSync('curl', [
-            '-sL', '--compressed',
-            '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            '--max-time', '2',
-            directApiUrl
-          ], { encoding: 'utf-8', timeout: 2500 });
-
-          if (!directRes.error && directRes.stdout && directRes.stdout.trim().startsWith('{')) {
-            raw = directRes.stdout.trim();
+    // Source B: __NEXT_DATA__
+    if (!productId) {
+      const nextScript = $('#__NEXT_DATA__').html();
+      if (nextScript) {
+        try {
+          const json = JSON.parse(nextScript);
+          const pd = json.props?.pageProps?.productDetail;
+          if (pd && (pd.id || pd.code || pd.masterId)) {
+            productId = (pd.id || pd.code || pd.masterId).toString();
           }
-        }
+        } catch (_) {}
+      }
+    }
 
-        if (raw) {
-          const data = JSON.parse(raw);
-          if (data) {
-            const ratingValue = data.averageRating != null ? parseFloat(data.averageRating) : null;
-            const ratingCount = data.reviewCount != null ? parseInt(data.reviewCount) : null;
-            if (ratingValue || ratingCount) {
-              return {
-                ratingValue: !isNaN(ratingValue) ? ratingValue : null,
-                ratingCount: !isNaN(ratingCount) ? ratingCount : null
-              };
+    // Source C: DOM Script Tags Regex
+    if (!productId) {
+      const htmlText = $.html ? $.html() : (html || '');
+      const matchScript = typeof htmlText === 'string' ? htmlText.match(/p-(\d+)/i) || htmlText.match(/"productId"\s*:\s*"?(\d+)"?/i) : null;
+      if (matchScript) {
+        productId = matchScript[1];
+      }
+    }
+
+    // 3. Live ecomapi API Call
+    if (productId) {
+      const apiUrl = `https://ecomapi.idefix.com/api/product/${productId}/detail/review`;
+      let data = null;
+
+      try {
+        const res = await fetch(apiUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'application/json'
+          },
+          signal: AbortSignal.timeout(2500)
+        });
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (_) {}
+
+      if (!data) {
+        try {
+          const { spawnSync } = require('child_process');
+          const curlRes = spawnSync('curl', [
+            '-sL',
+            '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            '-H', 'Accept: application/json',
+            '--max-time', '3',
+            apiUrl
+          ], { encoding: 'utf-8', timeout: 3500 });
+
+          if (!curlRes.error && curlRes.stdout) {
+            const raw = curlRes.stdout.trim();
+            if (raw.startsWith('{')) {
+              data = JSON.parse(raw);
             }
           }
+        } catch (_) {}
+      }
+
+      if (data) {
+        const ratingValue = data.averageRating != null ? parseFloat(data.averageRating) : null;
+        const ratingCount = data.reviewCount != null ? parseInt(data.reviewCount, 10) : null;
+        if ((ratingValue !== null && !isNaN(ratingValue)) || (ratingCount !== null && !isNaN(ratingCount))) {
+          return {
+            ratingValue: ratingValue !== null && !isNaN(ratingValue) ? ratingValue : null,
+            ratingCount: ratingCount !== null && !isNaN(ratingCount) ? ratingCount : null
+          };
         }
       }
-    } catch (_) {}
+    }
 
     return { ratingValue: null, ratingCount: null };
   }
