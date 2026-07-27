@@ -70,6 +70,64 @@ class MigrosScraper extends BaseProductScraper {
     return null;
   }
 
+  scrapeOriginalPrice($, currentPrice) {
+    if (!currentPrice || currentPrice <= 0) return null;
+
+    const candidates = [];
+
+    // 1. DOM: .single-price-amount (Migros specific non-Money price)
+    $('.single-price-amount, [class*="single-price-amount"]').each((_, el) => {
+      const txt = $(el).text().trim();
+      const val = this.parsePriceText(txt);
+      if (val && val > currentPrice) {
+        candidates.push(val);
+      }
+    });
+
+    // 2. DOM: Standard strikethrough / old price selectors
+    const strikeSelectors = [
+      '.old-price',
+      '[class*="old-price"]',
+      '[class*="original-price"]',
+      '[class*="crossed-price"]',
+      'del',
+      's'
+    ];
+    for (const sel of strikeSelectors) {
+      $(sel).each((_, el) => {
+        const txt = $(el).text().trim();
+        const val = this.parsePriceText(txt);
+        if (val && val > currentPrice) {
+          candidates.push(val);
+        }
+      });
+    }
+
+    // 3. JSON-LD highPrice or priceSpecification
+    const product = this.findProductJsonLd($);
+    if (product && product.offers) {
+      const offers = Array.isArray(product.offers) ? product.offers[0] : product.offers;
+      if (offers) {
+        if (offers.highPrice) {
+          const hp = parseFloat(offers.highPrice);
+          if (!isNaN(hp) && hp > currentPrice) candidates.push(hp);
+        }
+        if (Array.isArray(offers.priceSpecification)) {
+          for (const spec of offers.priceSpecification) {
+            if (spec.priceType && spec.priceType.includes('Strikethrough') && spec.price) {
+              const sp = parseFloat(spec.price);
+              if (!isNaN(sp) && sp > currentPrice) candidates.push(sp);
+            }
+          }
+        }
+      }
+    }
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a - b);
+    return candidates[0];
+  }
+
 
   cleanDescription(desc) {
     if (!desc) return '';

@@ -97,6 +97,68 @@ class MigrosScraper extends BaseProductScraper {
     return null;
   }
 
+  @override
+  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    final candidates = <double>[];
+
+    // 1. DOM: .single-price-amount (Migros specific non-Money price)
+    final singlePriceElements = document.querySelectorAll('.single-price-amount, [class*="single-price-amount"]');
+    for (final el in singlePriceElements) {
+      final val = parsePriceText(el.text);
+      if (val != null && val > currentPrice) {
+        candidates.add(val);
+      }
+    }
+
+    // 2. DOM: Standard strikethrough / old price selectors
+    final strikeSelectors = [
+      '.old-price',
+      '[class*="old-price"]',
+      '[class*="original-price"]',
+      '[class*="crossed-price"]',
+      'del',
+      's',
+    ];
+    for (final selector in strikeSelectors) {
+      for (final el in document.querySelectorAll(selector)) {
+        final val = parsePriceText(el.text);
+        if (val != null && val > currentPrice) {
+          candidates.add(val);
+        }
+      }
+    }
+
+    // 3. JSON-LD highPrice or priceSpecification
+    final product = findProductJsonLd(document);
+    if (product != null && product['offers'] != null) {
+      final offers = product['offers'];
+      final offerMap = offers is List && offers.isNotEmpty ? offers.first : (offers is Map ? offers : null);
+      if (offerMap != null) {
+        if (offerMap['highPrice'] != null) {
+          final hp = (offerMap['highPrice'] as num).toDouble();
+          if (hp > currentPrice) candidates.add(hp);
+        }
+        if (offerMap['priceSpecification'] is List) {
+          for (final spec in offerMap['priceSpecification']) {
+            if (spec is Map && spec['price'] != null) {
+              final type = spec['priceType']?.toString() ?? '';
+              if (type.contains('Strikethrough')) {
+                final sp = (spec['price'] as num).toDouble();
+                if (sp > currentPrice) candidates.add(sp);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+    candidates.sort();
+    return candidates.first;
+  }
+
   String _cleanDescription(String desc) {
     // Strip HTML tags
     String cleaned = desc.replaceAll(RegExp(r'<[^>]*>'), ' ');
