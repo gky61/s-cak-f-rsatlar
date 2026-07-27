@@ -181,30 +181,37 @@ class ItopyaScraper extends BaseProductScraper {
 
     // 4. Fallback: API Call to /Urun/UrunYorum?id={urunId}
     try {
+      const canonical = $('link[rel="canonical"]').attr('href') || $('meta[property="og:url"]').attr('content') || '';
+      const matchCanonical = canonical.match(/_u(\d+)/i);
       const matchUrl = (url || '').match(/_u(\d+)/i);
-      const htmlText = $.html ? $.html() : '';
-      const matchHtml = htmlText.match(/urunId\s*[:=]\s*['"]?(\d+)['"]?/i);
-      const urunId = matchUrl ? matchUrl[1] : (matchHtml ? matchHtml[1] : null);
+      const htmlText = $.html ? $.html() : (html || '');
+      const matchHtml = typeof htmlText === 'string' ? htmlText.match(/urunId\s*[:=]\s*['"]?(\d+)['"]?/i) : null;
+      const urunId = matchCanonical ? matchCanonical[1] : (matchUrl ? matchUrl[1] : (matchHtml ? matchHtml[1] : null));
 
       if (urunId) {
         const { execSync } = require('child_process');
         const apiUrl = `https://www.itopya.com/Urun/UrunYorum?id=${urunId}`;
-        const raw = execSync(`curl -sL --compressed -H "User-Agent: WhatsApp/2.23.4.15 A" "${apiUrl}"`, { timeout: 3000 }).toString();
-        const data = JSON.parse(raw);
-        if (Array.isArray(data) && data.length > 0) {
-          let totalPuan = 0;
-          let count = 0;
-          for (const item of data) {
-            if (item.puan !== undefined && item.puan !== null) {
-              totalPuan += parseFloat(item.puan);
-              count++;
+        const raw = execSync(`curl -sL --compressed -H "User-Agent: WhatsApp/2.23.4.15 A" "${apiUrl}"`, { timeout: 4000 }).toString();
+        if (raw && raw.trim().startsWith('[')) {
+          const data = JSON.parse(raw);
+          if (Array.isArray(data) && data.length > 0) {
+            let totalPuan = 0;
+            let count = 0;
+            for (const item of data) {
+              if (item.puan !== undefined && item.puan !== null) {
+                const p = parseFloat(item.puan);
+                if (!isNaN(p)) {
+                  totalPuan += p;
+                  count++;
+                }
+              }
             }
-          }
-          if (count > 0) {
-            return {
-              ratingValue: Math.round((totalPuan / count) * 10) / 10,
-              ratingCount: data.length
-            };
+            if (count > 0) {
+              return {
+                ratingValue: Math.round((totalPuan / count) * 10) / 10,
+                ratingCount: data.length
+              };
+            }
           }
         }
       }

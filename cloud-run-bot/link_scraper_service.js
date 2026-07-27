@@ -965,7 +965,7 @@ async function scrapeProductFromUrl(url) {
 
       // 7. Rating ve Marka Bilgisi Çekimi
       console.log(`[SCRAPE-SERVICE] [RATING & BRAND] Rating ve Marka bilgisi çekiliyor...`);
-      const rating = matchedScraper.scrapeRating ? matchedScraper.scrapeRating($) : { ratingValue: null, ratingCount: null };
+      const rating = matchedScraper.scrapeRating ? await matchedScraper.scrapeRating($, targetUrl, html) : { ratingValue: null, ratingCount: null };
       const brand = matchedScraper.scrapeBrand ? matchedScraper.scrapeBrand($) : null;
       console.log(`[SCRAPE-SERVICE] [RATING & BRAND] Rating: ${JSON.stringify(rating)}, Brand: "${brand || 'BULUNAMADI'}"`);
 

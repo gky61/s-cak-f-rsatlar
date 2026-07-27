@@ -46,6 +46,17 @@ function run() {
   assert.strictEqual(scraper.scrapeDescription($), 'Lenovo Legion oyuncu monitörü Itopya güvencesiyle.');
   assert.strictEqual(scraper.scrapeImage($, 'https://www.itopya.com/lenovo-legion-gaming-monitor-u33428'), 'https://www.itopya.com/product.jpg');
   assert.deepStrictEqual(scraper.scrapeBreadcrumbs($), ['Çevre Birimleri', 'Monitör']);
+
+  // 3. Test rating API fallback for real Itopya product URL
+  const testUrl = 'https://www.itopya.com/aoc-q27g41zdf-27-240hz-003ms-hdmi-dp-adaptive-sync-hdr10-qhd-qd-oled-gaming-monitor_u32391';
+  const realHtml = `<head><link rel="canonical" href="${testUrl}"></head>`;
+  const $real = cheerio.load(realHtml);
+  const rating = scraper.scrapeRating($real, testUrl, realHtml);
+  assert.notStrictEqual(rating, null, 'Itopya rating should not be null for rated product');
+  assert.strictEqual(typeof rating.ratingValue, 'number', 'ratingValue should be a number');
+  assert.strictEqual(typeof rating.ratingCount, 'number', 'ratingCount should be a number');
+  assert.ok(rating.ratingValue > 0, 'ratingValue should be > 0');
+  assert.ok(rating.ratingCount > 0, 'ratingCount should be > 0');
 }
 
 module.exports = { run };
