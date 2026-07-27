@@ -217,7 +217,7 @@ class MediaMarktScraper extends BaseProductScraper {
 
       const cntMatch = /(\d+)\s+(?:inceleme|yorum|oy|değerlendirme)/.exec(ariaLabel);
       if (cntMatch) {
-        const c = parseInt(cntMatch[1]);
+        const c = parseInt(cntMatch[1], 10);
         if (!isNaN(c) && c > 0) ratingCount = c;
       }
 
@@ -226,41 +226,78 @@ class MediaMarktScraper extends BaseProductScraper {
       }
     }
 
-    // 3. Hydration script / Raw script regex search ("averageOverallRating", "totalReviewCount")
     let ratingValue = null;
     let ratingCount = null;
 
+    // 3. __PRELOADED_STATE__ JSON Parsing
     $('script').each((_, el) => {
       const text = $(el).html() || '';
-      if (!ratingValue && (text.includes('averageOverallRating') || text.includes('ratingValue') || text.includes('averageRating'))) {
-        const match = /averageOverallRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?/.exec(text) ||
-                      /ratingValue["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?/.exec(text) ||
-                      /averageRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?/.exec(text);
-        if (match) {
-          const p = parseFloat(match[1].replace(',', '.'));
-          if (!isNaN(p) && p > 0 && p <= 5.0) {
-            ratingValue = Math.round(p * 10) / 10;
+      if (text.includes('window.__PRELOADED_STATE__')) {
+        const cleanJs = text.replace(/^\s*window\.__PRELOADED_STATE__\s*=\s*/, '').replace(/;\s*$/, '');
+        const sanitized = cleanJs.replace(/:\s*undefined/g, ':null').replace(/:\s*void 0/g, ':null');
+
+        try {
+          const state = JSON.parse(sanitized);
+
+          function findReviewStats(obj) {
+            if (!obj || typeof obj !== 'object') return;
+
+            if (obj.reviewStatistics && typeof obj.reviewStatistics === 'object') {
+              const stats = obj.reviewStatistics;
+              const rv = stats.averageOverallRating != null ? parseFloat(stats.averageOverallRating) : null;
+              const rc = stats.totalReviewCount != null ? parseInt(stats.totalReviewCount, 10) : null;
+              if (rv && !isNaN(rv) && rv > 0 && rv <= 5.0) ratingValue = Math.round(rv * 10) / 10;
+              if (rc && !isNaN(rc) && rc > 0) ratingCount = rc;
+            }
+
+            if (ratingValue && ratingCount) return;
+
+            for (const [k, v] of Object.entries(obj)) {
+              if (v && typeof v === 'object') {
+                findReviewStats(v);
+                if (ratingValue && ratingCount) return;
+              }
+            }
+          }
+
+          findReviewStats(state);
+        } catch (_) {}
+      }
+    });
+
+    if (ratingValue !== null || ratingCount !== null) {
+      return { ratingValue, ratingCount };
+    }
+
+    // 4. Regex Fallback across ALL scripts (matching non-zero occurrences)
+    $('script').each((_, el) => {
+      const text = $(el).html() || '';
+      if (text.includes('averageOverallRating') || text.includes('reviewStatistics') || text.includes('totalReviewCount')) {
+        if (!ratingValue) {
+          const rvMatches = [...text.matchAll(/averageOverallRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?/g)];
+          for (const m of rvMatches) {
+            const val = parseFloat(m[1].replace(',', '.'));
+            if (!isNaN(val) && val > 0 && val <= 5.0) {
+              ratingValue = Math.round(val * 10) / 10;
+              break;
+            }
           }
         }
-      }
 
-      if (!ratingCount && (text.includes('totalReviewCount') || text.includes('reviewCount') || text.includes('ratingCount'))) {
-        const match = /totalReviewCount["\\]*\s*:\s*"?(\d+)"?/.exec(text) ||
-                      /(?:reviewCount|ratingCount)["\\]*\s*:\s*"?(\d+)"?/.exec(text);
-        if (match) {
-          const c = parseInt(match[1]);
-          if (!isNaN(c) && c > 0) {
-            ratingCount = c;
+        if (!ratingCount) {
+          const rcMatches = [...text.matchAll(/totalReviewCount["\\]*\s*:\s*"?(\d+)"?/g)];
+          for (const m of rcMatches) {
+            const cnt = parseInt(m[1], 10);
+            if (!isNaN(cnt) && cnt > 0) {
+              ratingCount = cnt;
+              break;
+            }
           }
         }
       }
     });
 
-    if (ratingValue || ratingCount) {
-      return { ratingValue, ratingCount };
-    }
-
-    return { ratingValue: null, ratingCount: null };
+    return { ratingValue, ratingCount };
   }
 
   scrapeBrand($) {

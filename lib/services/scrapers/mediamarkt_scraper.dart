@@ -352,10 +352,8 @@ class MediaMarktScraper extends BaseProductScraper {
     for (final script in scripts) {
       final text = script.text + ' ' + script.innerHtml;
       if (text.contains('averageOverallRating') || text.contains('ratingValue') || text.contains('averageRating')) {
-        final match = RegExp(r'averageOverallRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(text) ??
-                      RegExp(r'ratingValue["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(text) ??
-                      RegExp(r'averageRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(text);
-        if (match != null) {
+        final matches = RegExp(r'averageOverallRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').allMatches(text);
+        for (final match in matches) {
           final raw = match.group(1)?.replaceAll(',', '.');
           final parsed = raw != null ? double.tryParse(raw) : null;
           if (parsed != null && parsed > 0 && parsed <= 5.0) {
@@ -369,10 +367,8 @@ class MediaMarktScraper extends BaseProductScraper {
 
     // 4. Fallback: Full Document HTML Search
     final fullHtml = document.outerHtml;
-    final match = RegExp(r'averageOverallRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(fullHtml) ??
-                  RegExp(r'ratingValue["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(fullHtml) ??
-                  RegExp(r'averageRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').firstMatch(fullHtml);
-    if (match != null) {
+    final matches = RegExp(r'averageOverallRating["\\]*\s*:\s*"?([\d]+(?:[.,]\d+)?)"?').allMatches(fullHtml);
+    for (final match in matches) {
       final raw = match.group(1)?.replaceAll(',', '.');
       final parsed = raw != null ? double.tryParse(raw) : null;
       if (parsed != null && parsed > 0 && parsed <= 5.0) {
@@ -421,9 +417,8 @@ class MediaMarktScraper extends BaseProductScraper {
     for (final script in scripts) {
       final text = script.text + ' ' + script.innerHtml;
       if (text.contains('totalReviewCount') || text.contains('reviewCount') || text.contains('ratingCount')) {
-        final match = RegExp(r'totalReviewCount["\\]*\s*:\s*"?(\d+)"?').firstMatch(text) ??
-                      RegExp(r'(?:reviewCount|ratingCount)["\\]*\s*:\s*"?(\d+)"?').firstMatch(text);
-        if (match != null) {
+        final matches = RegExp(r'totalReviewCount["\\]*\s*:\s*"?(\d+)"?').allMatches(text);
+        for (final match in matches) {
           final parsed = int.tryParse(match.group(1) ?? '');
           if (parsed != null && parsed > 0) {
             print('[aggregateRating] MediaMarktScraper: Hydration Script/Regex ile ratingCount bulundu: $parsed');
@@ -435,9 +430,8 @@ class MediaMarktScraper extends BaseProductScraper {
 
     // 4. Fallback: Full Document HTML Search
     final fullHtml = document.outerHtml;
-    final cntMatch = RegExp(r'totalReviewCount["\\]*\s*:\s*"?(\d+)"?').firstMatch(fullHtml) ??
-                     RegExp(r'(?:reviewCount|ratingCount)["\\]*\s*:\s*"?(\d+)"?').firstMatch(fullHtml);
-    if (cntMatch != null) {
+    final cntMatches = RegExp(r'totalReviewCount["\\]*\s*:\s*"?(\d+)"?').allMatches(fullHtml);
+    for (final cntMatch in cntMatches) {
       final parsed = int.tryParse(cntMatch.group(1) ?? '');
       if (parsed != null && parsed > 0) {
         print('[aggregateRating] MediaMarktScraper: Full HTML Regex ile ratingCount bulundu: $parsed');
