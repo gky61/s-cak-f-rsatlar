@@ -19,7 +19,7 @@ void main() {
       ''';
       final doc = html_parser.parse(html);
       final price = await scraper.scrapePrice(doc);
-      final origPrice = scraper.scrapeOriginalPrice(doc, price);
+      final origPrice = await scraper.scrapeOriginalPrice(doc, price);
 
       expect(price, equals(50.0));
       expect(origPrice, equals(70.0));
@@ -37,7 +37,7 @@ void main() {
       ''';
       final doc = html_parser.parse(html);
       final price = await scraper.scrapePrice(doc);
-      final origPrice = scraper.scrapeOriginalPrice(doc, price);
+      final origPrice = await scraper.scrapeOriginalPrice(doc, price);
 
       expect(price, equals(50.0));
       expect(origPrice, isNull);

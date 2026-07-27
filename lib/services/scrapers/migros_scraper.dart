@@ -73,9 +73,64 @@ class MigrosScraper extends BaseProductScraper {
     return null;
   }
 
+  String? _extractProductId(dom.Document document) {
+    // 1. og:image or meta tag
+    final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'] ?? '';
+    final matchImg = RegExp(r'product\/(\d+)').firstMatch(ogImage);
+    if (matchImg != null) return matchImg.group(1);
+
+    // 2. Canonical URL or img elements
+    final canonical = document.querySelector('link[rel="canonical"]')?.attributes['href'] ?? '';
+    final matchHex = RegExp(r'-p-([a-fA-F0-9]+)').firstMatch(canonical);
+    if (matchHex != null) {
+      final dec = int.tryParse(matchHex.group(1)!, radix: 16);
+      if (dec != null && dec > 0) return dec.toString();
+    }
+
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _fetchScreensApi(String productId) async {
+    final endpoints = [
+      'https://www.migros.com.tr/rest/hemen/products/screens/$productId',
+      'https://www.migros.com.tr/rest/sanalmarket/products/screens/$productId',
+      'https://www.migros.com.tr/rest/products/screens/$productId',
+    ];
+    for (final ep in endpoints) {
+      try {
+        final response = await http.get(
+          Uri.parse(ep),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+          },
+        ).timeout(const Duration(seconds: 3));
+        if (response.statusCode == 200) {
+          final json = jsonDecode(response.body);
+          if (json is Map && json['data'] != null) {
+            final data = json['data'];
+            if (data is Map && data['storeProductInfoDTO'] != null) {
+              return data['storeProductInfoDTO'] as Map<String, dynamic>;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. JSON-LD şemasından fiyat çekmeyi dene (Öncelikli)
+    // 1. Screens API
+    final productId = _extractProductId(document);
+    if (productId != null) {
+      final info = await _fetchScreensApi(productId);
+      if (info != null) {
+        final p = info['shownPrice'] ?? info['loyaltyPrice'] ?? info['salePrice'];
+        if (p is num && p > 0) return p.toDouble() / 100;
+      }
+    }
+
+    // 2. JSON-LD şemasından fiyat çekmeyi dene (Öncelikli)
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
       final priceLd = extractPriceFromProductJson(productJson);
@@ -84,7 +139,7 @@ class MigrosScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
+    // 3. DOM Seçicileri (Fallback)
     final priceEl = document.querySelector('#new-amount') ??
                     document.querySelector('.amount');
     if (priceEl != null) {
@@ -98,12 +153,32 @@ class MigrosScraper extends BaseProductScraper {
   }
 
   @override
-  double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
+  Future<double?> scrapeOriginalPrice(dom.Document document, double? currentPrice) async {
     if (currentPrice == null || currentPrice <= 0) return null;
 
     final candidates = <double>[];
 
-    // 1. DOM: .single-price-amount (Migros specific non-Money price)
+    // 1. Screens API (Primary for Migros SPA)
+    final productId = _extractProductId(document);
+    if (productId != null) {
+      final info = await _fetchScreensApi(productId);
+      if (info != null) {
+        if (info['regularPrice'] is num) {
+          final reg = (info['regularPrice'] as num).toDouble() / 100;
+          if (reg > currentPrice) candidates.add(reg);
+        }
+        if (info['badges'] is List) {
+          for (final badge in info['badges']) {
+            if (badge is Map && badge['name'] == 'PRICE_PROMOTED' && badge['value'] != null) {
+              final val = parsePriceText(badge['value'].toString());
+              if (val != null && val > currentPrice) candidates.add(val);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. DOM: .single-price-amount (Migros specific non-Money price)
     final singlePriceElements = document.querySelectorAll('.single-price-amount, [class*="single-price-amount"]');
     for (final el in singlePriceElements) {
       final val = parsePriceText(el.text);
@@ -112,7 +187,7 @@ class MigrosScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM: Standard strikethrough / old price selectors
+    // 3. DOM: Standard strikethrough / old price selectors
     final strikeSelectors = [
       '.old-price',
       '[class*="old-price"]',
@@ -126,30 +201,6 @@ class MigrosScraper extends BaseProductScraper {
         final val = parsePriceText(el.text);
         if (val != null && val > currentPrice) {
           candidates.add(val);
-        }
-      }
-    }
-
-    // 3. JSON-LD highPrice or priceSpecification
-    final product = findProductJsonLd(document);
-    if (product != null && product['offers'] != null) {
-      final offers = product['offers'];
-      final offerMap = offers is List && offers.isNotEmpty ? offers.first : (offers is Map ? offers : null);
-      if (offerMap != null) {
-        if (offerMap['highPrice'] != null) {
-          final hp = (offerMap['highPrice'] as num).toDouble();
-          if (hp > currentPrice) candidates.add(hp);
-        }
-        if (offerMap['priceSpecification'] is List) {
-          for (final spec in offerMap['priceSpecification']) {
-            if (spec is Map && spec['price'] != null) {
-              final type = spec['priceType']?.toString() ?? '';
-              if (type.contains('Strikethrough')) {
-                final sp = (spec['price'] as num).toDouble();
-                if (sp > currentPrice) candidates.add(sp);
-              }
-            }
-          }
         }
       }
     }

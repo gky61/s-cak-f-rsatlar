@@ -54,14 +54,63 @@ class MigrosScraper extends BaseProductScraper {
     return null;
   }
 
-  scrapePrice($) {
-    // 1. JSON-LD
+  extractProductId($, url) {
+    const matchHex = (url || '').match(/-p-([a-fA-F0-9]+)/i);
+    if (matchHex) {
+      const dec = parseInt(matchHex[1], 16);
+      if (!isNaN(dec) && dec > 0) return dec.toString();
+    }
+    const ogImg = $('meta[property="og:image"]').attr('content') || '';
+    const matchImg = ogImg.match(/product\/(\d+)/);
+    if (matchImg) return matchImg[1];
+    return null;
+  }
+
+  async fetchScreensApi(productId) {
+    if (!productId) return null;
+    const endpoints = [
+      `https://www.migros.com.tr/rest/hemen/products/screens/${productId}`,
+      `https://www.migros.com.tr/rest/sanalmarket/products/screens/${productId}`,
+      `https://www.migros.com.tr/rest/products/screens/${productId}`
+    ];
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(ep, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+          },
+          signal: AbortSignal.timeout(3000)
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data?.storeProductInfoDTO) {
+            return json.data.storeProductInfoDTO;
+          }
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  async scrapePrice($, url) {
+    // 1. Screens API
+    const productId = this.extractProductId($, url);
+    if (productId) {
+      const dto = await this.fetchScreensApi(productId);
+      if (dto) {
+        const p = (dto.shownPrice || dto.loyaltyPrice || dto.salePrice);
+        if (p && p > 0) return p / 100;
+      }
+    }
+
+    // 2. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
       const p = this.extractPriceFromProductJson(product);
       if (p && p > 0) return p;
     }
-    // 2. DOM Fallback
+
+    // 3. DOM Fallback
     const el = $('#new-amount, .amount').first();
     if (el.length) {
       const v = this.parsePriceText(el.text());
@@ -70,12 +119,31 @@ class MigrosScraper extends BaseProductScraper {
     return null;
   }
 
-  scrapeOriginalPrice($, currentPrice) {
+  async scrapeOriginalPrice($, currentPrice, url) {
     if (!currentPrice || currentPrice <= 0) return null;
 
     const candidates = [];
 
-    // 1. DOM: .single-price-amount (Migros specific non-Money price)
+    // 1. Screens API (Primary for Migros SPA)
+    const productId = this.extractProductId($, url);
+    if (productId) {
+      const dto = await this.fetchScreensApi(productId);
+      if (dto) {
+        if (dto.regularPrice) {
+          const reg = dto.regularPrice / 100;
+          if (reg > currentPrice) candidates.push(reg);
+        }
+        if (Array.isArray(dto.badges)) {
+          const promotedBadge = dto.badges.find(b => b.name === 'PRICE_PROMOTED' && b.value);
+          if (promotedBadge) {
+            const val = this.parsePriceText(promotedBadge.value);
+            if (val && val > currentPrice) candidates.push(val);
+          }
+        }
+      }
+    }
+
+    // 2. DOM: .single-price-amount (Migros specific non-Money price)
     $('.single-price-amount, [class*="single-price-amount"]').each((_, el) => {
       const txt = $(el).text().trim();
       const val = this.parsePriceText(txt);
@@ -84,7 +152,7 @@ class MigrosScraper extends BaseProductScraper {
       }
     });
 
-    // 2. DOM: Standard strikethrough / old price selectors
+    // 3. DOM: Standard strikethrough / old price selectors
     const strikeSelectors = [
       '.old-price',
       '[class*="old-price"]',
@@ -103,7 +171,7 @@ class MigrosScraper extends BaseProductScraper {
       });
     }
 
-    // 3. JSON-LD highPrice or priceSpecification
+    // 4. JSON-LD highPrice or priceSpecification
     const product = this.findProductJsonLd($);
     if (product && product.offers) {
       const offers = Array.isArray(product.offers) ? product.offers[0] : product.offers;

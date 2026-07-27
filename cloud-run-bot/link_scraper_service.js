@@ -938,7 +938,7 @@ async function scrapeProductFromUrl(url) {
 
       // 2b. İndirimsiz (Eski) Fiyat Çekimi
       console.log(`[SCRAPE-SERVICE] [ORIGINAL-PRICE] İndirimsiz fiyat çekiliyor...`);
-      const originalPrice = matchedScraper.scrapeOriginalPrice ? matchedScraper.scrapeOriginalPrice($, price) : null;
+      const originalPrice = matchedScraper.scrapeOriginalPrice ? await matchedScraper.scrapeOriginalPrice($, price, targetUrl) : null;
       console.log(`[SCRAPE-SERVICE] [ORIGINAL-PRICE] Sonuç: "${originalPrice != null ? originalPrice + ' TL' : 'BULUNAMADI'}"`);
 
       // 3. Görsel Çekimi

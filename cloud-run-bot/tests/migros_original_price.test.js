@@ -2,7 +2,7 @@ const assert = require('assert');
 const cheerio = require('cheerio');
 const MigrosScraper = require('../scrapers/migros_scraper');
 
-function testMigrosOriginalPrice() {
+async function testMigrosOriginalPrice() {
   console.log('Testing MigrosScraper scrapeOriginalPrice...');
   const scraper = new MigrosScraper();
 
@@ -18,8 +18,8 @@ function testMigrosOriginalPrice() {
     </html>
   `;
   const $1 = cheerio.load(html1);
-  const price1 = scraper.scrapePrice($1);
-  const origPrice1 = scraper.scrapeOriginalPrice($1, price1);
+  const price1 = await scraper.scrapePrice($1);
+  const origPrice1 = await scraper.scrapeOriginalPrice($1, price1);
 
   assert.strictEqual(price1, 50);
   assert.strictEqual(origPrice1, 70);
@@ -36,8 +36,8 @@ function testMigrosOriginalPrice() {
     </html>
   `;
   const $2 = cheerio.load(html2);
-  const price2 = scraper.scrapePrice($2);
-  const origPrice2 = scraper.scrapeOriginalPrice($2, price2);
+  const price2 = await scraper.scrapePrice($2);
+  const origPrice2 = await scraper.scrapeOriginalPrice($2, price2);
 
   assert.strictEqual(price2, 50);
   assert.strictEqual(origPrice2, null);
