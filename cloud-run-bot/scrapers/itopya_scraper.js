@@ -143,7 +143,7 @@ class ItopyaScraper extends BaseProductScraper {
     return null;
   }
 
-  scrapeRating($, url, html) {
+  async scrapeRating($, url, html) {
     // 1. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
@@ -179,7 +179,7 @@ class ItopyaScraper extends BaseProductScraper {
       return { ratingValue, ratingCount };
     }
 
-    // 4. Fallback: API Call to /Urun/UrunYorum?id={urunId} (Cloudflare Bypass via Google Translate Proxy)
+    // 4. Fallback: Non-blocking Async API Call to /Urun/UrunYorum?id={urunId} (Cloudflare Bypass via Google Translate Proxy)
     try {
       const canonical = $('link[rel="canonical"]').attr('href') || $('meta[property="og:url"]').attr('content') || '';
       const matchCanonical = canonical.match(/_u(\d+)/i);
@@ -189,41 +189,49 @@ class ItopyaScraper extends BaseProductScraper {
       const urunId = matchCanonical ? matchCanonical[1] : (matchUrl ? matchUrl[1] : (matchHtml ? matchHtml[1] : null));
 
       if (urunId) {
-        const { execSync } = require('child_process');
         const proxyApiUrl = `https://www-itopya-com.translate.goog/Urun/UrunYorum?id=${urunId}&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
-        const directApiUrl = `https://www.itopya.com/Urun/UrunYorum?id=${urunId}`;
+        let data = null;
 
-        let raw = null;
         try {
-          raw = execSync(`curl -sL --compressed -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "${proxyApiUrl}"`, { timeout: 4000 }).toString();
+          const res = await fetch(proxyApiUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+            signal: AbortSignal.timeout(2500)
+          });
+          if (res.ok) {
+            data = await res.json();
+          }
         } catch (_) {}
 
-        if (!raw || !raw.trim().startsWith('[')) {
+        if (!Array.isArray(data)) {
           try {
-            raw = execSync(`curl -sL --compressed -H "User-Agent: WhatsApp/2.23.4.15 A" "${directApiUrl}"`, { timeout: 4000 }).toString();
+            const directApiUrl = `https://www.itopya.com/Urun/UrunYorum?id=${urunId}`;
+            const res = await fetch(directApiUrl, {
+              headers: { 'User-Agent': 'WhatsApp/2.23.4.15 A' },
+              signal: AbortSignal.timeout(2000)
+            });
+            if (res.ok) {
+              data = await res.json();
+            }
           } catch (_) {}
         }
 
-        if (raw && raw.trim().startsWith('[')) {
-          const data = JSON.parse(raw);
-          if (Array.isArray(data) && data.length > 0) {
-            let totalPuan = 0;
-            let count = 0;
-            for (const item of data) {
-              if (item.puan !== undefined && item.puan !== null) {
-                const p = parseFloat(item.puan);
-                if (!isNaN(p)) {
-                  totalPuan += p;
-                  count++;
-                }
+        if (Array.isArray(data) && data.length > 0) {
+          let totalPuan = 0;
+          let count = 0;
+          for (const item of data) {
+            if (item.puan !== undefined && item.puan !== null) {
+              const p = parseFloat(item.puan);
+              if (!isNaN(p)) {
+                totalPuan += p;
+                count++;
               }
             }
-            if (count > 0) {
-              return {
-                ratingValue: Math.round((totalPuan / count) * 10) / 10,
-                ratingCount: data.length
-              };
-            }
+          }
+          if (count > 0) {
+            return {
+              ratingValue: Math.round((totalPuan / count) * 10) / 10,
+              ratingCount: data.length
+            };
           }
         }
       }

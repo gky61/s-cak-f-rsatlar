@@ -629,13 +629,18 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     // 🎯 DOMAIN ALLOWLIST İLE DESTEKLENEN MAĞAZA ÜRÜN LİNKİNİ TESPİT ET
     let mainLink = null;
     for (const rawLink of rawLinks) {
-      // 1. Yönlendirme veya kısa link varsa çöz
+      // 1. Doğrudan allowlist'te var mı kontrol et (Ağ isteği atmadan instant eşleşme)
+      if (domainAllowlist.isDomainAllowed(rawLink)) {
+        mainLink = rawLink;
+        console.log(`🎯 [ALLOWLIST MATCH] Desteklenen mağaza ürün linki bulundu: ${mainLink}`);
+        break;
+      }
+
+      // 2. Kısa link veya yönlendirme varsa çöz ve tekrar kontrol et
       const resolvedLink = await linkScraperService.resolveUrlRedirects(rawLink);
-      
-      // 2. Çözülen URL'nin domain'i allowlist'te var mı?
       if (domainAllowlist.isDomainAllowed(resolvedLink)) {
         mainLink = resolvedLink;
-        console.log(`🎯 [ALLOWLIST MATCH] Desteklenen mağaza ürün linki bulundu: ${mainLink} (Orijinal: ${rawLink})`);
+        console.log(`🎯 [ALLOWLIST MATCH] Desteklenen mağaza ürün linki bulundu (Çözülen): ${mainLink} (Orijinal: ${rawLink})`);
         break;
       } else {
         console.log(`⏩ [ALLOWLIST SKIP] Allowlist dışı link atlandı: ${resolvedLink} (Orijinal: ${rawLink})`);
@@ -662,9 +667,11 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     let currentMessage = message;
     const hasWebpageMedia = (msg) => msg && msg.media && (msg.media.className === 'MessageMediaWebpage' || msg.media.className === 'MessageMediaWebPage') && msg.media.webpage;
 
-    if (!hasWebpageMedia(currentMessage)) {
+    // Eğer scraper hem görsel hem başlık hem fiyat bulabildiyse bekleme yapmaya gerek yok!
+    const needsWebpageMedia = !scrapeResult.imageUrl || !scrapeResult.title || !scrapeResult.price;
+    if (!hasWebpageMedia(currentMessage) && needsWebpageMedia) {
       const waitTime = mainLink.includes('getir.com') || mainLink.includes('onelink.me') ? 8000 : 2500;
-      console.log(`⏱️ [${uniqueDocId}] Mesajda link önizlemesi bulunamadı. Telegram sunucularının önizleme üretmesi için ${waitTime / 1000} saniye bekleniyor...`);
+      console.log(`⏱️ [${uniqueDocId}] Scraper görsel/bilgi eksiğini tamamlama amacıyla Telegram önizlemesi için ${waitTime / 1000} saniye bekleniyor...`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
       try {
         const refreshedMsgs = await client.getMessages(chatInfo.id, { ids: messageId });
