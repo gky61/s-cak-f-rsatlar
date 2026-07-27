@@ -167,7 +167,7 @@ class IdefixScraper extends BaseProductScraper {
     return list;
   }
 
-  async scrapeRating($, url) {
+  scrapeRating($, url) {
     const product = this.findProductJsonLd($);
     if (product) {
       const rating = this.extractRatingFromProductJson(product);
@@ -176,33 +176,57 @@ class IdefixScraper extends BaseProductScraper {
       }
     }
 
-    // Live ecomapi API Fallback using native https
+    // Live ecomapi API Fallback using spawnSync curl & Google Translate Proxy (Cloudflare / Datacenter IP bypass)
     try {
-      let productId = null;
-      const match = /p-(\d+)/.exec(url || '') || /p-(\d+)/.exec($('link[rel="canonical"]').attr('href') || '');
-      if (match) productId = match[1];
+      const match = /p-(\d+)/.exec(url || '') ||
+                    /p-(\d+)/.exec($('link[rel="canonical"]').attr('href') || '') ||
+                    /p-(\d+)/.exec($('meta[property="og:url"]').attr('content') || '');
+      const productId = match ? match[1] : null;
 
       if (productId) {
-        const data = await new Promise((resolve) => {
-          const req = https.get(`https://ecomapi.idefix.com/api/product/${productId}/detail/review`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
-            timeout: 5000,
-          }, (res) => {
-            let body = '';
-            res.on('data', (chunk) => body += chunk);
-            res.on('end', () => {
-              try { resolve(JSON.parse(body)); } catch (_) { resolve(null); }
-            });
-          });
-          req.on('error', () => resolve(null));
-          req.on('timeout', () => { req.destroy(); resolve(null); });
-        });
+        const { spawnSync } = require('child_process');
+        const proxyApiUrl = `https://ecomapi-idefix-com.translate.goog/api/product/${productId}/detail/review?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
+        const directApiUrl = `https://ecomapi.idefix.com/api/product/${productId}/detail/review`;
 
-        if (data) {
-          const ratingValue = data.averageRating != null ? parseFloat(data.averageRating) : null;
-          const ratingCount = data.reviewCount != null ? parseInt(data.reviewCount) : null;
-          if (ratingValue || ratingCount) {
-            return { ratingValue: !isNaN(ratingValue) ? ratingValue : null, ratingCount: !isNaN(ratingCount) ? ratingCount : null };
+        let raw = null;
+
+        // 1. Google Translate Proxy üzerinden ultra hızlı deneme (500ms)
+        const proxyRes = spawnSync('curl', [
+          '-sL', '--compressed',
+          '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          '--max-time', '3',
+          proxyApiUrl
+        ], { encoding: 'utf-8', timeout: 3500 });
+
+        if (!proxyRes.error && proxyRes.stdout && proxyRes.stdout.trim().startsWith('{')) {
+          raw = proxyRes.stdout.trim();
+        }
+
+        // 2. Fallback: Doğrudan API isteği (curl ile)
+        if (!raw) {
+          const directRes = spawnSync('curl', [
+            '-sL', '--compressed',
+            '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            '--max-time', '2',
+            directApiUrl
+          ], { encoding: 'utf-8', timeout: 2500 });
+
+          if (!directRes.error && directRes.stdout && directRes.stdout.trim().startsWith('{')) {
+            raw = directRes.stdout.trim();
+          }
+        }
+
+        if (raw) {
+          const data = JSON.parse(raw);
+          if (data) {
+            const ratingValue = data.averageRating != null ? parseFloat(data.averageRating) : null;
+            const ratingCount = data.reviewCount != null ? parseInt(data.reviewCount) : null;
+            if (ratingValue || ratingCount) {
+              return {
+                ratingValue: !isNaN(ratingValue) ? ratingValue : null,
+                ratingCount: !isNaN(ratingCount) ? ratingCount : null
+              };
+            }
           }
         }
       }
