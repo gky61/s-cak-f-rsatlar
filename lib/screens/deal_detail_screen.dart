@@ -804,8 +804,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                               buildStoreLogo(deal.store, size: 18, borderRadius: 4),
-                                               const SizedBox(width: 6),
+                                              SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child: Center(
+                                                  child: buildStoreLogo(deal.store, size: 18, borderRadius: 4),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
                                               Text(
                                                 'Satıcı: ',
                                                 style: TextStyle(
@@ -844,8 +850,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Icon(Icons.verified_rounded, size: 14, color: primaryColor),
-                                                const SizedBox(width: 5),
+                                                SizedBox(
+                                                  width: 18,
+                                                  height: 18,
+                                                  child: Center(
+                                                    child: Icon(Icons.verified_rounded, size: 16, color: primaryColor),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
                                                 Text(
                                                   'Marka: ',
                                                   style: TextStyle(
