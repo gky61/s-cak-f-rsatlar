@@ -138,7 +138,8 @@ function wrapCall(name, handler) {
     try {
       return await handler(data, context);
     } catch (error) {
-      functions.logger.error(`❌ [Call Error] ${name}:`, error.message, error.stack || '');
+      functions.logger.error(`❌ [Call Error] ${name}:`, error.message);
+      // Skip if it's already an HttpsError we intentionally threw
       if (error instanceof functions.https.HttpsError) {
         throw error;
       }

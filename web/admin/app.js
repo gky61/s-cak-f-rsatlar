@@ -8167,7 +8167,6 @@ function showCatalogsView() {
     currentView = 'catalogs';
     showView('catalogsView');
     updateMenuActiveState('catalogs');
-    initCatalogsListeners();
     if (catalogs.length === 0) {
         loadCatalogs();
     } else {
@@ -8337,14 +8336,14 @@ function deleteAllCatalogs() {
 function initCatalogsListeners() {
     const refreshCatalogsBtn = document.getElementById('refreshCatalogsBtn');
     if (refreshCatalogsBtn) {
-        refreshCatalogsBtn.onclick = () => {
+        refreshCatalogsBtn.addEventListener('click', () => {
             loadCatalogs();
-        };
+        });
     }
 
     const scrapeCatalogsBtn = document.getElementById('scrapeCatalogsBtn');
     if (scrapeCatalogsBtn) {
-        scrapeCatalogsBtn.onclick = () => {
+        scrapeCatalogsBtn.addEventListener('click', () => {
             if (!confirm("Katalogları Akakçe'den otomatik çekmek istediğinize emin misiniz? Bu işlem tüm mevcuttaki katalogları silecek ve yenilerini yükleyecektir. İşlem 1-2 dakika sürebilir.")) {
                 return;
             }
@@ -8373,14 +8372,14 @@ function initCatalogsListeners() {
                     scrapeCatalogsBtn.innerHTML = originalHtml;
                     showError("Katalog çekme hatası: " + err.message);
                 });
-        };
+        });
     }
 
     const deleteAllCatalogsBtn = document.getElementById('deleteAllCatalogsBtn');
     if (deleteAllCatalogsBtn) {
-        deleteAllCatalogsBtn.onclick = () => {
+        deleteAllCatalogsBtn.addEventListener('click', () => {
             deleteAllCatalogs();
-        };
+        });
     }
 }
 

@@ -49,11 +49,11 @@ function parseDatesFromSpan(spanText, baslangicTarihiFromUrl) {
   const urlYear = baslangicTarihiFromUrl.getFullYear();
   
   function parseSinglePart(partText) {
-    const match = partText.trim().match(/(\d+)\s+([a-zA-ZğüşöçıİĞÜŞÖÇI']+)/);
+    const match = partText.trim().match(/(\d+)\s+([a-zA-ZğüşöçıİĞÜŞÖÇI]+)/);
     if (match) {
       const day = parseInt(match[1], 10);
-      const rawMonth = match[2].toLowerCase().replace(/['\s].*/, '');
-      const month = MONTHS_MAP[rawMonth];
+      const monthStr = match[2];
+      const month = MONTHS_MAP[monthStr];
       if (month !== undefined) {
         return { day, month };
       }
