@@ -17,6 +17,7 @@ import '../widgets/report_dialog.dart';
 import '../widgets/comments_bottom_sheet.dart';
 import '../widgets/deal_thermometer.dart';
 import '../widgets/money_badge.dart';
+import '../widgets/deal_card/deal_card_helpers.dart';
 import 'deal_detail/deal_detail_helpers.dart';
 import 'deal_detail/deal_detail_image.dart';
 import 'deal_detail/deal_share_sheet.dart';
@@ -803,8 +804,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Icon(Icons.storefront_rounded, size: 14, color: primaryColor),
-                                              const SizedBox(width: 5),
+                                               buildStoreLogo(deal.store, size: 18, borderRadius: 4),
+                                               const SizedBox(width: 6),
                                               Text(
                                                 'Satıcı: ',
                                                 style: TextStyle(

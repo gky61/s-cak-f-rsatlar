@@ -50,6 +50,41 @@ String getStoreAsset(String storeName) {
   return 'assets/logo.jpg';
 }
 
+Widget buildStoreLogo(String storeName, {double size = 16, double borderRadius = 4}) {
+  final assetPath = getStoreAsset(storeName);
+  return Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(
+        color: Colors.grey.withValues(alpha: 0.25),
+        width: 0.5,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.05),
+          blurRadius: 2,
+          offset: const Offset(0, 1),
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius > 0.5 ? borderRadius - 0.5 : 0),
+      child: Image.asset(
+        assetPath,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => Icon(
+          Icons.storefront_rounded,
+          size: size * 0.75,
+          color: Colors.grey[600],
+        ),
+      ),
+    ),
+  );
+}
+
 String getCategoryDisplayName(String categoryIdOrName) {
   if (categoryIdOrName.isEmpty) {
     return 'Genel';

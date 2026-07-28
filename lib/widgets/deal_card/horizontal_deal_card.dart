@@ -419,18 +419,14 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                       Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(
-                                            Icons.storefront,
-                                            size: 12,
-                                            color: isDark ? Colors.grey[300] : AppTheme.textPrimary,
-                                          ),
+                                          buildStoreLogo(deal.store, size: 14, borderRadius: 3),
                                           const SizedBox(width: 4),
                                           Flexible(
                                             child: Text(
                                               deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
                                               style: TextStyle(
                                                 fontSize: 10,
-                                                fontWeight: FontWeight.w500,
+                                                fontWeight: FontWeight.w600,
                                                 color: isDark ? Colors.grey[300] : AppTheme.textPrimary,
                                               ),
                                               overflow: TextOverflow.ellipsis,

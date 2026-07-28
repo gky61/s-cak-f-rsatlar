@@ -383,22 +383,18 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Mağaza adı ve Paylaşan Kullanıcı Avatarı (aynı satırda)
+                              // Mağaza logosu, mağaza adı ve Paylaşan Kullanıcı Avatarı (aynı satırda)
                               Row(
                                 children: [
-                                  Icon(
-                                    Icons.storefront,
-                                    size: 11,
-                                    color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                  ),
-                                  const SizedBox(width: 3),
+                                  buildStoreLogo(deal.store, size: 14, borderRadius: 3),
+                                  const SizedBox(width: 4),
                                   Expanded(
                                     child: Text(
                                       deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
                                       style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? Colors.grey[300] : AppTheme.textPrimary,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
