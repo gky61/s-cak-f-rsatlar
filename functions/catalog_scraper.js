@@ -168,6 +168,15 @@ const MONTHS_MAP = {
 };
 
 /**
+ * Creates a Date object representing specified local Turkey time (UTC+3 / Europe/Istanbul).
+ * Turkey is UTC+3 (3 hours ahead of UTC).
+ * For example: 31 July 23:59:59.999 Turkey time -> 31 July 20:59:59.999 UTC.
+ */
+function createTurkeyDate(year, monthIndex, day, hours = 0, minutes = 0, seconds = 0, ms = 0) {
+  return new Date(Date.UTC(year, monthIndex, day, hours - 3, minutes, seconds, ms));
+}
+
+/**
  * Extracts year from URL (e.g. /brosurler/bim-24-mart-2026...) or defaults to current year.
  */
 function parseYearFromUrl(url) {
@@ -186,9 +195,9 @@ function parseYearFromUrl(url) {
 /**
  * Parses start and end dates strictly from detail page DOM element span#br_s text.
  * Example spanTexts:
- * - "1 Temmuz - 31 Temmuz" -> Start: 01.07.2026 00:00:00, End: 31.07.2026 23:59:59
- * - "29 Temmuz - 11 Ağustos" -> Start: 29.07.2026 00:00:00, End: 11.08.2026 23:59:59
- * - "24 Temmuz" -> Start: 24.07.2026 00:00:00, End: 24.07.2026 23:59:59
+ * - "1 Temmuz - 31 Temmuz" -> Start: 01.07.2026 00:00:00 TR, End: 31.07.2026 23:59:59 TR
+ * - "29 Temmuz - 11 Ağustos" -> Start: 29.07.2026 00:00:00 TR, End: 11.08.2026 23:59:59 TR
+ * - "24 Temmuz" -> Start: 24.07.2026 00:00:00 TR, End: 24.07.2026 23:59:59 TR
  */
 function parseDatesFromSpan(spanText, urlYear = new Date().getFullYear()) {
   if (!spanText) return null;
@@ -216,19 +225,19 @@ function parseDatesFromSpan(spanText, urlYear = new Date().getFullYear()) {
     const endPart = parseSinglePart(parts[1]);
 
     if (startPart && endPart) {
-      const startDate = new Date(urlYear, startPart.month, startPart.day, 0, 0, 0, 0);
+      const startDate = createTurkeyDate(urlYear, startPart.month, startPart.day, 0, 0, 0, 0);
       let endYear = urlYear;
       if (endPart.month < startPart.month) {
         endYear = urlYear + 1;
       }
-      const endDate = new Date(endYear, endPart.month, endPart.day, 23, 59, 59, 999);
+      const endDate = createTurkeyDate(endYear, endPart.month, endPart.day, 23, 59, 59, 999);
       return { startDate, endDate };
     }
   } else if (parts.length === 1) {
     const singlePart = parseSinglePart(parts[0]);
     if (singlePart) {
-      const startDate = new Date(urlYear, singlePart.month, singlePart.day, 0, 0, 0, 0);
-      const endDate = new Date(urlYear, singlePart.month, singlePart.day, 23, 59, 59, 999);
+      const startDate = createTurkeyDate(urlYear, singlePart.month, singlePart.day, 0, 0, 0, 0);
+      const endDate = createTurkeyDate(urlYear, singlePart.month, singlePart.day, 23, 59, 59, 999);
       return { startDate, endDate };
     }
   }
@@ -247,7 +256,7 @@ function parseDateFromUrl(url) {
     const monthStr = match[2].toLowerCase();
     const year = parseInt(match[3], 10);
     const month = MONTHS_MAP[monthStr] !== undefined ? MONTHS_MAP[monthStr] : 0;
-    return new Date(year, month, day, 0, 0, 0, 0);
+    return createTurkeyDate(year, month, day, 0, 0, 0, 0);
   }
   return new Date();
 }
