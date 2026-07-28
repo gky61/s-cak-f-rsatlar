@@ -27,23 +27,22 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const { spawnSync } = require('child_process');
 
 /**
- * Robust HTML fetch with multi-stage fallback:
- * 1. Direct Node fetch with full Chrome headers
- * 2. Google Translate Proxy (bypasses Cloudflare/datacenter IP blocks)
- * 3. Native curl spawnSync
+ * Bulletproof multi-stage HTML fetcher:
+ * 1. Googlebot UA (bypasses Cloudflare / Akakce WAF blocks)
+ * 2. WhatsApp UA (bypasses mobile-only WAF restrictions)
+ * 3. Google Translate Proxy (bypasses datacenter IP blocks)
+ * 4. Microlink HTML API Proxy
+ * 5. Native OS curl spawnSync
  */
 async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
-  const fullHeaders = {
-    'User-Agent': USER_AGENT,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Cache-Control': 'max-age=0'
-  };
-
-  // Stage 1: Direct fetch
+  // Stage 1: Googlebot User-Agent
   try {
     const res = await fetch(targetUrl, {
-      headers: fullHeaders,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+      },
       signal: AbortSignal.timeout(timeoutMs)
     });
     if (res.ok) {
@@ -51,14 +50,32 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
       if (html && html.length > 5000) {
         return html;
       }
-    } else {
-      functions.logger.warn(`⚠️ Direct fetch failed for ${targetUrl}. Status: ${res.status}`);
     }
-  } catch (err) {
-    functions.logger.warn(`⚠️ Direct fetch error for ${targetUrl}: ${err.message}`);
+  } catch (e) {
+    functions.logger.debug(`Stage 1 (Googlebot UA) error for ${targetUrl}:`, e.message);
   }
 
-  // Stage 2: Google Translate Proxy (solves 403 Forbidden on Google Cloud Functions IP range)
+  // Stage 2: WhatsApp User-Agent
+  try {
+    const res = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'WhatsApp/2.23.4.15 A',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+      },
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (res.ok) {
+      const html = await res.text();
+      if (html && html.length > 5000) {
+        return html;
+      }
+    }
+  } catch (e) {
+    functions.logger.debug(`Stage 2 (WhatsApp UA) error for ${targetUrl}:`, e.message);
+  }
+
+  // Stage 3: Google Translate Proxy (solves 403 Forbidden on Google Cloud IP range)
   try {
     const parsedUrl = new URL(targetUrl);
     const proxyHost = parsedUrl.hostname.replace(/\./g, '-') + '.translate.goog';
@@ -74,20 +91,34 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
       if (html && html.length > 5000) {
         return html;
       }
-    } else {
-      functions.logger.warn(`⚠️ Google Translate Proxy failed. Status: ${proxyRes.status}`);
     }
-  } catch (proxyErr) {
-    functions.logger.warn(`⚠️ Google Translate Proxy error: ${proxyErr.message}`);
+  } catch (e) {
+    functions.logger.debug(`Stage 3 (Translate Proxy) error for ${targetUrl}:`, e.message);
   }
 
-  // Stage 3: Native OS curl spawnSync
+  // Stage 4: Microlink Proxy
+  try {
+    functions.logger.info(`🔄 Trying Microlink Proxy for: ${targetUrl}`);
+    const microlinkUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
+    const res = await fetch(microlinkUrl, { signal: AbortSignal.timeout(timeoutMs) });
+    if (res.ok) {
+      const json = await res.json();
+      const html = json.data?.html || '';
+      if (html && html.length > 3000) {
+        return html;
+      }
+    }
+  } catch (e) {
+    functions.logger.debug(`Stage 4 (Microlink Proxy) error for ${targetUrl}:`, e.message);
+  }
+
+  // Stage 5: Native OS curl spawnSync
   try {
     functions.logger.info(`🔄 Trying native curl fallback for: ${targetUrl}`);
     const curlArgs = [
       '-s', '-L',
       '--max-time', String(Math.ceil(timeoutMs / 1000)),
-      '-H', `User-Agent: ${USER_AGENT}`,
+      '-H', 'User-Agent: Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
       '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       '-H', 'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
       targetUrl
@@ -96,10 +127,11 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
     if (!curlResult.error && curlResult.stdout && curlResult.stdout.length > 5000) {
       return curlResult.stdout;
     }
-  } catch (curlErr) {
-    functions.logger.warn(`⚠️ curl fallback error: ${curlErr.message}`);
+  } catch (e) {
+    functions.logger.debug(`Stage 5 (curl) error for ${targetUrl}:`, e.message);
   }
 
+  functions.logger.warn(`❌ All 5 fetch strategies failed for ${targetUrl}`);
   return null;
 }
 
