@@ -8358,20 +8358,42 @@ function initCatalogsListeners() {
             const scrapeCatalogsManual = firebase.functions().httpsCallable('scrapeCatalogsManual');
             scrapeCatalogsManual()
                 .then((res) => {
-                    scrapeCatalogsBtn.disabled = false;
-                    scrapeCatalogsBtn.innerHTML = originalHtml;
-                    if (res.data && res.data.success) {
+                    if (res.data && res.data.success && res.data.count > 0) {
+                        scrapeCatalogsBtn.disabled = false;
+                        scrapeCatalogsBtn.innerHTML = originalHtml;
                         showSuccess(`${res.data.count} adet katalog başarıyla çekildi ve güncellendi.`);
                         loadCatalogs();
                     } else {
-                        showError(res.data.message || "Katalog çekme işlemi başarısız.");
+                        // Fallback to bot endpoint if Cloud Functions hit 403 or zero count
+                        console.warn("Cloud Function 0 katalog döndürdü veya 403 aldı, Bot Endpoint'i deneniyor...");
+                        triggerBotCatalogScrape();
                     }
                 })
                 .catch((err) => {
-                    scrapeCatalogsBtn.disabled = false;
-                    scrapeCatalogsBtn.innerHTML = originalHtml;
-                    showError("Katalog çekme hatası: " + err.message);
+                    console.warn("Cloud Function hatası, Bot Endpoint'i deneniyor:", err.message);
+                    triggerBotCatalogScrape();
                 });
+
+            function triggerBotCatalogScrape() {
+                const botUrl = (typeof getBotApiUrl === 'function') ? getBotApiUrl('/scrape-catalogs') : '/scrape-catalogs';
+                fetch(botUrl)
+                    .then(r => r.json())
+                    .then(res => {
+                        scrapeCatalogsBtn.disabled = false;
+                        scrapeCatalogsBtn.innerHTML = originalHtml;
+                        if (res && res.success) {
+                            showSuccess(`${res.count} adet katalog başarıyla çekildi ve güncellendi.`);
+                            loadCatalogs();
+                        } else {
+                            showError(res.message || "Katalog çekme işlemi başarısız.");
+                        }
+                    })
+                    .catch(err => {
+                        scrapeCatalogsBtn.disabled = false;
+                        scrapeCatalogsBtn.innerHTML = originalHtml;
+                        showError("Katalog çekme hatası: " + err.message);
+                    });
+            }
         });
     }
 
