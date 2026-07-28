@@ -27,28 +27,47 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const { spawnSync } = require('child_process');
 
 /**
- * Bulletproof multi-stage HTML fetcher:
- * 1. Google Translate Proxy (Primary: bypasses Cloudflare / Akakce 403 WAF blocks on GCP Datacenter IPs)
- * 2. Googlebot UA Direct
- * 3. WhatsApp UA Direct
- * 4. Microlink HTML API Proxy
- * 5. Native OS curl spawnSync
+ * Speed-Optimized Multi-Stage HTML Fetcher:
+ * 1. Direct Fetch with Googlebot UA (2.5s quick timeout - ~25ms ultra-fast for unblocked stores)
+ * 2. Google Translate Proxy (7s timeout - ~400ms WAF 403 bypass for Cloudflare protected stores)
+ * 3. Direct Fetch with WhatsApp UA (2.5s quick timeout - fast mobile fallback)
+ * 4. Microlink HTML API Proxy (6s timeout)
+ * 5. Native OS curl spawnSync (8s timeout)
  */
-async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
-  // Stage 1: Primary Strategy - Google Translate Proxy (bypasses GCP IP 403 blocks)
+async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
+  // Stage 1 (Fastest): Direct Fetch with Googlebot UA
+  try {
+    const res = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+      },
+      signal: AbortSignal.timeout(2500)
+    });
+    if (res.ok) {
+      const html = await res.text();
+      if (html && html.length > 5000) {
+        return html;
+      }
+    }
+  } catch (e) {
+    functions.logger.debug(`Stage 1 (Googlebot UA) info:`, e.message);
+  }
+
+  // Stage 2 (Cloud WAF Bypass Proxy): Google Translate Proxy
   try {
     const parsedUrl = new URL(targetUrl);
     const proxyHost = parsedUrl.hostname.replace(/\./g, '-') + '.translate.goog';
     const translateProxyUrl = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
     
-    functions.logger.info(`🌐 Fetching via Google Translate Proxy: ${translateProxyUrl}`);
     const proxyRes = await fetch(translateProxyUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
       },
-      signal: AbortSignal.timeout(timeoutMs)
+      signal: AbortSignal.timeout(7000)
     });
     if (proxyRes.ok) {
       const html = await proxyRes.text();
@@ -57,30 +76,10 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
       }
     }
   } catch (e) {
-    functions.logger.info(`Stage 1 (Translate Proxy) info:`, e.message);
+    functions.logger.debug(`Stage 2 (Translate Proxy) info:`, e.message);
   }
 
-  // Stage 2: Fallback - Googlebot User-Agent Direct
-  try {
-    const res = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-      },
-      signal: AbortSignal.timeout(timeoutMs)
-    });
-    if (res.ok) {
-      const html = await res.text();
-      if (html && html.length > 5000) {
-        return html;
-      }
-    }
-  } catch (e) {
-    functions.logger.info(`Stage 2 (Googlebot UA) info:`, e.message);
-  }
-
-  // Stage 3: Fallback - WhatsApp User-Agent Direct
+  // Stage 3 (Fast Mobile): Direct Fetch with WhatsApp UA
   try {
     const res = await fetch(targetUrl, {
       headers: {
@@ -88,7 +87,7 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
       },
-      signal: AbortSignal.timeout(timeoutMs)
+      signal: AbortSignal.timeout(2500)
     });
     if (res.ok) {
       const html = await res.text();
@@ -97,14 +96,13 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
       }
     }
   } catch (e) {
-    functions.logger.info(`Stage 3 (WhatsApp UA) info:`, e.message);
+    functions.logger.debug(`Stage 3 (WhatsApp UA) info:`, e.message);
   }
 
   // Stage 4: Fallback - Microlink Proxy
   try {
-    functions.logger.info(`🔄 Trying Microlink Proxy for: ${targetUrl}`);
     const microlinkUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
-    const res = await fetch(microlinkUrl, { signal: AbortSignal.timeout(timeoutMs) });
+    const res = await fetch(microlinkUrl, { signal: AbortSignal.timeout(6000) });
     if (res.ok) {
       const json = await res.json();
       const html = json.data?.html || '';
@@ -113,26 +111,25 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
       }
     }
   } catch (e) {
-    functions.logger.info(`Stage 4 (Microlink Proxy) info:`, e.message);
+    functions.logger.debug(`Stage 4 (Microlink Proxy) info:`, e.message);
   }
 
   // Stage 5: Fallback - Native OS curl spawnSync
   try {
-    functions.logger.info(`🔄 Trying native curl fallback for: ${targetUrl}`);
     const curlArgs = [
       '-s', '-L',
-      '--max-time', String(Math.ceil(timeoutMs / 1000)),
+      '--max-time', '6',
       '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       '-H', 'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
       targetUrl
     ];
-    const curlResult = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: timeoutMs + 2000 });
+    const curlResult = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: 8000 });
     if (!curlResult.error && curlResult.stdout && curlResult.stdout.length > 5000) {
       return curlResult.stdout;
     }
   } catch (e) {
-    functions.logger.info(`Stage 5 (curl) info:`, e.message);
+    functions.logger.debug(`Stage 5 (curl) info:`, e.message);
   }
 
   functions.logger.warn(`❌ All 5 fetch strategies failed for ${targetUrl}`);
