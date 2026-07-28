@@ -53,10 +53,10 @@ async function mapConcurrent(items, concurrency, fn) {
 
 /**
  * Speed-Optimized Multi-Stage HTML Fetcher:
- * 1. Direct Fetch with Googlebot UA (1.5s quick timeout - ~25ms ultra-fast for unblocked stores)
- * 2. Google Translate Proxy (6s timeout - ~400ms WAF 403 bypass for Cloudflare protected stores)
- * 3. Direct Fetch with WhatsApp UA (2s quick timeout - fast mobile fallback)
- * 4. Microlink HTML API Proxy (6s timeout)
+ * 1. Direct Fetch with Googlebot UA (2.5s quick timeout)
+ * 2. Google Translate Proxy (10s timeout - WAF 403 bypass for Cloudflare protected stores)
+ * 3. Direct Fetch with WhatsApp UA (3s quick timeout)
+ * 4. Microlink HTML API Proxy (8s timeout)
  * 5. Native OS curl spawnSync (8s timeout)
  */
 async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
@@ -68,7 +68,7 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
       },
-      signal: AbortSignal.timeout(1500)
+      signal: AbortSignal.timeout(2500)
     });
     if (res.ok) {
       const html = await res.text();
@@ -92,7 +92,7 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
       },
-      signal: AbortSignal.timeout(6000)
+      signal: AbortSignal.timeout(10000)
     });
     if (proxyRes.ok) {
       const html = await proxyRes.text();
@@ -112,7 +112,7 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
       },
-      signal: AbortSignal.timeout(2000)
+      signal: AbortSignal.timeout(3000)
     });
     if (res.ok) {
       const html = await res.text();
@@ -127,7 +127,7 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
   // Stage 4: Fallback - Microlink Proxy
   try {
     const microlinkUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
-    const res = await fetch(microlinkUrl, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(microlinkUrl, { signal: AbortSignal.timeout(8000) });
     if (res.ok) {
       const json = await res.json();
       const html = json.data?.html || '';
@@ -265,7 +265,7 @@ function parseDateFromUrl(url) {
  * Main scraper function for active catalog brochures.
  */
 async function scrapeAndSaveCatalogs() {
-  functions.logger.info('🚀 Active Catalog scraping process started...');
+  functions.logger.info('🚀 Starting catalog scraping flow for all stores...');
   const allScrapedCatalogs = [];
 
   for (const store of STORES) {
@@ -329,8 +329,8 @@ async function scrapeAndSaveCatalogs() {
 
       functions.logger.info(`Found ${catalogItems.length} brochures for ${store.name}.`);
 
-      // Scrape detail pages concurrently in batches of 5
-      const storeBrochures = await mapConcurrent(catalogItems, 5, async (item) => {
+      // Scrape detail pages concurrently in batches of 3
+      const storeBrochures = await mapConcurrent(catalogItems, 3, async (item) => {
         try {
           const detailUrl = item.href.startsWith('http') ? item.href : `https://www.akakce.com${item.href}`;
           functions.logger.info(`   📄 Scraping detail page: ${detailUrl}`);
