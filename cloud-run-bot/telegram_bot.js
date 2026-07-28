@@ -1182,7 +1182,33 @@ process.on('SIGINT', async () => {
   await sendHeartbeat();
   setInterval(sendHeartbeat, 5 * 60 * 1000);
   initSettingsListener();
+  initCatalogScraperSchedule();
 })().catch(console.error);
+
+let lastCatalogSyncDate = null;
+
+function initCatalogScraperSchedule() {
+  console.log('📅 Aktüel Katalog otomatik senkronizasyon zamanlayıcısı başlatılıyor (Her gece 04:00 TR)...');
+
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      // Europe/Istanbul saati (UTC+3)
+      const trHour = (now.getUTCHours() + 3) % 24;
+      const todayStr = now.toISOString().split('T')[0];
+
+      // Gece 04:00 TR saatinde ve bugün henüz çalıştırılmadıysa çalıştır
+      if (trHour === 4 && lastCatalogSyncDate !== todayStr) {
+        lastCatalogSyncDate = todayStr;
+        console.log(`⏰ [ZAMANLANMIŞ GÖREV] Gece 04:00 Aktüel Katalog senkronizasyonu başlatılıyor... (${now.toISOString()})`);
+        const { scrapeAndSaveCatalogs } = require('./scrapers/catalog_scraper');
+        await scrapeAndSaveCatalogs();
+      }
+    } catch (err) {
+      console.error('❌ Aktüel Katalog otomatik zamanlama hatası:', err.message);
+    }
+  }, 10 * 60 * 1000);
+}
 
 // Health check endpoint için basit HTTP server
 const http = require('http');

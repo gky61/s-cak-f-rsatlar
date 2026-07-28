@@ -1,4 +1,10 @@
-const functions = require('firebase-functions');
+const functions = typeof global.functions !== 'undefined' ? global.functions : {
+  logger: {
+    info: console.log,
+    warn: console.warn,
+    error: console.error
+  }
+};
 const admin = require('firebase-admin');
 const cheerio = require('cheerio');
 
@@ -92,7 +98,6 @@ function parseDatesFromSpan(spanText, baslangicTarihiFromUrl) {
 
 /**
  * Parses start date from relative URL.
- * Example: /brosurler/bim-24-mart-2026-aktuel-katalogu-indirimli-urunler-56190
  */
 function parseDateFromUrl(url) {
   const match = url.match(/(\d+)-([a-zA-ZğüşöçıİĞÜŞÖÇI]+)-(\d{4})/);
@@ -113,7 +118,6 @@ function calculateEndDate(baslangicTarihi, timeRemainingText) {
   const normalizedText = timeRemainingText.toLowerCase().trim();
   const today = new Date();
   
-  // "X gün kaldı"
   const gunMatch = normalizedText.match(/(\d+)\s+gün\s+kaldı/);
   if (gunMatch) {
     const days = parseInt(gunMatch[1], 10);
@@ -122,7 +126,6 @@ function calculateEndDate(baslangicTarihi, timeRemainingText) {
     return endDate;
   }
 
-  // "X hafta kaldı"
   const haftaMatch = normalizedText.match(/(\d+)\s+hafta\s+kaldı/);
   if (haftaMatch) {
     const weeks = parseInt(haftaMatch[1], 10);
@@ -131,7 +134,6 @@ function calculateEndDate(baslangicTarihi, timeRemainingText) {
     return endDate;
   }
 
-  // "X ay kaldı"
   const ayMatch = normalizedText.match(/(\d+)\s+ay\s+kaldı/);
   if (ayMatch) {
     const months = parseInt(ayMatch[1], 10);
@@ -140,28 +142,24 @@ function calculateEndDate(baslangicTarihi, timeRemainingText) {
     return endDate;
   }
 
-  // "1 ay sonra başlıyor" etc.
   if (normalizedText.includes('başlıyor')) {
     const endDate = new Date(baslangicTarihi.getTime() + 7 * 24 * 60 * 60 * 1000);
     endDate.setHours(23, 59, 59, 999);
     return endDate;
   }
 
-  // "Bugün son" or "Bugün son gün"
   if (normalizedText.includes('bugün son')) {
     const endDate = new Date(today);
     endDate.setHours(23, 59, 59, 999);
     return endDate;
   }
 
-  // "Yarın son"
   if (normalizedText.includes('yarın son')) {
     const endDate = new Date(today.getTime() + 24 * 60 * 60 * 1000);
     endDate.setHours(23, 59, 59, 999);
     return endDate;
   }
 
-  // "Son gün Pazartesi" / "Son gün Salı" vb.
   const sonGunMatch = normalizedText.match(/son\s+gün\s+([a-zA-ZğüşöçıİĞÜŞÖÇI]+)/);
   if (sonGunMatch) {
     const dayName = sonGunMatch[1].toLowerCase();
@@ -176,7 +174,6 @@ function calculateEndDate(baslangicTarihi, timeRemainingText) {
     }
   }
 
-  // Fallback: başlangıç tarihinden 7 gün sonra
   const endDate = new Date(baslangicTarihi.getTime() + 7 * 24 * 60 * 60 * 1000);
   endDate.setHours(23, 59, 59, 999);
   return endDate;
@@ -208,13 +205,11 @@ async function scrapeAndSaveCatalogs() {
 
       const catalogItems = [];
 
-      // Parse catalog lists inside ul#BLI
       $('ul#BLI li').each((i, el) => {
         const aTag = $(el).find('a');
         const href = aTag.attr('href') || '';
         
         if (href.startsWith('/brosurler/')) {
-          // Extract cover thumbnail from style (background: url(...))
           const imgStyle = aTag.find('.dt img').attr('style') || '';
           const bgUrlMatch = imgStyle.match(/url\((?:&quot;|"|')?([^)'"]+?)(?:&quot;|"|')?\)/);
           let coverImage = '';
@@ -225,11 +220,9 @@ async function scrapeAndSaveCatalogs() {
             }
           }
 
-          // Suffix catalog title
           const titleSuffix = aTag.find('.blid .bn').text().trim() || 'Aktüel Kataloğu';
           const timeRemainingText = aTag.find('span.b').text().trim();
           
-          // Brochure ID from url end
           const idMatch = href.match(/(\d+)$/);
           const brochureId = idMatch ? idMatch[1] : '';
 
@@ -247,11 +240,9 @@ async function scrapeAndSaveCatalogs() {
 
       functions.logger.info(`Found ${catalogItems.length} brochures for ${store.name}.`);
 
-      // Scrape detail pages sequentially
       for (const item of catalogItems) {
         try {
           const detailUrl = `https://www.akakce.com${item.href}`;
-          functions.logger.info(`   📄 Scraping detail page: ${detailUrl}`);
 
           const detailResponse = await fetch(detailUrl, {
             headers: { 'User-Agent': USER_AGENT },
@@ -269,7 +260,6 @@ async function scrapeAndSaveCatalogs() {
                 if (src.startsWith('//')) {
                   src = 'https:' + src;
                 }
-                // Convert low-res thumbnail paths (/l/, /y/, /m/) to high-res upload path (/u/)
                 src = src.replace('/_bro/l/', '/_bro/u/')
                          .replace('/_bro/y/', '/_bro/u/')
                          .replace('/_bro/m/', '/_bro/u/');
@@ -282,18 +272,15 @@ async function scrapeAndSaveCatalogs() {
               let baslangicTarihi = parseDateFromUrl(item.href);
               let bitisTarihi = calculateEndDate(baslangicTarihi, item.timeRemainingText);
 
-              // Extract precise dates from span#br_s on the detail page if present
               const dateSpanText = $detail('#br_s').text().trim();
               if (dateSpanText) {
                 const parsedDates = parseDatesFromSpan(dateSpanText, baslangicTarihi);
                 if (parsedDates) {
                   baslangicTarihi = parsedDates.startDate;
                   bitisTarihi = parsedDates.endDate;
-                  functions.logger.info(`   📅 Date override for brochure ${item.brochureId}: ${baslangicTarihi.toLocaleDateString('tr-TR')} - ${bitisTarihi.toLocaleDateString('tr-TR')}`);
                 }
               }
 
-              // Use first page image as cover if cover thumbnail is empty or a placeholder
               let finalCover = (item.coverImage && !item.coverImage.includes('t.gif'))
                 ? item.coverImage
                 : sayfaResimleri[0];
@@ -301,7 +288,6 @@ async function scrapeAndSaveCatalogs() {
               if (finalCover.startsWith('//')) {
                 finalCover = 'https:' + finalCover;
               }
-              // Convert to large thumbnail path (/l/) for fast grid listing
               finalCover = finalCover.replace('/_bro/u/', '/_bro/l/')
                                      .replace('/_bro/y/', '/_bro/l/')
                                      .replace('/_bro/m/', '/_bro/l/');
@@ -315,12 +301,9 @@ async function scrapeAndSaveCatalogs() {
                 sayfaResimleri,
                 kapakResmi: finalCover
               });
-            } else {
-              functions.logger.warn(`   ⚠️ No pages found inside brochure ${item.brochureId}. Skipping.`);
             }
           }
-          // Delay to prevent rate limit
-          await new Promise(resolve => setTimeout(resolve, 150));
+          await new Promise(resolve => setTimeout(resolve, 100));
         } catch (detailErr) {
           functions.logger.error(`❌ Error scraping brochure detail ${item.brochureId}:`, detailErr.message);
         }
@@ -340,7 +323,7 @@ async function scrapeAndSaveCatalogs() {
 
   const db = admin.firestore();
 
-  // 1. Delete all existing catalogs to ensure fresh reload (matching coupons scraper)
+  // Delete all existing catalogs
   functions.logger.info('🧹 Deleting all existing catalogs from Firestore...');
   const querySnapshot = await db.collection('kataloglar').get();
   const deleteDocs = querySnapshot.docs;
@@ -359,7 +342,7 @@ async function scrapeAndSaveCatalogs() {
   }
   functions.logger.info(`Deleted ${deleteDocs.length} old catalogs.`);
 
-  // 2. Add newly scraped catalogs
+  // Add new catalogs
   functions.logger.info('💾 Saving new catalogs to Firestore...');
   const writeChunks = [];
   for (let i = 0; i < allScrapedCatalogs.length; i += 500) {
@@ -371,7 +354,6 @@ async function scrapeAndSaveCatalogs() {
     chunk.forEach((catalog) => {
       const docRef = db.collection('kataloglar').doc(catalog.katalogId);
       
-      // Convert Date objects to Firestore Timestamp
       const dataToSave = {
         ...catalog,
         baslangicTarihi: admin.firestore.Timestamp.fromDate(catalog.baslangicTarihi),
