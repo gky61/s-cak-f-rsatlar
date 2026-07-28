@@ -24,6 +24,84 @@ const STORES = [
 ];
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const { spawnSync } = require('child_process');
+
+/**
+ * Robust HTML fetch with multi-stage fallback:
+ * 1. Direct Node fetch with full Chrome headers
+ * 2. Google Translate Proxy (bypasses Cloudflare/datacenter IP blocks)
+ * 3. Native curl spawnSync
+ */
+async function fetchHtmlWithFallback(targetUrl, timeoutMs = 15000) {
+  const fullHeaders = {
+    'User-Agent': USER_AGENT,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Cache-Control': 'max-age=0'
+  };
+
+  // Stage 1: Direct fetch
+  try {
+    const res = await fetch(targetUrl, {
+      headers: fullHeaders,
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (res.ok) {
+      const html = await res.text();
+      if (html && html.length > 5000) {
+        return html;
+      }
+    } else {
+      functions.logger.warn(`⚠️ Direct fetch failed for ${targetUrl}. Status: ${res.status}`);
+    }
+  } catch (err) {
+    functions.logger.warn(`⚠️ Direct fetch error for ${targetUrl}: ${err.message}`);
+  }
+
+  // Stage 2: Google Translate Proxy (solves 403 Forbidden on Google Cloud Functions IP range)
+  try {
+    const parsedUrl = new URL(targetUrl);
+    const proxyHost = parsedUrl.hostname.replace(/\./g, '-') + '.translate.goog';
+    const translateProxyUrl = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
+    
+    functions.logger.info(`🔄 Trying Google Translate Proxy: ${translateProxyUrl}`);
+    const proxyRes = await fetch(translateProxyUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (proxyRes.ok) {
+      const html = await proxyRes.text();
+      if (html && html.length > 5000) {
+        return html;
+      }
+    } else {
+      functions.logger.warn(`⚠️ Google Translate Proxy failed. Status: ${proxyRes.status}`);
+    }
+  } catch (proxyErr) {
+    functions.logger.warn(`⚠️ Google Translate Proxy error: ${proxyErr.message}`);
+  }
+
+  // Stage 3: Native OS curl spawnSync
+  try {
+    functions.logger.info(`🔄 Trying native curl fallback for: ${targetUrl}`);
+    const curlArgs = [
+      '-s', '-L',
+      '--max-time', String(Math.ceil(timeoutMs / 1000)),
+      '-H', `User-Agent: ${USER_AGENT}`,
+      '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      '-H', 'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+      targetUrl
+    ];
+    const curlResult = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: timeoutMs + 2000 });
+    if (!curlResult.error && curlResult.stdout && curlResult.stdout.length > 5000) {
+      return curlResult.stdout;
+    }
+  } catch (curlErr) {
+    functions.logger.warn(`⚠️ curl fallback error: ${curlErr.message}`);
+  }
+
+  return null;
+}
 
 const MONTHS_MAP = {
   'ocak': 0, 'subat': 1, 'şubat': 1, 'mart': 2, 'nisan': 3,
@@ -193,27 +271,30 @@ async function scrapeAndSaveCatalogs() {
     try {
       functions.logger.info(`🔍 Fetching catalog list for ${store.name} from ${store.url}...`);
       
-      const response = await fetch(store.url, {
-        headers: { 'User-Agent': USER_AGENT },
-        signal: AbortSignal.timeout(15000)
-      });
+      const html = await fetchHtmlWithFallback(store.url, 15000);
 
-      if (!response.ok) {
-        functions.logger.warn(`⚠️ Failed to fetch catalog page for ${store.name}. Status: ${response.status}`);
+      if (!html) {
+        functions.logger.warn(`⚠️ Failed to fetch catalog page for ${store.name} via all mechanisms.`);
         continue;
       }
 
-      const html = await response.text();
       const $ = cheerio.load(html);
-
       const catalogItems = [];
 
       // Parse catalog lists inside ul#BLI
       $('ul#BLI li').each((i, el) => {
         const aTag = $(el).find('a');
-        const href = aTag.attr('href') || '';
+        let href = aTag.attr('href') || '';
         
-        if (href.startsWith('/brosurler/')) {
+        // Clean proxy prefix if present from Google Translate
+        if (href.includes('.translate.goog')) {
+          try {
+            const u = new URL(href);
+            href = u.pathname;
+          } catch (e) {}
+        }
+
+        if (href.includes('/brosurler/')) {
           // Extract cover thumbnail from style (background: url(...))
           const imgStyle = aTag.find('.dt img').attr('style') || '';
           const bgUrlMatch = imgStyle.match(/url\((?:&quot;|"|')?([^)'"]+?)(?:&quot;|"|')?\)/);
@@ -250,16 +331,12 @@ async function scrapeAndSaveCatalogs() {
       // Scrape detail pages sequentially
       for (const item of catalogItems) {
         try {
-          const detailUrl = `https://www.akakce.com${item.href}`;
+          const detailUrl = item.href.startsWith('http') ? item.href : `https://www.akakce.com${item.href}`;
           functions.logger.info(`   📄 Scraping detail page: ${detailUrl}`);
 
-          const detailResponse = await fetch(detailUrl, {
-            headers: { 'User-Agent': USER_AGENT },
-            signal: AbortSignal.timeout(10000)
-          });
+          const detailHtml = await fetchHtmlWithFallback(detailUrl, 10000);
 
-          if (detailResponse.ok) {
-            const detailHtml = await detailResponse.text();
+          if (detailHtml) {
             const $detail = cheerio.load(detailHtml);
             
             const sayfaResimleri = [];
