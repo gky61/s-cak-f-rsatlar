@@ -167,23 +167,37 @@ const MONTHS_MAP = {
   'eylul': 8, 'eylül': 8, 'ekim': 9, 'kasim': 10, 'kasım': 10, 'aralik': 11, 'aralık': 11
 };
 
-const WEEKDAYS_MAP = {
-  'pazartesi': 1, 'sali': 2, 'salı': 2, 'carsamba': 3, 'çarşamba': 3,
-  'persembe': 4, 'perşembe': 4, 'cuma': 5, 'cumartesi': 6, 'pazar': 0
-};
+/**
+ * Extracts year from URL (e.g. /brosurler/bim-24-mart-2026...) or defaults to current year.
+ */
+function parseYearFromUrl(url) {
+  if (url) {
+    const match = url.match(/(\d{4})/);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      if (year >= 2024 && year <= 2030) {
+        return year;
+      }
+    }
+  }
+  return new Date().getFullYear();
+}
 
 /**
- * Parses start and end dates from detail page span#br_s text.
+ * Parses start and end dates strictly from detail page DOM element span#br_s text.
+ * Example spanTexts:
+ * - "1 Temmuz - 31 Temmuz" -> Start: 01.07.2026 00:00:00, End: 31.07.2026 23:59:59
+ * - "29 Temmuz - 11 Ağustos" -> Start: 29.07.2026 00:00:00, End: 11.08.2026 23:59:59
+ * - "24 Temmuz" -> Start: 24.07.2026 00:00:00, End: 24.07.2026 23:59:59
  */
-function parseDatesFromSpan(spanText, baslangicTarihiFromUrl) {
+function parseDatesFromSpan(spanText, urlYear = new Date().getFullYear()) {
   if (!spanText) return null;
   const normalized = spanText.toLowerCase().replace(/\s+/g, ' ').trim();
   
-  const parts = normalized.split(/[-–]/);
+  // Split by dash / en-dash / em-dash
+  const parts = normalized.split(/\s*[-–—]\s*/);
   if (parts.length === 0) return null;
 
-  const urlYear = baslangicTarihiFromUrl.getFullYear();
-  
   function parseSinglePart(partText) {
     const match = partText.trim().match(/(\d+)\s+([a-zA-ZğüşöçıİĞÜŞÖÇI]+)/);
     if (match) {
@@ -202,23 +216,19 @@ function parseDatesFromSpan(spanText, baslangicTarihiFromUrl) {
     const endPart = parseSinglePart(parts[1]);
 
     if (startPart && endPart) {
-      const startDate = new Date(urlYear, startPart.month, startPart.day);
-      startDate.setHours(0, 0, 0, 0);
+      const startDate = new Date(urlYear, startPart.month, startPart.day, 0, 0, 0, 0);
       let endYear = urlYear;
       if (endPart.month < startPart.month) {
         endYear = urlYear + 1;
       }
-      const endDate = new Date(endYear, endPart.month, endPart.day);
-      endDate.setHours(23, 59, 59, 999);
+      const endDate = new Date(endYear, endPart.month, endPart.day, 23, 59, 59, 999);
       return { startDate, endDate };
     }
   } else if (parts.length === 1) {
     const singlePart = parseSinglePart(parts[0]);
     if (singlePart) {
-      const startDate = new Date(urlYear, singlePart.month, singlePart.day);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(urlYear, singlePart.month, singlePart.day);
-      endDate.setHours(23, 59, 59, 999);
+      const startDate = new Date(urlYear, singlePart.month, singlePart.day, 0, 0, 0, 0);
+      const endDate = new Date(urlYear, singlePart.month, singlePart.day, 23, 59, 59, 999);
       return { startDate, endDate };
     }
   }
@@ -227,7 +237,7 @@ function parseDatesFromSpan(spanText, baslangicTarihiFromUrl) {
 }
 
 /**
- * Parses start date from relative URL.
+ * Fallback: parses start date from relative URL if span#br_s is missing in DOM.
  * Example: /brosurler/bim-24-mart-2026-aktuel-katalogu-indirimli-urunler-56190
  */
 function parseDateFromUrl(url) {
@@ -237,85 +247,9 @@ function parseDateFromUrl(url) {
     const monthStr = match[2].toLowerCase();
     const year = parseInt(match[3], 10);
     const month = MONTHS_MAP[monthStr] !== undefined ? MONTHS_MAP[monthStr] : 0;
-    return new Date(year, month, day);
+    return new Date(year, month, day, 0, 0, 0, 0);
   }
   return new Date();
-}
-
-/**
- * Calculates end date based on remaining time text.
- */
-function calculateEndDate(baslangicTarihi, timeRemainingText) {
-  const normalizedText = timeRemainingText.toLowerCase().trim();
-  const today = new Date();
-  
-  // "X gün kaldı"
-  const gunMatch = normalizedText.match(/(\d+)\s+gün\s+kaldı/);
-  if (gunMatch) {
-    const days = parseInt(gunMatch[1], 10);
-    const endDate = new Date(today.getTime() + days * 24 * 60 * 60 * 1000);
-    endDate.setHours(23, 59, 59, 999);
-    return endDate;
-  }
-
-  // "X hafta kaldı"
-  const haftaMatch = normalizedText.match(/(\d+)\s+hafta\s+kaldı/);
-  if (haftaMatch) {
-    const weeks = parseInt(haftaMatch[1], 10);
-    const endDate = new Date(today.getTime() + weeks * 7 * 24 * 60 * 60 * 1000);
-    endDate.setHours(23, 59, 59, 999);
-    return endDate;
-  }
-
-  // "X ay kaldı"
-  const ayMatch = normalizedText.match(/(\d+)\s+ay\s+kaldı/);
-  if (ayMatch) {
-    const months = parseInt(ayMatch[1], 10);
-    const endDate = new Date(today.getTime() + months * 30 * 24 * 60 * 60 * 1000);
-    endDate.setHours(23, 59, 59, 999);
-    return endDate;
-  }
-
-  // "1 ay sonra başlıyor" etc.
-  if (normalizedText.includes('başlıyor')) {
-    const endDate = new Date(baslangicTarihi.getTime() + 7 * 24 * 60 * 60 * 1000);
-    endDate.setHours(23, 59, 59, 999);
-    return endDate;
-  }
-
-  // "Bugün son" or "Bugün son gün"
-  if (normalizedText.includes('bugün son')) {
-    const endDate = new Date(today);
-    endDate.setHours(23, 59, 59, 999);
-    return endDate;
-  }
-
-  // "Yarın son"
-  if (normalizedText.includes('yarın son')) {
-    const endDate = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-    endDate.setHours(23, 59, 59, 999);
-    return endDate;
-  }
-
-  // "Son gün Pazartesi" / "Son gün Salı" vb.
-  const sonGunMatch = normalizedText.match(/son\s+gün\s+([a-zA-ZğüşöçıİĞÜŞÖÇI]+)/);
-  if (sonGunMatch) {
-    const dayName = sonGunMatch[1].toLowerCase();
-    if (WEEKDAYS_MAP[dayName] !== undefined) {
-      const targetDay = WEEKDAYS_MAP[dayName];
-      const currentDay = today.getDay();
-      let daysToAdd = (targetDay - currentDay + 7) % 7;
-      if (daysToAdd === 0) daysToAdd = 7;
-      const endDate = new Date(today.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
-      endDate.setHours(23, 59, 59, 999);
-      return endDate;
-    }
-  }
-
-  // Fallback: başlangıç tarihinden 7 gün sonra
-  const endDate = new Date(baslangicTarihi.getTime() + 7 * 24 * 60 * 60 * 1000);
-  endDate.setHours(23, 59, 59, 999);
-  return endDate;
 }
 
 /**
@@ -414,18 +348,23 @@ async function scrapeAndSaveCatalogs() {
             });
 
             if (sayfaResimleri.length > 0) {
-              let baslangicTarihi = parseDateFromUrl(item.href);
-              let bitisTarihi = calculateEndDate(baslangicTarihi, item.timeRemainingText);
-
-              // Extract precise dates from span#br_s on the detail page if present
+              const urlYear = parseYearFromUrl(item.href);
               const dateSpanText = $detail('#br_s').text().trim();
-              if (dateSpanText) {
-                const parsedDates = parseDatesFromSpan(dateSpanText, baslangicTarihi);
-                if (parsedDates) {
-                  baslangicTarihi = parsedDates.startDate;
-                  bitisTarihi = parsedDates.endDate;
-                  functions.logger.info(`   📅 Date override for brochure ${item.brochureId}: ${baslangicTarihi.toLocaleDateString('tr-TR')} - ${bitisTarihi.toLocaleDateString('tr-TR')}`);
-                }
+              const parsedSpanDates = parseDatesFromSpan(dateSpanText, urlYear);
+
+              let baslangicTarihi;
+              let bitisTarihi;
+
+              if (parsedSpanDates) {
+                baslangicTarihi = parsedSpanDates.startDate;
+                bitisTarihi = parsedSpanDates.endDate;
+                functions.logger.info(`   📅 Parsed dates from span#br_s for brochure ${item.brochureId}: ${baslangicTarihi.toLocaleDateString('tr-TR')} - ${bitisTarihi.toLocaleDateString('tr-TR')}`);
+              } else {
+                // Fallback: parse start date from URL slug, end date = start date + 7 days
+                baslangicTarihi = parseDateFromUrl(item.href);
+                bitisTarihi = new Date(baslangicTarihi.getTime() + 7 * 24 * 60 * 60 * 1000);
+                bitisTarihi.setHours(23, 59, 59, 999);
+                functions.logger.info(`   📅 Fallback dates for brochure ${item.brochureId}: ${baslangicTarihi.toLocaleDateString('tr-TR')} - ${bitisTarihi.toLocaleDateString('tr-TR')}`);
               }
 
               // Use first page image as cover if cover thumbnail is empty or a placeholder
