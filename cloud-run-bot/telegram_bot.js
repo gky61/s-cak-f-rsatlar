@@ -1252,6 +1252,15 @@ const server = http.createServer(async (req, res) => {
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     });
+  } else if (parsedUrl.pathname === '/scrape-catalogs') {
+    try {
+      console.log('👥 Manual catalog scraping triggered via API endpoint...');
+      const { scrapeAndSaveCatalogs } = require('./scrapers/catalog_scraper');
+      const result = await scrapeAndSaveCatalogs();
+      sendJson(200, result);
+    } catch (err) {
+      sendJson(500, { success: false, error: err.message });
+    }
   } else if (parsedUrl.pathname === '/bot-logs') {
     const limit = parseInt(parsedUrl.searchParams.get('limit') || '100');
     const startTime = parsedUrl.searchParams.get('startTime');
