@@ -2781,14 +2781,14 @@ exports.scrapeCatalogsManual = functions
 
 /**
  * 19. AKTÜEL KATALOG KAZIMA VE KAYDETME - ZAMANLANMIŞ (Scheduled)
- * Her gün gece 03:00'da otomatik çalışır.
+ * Her gün gece 03:00'da otomatik çalışır. (v2026.07.28 - Google Translate Proxy)
  */
 exports.scrapeCatalogsScheduled = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
   .pubsub.schedule('0 3 * * *')
   .timeZone('Europe/Istanbul')
   .onRun(wrapTrigger('scrapeCatalogsScheduled', async (context) => {
-    functions.logger.info('⏰ Scheduled catalog scraping triggered...');
+    functions.logger.info('⏰ Scheduled catalog scraping triggered (v2026.07.28)...');
     const { scrapeAndSaveCatalogs } = require('./catalog_scraper');
     const result = await scrapeAndSaveCatalogs();
     functions.logger.info('⏰ Scheduled catalog scraping finished:', result);
