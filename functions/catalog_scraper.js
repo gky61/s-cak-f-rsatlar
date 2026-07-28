@@ -168,12 +168,12 @@ const MONTHS_MAP = {
 };
 
 /**
- * Creates a Date object representing specified local Turkey time (UTC+3 / Europe/Istanbul).
- * Turkey is UTC+3 (3 hours ahead of UTC).
- * For example: 31 July 23:59:59.999 Turkey time -> 31 July 20:59:59.999 UTC.
+ * Helper to construct a Date object representing specific time components in Turkey Timezone (UTC+3).
+ * Ensures Firestore Timestamps align exactly with 00:00:00 - 23:59:59 in Turkey time (+03:00).
  */
 function createTurkeyDate(year, monthIndex, day, hours = 0, minutes = 0, seconds = 0, ms = 0) {
-  return new Date(Date.UTC(year, monthIndex, day, hours - 3, minutes, seconds, ms));
+  const utcMs = Date.UTC(year, monthIndex, day, hours, minutes, seconds, ms) - (3 * 3600 * 1000);
+  return new Date(utcMs);
 }
 
 /**
@@ -194,10 +194,10 @@ function parseYearFromUrl(url) {
 
 /**
  * Parses start and end dates strictly from detail page DOM element span#br_s text.
- * Example spanTexts:
- * - "1 Temmuz - 31 Temmuz" -> Start: 01.07.2026 00:00:00 TR, End: 31.07.2026 23:59:59 TR
- * - "29 Temmuz - 11 Ağustos" -> Start: 29.07.2026 00:00:00 TR, End: 11.08.2026 23:59:59 TR
- * - "24 Temmuz" -> Start: 24.07.2026 00:00:00 TR, End: 24.07.2026 23:59:59 TR
+ * Example spanTexts in Turkey Time (UTC+3):
+ * - "1 Temmuz - 31 Temmuz" -> Start: 01.07.2026 00:00:00 UTC+3, End: 31.07.2026 23:59:59 UTC+3
+ * - "29 Temmuz - 11 Ağustos" -> Start: 29.07.2026 00:00:00 UTC+3, End: 11.08.2026 23:59:59 UTC+3
+ * - "24 Temmuz" -> Start: 24.07.2026 00:00:00 UTC+3, End: 24.07.2026 23:59:59 UTC+3
  */
 function parseDatesFromSpan(spanText, urlYear = new Date().getFullYear()) {
   if (!spanText) return null;
@@ -258,7 +258,7 @@ function parseDateFromUrl(url) {
     const month = MONTHS_MAP[monthStr] !== undefined ? MONTHS_MAP[monthStr] : 0;
     return createTurkeyDate(year, month, day, 0, 0, 0, 0);
   }
-  return new Date();
+  return createTurkeyDate(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 0, 0, 0, 0);
 }
 
 /**
