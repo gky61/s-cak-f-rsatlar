@@ -8355,7 +8355,7 @@ function initCatalogsListeners() {
                 <span class="hidden sm:inline">Kazınıyor...</span>
             `;
 
-            const scrapeCatalogsManual = firebase.functions().httpsCallable('scrapeCatalogsManual');
+            const scrapeCatalogsManual = firebase.functions().httpsCallable('scrapeCatalogsManual', { timeout: 540000 });
             scrapeCatalogsManual()
                 .then((res) => {
                     scrapeCatalogsBtn.disabled = false;

@@ -27,10 +27,35 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const { spawnSync } = require('child_process');
 
 /**
+ * Validates if the returned HTML is valid catalog content and not a WAF block/error page.
+ */
+function isValidHtml(html, minLength = 3000) {
+  if (!html || html.length < minLength) return false;
+  const lower = html.toLowerCase();
+  if (lower.includes('403 - forbidden') || lower.includes('access is denied') || lower.includes('robot verification')) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Helper to process array items in parallel chunks of size concurrency
+ */
+async function mapConcurrent(items, concurrency, fn) {
+  const results = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    const chunk = items.slice(i, i + concurrency);
+    const chunkResults = await Promise.all(chunk.map(fn));
+    results.push(...chunkResults);
+  }
+  return results;
+}
+
+/**
  * Speed-Optimized Multi-Stage HTML Fetcher:
- * 1. Direct Fetch with Googlebot UA (2.5s quick timeout - ~25ms ultra-fast for unblocked stores)
- * 2. Google Translate Proxy (7s timeout - ~400ms WAF 403 bypass for Cloudflare protected stores)
- * 3. Direct Fetch with WhatsApp UA (2.5s quick timeout - fast mobile fallback)
+ * 1. Direct Fetch with Googlebot UA (1.5s quick timeout - ~25ms ultra-fast for unblocked stores)
+ * 2. Google Translate Proxy (6s timeout - ~400ms WAF 403 bypass for Cloudflare protected stores)
+ * 3. Direct Fetch with WhatsApp UA (2s quick timeout - fast mobile fallback)
  * 4. Microlink HTML API Proxy (6s timeout)
  * 5. Native OS curl spawnSync (8s timeout)
  */
@@ -43,11 +68,11 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
       },
-      signal: AbortSignal.timeout(2500)
+      signal: AbortSignal.timeout(1500)
     });
     if (res.ok) {
       const html = await res.text();
-      if (html && html.length > 5000) {
+      if (isValidHtml(html, 4000)) {
         return html;
       }
     }
@@ -67,11 +92,11 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
       },
-      signal: AbortSignal.timeout(7000)
+      signal: AbortSignal.timeout(6000)
     });
     if (proxyRes.ok) {
       const html = await proxyRes.text();
-      if (html && html.length > 5000) {
+      if (isValidHtml(html, 3000)) {
         return html;
       }
     }
@@ -87,11 +112,11 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
       },
-      signal: AbortSignal.timeout(2500)
+      signal: AbortSignal.timeout(2000)
     });
     if (res.ok) {
       const html = await res.text();
-      if (html && html.length > 5000) {
+      if (isValidHtml(html, 4000)) {
         return html;
       }
     }
@@ -106,7 +131,7 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
     if (res.ok) {
       const json = await res.json();
       const html = json.data?.html || '';
-      if (html && html.length > 3000) {
+      if (isValidHtml(html, 3000)) {
         return html;
       }
     }
@@ -125,7 +150,7 @@ async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
       targetUrl
     ];
     const curlResult = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: 8000 });
-    if (!curlResult.error && curlResult.stdout && curlResult.stdout.length > 5000) {
+    if (!curlResult.error && isValidHtml(curlResult.stdout, 4000)) {
       return curlResult.stdout;
     }
   } catch (e) {
@@ -361,13 +386,13 @@ async function scrapeAndSaveCatalogs() {
 
       functions.logger.info(`Found ${catalogItems.length} brochures for ${store.name}.`);
 
-      // Scrape detail pages sequentially
-      for (const item of catalogItems) {
+      // Scrape detail pages concurrently in batches of 5
+      const storeBrochures = await mapConcurrent(catalogItems, 5, async (item) => {
         try {
           const detailUrl = item.href.startsWith('http') ? item.href : `https://www.akakce.com${item.href}`;
           functions.logger.info(`   📄 Scraping detail page: ${detailUrl}`);
 
-          const detailHtml = await fetchHtmlWithFallback(detailUrl, 10000);
+          const detailHtml = await fetchHtmlWithFallback(detailUrl, 8000);
 
           if (detailHtml) {
             const $detail = cheerio.load(detailHtml);
@@ -416,7 +441,7 @@ async function scrapeAndSaveCatalogs() {
                                      .replace('/_bro/y/', '/_bro/l/')
                                      .replace('/_bro/m/', '/_bro/l/');
 
-              allScrapedCatalogs.push({
+              return {
                 katalogId: `${store.code}_${item.brochureId}`,
                 magazaKodu: store.code,
                 katalogBasligi: item.titleSuffix,
@@ -424,17 +449,19 @@ async function scrapeAndSaveCatalogs() {
                 bitisTarihi,
                 sayfaResimleri,
                 kapakResmi: finalCover
-              });
+              };
             } else {
               functions.logger.warn(`   ⚠️ No pages found inside brochure ${item.brochureId}. Skipping.`);
             }
           }
-          // Delay to prevent rate limit
-          await new Promise(resolve => setTimeout(resolve, 150));
         } catch (detailErr) {
           functions.logger.error(`❌ Error scraping brochure detail ${item.brochureId}:`, detailErr.message);
         }
-      }
+        return null;
+      });
+
+      const validStoreBrochures = storeBrochures.filter(Boolean);
+      allScrapedCatalogs.push(...validStoreBrochures);
 
     } catch (storeErr) {
       functions.logger.error(`❌ Error scraping store ${store.name}:`, storeErr.message);
