@@ -177,11 +177,44 @@ async function resolveUrlRedirects(url) {
     console.log(`[RESOLVE-REDIRECT] ✅ Çözülen Hedef URL: ${response.url} (Durum: ${response.status} ${response.statusText})`);
 
     let resolvedUrl = response.url || targetUrl;
+
+    // Eğer HTTP yanıtı 403 Forbidden ve kısa link ise (Örn: hb.biz Akamai WAF), Microlink fallback deneyerek çöz
+    if (response.status === 403 || isBotBlocked(resolvedUrl)) {
+      console.warn(`[RESOLVE-REDIRECT] ⚠️ Direct fetch 403/WAF döndü (${targetUrl}). Microlink API fallback ile çözülüyor...`);
+      try {
+        const microRes = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}`, {
+          signal: AbortSignal.timeout(10000)
+        });
+        if (microRes.ok) {
+          const microData = await microRes.json();
+          if (microData.data && microData.data.url) {
+            console.log(`[RESOLVE-REDIRECT] ✅ Microlink ile başarıyla çözüldü: ${microData.data.url}`);
+            resolvedUrl = microData.data.url;
+          }
+        }
+      } catch (microErr) {
+        console.warn(`[RESOLVE-REDIRECT] ⚠️ Microlink redirect resolution hatası: ${microErr.message}`);
+      }
+    }
+
     resolvedUrl = extractAdjustFallback(resolvedUrl);
 
     return resolvedUrl;
   } catch (err) {
-    console.warn(`[RESOLVE-REDIRECT] ⚠️ Yönlendirme çözülemedi (${err.message}), orijinal URL kullanılacak: ${targetUrl}`);
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ Yönlendirme çözülemedi (${err.message}), Microlink fallback deneniyor...`);
+    try {
+      const microRes = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}`, {
+        signal: AbortSignal.timeout(10000)
+      });
+      if (microRes.ok) {
+        const microData = await microRes.json();
+        if (microData.data && microData.data.url) {
+          const resolved = extractAdjustFallback(microData.data.url);
+          console.log(`[RESOLVE-REDIRECT] ✅ Microlink catch fallback ile çözüldü: ${resolved}`);
+          return resolved;
+        }
+      }
+    } catch (_) {}
     return targetUrl;
   }
 }

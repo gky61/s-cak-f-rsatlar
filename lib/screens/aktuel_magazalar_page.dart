@@ -32,7 +32,7 @@ class AktuelMagazalarPage extends StatelessWidget {
     Magaza(code: 'bizim', name: 'Bizim Toptan', logoAsset: 'assets/bizim.jpg', brandColor: Color(0xFFFFCC00)),
     Magaza(code: 'file', name: 'File', logoAsset: 'assets/file.jpg', brandColor: Color(0xFF3498DB)),
     Magaza(code: 'happycenter', name: 'Happy Center', logoAsset: 'assets/happycenter.jpg', brandColor: Color(0xFF8DC63F)),
-    Magaza(code: 'hakmar', name: 'Hakmar', logoAsset: 'assets/hakmar.jpg', brandColor: Color(0xFFD32F2F)),
+    Magaza(code: 'hakmar', name: 'Hakmar', logoAsset: 'assets/hakmar-express.jpg', brandColor: Color(0xFFD32F2F)),
     Magaza(code: 'cagri', name: 'Çağrı Hipermarket', logoAsset: 'assets/cagri.jpg', brandColor: Color(0xFFE31B23)),
     Magaza(code: 'kooperatifmarket', name: 'Kooperatif Market', logoAsset: 'assets/kooperatif.jpg', brandColor: Color(0xFF00755F)),
     // 2. Öncelik – Makyaj / Kişisel Bakım
