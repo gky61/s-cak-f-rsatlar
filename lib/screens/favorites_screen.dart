@@ -446,7 +446,84 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           );
         }
 
-        return _buildDealGrid(deals, isDark);
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.local_offer_outlined,
+                        size: 16,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${deals.length} Fırsat',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CategoryPreferencesScreen(),
+                        ),
+                      ).then((_) {
+                        setState(() {
+                          _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
+                        });
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: primaryColor.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.tune_rounded,
+                            size: 15,
+                            color: primaryColor,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Kategorileri Düzenle',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _buildDealGrid(deals, isDark),
+            ),
+          ],
+        );
       },
     );
   }

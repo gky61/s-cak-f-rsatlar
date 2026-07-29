@@ -300,16 +300,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   '🔗 URL: $_lastProcessedUrl',
                   style: const TextStyle(fontSize: 13, color: Colors.grey, fontStyle: FontStyle.italic),
                 ),
-              ],
-              const SizedBox(height: 12),
-              Text(
-                'Güvenli bir topluluk için sadece aşağıdaki desteklenen mağazalara ait geçerli ürün linkleri paylaşılabilir:\n\n'
-                '• Trendyol, Hepsiburada, Amazon TR, N11, Pazarama, Idefix, PttAVM\n'
-                '• Teknosa, MediaMarkt, Vatan Bilgisayar, İtopya, İncehesap\n'
-                '• Mavi, DeFacto, Zara, Mango, Beymen\n'
-                '• Migros, Getir, Havit',
-                style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.3),
-              ),
+              ]
             ],
           ),
           actions: [
@@ -1165,6 +1156,46 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                     ),
                   ),
 
+                // Otomatik Bilgi Alma Bilgilendirme Kutusu
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: isDark 
+                        ? const Color(0xFF1E293B).withOpacity(0.8) 
+                        : const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark 
+                          ? const Color(0xFF38BDF8).withOpacity(0.3) 
+                          : const Color(0xFFBFDBFE),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color(0xFF0284C7),
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Ürün linkini yapıştırdığınızda tüm bilgiler otomatik doldurulur. Boş kalan veya eksik verileri elle tamamlayabilirsiniz.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E3A8A),
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
                 // Ürün URL (En üstte olması daha iyi bir kullanıcı deneyimi sağlar)
                 TextFormField(
                   controller: _urlController,
@@ -1258,38 +1289,19 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             ),
             child: Row(
               children: [
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF6B35)),
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 180,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        width: 120,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ],
-                  ),
+                Container(
+                  width: 180,
+                  height: 16,
+                  color: Colors.white,
                 ),
               ],
             ),
@@ -1339,16 +1351,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          const SizedBox(height: 16),
-          // Image URL skeleton
-          Container(
-            height: 56,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          const SizedBox(height: 16),
           // Image preview box skeleton
           Container(
             height: 200,
@@ -1564,31 +1566,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Resim URL
-        TextFormField(
-          controller: _imageUrlController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'Resim Linki',
-            hintText: 'https://...',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            prefixIcon: const Icon(Icons.image),
-            suffixIcon: _isLoadingImage
-                ? const Padding(
-                    padding: EdgeInsets.all(12.0),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : null,
-          ),
-        ),
-        const SizedBox(height: 16),
-        
         // Görsel Önizleme
         if (_previewImageUrl != null || _isLoadingImage)
           Container(
