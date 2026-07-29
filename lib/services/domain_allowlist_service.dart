@@ -51,7 +51,6 @@ class DomainAllowlistService {
 
     final candidatePaths = [
       'assets/data/domain_allowlist_extended.json',
-      'assets/data/domain_allowlist.json',
     ];
 
     for (final path in candidatePaths) {

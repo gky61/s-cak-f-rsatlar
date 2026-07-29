@@ -3,9 +3,7 @@ const path = require('path');
 
 const candidatePaths = [
   path.join(__dirname, 'domain_allowlist_extended.json'),
-  path.join(__dirname, 'domain_allowlist.json'),
-  path.join(__dirname, '../assets/data/domain_allowlist_extended.json'),
-  path.join(__dirname, '../assets/data/domain_allowlist.json')
+  path.join(__dirname, '../assets/data/domain_allowlist_extended.json')
 ];
 
 let allowlistConfig = null;
