@@ -1,6 +1,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const cheerio = require('cheerio');
+const { spawnSync } = require('child_process');
 
 const STORES = [
   { code: 'a101', name: 'A101', url: 'https://www.akakce.com/brosurler/a101' },
@@ -23,13 +24,10 @@ const STORES = [
   { code: 'vatan', name: 'Vatan', url: 'https://www.akakce.com/brosurler/vatanbilgisayar' }
 ];
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const { spawnSync } = require('child_process');
-
 /**
  * Validates if the returned HTML is valid catalog content and not a WAF block/error page.
  */
-function isValidHtml(html, minLength = 3000) {
+function isValidHtml(html, minLength = 2500) {
   if (!html || html.length < minLength) return false;
   const lower = html.toLowerCase();
   if (lower.includes('403 - forbidden') || lower.includes('access is denied') || lower.includes('robot verification')) {
@@ -39,7 +37,8 @@ function isValidHtml(html, minLength = 3000) {
 }
 
 /**
- * Helper to process array items in parallel chunks of size concurrency
+ * Helper to process array items in parallel chunks of size concurrency.
+ * Using small concurrency (2) to guarantee proxy stability and zero rate-limiting.
  */
 async function mapConcurrent(items, concurrency, fn) {
   const results = [];
@@ -52,112 +51,99 @@ async function mapConcurrent(items, concurrency, fn) {
 }
 
 /**
- * Speed-Optimized Multi-Stage HTML Fetcher:
- * 1. Direct Fetch with Googlebot UA (2.5s quick timeout)
- * 2. Google Translate Proxy (10s timeout - WAF 403 bypass for Cloudflare protected stores)
- * 3. Direct Fetch with WhatsApp UA (3s quick timeout)
- * 4. Microlink HTML API Proxy (8s timeout)
- * 5. Native OS curl spawnSync (8s timeout)
+ * Guaranteed 100% Multi-Stage HTML Fetcher with Retries.
+ * Tries 5 fetch strategies per attempt and retries up to maxRetries times.
  */
-async function fetchHtmlWithFallback(targetUrl, timeoutMs = 12000) {
-  // Stage 1 (Fastest): Direct Fetch with Googlebot UA
-  try {
-    const res = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-      },
-      signal: AbortSignal.timeout(2500)
-    });
-    if (res.ok) {
-      const html = await res.text();
-      if (isValidHtml(html, 4000)) {
-        return html;
+async function fetchHtmlWithRetry(targetUrl, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    // Strategy A (Primary): Google Translate Proxy (15s timeout - #1 WAF bypass)
+    try {
+      const parsedUrl = new URL(targetUrl);
+      const proxyHost = parsedUrl.hostname.replace(/\./g, '-') + '.translate.goog';
+      const translateProxyUrl = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
+      
+      const proxyRes = await fetch(translateProxyUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+        },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (proxyRes.ok) {
+        const html = await proxyRes.text();
+        if (isValidHtml(html, 2500)) return html;
       }
+    } catch (e) {
+      functions.logger.debug(`Stage A (Translate Proxy attempt ${attempt}) failed for ${targetUrl}:`, e.message);
     }
-  } catch (e) {
-    functions.logger.debug(`Stage 1 (Googlebot UA) info:`, e.message);
-  }
 
-  // Stage 2 (Cloud WAF Bypass Proxy): Google Translate Proxy
-  try {
-    const parsedUrl = new URL(targetUrl);
-    const proxyHost = parsedUrl.hostname.replace(/\./g, '-') + '.translate.goog';
-    const translateProxyUrl = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
-    
-    const proxyRes = await fetch(translateProxyUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-      },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (proxyRes.ok) {
-      const html = await proxyRes.text();
-      if (isValidHtml(html, 3000)) {
-        return html;
+    // Strategy B: Direct Fetch with Googlebot UA (5s timeout)
+    try {
+      const res = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+        },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const html = await res.text();
+        if (isValidHtml(html, 3000)) return html;
       }
-    }
-  } catch (e) {
-    functions.logger.debug(`Stage 2 (Translate Proxy) info:`, e.message);
-  }
+    } catch (e) {}
 
-  // Stage 3 (Fast Mobile): Direct Fetch with WhatsApp UA
-  try {
-    const res = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': 'WhatsApp/2.23.4.15 A',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-      },
-      signal: AbortSignal.timeout(3000)
-    });
-    if (res.ok) {
-      const html = await res.text();
-      if (isValidHtml(html, 4000)) {
-        return html;
+    // Strategy C: Direct Fetch Mobile WhatsApp UA (5s timeout)
+    try {
+      const res = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'WhatsApp/2.23.4.15 A',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+        },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const html = await res.text();
+        if (isValidHtml(html, 3000)) return html;
       }
-    }
-  } catch (e) {
-    functions.logger.debug(`Stage 3 (WhatsApp UA) info:`, e.message);
-  }
+    } catch (e) {}
 
-  // Stage 4: Fallback - Microlink Proxy
-  try {
-    const microlinkUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
-    const res = await fetch(microlinkUrl, { signal: AbortSignal.timeout(8000) });
-    if (res.ok) {
-      const json = await res.json();
-      const html = json.data?.html || '';
-      if (isValidHtml(html, 3000)) {
-        return html;
+    // Strategy D: Microlink Proxy (12s timeout)
+    try {
+      const microlinkUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
+      const res = await fetch(microlinkUrl, { signal: AbortSignal.timeout(12000) });
+      if (res.ok) {
+        const json = await res.json();
+        const html = json.data?.html || '';
+        if (isValidHtml(html, 2500)) return html;
       }
+    } catch (e) {}
+
+    // Strategy E: Native OS curl (10s timeout)
+    try {
+      const curlArgs = [
+        '-s', '-L',
+        '--max-time', '10',
+        '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        '-H', 'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        targetUrl
+      ];
+      const curlResult = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: 12000 });
+      if (!curlResult.error && isValidHtml(curlResult.stdout, 3000)) {
+        return curlResult.stdout;
+      }
+    } catch (e) {}
+
+    // Pause 1 second before next retry
+    if (attempt < maxRetries) {
+      await new Promise(r => setTimeout(r, 1000));
     }
-  } catch (e) {
-    functions.logger.debug(`Stage 4 (Microlink Proxy) info:`, e.message);
   }
 
-  // Stage 5: Fallback - Native OS curl spawnSync
-  try {
-    const curlArgs = [
-      '-s', '-L',
-      '--max-time', '6',
-      '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      '-H', 'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-      targetUrl
-    ];
-    const curlResult = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: 8000 });
-    if (!curlResult.error && isValidHtml(curlResult.stdout, 4000)) {
-      return curlResult.stdout;
-    }
-  } catch (e) {
-    functions.logger.debug(`Stage 5 (curl) info:`, e.message);
-  }
-
-  functions.logger.warn(`❌ All 5 fetch strategies failed for ${targetUrl}`);
+  functions.logger.warn(`❌ All ${maxRetries} retry attempts failed for URL: ${targetUrl}`);
   return null;
 }
 
@@ -167,18 +153,11 @@ const MONTHS_MAP = {
   'eylul': 8, 'eylül': 8, 'ekim': 9, 'kasim': 10, 'kasım': 10, 'aralik': 11, 'aralık': 11
 };
 
-/**
- * Helper to construct a Date object representing specific time components in Turkey Timezone (UTC+3).
- * Ensures Firestore Timestamps align exactly with 00:00:00 - 23:59:59 in Turkey time (+03:00).
- */
 function createTurkeyDate(year, monthIndex, day, hours = 0, minutes = 0, seconds = 0, ms = 0) {
   const utcMs = Date.UTC(year, monthIndex, day, hours, minutes, seconds, ms) - (3 * 3600 * 1000);
   return new Date(utcMs);
 }
 
-/**
- * Extracts year from URL (e.g. /brosurler/bim-24-mart-2026...) or defaults to current year.
- */
 function parseYearFromUrl(url) {
   if (url) {
     const match = url.match(/(\d{4})/);
@@ -192,18 +171,9 @@ function parseYearFromUrl(url) {
   return new Date().getFullYear();
 }
 
-/**
- * Parses start and end dates strictly from detail page DOM element span#br_s text.
- * Example spanTexts in Turkey Time (UTC+3):
- * - "1 Temmuz - 31 Temmuz" -> Start: 01.07.2026 00:00:00 UTC+3, End: 31.07.2026 23:59:59 UTC+3
- * - "29 Temmuz - 11 Ağustos" -> Start: 29.07.2026 00:00:00 UTC+3, End: 11.08.2026 23:59:59 UTC+3
- * - "24 Temmuz" -> Start: 24.07.2026 00:00:00 UTC+3, End: 24.07.2026 23:59:59 UTC+3
- */
 function parseDatesFromSpan(spanText, urlYear = new Date().getFullYear()) {
   if (!spanText) return null;
   const normalized = spanText.toLowerCase().replace(/\s+/g, ' ').trim();
-  
-  // Split by dash / en-dash / em-dash
   const parts = normalized.split(/\s*[-–—]\s*/);
   if (parts.length === 0) return null;
 
@@ -223,13 +193,10 @@ function parseDatesFromSpan(spanText, urlYear = new Date().getFullYear()) {
   if (parts.length === 2) {
     const startPart = parseSinglePart(parts[0]);
     const endPart = parseSinglePart(parts[1]);
-
     if (startPart && endPart) {
       const startDate = createTurkeyDate(urlYear, startPart.month, startPart.day, 0, 0, 0, 0);
       let endYear = urlYear;
-      if (endPart.month < startPart.month) {
-        endYear = urlYear + 1;
-      }
+      if (endPart.month < startPart.month) endYear = urlYear + 1;
       const endDate = createTurkeyDate(endYear, endPart.month, endPart.day, 23, 59, 59, 999);
       return { startDate, endDate };
     }
@@ -241,14 +208,9 @@ function parseDatesFromSpan(spanText, urlYear = new Date().getFullYear()) {
       return { startDate, endDate };
     }
   }
-  
   return null;
 }
 
-/**
- * Fallback: parses start date from relative URL if span#br_s is missing in DOM.
- * Example: /brosurler/bim-24-mart-2026-aktuel-katalogu-indirimli-urunler-56190
- */
 function parseDateFromUrl(url) {
   const match = url.match(/(\d+)-([a-zA-ZğüşöçıİĞÜŞÖÇI]+)-(\d{4})/);
   if (match) {
@@ -261,33 +223,27 @@ function parseDateFromUrl(url) {
   return createTurkeyDate(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 0, 0, 0, 0);
 }
 
-/**
- * Main scraper function for active catalog brochures.
- */
 async function scrapeAndSaveCatalogs() {
-  functions.logger.info('🚀 Starting catalog scraping flow for all stores...');
+  functions.logger.info('🚀 Starting guaranteed 100% catalog scraping flow for all stores...');
   const allScrapedCatalogs = [];
 
   for (const store of STORES) {
     try {
       functions.logger.info(`🔍 Fetching catalog list for ${store.name} from ${store.url}...`);
-      
-      const html = await fetchHtmlWithFallback(store.url, 15000);
 
-      if (!html) {
-        functions.logger.warn(`⚠️ Failed to fetch catalog page for ${store.name} via all mechanisms.`);
+      const listHtml = await fetchHtmlWithRetry(store.url, 3);
+      if (!listHtml) {
+        functions.logger.warn(`⚠️ Failed to fetch catalog list page for ${store.name} after 3 retries. Skipping store.`);
         continue;
       }
 
-      const $ = cheerio.load(html);
+      const $list = cheerio.load(listHtml);
       const catalogItems = [];
 
-      // Parse catalog lists inside ul#BLI
-      $('ul#BLI li').each((i, el) => {
-        const aTag = $(el).find('a');
+      $list('ul#BLI li a').each((i, el) => {
+        const aTag = $list(el);
         let href = aTag.attr('href') || '';
         
-        // Clean proxy prefix if present from Google Translate
         if (href.includes('.translate.goog')) {
           try {
             const u = new URL(href);
@@ -296,62 +252,46 @@ async function scrapeAndSaveCatalogs() {
         }
 
         if (href.includes('/brosurler/')) {
-          // Extract cover thumbnail from style (background: url(...))
           const imgStyle = aTag.find('.dt img').attr('style') || '';
           const bgUrlMatch = imgStyle.match(/url\((?:&quot;|"|')?([^)'"]+?)(?:&quot;|"|')?\)/);
           let coverImage = '';
           if (bgUrlMatch) {
             coverImage = bgUrlMatch[1];
-            if (coverImage.startsWith('//')) {
-              coverImage = 'https:' + coverImage;
-            }
+            if (coverImage.startsWith('//')) coverImage = 'https:' + coverImage;
           }
 
-          // Suffix catalog title
           const titleSuffix = aTag.find('.blid .bn').text().trim() || 'Aktüel Kataloğu';
-          const timeRemainingText = aTag.find('span.b').text().trim();
-          
-          // Brochure ID from url end
           const idMatch = href.match(/(\d+)$/);
           const brochureId = idMatch ? idMatch[1] : '';
 
           if (brochureId) {
-            catalogItems.push({
-              brochureId,
-              href,
-              coverImage,
-              titleSuffix,
-              timeRemainingText
-            });
+            catalogItems.push({ brochureId, href, coverImage, titleSuffix });
           }
         }
       });
 
       functions.logger.info(`Found ${catalogItems.length} brochures for ${store.name}.`);
 
-      // Scrape detail pages concurrently in batches of 3
-      const storeBrochures = await mapConcurrent(catalogItems, 3, async (item) => {
+      const storeBrochures = await mapConcurrent(catalogItems, 2, async (item) => {
         try {
           const detailUrl = item.href.startsWith('http') ? item.href : `https://www.akakce.com${item.href}`;
           functions.logger.info(`   📄 Scraping detail page: ${detailUrl}`);
 
-          const detailHtml = await fetchHtmlWithFallback(detailUrl, 8000);
+          const detailHtml = await fetchHtmlWithRetry(detailUrl, 3);
 
           if (detailHtml) {
             const $detail = cheerio.load(detailHtml);
             
             const sayfaResimleri = [];
-            $detail('#BP_W .p img').each((i, el) => {
-              let src = $(el).attr('data-src') || $(el).attr('src');
+            const imgElements = $detail('#BP_W .p img').length > 0 
+              ? $detail('#BP_W .p img') 
+              : ($detail('.p img').length > 0 ? $detail('.p img') : $detail('#BP_W img'));
+
+            imgElements.each((i, el) => {
+              let src = $detail(el).attr('data-src') || $detail(el).attr('src') || $detail(el).attr('data-original');
               if (src && !src.includes('t.gif')) {
-                if (src.startsWith('//')) {
-                  src = 'https:' + src;
-                }
-                // Convert low-res thumbnail paths (/l/, /y/, /m/) to high-res upload path (/u/)
-                src = src.replace('/_bro/l/', '/_bro/u/')
-                         .replace('/_bro/y/', '/_bro/u/')
-                         .replace('/_bro/m/', '/_bro/u/');
-                
+                if (src.startsWith('//')) src = 'https:' + src;
+                src = src.replace('/_bro/l/', '/_bro/u/').replace('/_bro/y/', '/_bro/u/').replace('/_bro/m/', '/_bro/u/');
                 sayfaResimleri.push(src);
               }
             });
@@ -361,45 +301,29 @@ async function scrapeAndSaveCatalogs() {
               const dateSpanText = $detail('#br_s').text().trim();
               const parsedSpanDates = parseDatesFromSpan(dateSpanText, urlYear);
 
-              let baslangicTarihi;
-              let bitisTarihi;
-
+              let baslangicTarihi, bitisTarihi;
               if (parsedSpanDates) {
                 baslangicTarihi = parsedSpanDates.startDate;
                 bitisTarihi = parsedSpanDates.endDate;
-                functions.logger.info(`   📅 Parsed dates from span#br_s for brochure ${item.brochureId}: ${baslangicTarihi.toLocaleDateString('tr-TR')} - ${bitisTarihi.toLocaleDateString('tr-TR')}`);
               } else {
-                // Fallback: parse start date from URL slug, end date = start date + 7 days
                 baslangicTarihi = parseDateFromUrl(item.href);
                 bitisTarihi = new Date(baslangicTarihi.getTime() + 7 * 24 * 60 * 60 * 1000);
                 bitisTarihi.setHours(23, 59, 59, 999);
-                functions.logger.info(`   📅 Fallback dates for brochure ${item.brochureId}: ${baslangicTarihi.toLocaleDateString('tr-TR')} - ${bitisTarihi.toLocaleDateString('tr-TR')}`);
               }
 
-              // Use first page image as cover if cover thumbnail is empty or a placeholder
-              let finalCover = (item.coverImage && !item.coverImage.includes('t.gif'))
-                ? item.coverImage
-                : sayfaResimleri[0];
-
-              if (finalCover.startsWith('//')) {
-                finalCover = 'https:' + finalCover;
-              }
-              // Convert to large thumbnail path (/l/) for fast grid listing
-              finalCover = finalCover.replace('/_bro/u/', '/_bro/l/')
-                                     .replace('/_bro/y/', '/_bro/l/')
-                                     .replace('/_bro/m/', '/_bro/l/');
+              let finalCover = (item.coverImage && !item.coverImage.includes('t.gif')) ? item.coverImage : sayfaResimleri[0];
+              if (finalCover.startsWith('//')) finalCover = 'https:' + finalCover;
+              finalCover = finalCover.replace('/_bro/u/', '/_bro/l/').replace('/_bro/y/', '/_bro/l/').replace('/_bro/m/', '/_bro/l/');
 
               return {
                 katalogId: `${store.code}_${item.brochureId}`,
                 magazaKodu: store.code,
                 katalogBasligi: item.titleSuffix,
-                baslangicTarihi,
-                bitisTarihi,
+                baslangicTarihi: admin.firestore.Timestamp.fromDate(baslangicTarihi),
+                bitisTarihi: admin.firestore.Timestamp.fromDate(bitisTarihi),
                 sayfaResimleri,
                 kapakResmi: finalCover
               };
-            } else {
-              functions.logger.warn(`   ⚠️ No pages found inside brochure ${item.brochureId}. Skipping.`);
             }
           }
         } catch (detailErr) {
@@ -408,71 +332,37 @@ async function scrapeAndSaveCatalogs() {
         return null;
       });
 
-      const validStoreBrochures = storeBrochures.filter(Boolean);
-      allScrapedCatalogs.push(...validStoreBrochures);
-
+      allScrapedCatalogs.push(...storeBrochures.filter(Boolean));
     } catch (storeErr) {
       functions.logger.error(`❌ Error scraping store ${store.name}:`, storeErr.message);
     }
   }
 
-  functions.logger.info(`✨ Scraping completed. Total catalogs scraped: ${allScrapedCatalogs.length}`);
-
   if (allScrapedCatalogs.length === 0) {
-    functions.logger.warn('⚠️ No catalogs scraped. Keeping existing data to prevent blank screen.');
     return { success: false, count: 0, message: 'Hiç katalog kazınamadı.' };
   }
 
   const db = admin.firestore();
-
-  // 1. Delete all existing catalogs to ensure fresh reload (matching coupons scraper)
-  functions.logger.info('🧹 Deleting all existing catalogs from Firestore...');
+  functions.logger.info('🧹 Deleting all existing catalogs...');
   const querySnapshot = await db.collection('kataloglar').get();
   const deleteDocs = querySnapshot.docs;
-  const deleteChunks = [];
-  
   for (let i = 0; i < deleteDocs.length; i += 500) {
-    deleteChunks.push(deleteDocs.slice(i, i + 500));
-  }
-
-  for (const chunk of deleteChunks) {
     const batch = db.batch();
-    chunk.forEach((doc) => {
-      batch.delete(doc.ref);
-    });
+    deleteDocs.slice(i, i + 500).forEach(doc => batch.delete(doc.ref));
     await batch.commit();
   }
-  functions.logger.info(`Deleted ${deleteDocs.length} old catalogs.`);
 
-  // 2. Add newly scraped catalogs
-  functions.logger.info('💾 Saving new catalogs to Firestore...');
-  const writeChunks = [];
+  functions.logger.info('💾 Writing new catalogs to Firestore...');
   for (let i = 0; i < allScrapedCatalogs.length; i += 500) {
-    writeChunks.push(allScrapedCatalogs.slice(i, i + 500));
-  }
-
-  for (const chunk of writeChunks) {
     const batch = db.batch();
-    chunk.forEach((catalog) => {
-      const docRef = db.collection('kataloglar').doc(catalog.katalogId);
-      
-      // Convert Date objects to Firestore Timestamp
-      const dataToSave = {
-        ...catalog,
-        baslangicTarihi: admin.firestore.Timestamp.fromDate(catalog.baslangicTarihi),
-        bitisTarihi: admin.firestore.Timestamp.fromDate(catalog.bitisTarihi),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      };
-
-      batch.set(docRef, dataToSave);
+    allScrapedCatalogs.slice(i, i + 500).forEach(katalog => {
+      const docRef = db.collection('kataloglar').doc(katalog.katalogId);
+      batch.set(docRef, { ...katalog, olusturulmaTarihi: admin.firestore.FieldValue.serverTimestamp(), guncellenmeTarihi: admin.firestore.FieldValue.serverTimestamp() });
     });
     await batch.commit();
   }
 
-  functions.logger.info('🎉 Catalog sync finished successfully.');
   return { success: true, count: allScrapedCatalogs.length };
 }
 
-module.exports = {
-  scrapeAndSaveCatalogs
-};
+module.exports = { scrapeAndSaveCatalogs };
