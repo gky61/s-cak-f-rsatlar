@@ -1,13 +1,29 @@
 const fs = require('fs');
 const path = require('path');
 
+const candidatePaths = [
+  path.join(__dirname, 'domain_allowlist_extended.json'),
+  path.join(__dirname, 'domain_allowlist.json'),
+  path.join(__dirname, '../assets/data/domain_allowlist_extended.json'),
+  path.join(__dirname, '../assets/data/domain_allowlist.json')
+];
+
 let allowlistConfig = null;
-try {
-  const jsonPath = path.join(__dirname, 'domain_allowlist.json');
-  const rawData = fs.readFileSync(jsonPath, 'utf8');
-  allowlistConfig = JSON.parse(rawData);
-} catch (err) {
-  console.error('⚠️ domain_allowlist.json okunamadı, fallback değerler kullanılıyor:', err.message);
+for (const p of candidatePaths) {
+  try {
+    if (fs.existsSync(p)) {
+      const rawData = fs.readFileSync(p, 'utf8');
+      allowlistConfig = JSON.parse(rawData);
+      console.log(`✅ Domain Allowlist dinamik olarak yüklendi: ${p} (${Object.keys(allowlistConfig.stores || {}).length} mağaza)`);
+      break;
+    }
+  } catch (err) {
+    console.warn(`⚠️ Allowlist dosyası okunamadı (${p}): ${err.message}`);
+  }
+}
+
+if (!allowlistConfig || !allowlistConfig.stores) {
+  console.error('⚠️ Hiçbir domain allowlist JSON dosyası okunamadı, 20 mağazalık varsayılan fallback kullanılıyor.');
   allowlistConfig = {
     stores: {
       "trendyol": ["trendyol.com"],
