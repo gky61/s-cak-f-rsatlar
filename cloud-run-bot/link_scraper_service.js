@@ -156,18 +156,22 @@ async function resolveUrlRedirects(url) {
 
   // Aşama 1: Manuel yönlendirme takibi (redirect: 'manual').
   // hb.biz / Adjust (7t4g.adj.st) gibi kısa linkler 301/302 dönüp Location header'ında adj_fallback parametresi içerir.
-  // Otomatik follow yapıldığında 7t4g.adj.st Cloud/Datacenter IP'lere 403 döndüğü için yönlendirme kilitlenir.
+  // Akamai WAF Cloud/Datacenter IP'lerde Desktop Chrome UA'lara 403 döndüğü için Hepsiburada Mobil / WhatsApp UA kullanılır.
   try {
     console.log(`[RESOLVE-REDIRECT] 🔗 Yönlendirme manuel çözülüyor: ${targetUrl}`);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
 
+    const uaToUse = lowerUrl.includes('hb.biz') || lowerUrl.includes('hepsiburada')
+      ? 'Hepsiburada/5.12.0 (iPhone; iOS 17.4.1; Scale/3.00)'
+      : 'WhatsApp/2.23.4.15 A';
+
     const manualRes = await fetch(targetUrl, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+        'User-Agent': uaToUse,
+        'Accept': '*/*',
+        'Accept-Language': 'tr-TR,tr;q=0.9'
       },
       redirect: 'manual',
       signal: controller.signal
@@ -187,7 +191,40 @@ async function resolveUrlRedirects(url) {
       }
     }
   } catch (err) {
-    console.warn(`[RESOLVE-REDIRECT] ⚠️ Manuel redirect çözme hatası (${err.message}), standart akışa geçiliyor...`);
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ Manuel fetch redirect çözme hatası (${err.message}), curl fallback deneniyor...`);
+  }
+
+  // Aşama 1.5: curl (Mobile / WhatsApp UA) ile Location başlığını çekme
+  try {
+    const uaToUse = lowerUrl.includes('hb.biz') || lowerUrl.includes('hepsiburada')
+      ? 'Hepsiburada/5.12.0 (iPhone; iOS 17.4.1; Scale/3.00)'
+      : 'WhatsApp/2.23.4.15 A';
+
+    const curlArgs = [
+      '-sI',
+      '-H', `User-Agent: ${uaToUse}`,
+      '-H', 'Accept: */*',
+      '--max-time', '6',
+      targetUrl
+    ];
+    const curlRes = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: 8000 });
+    if (!curlRes.error && curlRes.stdout) {
+      const locMatch = curlRes.stdout.match(/location:\s*(https?:\/\/[^\s\r\n]+)/i);
+      if (locMatch && locMatch[1]) {
+        const loc = locMatch[1];
+        console.log(`[RESOLVE-REDIRECT] 📍 curl ile Location header yakalandı: ${loc}`);
+        const fallbackUrl = extractAdjustFallback(loc);
+        if (fallbackUrl && fallbackUrl !== loc && fallbackUrl.startsWith('http')) {
+          console.log(`[RESOLVE-REDIRECT] ✅ Adjust fallback URL başarıyla çıkarıldı: ${fallbackUrl}`);
+          return fallbackUrl;
+        }
+        if (loc.startsWith('http') && loc !== targetUrl) {
+          return await resolveUrlRedirects(loc);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ curl redirect çözme hatası: ${err.message}`);
   }
 
   // Aşama 2: Standart follow akışı (Fallback)
