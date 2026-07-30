@@ -168,6 +168,9 @@ python cloud-run-bot/deploy_to_vm.py prod
 # Doğrudan VM İçi Docker Build ile Deployment (Cloud Build Bypass / Billing Askı durumunda)
 python cloud-run-bot/deploy_direct_vm.py dev
 python cloud-run-bot/deploy_direct_vm.py prod
+
+# VM Temizlik ve Bellek/Disk Optimizasyonu (Tek Komutla Manuel Temizlik)
+python cloud-run-bot/clean_vm.py
 ```
 
 ### Sanal Makineye SSH ile Bağlanma:
