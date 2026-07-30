@@ -154,8 +154,45 @@ async function resolveUrlRedirects(url) {
 
   if (!isShortOrRedirect) return targetUrl;
 
+  // Aşama 1: Manuel yönlendirme takibi (redirect: 'manual').
+  // hb.biz / Adjust (7t4g.adj.st) gibi kısa linkler 301/302 dönüp Location header'ında adj_fallback parametresi içerir.
+  // Otomatik follow yapıldığında 7t4g.adj.st Cloud/Datacenter IP'lere 403 döndüğü için yönlendirme kilitlenir.
   try {
-    console.log(`[RESOLVE-REDIRECT] 🔗 Yönlendirme çözülüyor: ${targetUrl}`);
+    console.log(`[RESOLVE-REDIRECT] 🔗 Yönlendirme manuel çözülüyor: ${targetUrl}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const manualRes = await fetch(targetUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+      },
+      redirect: 'manual',
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    const locationHeader = manualRes.headers.get('location');
+    if (locationHeader) {
+      console.log(`[RESOLVE-REDIRECT] 📍 Location header yakalandı: ${locationHeader}`);
+      const fallbackUrl = extractAdjustFallback(locationHeader);
+      if (fallbackUrl && fallbackUrl !== locationHeader && fallbackUrl.startsWith('http')) {
+        console.log(`[RESOLVE-REDIRECT] ✅ Adjust fallback URL başarıyla çıkarıldı: ${fallbackUrl}`);
+        return fallbackUrl;
+      }
+      if (locationHeader.startsWith('http') && locationHeader !== targetUrl) {
+        return await resolveUrlRedirects(locationHeader);
+      }
+    }
+  } catch (err) {
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ Manuel redirect çözme hatası (${err.message}), standart akışa geçiliyor...`);
+  }
+
+  // Aşama 2: Standart follow akışı (Fallback)
+  try {
+    console.log(`[RESOLVE-REDIRECT] 🔗 Standart yönlendirme çözülüyor: ${targetUrl}`);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
@@ -164,7 +201,6 @@ async function resolveUrlRedirects(url) {
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
     };
-    console.log(`[RESOLVE-REDIRECT] Giden User-Agent: "${headers['User-Agent']}"`);
 
     const response = await fetch(targetUrl, {
       method: 'GET',
@@ -178,7 +214,6 @@ async function resolveUrlRedirects(url) {
 
     let resolvedUrl = response.url || targetUrl;
 
-    // Eğer HTTP yanıtı 403 Forbidden ve kısa link ise (Örn: hb.biz Akamai WAF), Microlink fallback deneyerek çöz
     if (response.status === 403 || isBotBlocked(resolvedUrl)) {
       console.warn(`[RESOLVE-REDIRECT] ⚠️ Direct fetch 403/WAF döndü (${targetUrl}). Microlink API fallback ile çözülüyor...`);
       try {
@@ -198,7 +233,6 @@ async function resolveUrlRedirects(url) {
     }
 
     resolvedUrl = extractAdjustFallback(resolvedUrl);
-
     return resolvedUrl;
   } catch (err) {
     console.warn(`[RESOLVE-REDIRECT] ⚠️ Yönlendirme çözülemedi (${err.message}), Microlink fallback deneniyor...`);
