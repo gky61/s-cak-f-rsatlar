@@ -5,7 +5,7 @@
 
 const { TelegramClient } = require('telegram');
 const { StringSession } = require('telegram/sessions');
-const { NewMessage, EditedMessage } = require('telegram/events');
+const { NewMessage } = require('telegram/events');
 const { Api } = require('telegram/tl');
 const admin = require('firebase-admin');
 const { spawnSync } = require('child_process');
@@ -1262,7 +1262,6 @@ async function subscribeToChannels() {
   };
 
   client.addEventHandler(handleTelegramMessageEvent, new NewMessage({}));
-  client.addEventHandler(handleTelegramMessageEvent, new EditedMessage({}));
 
   try {
     const statusRef = db.collection('settings').doc('telegramBot');
