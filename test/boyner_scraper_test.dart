@@ -117,5 +117,40 @@ void main() {
       final ratingCount = await scraper.scrapeRatingCount(document);
       expect(ratingCount, equals(30));
     });
+
+    test('Product #4 (Fabrika Polo T-Shirt) - Should scrape title, brand, prices and ratings (4.5/17) correctly', () async {
+      final file = File('scratch/boyner_4.html');
+      if (!file.existsSync()) return;
+      final html = await file.readAsString();
+      final document = html_parser.parse(html);
+      const url = 'https://www.boyner.com.tr/siyah-erkek-100-pamuk-polo-t-shirt-nobro-cepsiz-nb-p-15784597?magaza=boyner';
+
+      final image = scraper.scrape(
+        document: document,
+        url: url,
+        isLogoUrl: (u) => u.contains('logo'),
+        resolveImageUrl: (img, p) => img,
+        log: (_) {},
+      );
+      expect(image, isNotNull);
+
+      final title = scraper.scrapeTitle(document);
+      expect(title, contains('Polo T-Shirt'));
+
+      final brand = scraper.scrapeBrand(document);
+      expect(brand, equals('Fabrika'));
+
+      final price = await scraper.scrapePrice(document);
+      expect(price, equals(649.95));
+
+      final originalPrice = await scraper.scrapeOriginalPrice(document, price);
+      expect(originalPrice, equals(1399.0));
+
+      final ratingValue = await scraper.scrapeRatingValue(document);
+      expect(ratingValue, equals(4.5));
+
+      final ratingCount = await scraper.scrapeRatingCount(document);
+      expect(ratingCount, equals(17));
+    });
   });
 }

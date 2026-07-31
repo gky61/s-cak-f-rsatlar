@@ -100,14 +100,72 @@ class BoynerScraper extends BaseProductScraper {
   }
 
   scrapeRating($) {
-    const product = this.findProductJsonLd($);
-    if (product) {
-      const rating = this.extractRatingFromProductJson(product);
-      if (rating && (rating.ratingValue != null || rating.ratingCount != null)) {
-        return rating;
+    // 1. Check JSON-LD blocks recursively for aggregateRating
+    const jsonLdRating = this.findRatingFromJsonLd($);
+    if (jsonLdRating && (jsonLdRating.ratingValue != null || jsonLdRating.ratingCount != null)) {
+      return jsonLdRating;
+    }
+
+    // 2. Script/JSON payload regex search (ProductRating, TotalReviewCount, ReviewCount)
+    const html = $.html();
+    const ratingValueMatch = html.match(/"ProductRating"\s*:\s*(\d+(?:\.\d+)?)/i) ||
+                             html.match(/"ratingValue"\s*:\s*(\d+(?:\.\d+)?)/i);
+    const ratingCountMatch = html.match(/"TotalReviewCount"\s*:\s*(\d+)/i) ||
+                             html.match(/"ReviewCount"\s*:\s*(\d+)/i) ||
+                             html.match(/"ratingCount"\s*:\s*(\d+)/i);
+
+    const ratingValue = ratingValueMatch ? parseFloat(ratingValueMatch[1]) : null;
+    const ratingCount = ratingCountMatch ? parseInt(ratingCountMatch[1]) : null;
+
+    if (!isNaN(ratingValue) || !isNaN(ratingCount)) {
+      return {
+        ratingValue: !isNaN(ratingValue) ? ratingValue : null,
+        ratingCount: !isNaN(ratingCount) ? ratingCount : null,
+      };
+    }
+
+    return { ratingValue: null, ratingCount: null };
+  }
+
+  findRatingFromJsonLd($) {
+    const scripts = $('script[type="application/ld+json"]');
+    for (let i = 0; i < scripts.length; i++) {
+      try {
+        const text = $(scripts[i]).text() || '';
+        const sanitized = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ');
+        const data = JSON.parse(sanitized);
+        const rating = this._searchRatingInJson(data);
+        if (rating) return rating;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  _searchRatingInJson(json) {
+    if (json && typeof json === 'object' && !Array.isArray(json)) {
+      if (json['aggregateRating'] && typeof json['aggregateRating'] === 'object') {
+        const r = this.extractRatingFromProductJson(json);
+        if (r && (r.ratingValue != null || r.ratingCount != null)) return r;
+      }
+      if (Array.isArray(json['@graph'])) {
+        for (const item of json['@graph']) {
+          const res = this._searchRatingInJson(item);
+          if (res) return res;
+        }
+      }
+      for (const val of Object.values(json)) {
+        if (val && typeof val === 'object') {
+          const res = this._searchRatingInJson(val);
+          if (res) return res;
+        }
+      }
+    } else if (Array.isArray(json)) {
+      for (const item of json) {
+        const res = this._searchRatingInJson(item);
+        if (res) return res;
       }
     }
-    return { ratingValue: null, ratingCount: null };
+    return null;
   }
 
   scrapeImage($, url) {

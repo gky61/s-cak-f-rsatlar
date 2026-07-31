@@ -17,7 +17,6 @@ describe('BoynerScraper Tests', () => {
     if (!fs.existsSync(htmlPath)) return;
     const html = fs.readFileSync(htmlPath, 'utf-8');
     const $ = cheerio.load(html);
-    const url = 'https://www.boyner.com.tr/tommy-hilfiger-tas-kadin-omuz-cantasi-aw0aw18463aep-p-15891128?magaza=boyner';
 
     expect(scraper.scrapeTitle($)).toContain('Tommy Hilfiger');
     expect(scraper.scrapeBrand($)).toBe('Tommy Hilfiger');
@@ -35,7 +34,6 @@ describe('BoynerScraper Tests', () => {
     if (!fs.existsSync(htmlPath)) return;
     const html = fs.readFileSync(htmlPath, 'utf-8');
     const $ = cheerio.load(html);
-    const url = 'https://www.boyner.com.tr/armani-stronger-with-you-intensely-edp-100-ml-erkek-parfum-p-797957?magaza=boyner';
 
     expect(scraper.scrapeTitle($)).toContain('Armani');
     expect(scraper.scrapeBrand($)).toBe('Armani');
@@ -53,7 +51,6 @@ describe('BoynerScraper Tests', () => {
     if (!fs.existsSync(htmlPath)) return;
     const html = fs.readFileSync(htmlPath, 'utf-8');
     const $ = cheerio.load(html);
-    const url = 'https://www.boyner.com.tr/new-balance-530-mr530sg-nb-beyaz-mavi-kadin-lifestyle-ayakkabi-p-1755886?magaza=boyner';
 
     expect(scraper.scrapeTitle($)).toContain('New Balance');
     expect(scraper.scrapeBrand($)).toBe('New Balance');
@@ -64,5 +61,22 @@ describe('BoynerScraper Tests', () => {
     const rating = scraper.scrapeRating($);
     expect(rating.ratingValue).toBe(3.9);
     expect(rating.ratingCount).toBe(30);
+  });
+
+  test('Product #4 (Fabrika Polo T-Shirt) - Should scrape title, brand, prices and ratings (4.5/17) correctly', () => {
+    const htmlPath = path.join(__dirname, '../../scratch/boyner_4.html');
+    if (!fs.existsSync(htmlPath)) return;
+    const html = fs.readFileSync(htmlPath, 'utf-8');
+    const $ = cheerio.load(html);
+
+    expect(scraper.scrapeTitle($)).toContain('Polo T-Shirt');
+    expect(scraper.scrapeBrand($)).toBe('Fabrika');
+    const price = scraper.scrapePrice($);
+    expect(price).toBe(649.95);
+    const originalPrice = scraper.scrapeOriginalPrice($, price);
+    expect(originalPrice).toBe(1399);
+    const rating = scraper.scrapeRating($);
+    expect(rating.ratingValue).toBe(4.5);
+    expect(rating.ratingCount).toBe(17);
   });
 });

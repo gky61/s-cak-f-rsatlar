@@ -157,23 +157,92 @@ class BoynerScraper extends BaseProductScraper {
 
   @override
   FutureOr<double?> scrapeRatingValue(dom.Document document) {
-    final productJson = findProductJsonLd(document);
-    if (productJson != null) {
-      final rating = extractRatingFromProductJson(productJson);
-      if (rating != null && rating['ratingValue'] != null) {
-        return (rating['ratingValue'] as num).toDouble();
+    // 1. Check all JSON-LD blocks for aggregateRating
+    final jsonLdRating = _findRatingFromJsonLd(document);
+    if (jsonLdRating != null && jsonLdRating['ratingValue'] != null) {
+      return (jsonLdRating['ratingValue'] as num).toDouble();
+    }
+
+    // 2. Script/JSON payload regex search
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      final match = RegExp(r'"ProductRating"\s*:\s*(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(text) ??
+                    RegExp(r'"ratingValue"\s*:\s*(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(text);
+      if (match != null) {
+        final val = double.tryParse(match.group(1)!);
+        if (val != null && val > 0) return val;
       }
     }
+
     return null;
   }
 
   @override
   FutureOr<int?> scrapeRatingCount(dom.Document document) {
-    final productJson = findProductJsonLd(document);
-    if (productJson != null) {
-      final rating = extractRatingFromProductJson(productJson);
-      if (rating != null && rating['ratingCount'] != null) {
-        return (rating['ratingCount'] as num).toInt();
+    // 1. Check all JSON-LD blocks for aggregateRating
+    final jsonLdRating = _findRatingFromJsonLd(document);
+    if (jsonLdRating != null && jsonLdRating['ratingCount'] != null) {
+      return (jsonLdRating['ratingCount'] as num).toInt();
+    }
+
+    // 2. Script/JSON payload regex search
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      final match = RegExp(r'"TotalReviewCount"\s*:\s*(\d+)', caseSensitive: false).firstMatch(text) ??
+                    RegExp(r'"ReviewCount"\s*:\s*(\d+)', caseSensitive: false).firstMatch(text) ??
+                    RegExp(r'"ratingCount"\s*:\s*(\d+)', caseSensitive: false).firstMatch(text);
+      if (match != null) {
+        final val = int.tryParse(match.group(1)!);
+        if (val != null && val > 0) return val;
+      }
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _findRatingFromJsonLd(dom.Document document) {
+    final scripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (final script in scripts) {
+      try {
+        final sanitizedText = script.text
+            .replaceAll('\r\n', ' ')
+            .replaceAll('\n', ' ')
+            .replaceAll('\r', ' ')
+            .replaceAll('\t', ' ');
+        final data = jsonDecode(sanitizedText);
+        final rating = _searchRatingInJson(data);
+        if (rating != null) return rating;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _searchRatingInJson(dynamic json) {
+    if (json is Map) {
+      if (json['aggregateRating'] is Map) {
+        final r = extractRatingFromProductJson(Map<String, dynamic>.from(json));
+        if (r != null && (r['ratingValue'] != null || r['ratingCount'] != null)) {
+          return r;
+        }
+      }
+      if (json['@graph'] is List) {
+        for (final item in json['@graph'] as List) {
+          final res = _searchRatingInJson(item);
+          if (res != null) return res;
+        }
+      }
+      for (final value in json.values) {
+        if (value is Map || value is List) {
+          final res = _searchRatingInJson(value);
+          if (res != null) return res;
+        }
+      }
+    } else if (json is List) {
+      for (final item in json) {
+        final res = _searchRatingInJson(item);
+        if (res != null) return res;
       }
     }
     return null;
