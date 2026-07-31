@@ -111,6 +111,15 @@ E-ticaret siteleri bulut IP bloklarından (GCP/AWS) gelen bot isteklerini sert g
 *   **Doküman ID:** Otomatik üretilir.
 *   **Alanlar:** `userId` (String), `keyword` (String - küçük harfe normalize edilmiş), `createdAt` (Timestamp).
 
+### 4. `settings` Koleksiyonu
+*   **`settings/telegramBot` Dokümanı:**
+    *   `botEnabled` (Boolean): Botun mesaj işleme aktiflik durumu.
+    *   `monitoredChannels` (Array of Strings): Botun dinlediği kanalların listesi (Örn: `['@indirimkaplani', '-3423704050', '@firsattayfa']`). Web Admin Panelinden dinamik olarak yönetilir.
+    *   `monitoredChannelsMeta` (Array of Maps): Dinlenen kanalların canlı metadataları (`input`, `title`, `username`, `id`, `subscribers`, `type`, `isPublic`, `status`).
+    *   `lastHeartbeatAt` (Timestamp), `msgCount`, `dealCount`, `dupCount`, `errCount`.
+*   **`settings/app` Dokümanı:**
+    *   `dealApprovalRequired` (Boolean): Fırsatların otomatik onaylanma veya editör onayına düşme kuralı.
+
 ---
 
 ## 🚀 6. Canlıya Alma ve Güncelleme İş Akışları (Deployment Pipelines)
@@ -227,4 +236,29 @@ Sistemde yeni bir link paylaşıldığında veritabanı taranır:
 ### UX Davranışı (Mobil):
 - Mobil uygulamadan mükerrer aktif paylaşım yapılmaya çalışıldığında kullanıcı engellenir ve ekranda özel bir diyalog penceresi açılır. Kullanıcıya **"Fırsata Git"** butonu sunularak doğrudan mevcut aktif fırsatın detay sayfasına yönlendirilmesi sağlanır.
 - Telegram botu ise aktif mükerrer linkleri sessizce konsola loglayarak atlar.
+
+---
+
+## 📡 10. Dinamik Telegram Kanal Yönetimi ve Olay Filtreleme Mimarisi
+
+Botun kanal dinleme altyapısı statik `.env` konfigürasyonlarından tamamen bağımsız, veritabanı merkezli dinamik bir mimariye geçirilmiştir:
+
+### 1. Firestore-First Açılış Stratejisi (`loadChannelsFromFirestore`):
+- Bot sunucuda ayağa kalktığında ilk iş Firestore `settings/telegramBot` dokümanından `monitoredChannels` dizisini okur.
+- Firestore'da kayıtlı kanallar varsa bot bu kanallarla başlar. Yalnızca Firestore bomboşsa yedek (fallback) tohum veri olarak `.env` dosyasındaki kanalları çeker.
+- Bu sayede bot restart veya redeploy olduğunda Web Admin Panelinden eklenen kanallar asla kaybolmaz.
+
+### 2. Canlı Dinleme ve Real-Time Senkronizasyon (`onSnapshot`):
+- Bot Firestore üzerindeki `settings/telegramBot` dokümanını canlı dinler (`onSnapshot`).
+- Yönetici Web Admin Paneli üzerinden yeni bir kanal eklediğinde veya sildiğinde bot re-restart gerekmeden arka planda dinlediği kanalları canlı olarak günceller (`subscribeToChannels()`).
+
+### 3. Normalleştirilmiş ID Eşleştirme ve Event Filtering (`cleanChatId`):
+- GramJS kütüphanesinde Telegram, dahili olaylarda (`NewMessage`) kanal ID'lerini `-100` önekiyle iletir (`-1001475141973`).
+- Eşleşmeyen ID sorunlarını %100 önlemek için gelen mesajın sohbet ID'si `cleanChatId` (`-100` ve `-` öneklerinden arındırılmış string) formatına indirgenir.
+- Tek bir genel `NewMessage({})` event handler'ı üzerinden dinamik `monitoredMap` haritalaması yapılarak hem kamuya açık `@username` kanalları hem de özel kanallar kesintisiz ve firesiz dinlenir.
+
+### 4. Abone/Katılımcı Sayısı ve Metadata Zenginleştirme:
+- Bot kanal aboneliklerini başlatırken GramJS `Api.channels.GetFullChannel` ve `Api.InputPeerChannel` çağrıları ile kanalların canlı katılımcı sayılarını çeker.
+- Detaylı veriler `monitoredChannelsMeta` dizisi halinde Firestore'a kaydedilir ve Web Admin Panelinde şık rozetler/istatistikler olarak yöneticilere sunulur.
+
 
