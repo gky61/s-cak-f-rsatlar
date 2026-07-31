@@ -212,6 +212,24 @@ async function loadCountersFromFirestore() {
   } catch (error) {
     console.error('❌ Firestore\'dan sayaçları yüklerken hata oluştu:', error.message);
   }
+async function loadChannelsFromFirestore() {
+  try {
+    const docRef = db.collection('settings').doc('telegramBot');
+    const snap = await docRef.get();
+    if (snap.exists) {
+      const data = snap.data();
+      if (data.monitoredChannels && Array.isArray(data.monitoredChannels) && data.monitoredChannels.length > 0) {
+        CHANNELS = data.monitoredChannels.map(c => c.trim()).filter(Boolean);
+        console.log(`📋 Firestore'dan ${CHANNELS.length} dinlenen kanal yüklendi:`, CHANNELS.join(', '));
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Firestore\'dan kanallar yüklenemedi, varsayılan env kullanılacak:', e.message);
+  }
+
+  CHANNELS = process.env.TELEGRAM_CHANNELS ? process.env.TELEGRAM_CHANNELS.split(',').map(c => c.trim()).filter(Boolean) : [];
+  console.log(`📋 ENV dosyasından ${CHANNELS.length} varsayılan kanal yüklendi:`, CHANNELS.join(', '));
 }
 
 async function sendHeartbeat() {
@@ -1338,6 +1356,7 @@ process.on('SIGINT', async () => {
   }
 
   await loadCountersFromFirestore();
+  await loadChannelsFromFirestore();
   await startBot();
   await sendHeartbeat();
   setInterval(sendHeartbeat, 5 * 60 * 1000);
