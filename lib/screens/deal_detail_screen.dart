@@ -1760,7 +1760,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
 
   Future<void> _showShareOptions(BuildContext context, Deal deal) =>
-      DealShareSheet.showShareOptions(context, deal, fetchedImageUrl: _fetchedImageUrl);
+      DealShareSheet.showShareOptions(context, deal);
 
 
 
