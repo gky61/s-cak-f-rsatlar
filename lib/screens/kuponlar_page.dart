@@ -126,6 +126,8 @@ class _KuponlarPageState extends State<KuponlarPage> {
         return 'assets/migros.jpg';
       case 'Getir':
         return 'assets/getir.jpg';
+      case 'Boyner':
+        return 'assets/boyner.jpg';
       default:
         return 'assets/store-icon.png';
     }

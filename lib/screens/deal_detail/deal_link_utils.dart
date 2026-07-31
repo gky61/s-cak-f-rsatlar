@@ -83,6 +83,7 @@ class DealLinkUtils {
       if (hostname.contains('havitstore.com.tr')) return 'Havit';
       if (hostname.contains('migros.com.tr')) return 'Migros';
       if (hostname.contains('getir.com')) return 'Getir';
+      if (hostname.contains('boyner.com.tr')) return 'Boyner';
 
       return 'Bilinmeyen';
     } catch (e) {

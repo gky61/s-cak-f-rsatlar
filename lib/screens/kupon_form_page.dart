@@ -45,6 +45,7 @@ class _KuponFormPageState extends State<KuponFormPage> {
     'Havit',
     'Migros',
     'Getir',
+    'Boyner',
     'Diğer',
   ];
 
