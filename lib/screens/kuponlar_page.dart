@@ -16,6 +16,7 @@ class KuponlarPage extends StatefulWidget {
 class _KuponlarPageState extends State<KuponlarPage> {
   final KuponService _kuponService = KuponService();
   final Set<String> _copiedKuponIds = {};
+  final Set<String> _expandedKuponIds = {}; // Açıklaması genişletilmiş kupon kartları
   final Map<String, String?> _userVotes = {};
   // Lokal oy sayaçları — stream'den gelen veriyi override eder (anında UI tepkisi)
   final Map<String, int> _localHotCounts = {};
@@ -471,15 +472,74 @@ class _KuponlarPageState extends State<KuponlarPage> {
                           ),
                         ),
                         if (kupon.aciklama.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            kupon.aciklama,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          const SizedBox(height: 4),
+                          Builder(
+                            builder: (context) {
+                              final isExpanded = _expandedKuponIds.contains(kupon.id);
+                              final isLongDescription = kupon.aciklama.length > 65 || kupon.aciklama.contains('\n');
+
+                              return InkWell(
+                                onTap: isLongDescription
+                                    ? () {
+                                        setState(() {
+                                          if (isExpanded) {
+                                            _expandedKuponIds.remove(kupon.id);
+                                          } else {
+                                            _expandedKuponIds.add(kupon.id);
+                                          }
+                                        });
+                                      }
+                                    : null,
+                                borderRadius: BorderRadius.circular(6),
+                                splashColor: AppTheme.primary.withValues(alpha: 0.08),
+                                highlightColor: Colors.transparent,
+                                child: AnimatedSize(
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeInOut,
+                                  alignment: Alignment.topLeft,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        kupon.aciklama,
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                                          height: 1.35,
+                                        ),
+                                        maxLines: isExpanded ? null : 2,
+                                        overflow: isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                                      ),
+                                      if (isLongDescription) ...[
+                                        const SizedBox(height: 3),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              isExpanded ? 'Daha Az Göster' : 'Devamını Göster',
+                                              style: TextStyle(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.primary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Icon(
+                                              isExpanded
+                                                  ? Icons.keyboard_arrow_up_rounded
+                                                  : Icons.keyboard_arrow_down_rounded,
+                                              size: 14,
+                                              color: AppTheme.primary,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ],

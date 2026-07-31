@@ -24,9 +24,75 @@ class CategoryDetectionService {
   /// Metinden kategori ve alt kategori tespit eder
   /// 
   /// [text] Tespit edilecek metin (başlık, açıklama vb.)
+  /// [url] Ürün bağlantısı (isteğe bağlı)
+  /// [store] Mağaza adı (isteğe bağlı)
   /// 
   /// Returns: Map with 'categoryId' and 'subCategory' keys, or null if no match
-  static Map<String, String?>? detectCategory(String text) {
+  static Map<String, String?>? detectCategory(String text, {String? url, String? store}) {
+    final lowerUrl = (url ?? '').toLowerCase();
+    final lowerStore = (store ?? '').toLowerCase();
+    final lowerText = text.toLowerCase();
+
+    final isGetirOrMigros = lowerUrl.contains('getir.com') ||
+        lowerUrl.contains('migros.com.tr') ||
+        lowerStore.contains('getir') ||
+        lowerStore.contains('migros') ||
+        lowerText.contains('getir.com') ||
+        lowerText.contains('migros.com.tr');
+
+    final result = _detectCategoryInternal(text);
+
+    if (isGetirOrMigros) {
+      String? subCategory;
+      if (result != null && result['categoryId'] == 'supermarket') {
+        subCategory = result['subCategory'];
+      }
+      subCategory ??= _findSupermarketSubCategory(lowerText);
+      subCategory ??= 'Gıda Ürünleri';
+
+      _log('🛒 Getir/Migros ürünü tespit edildi -> Kategori: supermarket, Alt Kategori: $subCategory');
+
+      return {
+        'categoryId': 'supermarket',
+        'subCategory': subCategory,
+      };
+    }
+
+    return result;
+  }
+
+  static String? _findSupermarketSubCategory(String lowerText) {
+    final supermarketCategories = _categoryKeywords['supermarket'];
+    if (supermarketCategories == null) return null;
+
+    final normalizedText = _normalizeText(lowerText);
+
+    double bestScore = 0;
+    String? bestSubCategory;
+
+    for (final entry in supermarketCategories.entries) {
+      final subCategory = entry.key;
+      final keywords = entry.value;
+
+      double score = 0;
+      for (final keyword in keywords) {
+        final normalizedKeyword = _normalizeText(keyword.toLowerCase());
+        if (normalizedText.contains(normalizedKeyword)) {
+          final weight = _getKeywordWeight(normalizedKeyword);
+          score += weight;
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestSubCategory = subCategory;
+      }
+    }
+
+    return bestScore > 0 ? bestSubCategory : null;
+  }
+
+  static Map<String, String?>? _detectCategoryInternal(String text) {
     if (text.isEmpty) return null;
 
     // Metni küçük harfe çevir ve Türkçe karakterleri normalize et

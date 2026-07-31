@@ -142,6 +142,25 @@ String formatRelativeTime(DateTime date) {
   return DateFormat('d MMM').format(date);
 }
 
+String formatExactDateTime(DateTime date) {
+  try {
+    return DateFormat('d MMMM - HH:mm', 'tr_TR').format(date);
+  } catch (_) {
+    try {
+      return DateFormat('d MMM - HH:mm').format(date);
+    } catch (_) {
+      final months = [
+        'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+        'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+      ];
+      final monthName = months[date.month - 1];
+      final minute = date.minute.toString().padLeft(2, '0');
+      final hour = date.hour.toString().padLeft(2, '0');
+      return '${date.day} $monthName - $hour:$minute';
+    }
+  }
+}
+
 Future<void> openProductLink(BuildContext context, String url) async {
   if (url.isEmpty) return;
   

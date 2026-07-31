@@ -1059,13 +1059,71 @@ function _applyNegativeExclusions(normalizedText, categoryId, subCategory) {
   return { categoryId: finalCategoryId, subCategory: finalSubCategory };
 }
 
+function _findSupermarketSubCategory(lowerText) {
+  const supermarketSubs = _categoryKeywords['supermarket'];
+  if (!supermarketSubs) return null;
+
+  const normalizedText = _normalizeText(lowerText);
+  let bestScore = 0;
+  let bestSubCategory = null;
+
+  for (const [subCategory, keywords] of Object.entries(supermarketSubs)) {
+    let score = 0;
+    for (const keyword of keywords) {
+      const normalizedKeyword = _normalizeText(keyword);
+      if (normalizedText.includes(normalizedKeyword)) {
+        score += _getKeywordWeight(normalizedKeyword);
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestSubCategory = subCategory;
+    }
+  }
+
+  return bestScore > 0 ? bestSubCategory : null;
+}
+
 /**
  * Metinden kategori ve alt kategori tespit eder
  * @param {string} title Ürün başlığı
  * @param {string[]} [breadcrumbs] Ürün kırıntı listesi (isteğe bağlı)
  * @param {string} [url] Ürün linki (isteğe bağlı)
+ * @param {string} [store] Mağaza adı (isteğe bağlı)
  */
-function detectCategory(title, breadcrumbs = [], url = '') {
+function detectCategory(title, breadcrumbs = [], url = '', store = '') {
+  const lowerUrl = (url || '').toLowerCase();
+  const lowerStore = (store || '').toLowerCase();
+  const safeBreadcrumbs = Array.isArray(breadcrumbs) ? breadcrumbs : [];
+  const checkText = [title || '', ...safeBreadcrumbs].join(' ');
+  const lowerText = checkText.toLowerCase();
+
+  const isGetirOrMigros = lowerUrl.includes('getir.com') ||
+    lowerUrl.includes('migros.com.tr') ||
+    lowerStore.includes('getir') ||
+    lowerStore.includes('migros') ||
+    lowerText.includes('getir.com') ||
+    lowerText.includes('migros.com.tr');
+
+  const result = _detectCategoryInternal(title, safeBreadcrumbs);
+
+  if (isGetirOrMigros) {
+    let subCategory = null;
+    if (result && result.categoryId === 'supermarket') {
+      subCategory = result.subCategory;
+    }
+    subCategory = subCategory || _findSupermarketSubCategory(lowerText) || 'Gıda Ürünleri';
+
+    return {
+      categoryId: 'supermarket',
+      subCategory: subCategory
+    };
+  }
+
+  return result;
+}
+
+function _detectCategoryInternal(title, breadcrumbs = []) {
   if (!title) return { categoryId: 'diger', subCategory: null };
 
   const checkText = [title, ...breadcrumbs].join(' ');

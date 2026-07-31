@@ -171,6 +171,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _customStoreController.text = storeName;
         _storeController.text = storeName;
       }
+
+      if (matchedStore == 'Getir' || matchedStore == 'Migros') {
+        _selectedCategory = 'supermarket';
+        if (_selectedSubCategory == null) {
+          _selectedSubCategory = 'Gıda Ürünleri';
+        }
+      }
     });
   }
 
@@ -523,7 +530,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           final cleanTitle = _cleanScrapedString(preview.title) ?? '';
           final textToClassify = '$joinedBreadcrumbs $cleanTitle';
           _log('🔍 Scraper kırıntıları ve başlık ile kategori tespiti yapılıyor: $textToClassify');
-          final result = CategoryDetectionService.detectCategory(textToClassify);
+          final result = CategoryDetectionService.detectCategory(
+            textToClassify,
+            url: url,
+            store: _selectedStore,
+          );
           if (result != null) {
             setState(() {
               _selectedCategory = result['categoryId']!;
@@ -574,7 +585,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           hasStore = true;
         }
 
-        if (aiResult['category'] != null && !_isCategoryLockedByScraper) {
+        final isGetirOrMigros = url.contains('getir') || url.contains('migros') ||
+            (_selectedStore != null && (_selectedStore! == 'Getir' || _selectedStore! == 'Migros'));
+
+        if (aiResult['category'] != null && !_isCategoryLockedByScraper && !isGetirOrMigros) {
           setState(() {
             _selectedCategory = aiResult['category'];
             _selectedSubCategory = null;
@@ -802,7 +816,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     final combinedText = '$title $description';
     
     _log('🔍 Kategori tespiti yapılıyor: $combinedText');
-    final result = CategoryDetectionService.detectCategory(combinedText);
+    final result = CategoryDetectionService.detectCategory(
+      combinedText,
+      url: _urlController.text.trim(),
+      store: _selectedStore,
+    );
     _log('✅ Tespit sonucu: $result');
     
     if (result != null && mounted) {

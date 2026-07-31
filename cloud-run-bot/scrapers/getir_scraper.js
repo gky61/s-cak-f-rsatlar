@@ -7,7 +7,8 @@ class GetirScraper extends BaseProductScraper {
   get domain() { return 'getir.com'; }
 
   canHandle(url) {
-    return url.toLowerCase().includes('getir.com');
+    const lower = url.toLowerCase();
+    return lower.includes('getir.com') || lower.includes('getir.onelink.me');
   }
 
   scrapeImage($, url) {

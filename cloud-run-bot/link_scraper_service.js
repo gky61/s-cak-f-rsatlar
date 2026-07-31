@@ -111,6 +111,77 @@ async function resolveUrlRedirects(url) {
   }
   const lowerUrl = targetUrl.toLowerCase();
 
+  // Hepsiburada kısa linkleri (hb.biz / app.hb.biz) için özel çözümleme
+  // hb.biz kısa linkleri 301 ile adj.st (Adjust deep-link) URL'sine yönlendirir.
+  // Adjust URL'inin adj_fallback parametresinde gerçek hepsiburada.com ürün URL'si bulunur.
+  // redirect:'follow' ile fetch yapıldığında Akamai WAF zincirin sonunda 403 döndürüp
+  // response.url'yi kısa linkte bırakıyor. Bu yüzden redirect:'manual' ile ilk 301'in
+  // Location header'ını yakalayıp Adjust fallback'ten gerçek URL'yi çıkarıyoruz.
+  if (lowerUrl.includes('hb.biz')) {
+    try {
+      console.log(`[RESOLVE-REDIRECT] 🔗 hb.biz kısa linki çözülüyor (redirect:manual): ${targetUrl}`);
+      
+      // Yöntem 1: Node fetch redirect:manual ile ilk 301 Location header'ını yakala
+      const manualRes = await fetch(targetUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: { 'User-Agent': 'WhatsApp/2.23.4.15 A' },
+        signal: AbortSignal.timeout(10000)
+      });
+      
+      const locationHeader = manualRes.headers.get('location');
+      if (locationHeader) {
+        console.log(`[RESOLVE-REDIRECT] 📍 hb.biz Location header yakalandı (Status: ${manualRes.status})`);
+        // Adjust URL'sindeki fallback parametresinden gerçek Hepsiburada URL'sini çıkar
+        const resolvedFromAdjust = extractAdjustFallback(locationHeader);
+        if (resolvedFromAdjust && resolvedFromAdjust !== locationHeader && resolvedFromAdjust.includes('hepsiburada.com')) {
+          console.log(`[RESOLVE-REDIRECT] ✅ hb.biz kısa linki Adjust fallback'ten çözüldü: ${resolvedFromAdjust}`);
+          return resolvedFromAdjust;
+        }
+        // Adjust değilse, Location header doğrudan hedef URL olabilir
+        if (locationHeader.includes('hepsiburada.com')) {
+          console.log(`[RESOLVE-REDIRECT] ✅ hb.biz kısa linki doğrudan Location'dan çözüldü: ${locationHeader}`);
+          return locationHeader;
+        }
+        // Location header başka bir yönlendirme ise (ör: adj.st), onu da takip et
+        if (locationHeader.startsWith('http')) {
+          console.log(`[RESOLVE-REDIRECT] 🔄 hb.biz ara yönlendirme tespit edildi, takip ediliyor: ${locationHeader}`);
+          return extractAdjustFallback(locationHeader);
+        }
+      }
+    } catch (fetchErr) {
+      console.warn(`[RESOLVE-REDIRECT] ⚠️ hb.biz Node fetch hatası: ${fetchErr.message}. curl HEAD fallback deneniyor...`);
+    }
+
+    // Yöntem 2: curl -sI HEAD request ile Location header'ını yakala (Node fetch başarısız olursa)
+    try {
+      console.log(`[RESOLVE-REDIRECT] 🔗 hb.biz curl HEAD fallback deneniyor: ${targetUrl}`);
+      const curlRes = spawnSync('curl', [
+        '-sI',
+        '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
+        '--max-time', '10',
+        targetUrl
+      ], { encoding: 'utf-8', timeout: 12000 });
+      
+      if (!curlRes.error && curlRes.stdout) {
+        const locationMatch = curlRes.stdout.match(/location:\s*(.+)/i);
+        if (locationMatch) {
+          const curlLocation = locationMatch[1].trim();
+          console.log(`[RESOLVE-REDIRECT] 📍 hb.biz curl Location header: ${curlLocation.substring(0, 200)}...`);
+          const resolvedFromCurl = extractAdjustFallback(curlLocation);
+          if (resolvedFromCurl && resolvedFromCurl.includes('hepsiburada.com')) {
+            console.log(`[RESOLVE-REDIRECT] ✅ hb.biz curl HEAD ile çözüldü: ${resolvedFromCurl}`);
+            return resolvedFromCurl;
+          }
+        }
+      }
+    } catch (curlErr) {
+      console.warn(`[RESOLVE-REDIRECT] ⚠️ hb.biz curl HEAD hatası: ${curlErr.message}`);
+    }
+
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ hb.biz kısa linki hiçbir yöntemle çözülemedi: ${targetUrl}`);
+  }
+
   // Trendyol kısa linkleri (ty.gl) için WhatsApp UA ile curl kullanarak yönlendirmeyi çöz
   if (lowerUrl.includes('ty.gl')) {
     try {
@@ -154,82 +225,8 @@ async function resolveUrlRedirects(url) {
 
   if (!isShortOrRedirect) return targetUrl;
 
-  // Aşama 1: Manuel yönlendirme takibi (redirect: 'manual').
-  // hb.biz / Adjust (7t4g.adj.st) gibi kısa linkler 301/302 dönüp Location header'ında adj_fallback parametresi içerir.
-  // Akamai WAF Cloud/Datacenter IP'lerde Desktop Chrome UA'lara 403 döndüğü için Hepsiburada Mobil / WhatsApp UA kullanılır.
   try {
-    console.log(`[RESOLVE-REDIRECT] 🔗 Yönlendirme manuel çözülüyor: ${targetUrl}`);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-    const uaToUse = lowerUrl.includes('hb.biz') || lowerUrl.includes('hepsiburada')
-      ? 'Hepsiburada/5.12.0 (iPhone; iOS 17.4.1; Scale/3.00)'
-      : 'WhatsApp/2.23.4.15 A';
-
-    const manualRes = await fetch(targetUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': uaToUse,
-        'Accept': '*/*',
-        'Accept-Language': 'tr-TR,tr;q=0.9'
-      },
-      redirect: 'manual',
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    const locationHeader = manualRes.headers.get('location');
-    if (locationHeader) {
-      console.log(`[RESOLVE-REDIRECT] 📍 Location header yakalandı: ${locationHeader}`);
-      const fallbackUrl = extractAdjustFallback(locationHeader);
-      if (fallbackUrl && fallbackUrl !== locationHeader && fallbackUrl.startsWith('http')) {
-        console.log(`[RESOLVE-REDIRECT] ✅ Adjust fallback URL başarıyla çıkarıldı: ${fallbackUrl}`);
-        return fallbackUrl;
-      }
-      if (locationHeader.startsWith('http') && locationHeader !== targetUrl) {
-        return await resolveUrlRedirects(locationHeader);
-      }
-    }
-  } catch (err) {
-    console.warn(`[RESOLVE-REDIRECT] ⚠️ Manuel fetch redirect çözme hatası (${err.message}), curl fallback deneniyor...`);
-  }
-
-  // Aşama 1.5: curl (Mobile / WhatsApp UA) ile Location başlığını çekme
-  try {
-    const uaToUse = lowerUrl.includes('hb.biz') || lowerUrl.includes('hepsiburada')
-      ? 'Hepsiburada/5.12.0 (iPhone; iOS 17.4.1; Scale/3.00)'
-      : 'WhatsApp/2.23.4.15 A';
-
-    const curlArgs = [
-      '-sI',
-      '-H', `User-Agent: ${uaToUse}`,
-      '-H', 'Accept: */*',
-      '--max-time', '6',
-      targetUrl
-    ];
-    const curlRes = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: 8000 });
-    if (!curlRes.error && curlRes.stdout) {
-      const locMatch = curlRes.stdout.match(/location:\s*(https?:\/\/[^\s\r\n]+)/i);
-      if (locMatch && locMatch[1]) {
-        const loc = locMatch[1];
-        console.log(`[RESOLVE-REDIRECT] 📍 curl ile Location header yakalandı: ${loc}`);
-        const fallbackUrl = extractAdjustFallback(loc);
-        if (fallbackUrl && fallbackUrl !== loc && fallbackUrl.startsWith('http')) {
-          console.log(`[RESOLVE-REDIRECT] ✅ Adjust fallback URL başarıyla çıkarıldı: ${fallbackUrl}`);
-          return fallbackUrl;
-        }
-        if (loc.startsWith('http') && loc !== targetUrl) {
-          return await resolveUrlRedirects(loc);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn(`[RESOLVE-REDIRECT] ⚠️ curl redirect çözme hatası: ${err.message}`);
-  }
-
-  // Aşama 2: Standart follow akışı (Fallback)
-  try {
-    console.log(`[RESOLVE-REDIRECT] 🔗 Standart yönlendirme çözülüyor: ${targetUrl}`);
+    console.log(`[RESOLVE-REDIRECT] 🔗 Yönlendirme çözülüyor: ${targetUrl}`);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
@@ -238,6 +235,7 @@ async function resolveUrlRedirects(url) {
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
     };
+    console.log(`[RESOLVE-REDIRECT] Giden User-Agent: "${headers['User-Agent']}"`);
 
     const response = await fetch(targetUrl, {
       method: 'GET',
@@ -251,6 +249,7 @@ async function resolveUrlRedirects(url) {
 
     let resolvedUrl = response.url || targetUrl;
 
+    // Eğer HTTP yanıtı 403 Forbidden ve kısa link ise (Örn: hb.biz Akamai WAF), Microlink fallback deneyerek çöz
     if (response.status === 403 || isBotBlocked(resolvedUrl)) {
       console.warn(`[RESOLVE-REDIRECT] ⚠️ Direct fetch 403/WAF döndü (${targetUrl}). Microlink API fallback ile çözülüyor...`);
       try {
@@ -270,6 +269,7 @@ async function resolveUrlRedirects(url) {
     }
 
     resolvedUrl = extractAdjustFallback(resolvedUrl);
+
     return resolvedUrl;
   } catch (err) {
     console.warn(`[RESOLVE-REDIRECT] ⚠️ Yönlendirme çözülemedi (${err.message}), Microlink fallback deneniyor...`);

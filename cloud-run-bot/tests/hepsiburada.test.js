@@ -1,6 +1,7 @@
 const assert = require('assert');
 const cheerio = require('cheerio');
 const HepsiburadaScraper = require('../scrapers/hepsiburada_scraper');
+const { resolveUrlRedirects } = require('../link_scraper_service');
 
 async function run() {
   const scraper = new HepsiburadaScraper();
@@ -64,6 +65,22 @@ async function run() {
   assert.strictEqual(rating3.ratingValue, 4.8);
   assert.strictEqual(rating3.ratingCount, 1173);
   assert.strictEqual(scraper.scrapeBrand($3), 'Apple');
+
+  // 5. hb.biz kısa link çözümleme testi (Adjust fallback → hepsiburada.com)
+  console.log('\n--- hb.biz kısa link çözümleme testleri ---');
+  const hbBizTestUrls = [
+    'https://app.hb.biz/ycpwZNyv7dFK',
+    'https://app.hb.biz/a5bzztOjKFMB',
+    'https://app.hb.biz/RRAGeZnddSrr'
+  ];
+  for (const shortUrl of hbBizTestUrls) {
+    const resolved = await resolveUrlRedirects(shortUrl);
+    assert.ok(
+      resolved.includes('hepsiburada.com'),
+      `hb.biz resolve FAILED: ${shortUrl} → ${resolved} (hepsiburada.com bekleniyor)`
+    );
+    console.log(`✅ ${shortUrl} → ${resolved.substring(0, 80)}...`);
+  }
 }
 
 module.exports = { run };

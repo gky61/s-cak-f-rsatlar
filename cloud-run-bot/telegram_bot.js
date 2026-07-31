@@ -544,34 +544,44 @@ function cleanFallbackTitle(rawTitle) {
 function extractStoreFromLink(link, text) {
   let store = 'Diğer';
   const lowerLink = link ? link.toLowerCase() : '';
+  let hostname = '';
+  if (link) {
+    try {
+      hostname = new URL(link).hostname.toLowerCase();
+    } catch (_) {
+      hostname = lowerLink;
+    }
+  }
 
-  if (lowerLink.includes('trendyol.com') || lowerLink.includes('ty.gl')) store = 'Trendyol';
-  else if (lowerLink.includes('hepsiburada.com') || lowerLink.includes('hb.biz')) store = 'Hepsiburada';
-  else if (lowerLink.includes('amazon.') || lowerLink.includes('amzn.') || lowerLink.includes('link.amazon') || lowerLink.includes('amzlinks.') || lowerLink.includes('/amzn')) store = 'Amazon';
-  else if (lowerLink.includes('n11.com')) store = 'N11';
-  else if (lowerLink.includes('a101.com') || lowerLink.includes('a101')) store = 'A101';
-  else if (lowerLink.includes('migros.com') || lowerLink.includes('migros')) store = 'Migros';
-  else if (lowerLink.includes('bim.com') || lowerLink.includes('bim')) store = 'Bim';
-  else if (lowerLink.includes('sokmarket') || lowerLink.includes('ceptesok') || lowerLink.includes('sok')) store = 'Şok';
-  else if (lowerLink.includes('pazarama.com') || lowerLink.includes('pazarama')) store = 'Pazarama';
-  else if (lowerLink.includes('watsons.com') || lowerLink.includes('watsons')) store = 'Watsons';
-  else if (lowerLink.includes('gratis.com') || lowerLink.includes('gratis')) store = 'Gratis';
-  else if (lowerLink.includes('ikea.com') || lowerLink.includes('ikea')) store = 'Ikea';
-  else if (lowerLink.includes('boyner.com') || lowerLink.includes('boyner')) store = 'Boyner';
-  else if (lowerLink.includes('decathlon.com') || lowerLink.includes('decathlon')) store = 'Decathlon';
-  else if (lowerLink.includes('mediamarkt.com') || lowerLink.includes('mediamarkt')) store = 'MediaMarkt';
-  else if (lowerLink.includes('vatanbilgisayar') || lowerLink.includes('vatan')) store = 'Vatan Bilgisayar';
-  else if (lowerLink.includes('teknosa.com') || lowerLink.includes('teknosa')) store = 'Teknosa';
+  if (hostname.includes('getir') || lowerLink.includes('getir.com') || lowerLink.includes('getir.onelink.me') || lowerLink.includes('onelink.me')) store = 'Getir';
+  else if (hostname.includes('migros') || lowerLink.includes('migros.com')) store = 'Migros';
+  else if (hostname.includes('trendyol') || lowerLink.includes('trendyol.com') || lowerLink.includes('ty.gl')) store = 'Trendyol';
+  else if (hostname.includes('hepsiburada') || lowerLink.includes('hepsiburada.com') || lowerLink.includes('hb.biz')) store = 'Hepsiburada';
+  else if (hostname.includes('amazon') || lowerLink.includes('amazon.') || lowerLink.includes('amzn.') || lowerLink.includes('amzlinks.')) store = 'Amazon';
+  else if (hostname.includes('n11') || lowerLink.includes('n11.com')) store = 'N11';
+  else if (hostname.includes('a101') || lowerLink.includes('a101.com')) store = 'A101';
+  else if (hostname.includes('bim.com') || lowerLink.includes('bim.com.tr')) store = 'Bim';
+  else if (hostname.includes('sokmarket') || hostname.includes('ceptesok')) store = 'Şok';
+  else if (hostname.includes('pazarama') || lowerLink.includes('pazarama.com')) store = 'Pazarama';
+  else if (hostname.includes('watsons') || lowerLink.includes('watsons.com')) store = 'Watsons';
+  else if (hostname.includes('gratis') || lowerLink.includes('gratis.com')) store = 'Gratis';
+  else if (hostname.includes('ikea') || lowerLink.includes('ikea.com')) store = 'Ikea';
+  else if (hostname.includes('boyner') || lowerLink.includes('boyner.com')) store = 'Boyner';
+  else if (hostname.includes('decathlon') || lowerLink.includes('decathlon.com')) store = 'Decathlon';
+  else if (hostname.includes('mediamarkt') || lowerLink.includes('mediamarkt.com')) store = 'MediaMarkt';
+  else if (hostname.includes('vatanbilgisayar') || lowerLink.includes('vatanbilgisayar')) store = 'Vatan Bilgisayar';
+  else if (hostname.includes('teknosa') || lowerLink.includes('teknosa.com')) store = 'Teknosa';
 
   // Eğer linkten bulunamadıysa veya Google gibi arama linkiyse, metinden aramaya çalış
   if ((store === 'Diğer' || lowerLink.includes('google.')) && text) {
     const lowerText = text.toLowerCase();
+    if (lowerText.includes('getir')) return 'Getir';
+    if (lowerText.includes('migros')) return 'Migros';
     if (lowerText.includes('trendyol')) return 'Trendyol';
     if (lowerText.includes('hepsiburada')) return 'Hepsiburada';
     if (lowerText.includes('amazon')) return 'Amazon';
     if (lowerText.includes('n11')) return 'N11';
     if (lowerText.includes('a101')) return 'A101';
-    if (lowerText.includes('migros')) return 'Migros';
     if (lowerText.includes('bim')) return 'Bim';
     if (lowerText.includes('şok') || lowerText.includes('sokmarket')) return 'Şok';
     if (lowerText.includes('pazarama')) return 'Pazarama';
@@ -602,14 +612,84 @@ function extractStoreFromLink(link, text) {
 }
 
 /**
+ * Açıklama metninden Editör, Yazar, Paylaşan, Admin vb. footer satırlarını ve sonrasını temizler.
+ */
+function truncateEditorAndFooterInfo(rawText) {
+  if (!rawText) return '';
+
+  const lines = rawText.split(/\r?\n/);
+  const cleanLines = [];
+
+  const forbiddenKeywords = [
+    'editör',
+    'editor',
+    'yazar',
+    'paylaşan',
+    'paylasan',
+    'hazırlayan',
+    'hazirlayan',
+    'ekleyen',
+    'yayınlayan',
+    'yayinlayan',
+    'gönderen',
+    'gonderen',
+    'moderatör',
+    'moderator',
+    'admin',
+    'kaynak:',
+    'kanalımız',
+    'kanalimiz',
+    'grubumuz',
+    'takip edin',
+    'takipedin',
+    'katılın',
+    'katilin',
+    'sponsorlu',
+    'işbirliği',
+    'isbirligi',
+    'reklam içerir',
+    'reklam icerir'
+  ];
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) {
+      cleanLines.push(line);
+      continue;
+    }
+
+    const lowerStandard = trimmedLine.toLowerCase();
+    const lowerTurkish = trimmedLine.toLocaleLowerCase('tr-TR');
+
+    const hasForbiddenWord = forbiddenKeywords.some(keyword => 
+      lowerStandard.includes(keyword) || lowerTurkish.includes(keyword)
+    );
+
+    if (hasForbiddenWord) {
+      console.log(`✂️ [AÇIKLAMA FİLTRESİ] Editör/Yazar/Footer satırı tespit edildi ("${trimmedLine}"), bu satırdan sonrası kesildi.`);
+      break;
+    }
+
+    cleanLines.push(line);
+  }
+
+  return cleanLines.join('\n').trim();
+}
+
+/**
  * Mesaj metninden linkleri çıkartarak temiz bir açıklama metni hazırlar
  */
 function getDescriptionWithoutLinks(messageText, links) {
   if (!messageText) return '';
   let text = messageText;
-  for (const link of links) {
-    text = text.replace(link, '');
+  if (Array.isArray(links)) {
+    for (const link of links) {
+      text = text.replace(link, '');
+    }
   }
+
+  text = truncateEditorAndFooterInfo(text);
+
   return text.trim().substring(0, 2000);
 }
 
@@ -761,14 +841,15 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       }
     }
 
+    const storeFromLink = extractStoreFromLink(scrapeResult.url || mainLink, messageText);
     const categoryResult = categoryDetectionService.detectCategory(
       cleanedTitle,
       scrapeResult.breadcrumbs || [],
-      scrapeResult.description || messageText || scrapeResult.url || mainLink
+      scrapeResult.url || mainLink,
+      storeFromLink
     );
     const finalCategory = categoryResult.categoryId || 'diger';
 
-    const storeFromLink = extractStoreFromLink(scrapeResult.url || mainLink, messageText);
     const finalDescription = getDescriptionWithoutLinks(messageText, rawLinks);
 
     // ========================================
@@ -878,7 +959,7 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     // Deal objesi
     const deal = {
       title: cleanedTitle,
-      description: finalDescription || scrapeResult.description || 'Fırsat Ürünü Detayları',
+      description: truncateEditorAndFooterInfo(finalDescription || scrapeResult.description || 'Fırsat Ürünü Detayları'),
       link: scrapeResult.url || mainLink,
       price: finalPrice,
       originalPrice: origPrice,

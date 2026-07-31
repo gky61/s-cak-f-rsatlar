@@ -98,7 +98,7 @@ Sunucu ortamındaki bot korumalarını aşmak için geliştirilen 5 temel bypass
 
 | Mağaza | Bot Karşılaşma Durumu | Kullanılan Bypass Yöntemi | Teknik Detay / Başlık |
 | :--- | :--- | :--- | :--- |
-| **Hepsiburada** | Akamai Captcha / Microlink Blok | `curl` spawnSync (Doğrudan) | TLS Fingerprint Bypass + `WhatsApp` UA (Google Translate Proxy engellendiği ve Microlink ücretli plan istediği için doğrudan curl ile çekilir) |
+| **Hepsiburada** | Akamai Captcha / Microlink Blok / hb.biz 403 | `curl` spawnSync (Doğrudan) + `redirect:manual` Adjust Fallback | TLS Fingerprint Bypass + `WhatsApp` UA ile HTML çekimi. `hb.biz` kısa linkleri `redirect:'manual'` ile ilk 301 Location header'ı yakalanarak `adj.st` URL'indeki `adj_fallback` parametresinden gerçek `hepsiburada.com` ürün URL'si çıkarılır. |
 | **Trendyol** | Yurt dışı IP & Ülke Engeli | `curl` spawnSync (Doğrudan) | `storefrontId=1; countryCode=TR; language=tr` Cookie Entegrasyonu |
 | **N11** | 403 Forbidden (IP Engeli) & Kısa Linkler | Google Translate Proxy | `translate.goog` + `magaza` parametresi koruma. `sl.n11.com/n/` kısa linkleri `www.n11.com/n/` formatına dönüştürülerek Google Translate Proxy üzerinden çözümlenir (`resolveN11ShortLink`), böylece Adjust'ın Google Play Store yönlendirmesi tamamen bypass edilir. |
 | **Vatan Bilgisayar** | 403 Forbidden (IP Engeli) | Google Translate Proxy | `translate.goog` |
