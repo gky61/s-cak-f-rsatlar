@@ -1065,13 +1065,25 @@ async function subscribeToChannels() {
 
       console.log(`✅ Kanal bulundu: ${channel.title || channel.firstName} (${trimmedChannel})`);
 
+      let subscriberCount = channel.participantsCount || null;
+      try {
+        const fullInfo = await client.invoke(new Api.channels.GetFullChannel({ channel: channel }));
+        if (fullInfo && fullInfo.fullChat && fullInfo.fullChat.participantsCount != null) {
+          subscriberCount = fullInfo.fullChat.participantsCount;
+        }
+      } catch (_) {}
+
+      const isPublic = !!channel.username;
+      const isChannel = channel.broadcast !== false;
+
       monitoredChannelsMeta.push({
         input: trimmedChannel,
         title: channel.title || channel.firstName || trimmedChannel,
-        username: channel.username ? `@${channel.username}` : (channel.broadcast ? 'Özel Kanal' : 'Özel Grup'),
+        username: channel.username ? `@${channel.username}` : (isPublic ? `@${channel.username}` : 'Özel Kanal'),
         id: channel.id ? channel.id.toString() : trimmedChannel,
-        subscribers: channel.participantsCount || null,
-        type: channel.broadcast ? 'Public/Private Channel' : 'Group/Supergroup',
+        subscribers: subscriberCount,
+        type: isChannel ? (isPublic ? 'Kamuya Açık Kanal' : 'Özel Kanal') : 'Grup / Süpergrup',
+        isPublic: isPublic,
         status: 'active'
       });
 

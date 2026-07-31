@@ -6310,25 +6310,62 @@ async function loadBotConfig() {
                 if (metaContainer) {
                     if (data.monitoredChannelsMeta && Array.isArray(data.monitoredChannelsMeta) && data.monitoredChannelsMeta.length > 0) {
                         metaContainer.innerHTML = `
-                            <div class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Tespit Edilen Kanal Detayları (${data.monitoredChannelsMeta.length} Kanal)</div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                ${data.monitoredChannelsMeta.map(meta => `
-                                    <div class="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col gap-1 shadow-2xs">
-                                        <div class="flex items-center justify-between gap-2">
-                                            <span class="text-sm font-bold text-slate-900 dark:text-white truncate" title="${meta.title}">${meta.title}</span>
-                                            <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full ${meta.status === 'error' ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}">
-                                                ${meta.status === 'error' ? 'Hatalı / Bulunamadı' : 'Aktif'}
-                                            </span>
+                            <div class="mt-4 flex flex-col gap-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                        <span class="material-symbols-outlined text-[16px] text-primary">sensors</span>
+                                        Aktif Dinlenen Telegram Kanalları (${data.monitoredChannelsMeta.length})
+                                    </span>
+                                </div>
+                                
+                                <div class="space-y-2">
+                                    ${data.monitoredChannelsMeta.map(meta => `
+                                        <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs hover:border-primary/40 transition-all">
+                                            
+                                            <!-- Left: Channel Info & Icon -->
+                                            <div class="flex items-center gap-3 min-w-0">
+                                                <div class="w-10 h-10 rounded-full ${meta.status === 'error' ? 'bg-rose-500/10 text-rose-500' : (meta.isPublic ? 'bg-blue-500/10 text-blue-500' : 'bg-amber-500/10 text-amber-500')} flex items-center justify-center shrink-0 font-bold">
+                                                    <span class="material-symbols-outlined text-xl">
+                                                        ${meta.status === 'error' ? 'error' : (meta.isPublic ? 'campaign' : 'lock')}
+                                                    </span>
+                                                </div>
+                                                <div class="flex flex-col min-w-0">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-sm font-bold text-slate-900 dark:text-white truncate">${meta.title}</span>
+                                                        <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full ${meta.status === 'error' ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}">
+                                                            ${meta.status === 'error' ? 'Bulunamadı' : 'Aktif'}
+                                                        </span>
+                                                    </div>
+                                                    <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                                        <span class="font-mono text-slate-700 dark:text-slate-300 font-semibold">${meta.username || meta.input}</span>
+                                                        <span class="text-slate-300 dark:text-slate-700">•</span>
+                                                        <span>${meta.type || 'Kanal'}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Right: Subscribers & Input Badge -->
+                                            <div class="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 border-slate-200/60 dark:border-slate-800/60 pt-2 sm:pt-0">
+                                                ${meta.subscribers ? `
+                                                    <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
+                                                        <span class="material-symbols-outlined text-[16px] text-primary">groups</span>
+                                                        <span>${Number(meta.subscribers).toLocaleString('tr-TR')} Abone</span>
+                                                    </div>
+                                                ` : `
+                                                    <div class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/50 px-2.5 py-1 rounded-lg">
+                                                        <span class="material-symbols-outlined text-[15px]">lock</span>
+                                                        <span>Özel Kanal (Gizli)</span>
+                                                    </div>
+                                                `}
+                                                
+                                                <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono bg-slate-200/60 dark:bg-slate-800/60 px-2 py-1 rounded">
+                                                    Girdi: <span class="text-slate-700 dark:text-slate-300 font-bold">${meta.input}</span>
+                                                </div>
+                                            </div>
+
                                         </div>
-                                        <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-mono">
-                                            <span>ID / User: <strong class="text-slate-700 dark:text-slate-300 font-medium">${meta.username || meta.input}</strong></span>
-                                            <span>${meta.subscribers ? `👥 ${Number(meta.subscribers).toLocaleString('tr-TR')} Abone` : (meta.type || '')}</span>
-                                        </div>
-                                        ${meta.input !== meta.username && meta.input !== meta.id ? `
-                                            <div class="text-[11px] text-slate-400 dark:text-slate-500">Girilmiş Değer: <code class="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded">${meta.input}</code> (Eşleşen ID: ${meta.id})</div>
-                                        ` : ''}
-                                    </div>
-                                `).join('')}
+                                    `).join('')}
+                                </div>
                             </div>
                         `;
                     } else {
