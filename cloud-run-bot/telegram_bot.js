@@ -1025,6 +1025,7 @@ async function subscribeToChannels() {
 
   console.log(`🔊 ${CHANNELS.length} kanal için dinleyiciler başlatılıyor...`);
   const monitoredChannelsMeta = [];
+  const monitoredMap = new Map();
 
   for (const channelUsername of CHANNELS) {
     try {
@@ -1083,119 +1084,146 @@ async function subscribeToChannels() {
 
       const isPublic = !!channel.username;
       const isChannel = channel.broadcast !== false;
+      const cleanId = channel.id ? channel.id.toString().replace(/^-100/, '').replace(/^-/, '') : trimmedChannel.replace(/^-100/, '').replace(/^-/, '');
+
+      const channelInfo = {
+        id: channel.id ? channel.id.toString() : cleanId,
+        cleanId: cleanId,
+        title: channel.title || channel.firstName || trimmedChannel,
+        username: channel.username ? `@${channel.username}` : null,
+        input: trimmedChannel,
+        broadcast: channel.broadcast
+      };
+
+      // Map'e ekle (temiz ID, ham ID ve username bazlı)
+      monitoredMap.set(cleanId, channelInfo);
+      if (channel.username) {
+        monitoredMap.set(`@${channel.username.toLowerCase()}`, channelInfo);
+        monitoredMap.set(channel.username.toLowerCase(), channelInfo);
+      }
+      monitoredMap.set(trimmedChannel.toLowerCase(), channelInfo);
 
       monitoredChannelsMeta.push({
         input: trimmedChannel,
-        title: channel.title || channel.firstName || trimmedChannel,
-        username: channel.username ? `@${channel.username}` : (isPublic ? `@${channel.username}` : 'Özel Kanal'),
-        id: channel.id ? channel.id.toString() : trimmedChannel,
+        title: channelInfo.title,
+        username: channelInfo.username || (isPublic ? channelInfo.username : 'Özel Kanal'),
+        id: channelInfo.id,
         subscribers: subscriberCount,
         type: isChannel ? (isPublic ? 'Kamuya Açık Kanal' : 'Özel Kanal') : 'Grup / Süpergrup',
         isPublic: isPublic,
         status: 'active'
       });
 
-      const channelInfo = {
-        id: channel.id,
-        title: channel.title || channel.firstName || trimmedChannel,
-        username: channel.username,
-        broadcast: channel.broadcast,
-      };
-
-      client.addEventHandler(async (event) => {
-        try {
-          checkDateAndResetCounters();
-
-          if (!botEnabled) {
-            console.log('⏸️ Bot pasif durumda, mesaj atlandı.');
-            return;
-          }
-
-          const message = event.message;
-          if (!message) return;
-
-          msgCount++;
-          lastMessageTime = new Date();
-
-          const links = getAllLinks(message);
-          if (!links.length) {
-            console.log(`⏩ [${channelInfo.title}] Mesajda link yok, atlanıyor.`);
-            return;
-          }
-
-          const mainLink = links[0];
-          // MÜKERRER (DUPLICATE) KONTROLÜ
-          console.log(`🔍 [${channelInfo.title}] Mükerrer link kontrolü yapılıyor: ${mainLink}`);
-          let resolvedLink = mainLink;
-          try {
-            resolvedLink = await linkScraperService.resolveUrlRedirects(mainLink);
-          } catch (e) {
-            console.warn(`[DUPLICATE-CHECK] ⚠️ Yönlendirme çözülemedi: ${e.message}`);
-          }
-          const cleanUrl = cleanProductUrl(resolvedLink);
-          let isDuplicate = false;
-          if (cleanUrl) {
-            const querySnapshot = await db.collection('deals')
-              .where('cleanUrl', '==', cleanUrl)
-              .where('isApproved', '==', true)
-              .get();
-
-            if (!querySnapshot.empty) {
-              for (const doc of querySnapshot.docs) {
-                const dealData = doc.data();
-
-                // Pasif/Biten Kontrolleri:
-                const isExpired = dealData.isExpired === true;
-                const expiredVotes = dealData.expiredVotes || 0;
-                if (isExpired || expiredVotes >= 15) {
-                  continue;
-                }
-
-                // Soğuk oylama kontrolü:
-                const hotVotes = dealData.hotVotes || 0;
-                const coldVotes = dealData.coldVotes || 0;
-                const totalVotes = hotVotes + coldVotes;
-                if (totalVotes >= 5) {
-                  const hotPercentage = (hotVotes / totalVotes * 100);
-                  if (hotPercentage < 20) {
-                    continue;
-                  }
-                }
-                if (hotVotes - coldVotes <= -5) {
-                  continue;
-                }
-
-                // Aktif bir fırsat var -> Mükerrer olarak işaretle
-                isDuplicate = true;
-                break;
-              }
-            }
-          }
-
-          if (isDuplicate) {
-            console.log(`⏩ [${channelInfo.title}] Aynı link zaten aktif olarak kayıtlı, mükerrer atlanıyor: ${mainLink}`);
-            dupCount++;
-            return;
-          }
-
-          console.log(`📝 Mesaj içeriği: ${message.message?.substring(0, 100)}...`);
-
-          const success = await saveDealToFirebase(message, channelInfo);
-          if (success) {
-            dealCount++;
-          }
-        } catch (error) {
-          errCount++;
-          console.error(`❌ Mesaj işleme hatası (${channelInfo.title}):`, error.message);
-        }
-      }, new NewMessage({ chats: [channel.id] }));
-
-      console.log(`👂 ${channel.title} dinleniyor...`);
+      console.log(`👂 ${channelInfo.title} (ID: ${cleanId}) dinlemeye eklendi.`);
     } catch (error) {
       errCount++;
       console.error(`❌ Kanal bulunamadı: ${channelUsername}`, error.message);
     }
   }
+
+  // TEK BİR GENEL DİNLEYİCİ EKLENİYOR (Tüm gelen mesajlar güvenle yakalanır)
+  client.addEventHandler(async (event) => {
+    try {
+      checkDateAndResetCounters();
+
+      if (!botEnabled) {
+        console.log('⏸️ Bot pasif durumda, mesaj atlandı.');
+        return;
+      }
+
+      const message = event.message;
+      if (!message) return;
+
+      // Mesajın geldiği sohbet ID'sini al ve temizle
+      const rawChatId = event.chatId ? event.chatId.toString() : (message.peerId?.channelId ? message.peerId.channelId.toString() : '');
+      const cleanChatId = rawChatId.replace(/^-100/, '').replace(/^-/, '');
+
+      let matchedChannel = monitoredMap.get(cleanChatId) || monitoredMap.get(rawChatId);
+      if (!matchedChannel && message.chat?.username) {
+        matchedChannel = monitoredMap.get(`@${message.chat.username.toLowerCase()}`);
+      }
+
+      if (!matchedChannel) {
+        // Dinlenen kanallardan biri değilse atla
+        return;
+      }
+
+      console.log(`📩 [${matchedChannel.title}] Yeni mesaj yakalandı! (Chat ID: ${rawChatId})`);
+      msgCount++;
+      lastMessageTime = new Date();
+
+      const links = getAllLinks(message);
+      if (!links.length) {
+        console.log(`⏩ [${matchedChannel.title}] Mesajda link yok, atlanıyor.`);
+        return;
+      }
+
+      const mainLink = links[0];
+      // MÜKERRER (DUPLICATE) KONTROLÜ
+      console.log(`🔍 [${matchedChannel.title}] Mükerrer link kontrolü yapılıyor: ${mainLink}`);
+      let resolvedLink = mainLink;
+      try {
+        resolvedLink = await linkScraperService.resolveUrlRedirects(mainLink);
+      } catch (e) {
+        console.warn(`[DUPLICATE-CHECK] ⚠️ Yönlendirme çözülemedi: ${e.message}`);
+      }
+      const cleanUrl = cleanProductUrl(resolvedLink);
+      let isDuplicate = false;
+      if (cleanUrl) {
+        const querySnapshot = await db.collection('deals')
+          .where('cleanUrl', '==', cleanUrl)
+          .where('isApproved', '==', true)
+          .get();
+
+        if (!querySnapshot.empty) {
+          for (const doc of querySnapshot.docs) {
+            const dealData = doc.data();
+
+            // Pasif/Biten Kontrolleri:
+            const isExpired = dealData.isExpired === true;
+            const expiredVotes = dealData.expiredVotes || 0;
+            if (isExpired || expiredVotes >= 15) {
+              continue;
+            }
+
+            // Soğuk oylama kontrolü:
+            const hotVotes = dealData.hotVotes || 0;
+            const coldVotes = dealData.coldVotes || 0;
+            const totalVotes = hotVotes + coldVotes;
+            if (totalVotes >= 5) {
+              const hotPercentage = (hotVotes / totalVotes * 100);
+              if (hotPercentage < 20) {
+                continue;
+              }
+            }
+            if (hotVotes - coldVotes <= -5) {
+              continue;
+            }
+
+            // Aktif bir fırsat var -> Mükerrer olarak işaretle
+            isDuplicate = true;
+            break;
+          }
+        }
+      }
+
+      if (isDuplicate) {
+        console.log(`⏩ [${matchedChannel.title}] Aynı link zaten aktif olarak kayıtlı, mükerrer atlanıyor: ${mainLink}`);
+        dupCount++;
+        return;
+      }
+
+      console.log(`📝 Mesaj içeriği: ${message.message?.substring(0, 100)}...`);
+
+      const success = await saveDealToFirebase(message, matchedChannel);
+      if (success) {
+        dealCount++;
+      }
+    } catch (error) {
+      errCount++;
+      console.error(`❌ Mesaj işleme hatası:`, error.message);
+    }
+  }, new NewMessage({}));
 
   try {
     const statusRef = db.collection('settings').doc('telegramBot');
