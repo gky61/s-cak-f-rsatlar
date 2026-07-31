@@ -1065,14 +1065,20 @@ async function subscribeToChannels() {
 
       console.log(`✅ Kanal bulundu: ${channel.title || channel.firstName} (${trimmedChannel})`);
 
-      let subscriberCount = channel.participantsCount || null;
+      let subscriberCount = null;
       try {
-        const participants = await client.getParticipants(channel, { limit: 1 });
-        if (participants && typeof participants.total === 'number') {
-          subscriberCount = participants.total;
+        if (channel.id && channel.accessHash) {
+          const inputChannel = new Api.InputChannel({
+            channelId: BigInt(channel.id.toString()),
+            accessHash: BigInt(channel.accessHash.toString())
+          });
+          const fullInfo = await client.invoke(new Api.channels.GetFullChannel({ channel: inputChannel }));
+          if (fullInfo && fullInfo.fullChat && fullInfo.fullChat.participantsCount != null) {
+            subscriberCount = fullInfo.fullChat.participantsCount;
+          }
         }
-      } catch (ePart) {
-        console.log(`ℹ️ getParticipants count (${trimmedChannel}):`, ePart.message);
+      } catch (eFull) {
+        console.log(`ℹ️ GetFullChannel (${trimmedChannel}):`, eFull.message);
       }
 
       const isPublic = !!channel.username;
