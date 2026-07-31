@@ -157,6 +157,11 @@ let isRunning = false;
 let isStarting = false;
 let isShuttingDown = false;
 
+// Global Haritalar & Polling Değişkenleri
+let monitoredMap = new Map();
+let lastSeenMessageIds = new Map();
+let pollingInterval = null;
+
 // Sayaçlar ve Durum Değişkenleri
 let msgCount = 0;
 let dealCount = 0;
@@ -1045,7 +1050,7 @@ async function subscribeToChannels() {
 
   console.log(`🔊 ${CHANNELS.length} kanal için dinleyiciler başlatılıyor...`);
   const monitoredChannelsMeta = [];
-  const monitoredMap = new Map();
+  monitoredMap.clear();
 
   for (const channelUsername of CHANNELS) {
     try {
@@ -1102,7 +1107,7 @@ async function subscribeToChannels() {
         console.log(`ℹ️ GetFullChannel (${trimmedChannel}):`, eFull.message);
       }
 
-      // Otomatik Kanala Katılım Kontrolü (Real-Time Telegram MTProto akışı alabilmek adına kanala üyelik zorunludur)
+      // Otomatik Kanala Katılım Kontrolü
       if (channel.id && channel.accessHash) {
         try {
           const inputChannel = new Api.InputPeerChannel({
@@ -1157,110 +1162,7 @@ async function subscribeToChannels() {
     }
   }
 
-  // TEK BİR GENEL DİNLEYİCİ FONKSİYONU (Hem Yeni Hem Düzenlenen Mesajları Yakalar)
-  const handleTelegramMessageEvent = async (event) => {
-    try {
-      checkDateAndResetCounters();
-
-      if (!botEnabled) {
-        console.log('⏸️ Bot pasif durumda, mesaj atlandı.');
-        return;
-      }
-
-      const message = event.message;
-      if (!message) return;
-
-      // Mesajın geldiği sohbet ID'sini al ve temizle
-      const rawChatId = event.chatId ? event.chatId.toString() : (message.peerId?.channelId ? message.peerId.channelId.toString() : '');
-      const cleanChatId = rawChatId.replace(/^-100/, '').replace(/^-/, '');
-
-      let matchedChannel = monitoredMap.get(cleanChatId) || monitoredMap.get(rawChatId);
-      if (!matchedChannel && message.chat?.username) {
-        matchedChannel = monitoredMap.get(`@${message.chat.username.toLowerCase()}`);
-      }
-
-      if (!matchedChannel) {
-        // Dinlenen kanallardan biri değilse atla
-        return;
-      }
-
-      console.log(`📩 [${matchedChannel.title}] Gelen mesaj/düzenleme olayı yakalandı! (Chat ID: ${rawChatId})`);
-      msgCount++;
-      lastMessageTime = new Date();
-
-      const links = getAllLinks(message);
-      if (!links.length) {
-        console.log(`⏩ [${matchedChannel.title}] Mesajda link yok, atlanıyor.`);
-        return;
-      }
-
-      const mainLink = links[0];
-      // MÜKERRER (DUPLICATE) KONTROLÜ
-      console.log(`🔍 [${matchedChannel.title}] Mükerrer link kontrolü yapılıyor: ${mainLink}`);
-      let resolvedLink = mainLink;
-      try {
-        resolvedLink = await linkScraperService.resolveUrlRedirects(mainLink);
-      } catch (e) {
-        console.warn(`[DUPLICATE-CHECK] ⚠️ Yönlendirme çözülemedi: ${e.message}`);
-      }
-      const cleanUrl = cleanProductUrl(resolvedLink);
-      let isDuplicate = false;
-      if (cleanUrl) {
-        const querySnapshot = await db.collection('deals')
-          .where('cleanUrl', '==', cleanUrl)
-          .where('isApproved', '==', true)
-          .get();
-
-        if (!querySnapshot.empty) {
-          for (const doc of querySnapshot.docs) {
-            const dealData = doc.data();
-
-            // Pasif/Biten Kontrolleri:
-            const isExpired = dealData.isExpired === true;
-            const expiredVotes = dealData.expiredVotes || 0;
-            if (isExpired || expiredVotes >= 15) {
-              continue;
-            }
-
-            // Soğuk oylama kontrolü:
-            const hotVotes = dealData.hotVotes || 0;
-            const coldVotes = dealData.coldVotes || 0;
-            const totalVotes = hotVotes + coldVotes;
-            if (totalVotes >= 5) {
-              const hotPercentage = (hotVotes / totalVotes * 100);
-              if (hotPercentage < 20) {
-                continue;
-              }
-            }
-            if (hotVotes - coldVotes <= -5) {
-              continue;
-            }
-
-            // Aktif bir fırsat var -> Mükerrer olarak işaretle
-            isDuplicate = true;
-            break;
-          }
-        }
-      }
-
-      if (isDuplicate) {
-        console.log(`⏩ [${matchedChannel.title}] Aynı link zaten aktif olarak kayıtlı, mükerrer atlanıyor: ${mainLink}`);
-        dupCount++;
-        return;
-      }
-
-      console.log(`📝 Mesaj içeriği: ${message.message?.substring(0, 100)}...`);
-
-      const success = await saveDealToFirebase(message, matchedChannel);
-      if (success) {
-        dealCount++;
-      }
-    } catch (error) {
-      errCount++;
-      console.error(`❌ Mesaj işleme hatası:`, error.message);
-    }
-  };
-
+  // Real-Time MTProto Push Olay Dinleyicisi
   client.addEventHandler(handleTelegramMessageEvent, new NewMessage({}));
 
   try {
@@ -1271,6 +1173,148 @@ async function subscribeToChannels() {
     console.log(`✅ ${monitoredChannelsMeta.length} kanalın detaylı metadataları Firestore'a kaydedildi.`);
   } catch (e) {
     console.error('❌ Kanal metadataları kaydedilemedi:', e.message);
+  }
+}
+
+// Standalone Gelen Mesaj Olay İşleyicisi
+async function handleTelegramMessageEvent(event) {
+  try {
+    checkDateAndResetCounters();
+
+    if (!botEnabled) {
+      console.log('⏸️ Bot pasif durumda, mesaj atlandı.');
+      return;
+    }
+
+    const message = event.message;
+    if (!message) return;
+
+    // Mesajın geldiği sohbet ID'sini al ve temizle
+    const rawChatId = event.chatId ? event.chatId.toString() : (message.peerId?.channelId ? message.peerId.channelId.toString() : '');
+    const cleanChatId = rawChatId.replace(/^-100/, '').replace(/^-/, '');
+
+    let matchedChannel = monitoredMap.get(cleanChatId) || monitoredMap.get(rawChatId);
+    if (!matchedChannel && message.chat?.username) {
+      matchedChannel = monitoredMap.get(`@${message.chat.username.toLowerCase()}`);
+    }
+
+    if (!matchedChannel) {
+      return;
+    }
+
+    console.log(`📩 [${matchedChannel.title}] Mesaj yakalandı! (Chat ID: ${rawChatId})`);
+    msgCount++;
+    lastMessageTime = new Date();
+
+    const links = getAllLinks(message);
+    if (!links.length) {
+      console.log(`⏩ [${matchedChannel.title}] Mesajda link yok, atlanıyor.`);
+      return;
+    }
+
+    const mainLink = links[0];
+    // MÜKERRER (DUPLICATE) KONTROLÜ
+    console.log(`🔍 [${matchedChannel.title}] Mükerrer link kontrolü yapılıyor: ${mainLink}`);
+    let resolvedLink = mainLink;
+    try {
+      resolvedLink = await linkScraperService.resolveUrlRedirects(mainLink);
+    } catch (e) {
+      console.warn(`[DUPLICATE-CHECK] ⚠️ Yönlendirme çözülemedi: ${e.message}`);
+    }
+    const cleanUrl = cleanProductUrl(resolvedLink);
+    let isDuplicate = false;
+    if (cleanUrl) {
+      const querySnapshot = await db.collection('deals')
+        .where('cleanUrl', '==', cleanUrl)
+        .where('isApproved', '==', true)
+        .get();
+
+      if (!querySnapshot.empty) {
+        for (const doc of querySnapshot.docs) {
+          const dealData = doc.data();
+
+          const isExpired = dealData.isExpired === true;
+          const expiredVotes = dealData.expiredVotes || 0;
+          if (isExpired || expiredVotes >= 15) {
+            continue;
+          }
+
+          const hotVotes = dealData.hotVotes || 0;
+          const coldVotes = dealData.coldVotes || 0;
+          const totalVotes = hotVotes + coldVotes;
+          if (totalVotes >= 5) {
+            const hotPercentage = (hotVotes / totalVotes * 100);
+            if (hotPercentage < 20) {
+              continue;
+            }
+          }
+          if (hotVotes - coldVotes <= -5) {
+            continue;
+          }
+
+          isDuplicate = true;
+          break;
+        }
+      }
+    }
+
+    if (isDuplicate) {
+      console.log(`⏩ [${matchedChannel.title}] Aynı link zaten aktif olarak kayıtlı, mükerrer atlanıyor: ${mainLink}`);
+      dupCount++;
+      return;
+    }
+
+    console.log(`📝 Mesaj içeriği: ${message.message?.substring(0, 100)}...`);
+
+    const success = await saveDealToFirebase(message, matchedChannel);
+    if (success) {
+      dealCount++;
+    }
+  } catch (error) {
+    errCount++;
+    console.error(`❌ Mesaj işleme hatası:`, error.message);
+  }
+}
+
+// Kamusal (Yönetici Olunmayan) Kanallar İçin 5 Saniyelik Canlı Mesaj Polling Döngüsü
+async function pollMonitoredChannels() {
+  if (!client || !isRunning || !botEnabled) return;
+
+  const processedInputs = new Set();
+
+  for (const [key, channelInfo] of monitoredMap.entries()) {
+    if (!channelInfo || processedInputs.has(channelInfo.input)) continue;
+    processedInputs.add(channelInfo.input);
+
+    try {
+      const cleanId = channelInfo.cleanId;
+      const messages = await client.getMessages(channelInfo.input, { limit: 2 });
+      if (!messages || !messages.length) continue;
+
+      const lastSeenId = lastSeenMessageIds.get(cleanId) || 0;
+
+      // Bot ilk başladığında mevcut en son mesaj ID'sini kaydet
+      if (lastSeenId === 0) {
+        lastSeenMessageIds.set(cleanId, messages[0].id);
+        continue;
+      }
+
+      // Yeni gelen mesajları eskiden yeniye doğru sırayla işle
+      const newMessages = messages.filter(m => m.id > lastSeenId).sort((a, b) => a.id - b.id);
+
+      for (const msg of newMessages) {
+        lastSeenMessageIds.set(cleanId, Math.max(lastSeenMessageIds.get(cleanId) || 0, msg.id));
+        console.log(`⚡ [${channelInfo.title}] Yeni mesaj yakalandı! (ID: ${msg.id} via 5s Polling)`);
+
+        const fakeEvent = {
+          message: msg,
+          chatId: msg.peerId?.channelId ? `-100${msg.peerId.channelId}` : channelInfo.id
+        };
+        await handleTelegramMessageEvent(fakeEvent);
+      }
+    } catch (ePoll) {
+      // Polling hataları yutulur
+    }
   }
 }
 
@@ -1334,6 +1378,11 @@ async function startBot() {
     isRunning = true;
     isStarting = false;
     console.log('🎉 Bot başarıyla başlatıldı! Kanallar dinleniyor...');
+
+    // 5 Saniyelik Polling Döngüsü (Yönetici olunmayan kamusal kanallar için)
+    if (pollingInterval) clearInterval(pollingInterval);
+    pollingInterval = setInterval(pollMonitoredChannels, 5000);
+    console.log('⚡ 5 saniyelik kanal mesaj takip döngüsü (Polling) başlatıldı!');
 
     // Keep-alive
     setInterval(() => {
