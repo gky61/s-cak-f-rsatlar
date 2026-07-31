@@ -1102,6 +1102,21 @@ async function subscribeToChannels() {
         console.log(`ℹ️ GetFullChannel (${trimmedChannel}):`, eFull.message);
       }
 
+      // Otomatik Kanala Katılım Kontrolü (Real-Time Telegram MTProto akışı alabilmek adına kanala üyelik zorunludur)
+      if (channel.left && channel.id && channel.accessHash) {
+        try {
+          console.log(`➕ Otomatik kanala katılım sağlanıyor: ${channel.title || trimmedChannel}`);
+          const inputChannel = new Api.InputPeerChannel({
+            channelId: BigInt(channel.id.toString()),
+            accessHash: BigInt(channel.accessHash.toString())
+          });
+          await client.invoke(new Api.channels.JoinChannel({ channel: inputChannel }));
+          console.log(`🎉 Kanala başarıyla katılım sağlandı: ${channel.title || trimmedChannel}`);
+        } catch (eJoin) {
+          console.log(`ℹ️ Auto-JoinChannel (${trimmedChannel}):`, eJoin.message);
+        }
+      }
+
       const isPublic = !!channel.username;
       const isChannel = channel.broadcast !== false;
       const cleanId = channel.id ? channel.id.toString().replace(/^-100/, '').replace(/^-/, '') : trimmedChannel.replace(/^-100/, '').replace(/^-/, '');
