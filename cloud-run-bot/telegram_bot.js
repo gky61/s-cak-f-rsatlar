@@ -5,7 +5,7 @@
 
 const { TelegramClient } = require('telegram');
 const { StringSession } = require('telegram/sessions');
-const { NewMessage } = require('telegram/events');
+const { NewMessage, EditedMessage } = require('telegram/events');
 const { Api } = require('telegram/tl');
 const admin = require('firebase-admin');
 const { spawnSync } = require('child_process');
@@ -1103,17 +1103,18 @@ async function subscribeToChannels() {
       }
 
       // Otomatik Kanala Katılım Kontrolü (Real-Time Telegram MTProto akışı alabilmek adına kanala üyelik zorunludur)
-      if (channel.left && channel.id && channel.accessHash) {
+      if (channel.id && channel.accessHash) {
         try {
-          console.log(`➕ Otomatik kanala katılım sağlanıyor: ${channel.title || trimmedChannel}`);
           const inputChannel = new Api.InputPeerChannel({
             channelId: BigInt(channel.id.toString()),
             accessHash: BigInt(channel.accessHash.toString())
           });
           await client.invoke(new Api.channels.JoinChannel({ channel: inputChannel }));
-          console.log(`🎉 Kanala başarıyla katılım sağlandı: ${channel.title || trimmedChannel}`);
+          console.log(`🎉 Kanala katılım / abonelik doğrulandı: ${channel.title || trimmedChannel}`);
         } catch (eJoin) {
-          console.log(`ℹ️ Auto-JoinChannel (${trimmedChannel}):`, eJoin.message);
+          if (!eJoin.message.includes('USER_ALREADY_PARTICIPANT')) {
+            console.log(`ℹ️ JoinChannel (${trimmedChannel}):`, eJoin.message);
+          }
         }
       }
 
@@ -1156,8 +1157,8 @@ async function subscribeToChannels() {
     }
   }
 
-  // TEK BİR GENEL DİNLEYİCİ EKLENİYOR (Tüm gelen mesajlar güvenle yakalanır)
-  client.addEventHandler(async (event) => {
+  // TEK BİR GENEL DİNLEYİCİ FONKSİYONU (Hem Yeni Hem Düzenlenen Mesajları Yakalar)
+  const handleTelegramMessageEvent = async (event) => {
     try {
       checkDateAndResetCounters();
 
@@ -1183,7 +1184,7 @@ async function subscribeToChannels() {
         return;
       }
 
-      console.log(`📩 [${matchedChannel.title}] Yeni mesaj yakalandı! (Chat ID: ${rawChatId})`);
+      console.log(`📩 [${matchedChannel.title}] Gelen mesaj/düzenleme olayı yakalandı! (Chat ID: ${rawChatId})`);
       msgCount++;
       lastMessageTime = new Date();
 
@@ -1258,7 +1259,10 @@ async function subscribeToChannels() {
       errCount++;
       console.error(`❌ Mesaj işleme hatası:`, error.message);
     }
-  }, new NewMessage({}));
+  };
+
+  client.addEventHandler(handleTelegramMessageEvent, new NewMessage({}));
+  client.addEventHandler(handleTelegramMessageEvent, new EditedMessage({}));
 
   try {
     const statusRef = db.collection('settings').doc('telegramBot');
@@ -1317,6 +1321,14 @@ async function startBot() {
 
     await client.connect();
     console.log('✅ Telegram Client bağlandı!');
+
+    try {
+      console.log('🔄 Telegram diyalogları ve sohbet akışları senkronize ediliyor...');
+      await client.getDialogs({ limit: 100 });
+      console.log('✅ Telegram diyalog akışı başarıyla başlatıldı!');
+    } catch (eDialogs) {
+      console.warn('⚠️ getDialogs uyarısı:', eDialogs.message);
+    }
 
     await subscribeToChannels();
 
