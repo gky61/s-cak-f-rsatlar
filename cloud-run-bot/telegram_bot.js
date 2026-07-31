@@ -229,7 +229,8 @@ async function sendHeartbeat() {
       dupCount: dupCount,
       errCount: errCount,
       botEnabled: botEnabled,
-      countersDate: countersDate
+      countersDate: countersDate,
+      monitoredChannels: CHANNELS
     }, { merge: true });
     console.log('💓 Heartbeat sent successfully!');
   } catch (err) {
