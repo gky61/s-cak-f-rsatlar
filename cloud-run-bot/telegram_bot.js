@@ -1067,13 +1067,12 @@ async function subscribeToChannels() {
 
       let subscriberCount = channel.participantsCount || null;
       try {
-        const fullInfo = await client.invoke(
-          new Api.channels.GetFullChannel({
-            channel: channel.username || channel
-          })
-        );
-        if (fullInfo && fullInfo.fullChat && fullInfo.fullChat.participantsCount != null) {
-          subscriberCount = fullInfo.fullChat.participantsCount;
+        const inputPeer = await client.getInputEntity(trimmedChannel);
+        if (inputPeer) {
+          const fullInfo = await client.invoke(new Api.channels.GetFullChannel({ channel: inputPeer }));
+          if (fullInfo && fullInfo.fullChat && fullInfo.fullChat.participantsCount != null) {
+            subscriberCount = fullInfo.fullChat.participantsCount;
+          }
         }
       } catch (eFull) {
         console.log(`⚠️ GetFullChannel hatası (${trimmedChannel}):`, eFull.message);
