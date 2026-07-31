@@ -212,6 +212,8 @@ async function loadCountersFromFirestore() {
   } catch (error) {
     console.error('❌ Firestore\'dan sayaçları yüklerken hata oluştu:', error.message);
   }
+}
+
 async function loadChannelsFromFirestore() {
   try {
     const docRef = db.collection('settings').doc('telegramBot');
