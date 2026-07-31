@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/katalog.dart';
+import '../widgets/katalog_share_sheet.dart';
 
 class KatalogDetayPage extends StatefulWidget {
   final Katalog catalog;
@@ -297,6 +298,33 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Modern Paylaşım Butonu
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.share_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      tooltip: 'Kataloğu Paylaş',
+                      onPressed: () {
+                        KatalogShareSheet.showShareOptions(
+                          context,
+                          catalog: widget.catalog,
+                          currentPageIndex: _currentPage,
+                        );
+                      },
                     ),
                   ),
                 ],
