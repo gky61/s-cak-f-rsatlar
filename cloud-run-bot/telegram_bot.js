@@ -1067,8 +1067,11 @@ async function subscribeToChannels() {
 
       let subscriberCount = channel.participantsCount || null;
       try {
-        const inputEntity = await client.getInputEntity(channel);
-        const fullInfo = await client.invoke(new Api.channels.GetFullChannel({ channel: inputEntity }));
+        const fullInfo = await client.invoke(
+          new Api.channels.GetFullChannel({
+            channel: channel.username || channel
+          })
+        );
         if (fullInfo && fullInfo.fullChat && fullInfo.fullChat.participantsCount != null) {
           subscriberCount = fullInfo.fullChat.participantsCount;
         }
