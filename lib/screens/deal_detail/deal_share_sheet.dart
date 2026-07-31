@@ -1,31 +1,38 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../models/deal.dart';
 
-/// Paylaşım bottom sheet ve sosyal medya paylaşım fonksiyonları.
+/// Tek tıkla doğrudan telefonun natif paylaşım ekranını açan Fırsat Paylaşım Servisi.
 class DealShareSheet {
   DealShareSheet._();
 
-  /// Paylaşım bottom sheet'ini gösterir.
-  static Future<void> showShareOptions(BuildContext context, Deal deal) async {
+  /// Fırsatı doğrudan telefonun natif paylaşım diyaloğuyla resimli/metinli paylaşır.
+  static Future<void> showShareOptions(
+    BuildContext context,
+    Deal deal, {
+    String? fetchedImageUrl,
+  }) async {
     final link = deal.link;
     if (link.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bağlantı henüz eklenmedi'),
-        ),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bağlantı henüz eklenmedi')),
+        );
+      }
       return;
     }
 
     // Zengin paylaşım metni
-    final priceValText = DynamicCurrencyFormatter().format(deal.price);
-    final priceText = deal.price > 0 ? '💰 $priceValText' : '';
-    final discountText = deal.discountRate != null && deal.discountRate! > 0 
-        ? ' (-%${deal.discountRate})' 
+    final priceStr = deal.price > 0 ? (deal.price % 1 == 0 ? deal.price.toInt().toString() : deal.price.toStringAsFixed(2)) : '';
+    final priceText = deal.price > 0 ? '💰 $priceStr TL' : '';
+    final discountText = (deal.discountRate != null && deal.discountRate! > 0)
+        ? ' (-%${deal.discountRate})'
         : '';
+
     final shareText = '''🔥 ${deal.title}
 🏪 ${deal.store}
 $priceText$discountText
@@ -34,163 +41,61 @@ $priceText$discountText
 
 📱 FIRSATKOLİK ile keşfet: https://firsatkolik.app.link/indirme''';
 
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Paylaş',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    // Kullanılacak görsel adresi
+    final imageUrl = (deal.imageUrl.isNotEmpty)
+        ? deal.imageUrl
+        : (fetchedImageUrl ?? '');
+
+    // Görsel varsa indirip natif resimli paylaşım yap
+    if (imageUrl.isNotEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
               children: [
-                _buildShareOption(
-                  context,
-                  icon: Icons.content_copy_rounded,
-                  label: 'Kopyala',
-                  color: Colors.blue,
-                  onTap: () {
-                    Navigator.pop(context);
-                    copyLinkToClipboard(context, link);
-                  },
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 ),
-                _buildShareOption(
-                  context,
-                  icon: Icons.chat_rounded,
-                  label: 'WhatsApp',
-                  color: Colors.green,
-                  onTap: () {
-                    Navigator.pop(context);
-                    shareToWhatsApp(context, shareText);
-                  },
-                ),
-                _buildShareOption(
-                  context,
-                  icon: Icons.chat_bubble_outline_rounded,
-                  label: 'Twitter',
-                  color: Colors.blue,
-                  onTap: () {
-                    Navigator.pop(context);
-                    shareToTwitter(context, shareText);
-                  },
-                ),
+                SizedBox(width: 12),
+                Text('Fırsat görseli hazırlanıyor...'),
               ],
             ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Paylaşım seçenek kartı widget'ı.
-  static Widget _buildShareOption(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// WhatsApp paylaşımı.
-  static Future<void> shareToWhatsApp(BuildContext context, String text) async {
-    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('WhatsApp açılamadı')),
-          );
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Paylaşım hatası: $e')),
+            duration: Duration(seconds: 2),
+          ),
         );
       }
-    }
-  }
 
-  /// Twitter paylaşımı.
-  static Future<void> shareToTwitter(BuildContext context, String text) async {
-    final uri = Uri.parse('https://twitter.com/intent/tweet?text=${Uri.encodeComponent(text)}');
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Twitter açılamadı')),
+      try {
+        final response = await http.get(Uri.parse(imageUrl)).timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+          final tempDir = await getTemporaryDirectory();
+          final sanitizedId = deal.id.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+          final file = File('${tempDir.path}/deal_$sanitizedId.jpg');
+          await file.writeAsBytes(response.bodyBytes);
+
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          }
+
+          // Doğrudan yerel telefon paylaşım diyaloğunu aç (Resim + Altyazı metni)
+          await Share.shareXFiles(
+            [XFile(file.path, mimeType: 'image/jpeg')],
+            text: shareText,
           );
+          return;
         }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Paylaşım hatası: $e')),
-        );
+      } catch (e) {
+        debugPrint('Fırsat görseli indirilemedi, metin olarak paylaşılıyor: $e');
       }
     }
-  }
 
-  /// Link kopyalama.
-  static void copyLinkToClipboard(BuildContext context, String link) {
-    Clipboard.setData(ClipboardData(text: link));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Bağlantı kopyalandı!'),
-      ),
-    );
+    // Görsel yoksa veya indirme başarısızsa doğrudan metin paylaş
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
+    await Share.share(shareText);
   }
 }

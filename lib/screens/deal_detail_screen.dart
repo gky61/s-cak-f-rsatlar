@@ -1177,7 +1177,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
                               const SizedBox(height: 28),
 
-                              // Description Header
+                              // Description Header & Sharing Date
                               Row(
                                 children: [
                                   Container(
@@ -1196,6 +1196,42 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       fontWeight: FontWeight.w800,
                                       color: isDark ? Colors.white : AppTheme.textPrimary,
                                       letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  // Şık & Modern Paylaşım Tarihi (örn: 30 Temmuz - 16:55)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                    decoration: BoxDecoration(
+                                      color: isDark 
+                                          ? Colors.white.withValues(alpha: 0.05) 
+                                          : Colors.grey[100],
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: isDark 
+                                            ? Colors.white.withValues(alpha: 0.08) 
+                                            : Colors.grey[300]!.withValues(alpha: 0.5),
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.access_time_rounded,
+                                          size: 12,
+                                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          formatExactDateTime(deal.createdAt),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -1724,7 +1760,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
 
   Future<void> _showShareOptions(BuildContext context, Deal deal) =>
-      DealShareSheet.showShareOptions(context, deal);
+      DealShareSheet.showShareOptions(context, deal, fetchedImageUrl: _fetchedImageUrl);
 
 
 
