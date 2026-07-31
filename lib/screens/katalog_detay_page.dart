@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/katalog.dart';
-import '../widgets/katalog_share_sheet.dart';
+import '../services/katalog_share_service.dart';
 
 class KatalogDetayPage extends StatefulWidget {
   final Katalog catalog;
@@ -319,7 +319,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
                       ),
                       tooltip: 'Kataloğu Paylaş',
                       onPressed: () {
-                        KatalogShareSheet.showShareOptions(
+                        KatalogShareService.shareCatalogPage(
                           context,
                           catalog: widget.catalog,
                           currentPageIndex: _currentPage,
