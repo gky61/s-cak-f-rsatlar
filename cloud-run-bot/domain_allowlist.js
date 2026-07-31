@@ -43,7 +43,8 @@ if (!allowlistConfig || !allowlistConfig.stores) {
       "beymen": ["beymen.com"],
       "migros": ["migros.com.tr"],
       "getir": ["getir.com"],
-      "havit_turkiye": ["havitstore.com.tr"]
+      "havit_turkiye": ["havitstore.com.tr"],
+      "boyner": ["boyner.com.tr"]
     }
   };
 }

@@ -32,6 +32,7 @@ import 'scrapers/incehesap_scraper.dart';
 import 'scrapers/havit_scraper.dart';
 import 'scrapers/migros_scraper.dart';
 import 'scrapers/getir_scraper.dart';
+import 'scrapers/boyner_scraper.dart';
 import '../utils/test_logger.dart';
 
 void _log(String message) {
@@ -93,6 +94,7 @@ class LinkPreviewService {
     HavitScraper(),
     MigrosScraper(),
     GetirScraper(),
+    BoynerScraper(),
   ];
   static const _defaultUserAgent =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36';

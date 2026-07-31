@@ -47,6 +47,7 @@ String getStoreAsset(String storeName) {
   if (lower.contains('havit')) return 'assets/havit.jpg';
   if (lower.contains('migros')) return 'assets/migros.jpg';
   if (lower.contains('getir')) return 'assets/getir.jpg';
+  if (lower.contains('boyner')) return 'assets/boyner.jpg';
   return 'assets/logo.jpg';
 }
 
