@@ -1068,7 +1068,7 @@ async function subscribeToChannels() {
       let subscriberCount = null;
       try {
         if (channel.id && channel.accessHash) {
-          const inputChannel = new Api.InputChannel({
+          const inputChannel = new Api.InputPeerChannel({
             channelId: BigInt(channel.id.toString()),
             accessHash: BigInt(channel.accessHash.toString())
           });
