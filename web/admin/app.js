@@ -6298,6 +6298,36 @@ async function loadBotConfig() {
             if (channelsInput && data.monitoredChannels) {
                 channelsInput.value = data.monitoredChannels.join(', ');
             }
+
+            const metaContainer = document.getElementById('settingsChannelsMetaContainer');
+            if (metaContainer) {
+                if (data.monitoredChannelsMeta && Array.isArray(data.monitoredChannelsMeta) && data.monitoredChannelsMeta.length > 0) {
+                    metaContainer.innerHTML = `
+                        <div class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Tespit Edilen Kanal Detayları (${data.monitoredChannelsMeta.length} Kanal)</div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            ${data.monitoredChannelsMeta.map(meta => `
+                                <div class="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col gap-1 shadow-2xs">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-sm font-bold text-slate-900 dark:text-white truncate" title="${meta.title}">${meta.title}</span>
+                                        <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full ${meta.status === 'error' ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}">
+                                            ${meta.status === 'error' ? 'Hatalı / Bulunamadı' : 'Aktif'}
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                        <span>ID / User: <strong class="text-slate-700 dark:text-slate-300 font-medium">${meta.username || meta.input}</strong></span>
+                                        <span>${meta.subscribers ? `👥 ${Number(meta.subscribers).toLocaleString('tr-TR')} Abone` : (meta.type || '')}</span>
+                                    </div>
+                                    ${meta.input !== meta.username && meta.input !== meta.id ? `
+                                        <div class="text-[11px] text-slate-400 dark:text-slate-500">Girilmiş Değer: <code class="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded">${meta.input}</code> (Eşleşen ID: ${meta.id})</div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    metaContainer.innerHTML = '';
+                }
+            }
             
             const botToggle = document.getElementById('settingsToggleBotBtn');
             if (botToggle) {

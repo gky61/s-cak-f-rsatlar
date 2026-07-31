@@ -1024,6 +1024,7 @@ async function subscribeToChannels() {
   }
 
   console.log(`🔊 ${CHANNELS.length} kanal için dinleyiciler başlatılıyor...`);
+  const monitoredChannelsMeta = [];
 
   for (const channelUsername of CHANNELS) {
     try {
@@ -1048,16 +1049,35 @@ async function subscribeToChannels() {
             channel = await client.getEntity(BigInt(channelId));
           } catch (e2) {
             console.error(`❌ Kanal bulunamadı: ${trimmedChannel}`, e2.message);
+            monitoredChannelsMeta.push({
+              input: trimmedChannel,
+              title: 'Bilinmeyen Kanal / Bulunamadı',
+              username: trimmedChannel,
+              id: trimmedChannel,
+              subscribers: null,
+              type: 'Unknown',
+              status: 'error'
+            });
             continue;
           }
         }
       }
 
-      console.log(`✅ Kanal bulundu: ${channel.title} (${trimmedChannel})`);
+      console.log(`✅ Kanal bulundu: ${channel.title || channel.firstName} (${trimmedChannel})`);
+
+      monitoredChannelsMeta.push({
+        input: trimmedChannel,
+        title: channel.title || channel.firstName || trimmedChannel,
+        username: channel.username ? `@${channel.username}` : (channel.broadcast ? 'Özel Kanal' : 'Özel Grup'),
+        id: channel.id ? channel.id.toString() : trimmedChannel,
+        subscribers: channel.participantsCount || null,
+        type: channel.broadcast ? 'Public/Private Channel' : 'Group/Supergroup',
+        status: 'active'
+      });
 
       const channelInfo = {
         id: channel.id,
-        title: channel.title,
+        title: channel.title || channel.firstName || trimmedChannel,
         username: channel.username,
         broadcast: channel.broadcast,
       };
@@ -1155,6 +1175,16 @@ async function subscribeToChannels() {
       errCount++;
       console.error(`❌ Kanal bulunamadı: ${channelUsername}`, error.message);
     }
+  }
+
+  try {
+    const statusRef = db.collection('settings').doc('telegramBot');
+    await statusRef.set({
+      monitoredChannelsMeta: monitoredChannelsMeta
+    }, { merge: true });
+    console.log(`✅ ${monitoredChannelsMeta.length} kanalın detaylı metadataları Firestore'a kaydedildi.`);
+  } catch (e) {
+    console.error('❌ Kanal metadataları kaydedilemedi:', e.message);
   }
 }
 
