@@ -6306,6 +6306,41 @@ async function loadBotConfig() {
                     channelsInput.value = data.monitoredChannels.join(', ');
                 }
 
+                // Render Clean VM Status
+                if (data.cleanVmStatus) {
+                    const banner = document.getElementById('cleanVmStatusBanner');
+                    const titleEl = document.getElementById('cleanVmStatusTitle');
+                    const descEl = document.getElementById('cleanVmStatusDesc');
+                    const logsEl = document.getElementById('cleanVmLogsContainer');
+                    const btn = document.getElementById('triggerCleanVmBtn');
+
+                    if (banner && titleEl && descEl) {
+                        banner.classList.remove('hidden');
+                        const st = data.cleanVmStatus;
+
+                        if (st.status === 'running') {
+                            banner.className = 'p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 flex flex-col gap-2 transition-all';
+                            titleEl.innerHTML = `<span class="material-symbols-outlined animate-spin text-[18px]">sync</span> Sunucu Temizliği Yapılıyor...`;
+                            descEl.innerHTML = `Temizlik işlemi arka planda yürütülüyor (Başlangıç: ${st.startedAt ? new Date(st.startedAt).toLocaleTimeString() : ''})`;
+                            if (btn) btn.disabled = true;
+                        } else if (st.status === 'success') {
+                            banner.className = 'p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex flex-col gap-2 transition-all';
+                            titleEl.innerHTML = `<span class="material-symbols-outlined text-[18px]">check_circle</span> Temizlik Başarıyla Tamamlandı! (${st.durationSec || 0}s)`;
+                            descEl.innerHTML = `Serbest Bırakılan Heap: <b>${st.freedHeapMb || 0} MB</b> | Güncel Heap: <b>${st.heapUsedMb || 0} MB</b> | Tamamlanma: ${st.completedAt ? new Date(st.completedAt).toLocaleString('tr-TR') : ''}`;
+                            if (btn) btn.disabled = false;
+                        } else if (st.status === 'error') {
+                            banner.className = 'p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 flex flex-col gap-2 transition-all';
+                            titleEl.innerHTML = `<span class="material-symbols-outlined text-[18px]">error</span> Temizlik Sırasında Hata Oluştu!`;
+                            descEl.innerHTML = `<b>Hata:</b> ${st.error || 'Bilinmeyen hata'} (${st.failedAt ? new Date(st.failedAt).toLocaleTimeString() : ''})`;
+                            if (btn) btn.disabled = false;
+                        }
+
+                        if (logsEl && Array.isArray(st.logs)) {
+                            logsEl.textContent = st.logs.join('\n');
+                        }
+                    }
+                }
+
                 const metaContainer = document.getElementById('settingsChannelsMetaContainer');
                 if (metaContainer) {
                     if (data.monitoredChannelsMeta && Array.isArray(data.monitoredChannelsMeta) && data.monitoredChannelsMeta.length > 0) {
@@ -8469,6 +8504,38 @@ if (document.readyState === 'loading') {
     initCouponsListeners();
     initCatalogsListeners();
 }
+
+window.triggerCleanVmExecution = async function() {
+    if (!confirm('Sunucu bellek ve performans temizliğini başlatmak istediğinize emin misiniz?')) {
+        return;
+    }
+    const btn = document.getElementById('triggerCleanVmBtn');
+    if (btn) btn.disabled = true;
+
+    try {
+        await db.collection('settings').doc('telegramBot').set({
+            cleanVmTrigger: Date.now()
+        }, { merge: true });
+        
+        if (typeof showSuccess === 'function') {
+            showSuccess('Sunucu temizlik komutu gönderildi. İşlem takip ediliyor...');
+        }
+    } catch (e) {
+        if (btn) btn.disabled = false;
+        if (typeof showError === 'function') {
+            showError('Temizlik başlatılamadı: ' + e.message);
+        } else {
+            alert('Hata: ' + e.message);
+        }
+    }
+};
+
+window.toggleCleanVmLogs = function() {
+    const logsEl = document.getElementById('cleanVmLogsContainer');
+    if (logsEl) {
+        logsEl.classList.toggle('hidden');
+    }
+};
 
 
 
