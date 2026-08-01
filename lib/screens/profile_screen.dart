@@ -334,9 +334,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     // Assets klasöründeki profil resimleri
     final List<String> profileImages = [
-      'assets/kullanıcı pp.jpg',
-      'assets/kkpp.jpg',
-      'assets/ayı.jpg',
+      'assets/kullanıcı pp.webp',
+      'assets/kkpp.webp',
     ];
 
     showDialog(

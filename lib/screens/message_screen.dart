@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../models/message.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
 import 'profile_screen.dart';
 
@@ -118,13 +119,13 @@ class _MessageScreenState extends State<MessageScreen> {
           builder: (context, otherUserSnapshot) {
             String currentUserImageUrl = _authService.currentUser?.photoURL ?? '';
             if (currentUserSnapshot.hasData && currentUserSnapshot.data!.exists) {
-              currentUserImageUrl = currentUserSnapshot.data!.data()?['profileImageUrl'] ?? currentUserImageUrl;
+              currentUserImageUrl = migrateAssetPath(currentUserSnapshot.data!.data()?['profileImageUrl'] ?? currentUserImageUrl);
             }
 
             String otherUserImageUrl = widget.otherUserImageUrl;
             String otherUserName = widget.otherUserName;
             if (otherUserSnapshot.hasData && otherUserSnapshot.data!.exists) {
-              otherUserImageUrl = otherUserSnapshot.data!.data()?['profileImageUrl'] ?? otherUserImageUrl;
+              otherUserImageUrl = migrateAssetPath(otherUserSnapshot.data!.data()?['profileImageUrl'] ?? otherUserImageUrl);
               otherUserName = otherUserSnapshot.data!.data()?['username'] ?? otherUserSnapshot.data!.data()?['displayName'] ?? otherUserName;
             }
 

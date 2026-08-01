@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
 
 import '../models/deal.dart';
 import '../models/category.dart';
@@ -941,7 +942,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             }
                                             final userData = snapshot.data!.data() as Map<String, dynamic>;
                                             final username = userData['username']?.toString() ?? 'Kullanıcı';
-                                            final profileImageUrl = userData['profileImageUrl']?.toString() ?? '';
+                                            final profileImageUrl = migrateAssetPath(userData['profileImageUrl']?.toString() ?? '');
 
                                             return InkWell(
                                               onTap: () {

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
 import '../models/message.dart';
 import '../models/admin_to_user_message.dart';
 
@@ -25,10 +26,10 @@ class MessageService {
         id: '',
         senderId: senderId,
         senderName: senderDoc.data()?['username'] ?? 'Kullanıcı',
-        senderImageUrl: senderDoc.data()?['profileImageUrl'] ?? '',
+        senderImageUrl: migrateAssetPath(senderDoc.data()?['profileImageUrl'] ?? ''),
         receiverId: receiverId,
         receiverName: receiverDoc.data()?['username'] ?? 'Kullanıcı',
-        receiverImageUrl: receiverDoc.data()?['profileImageUrl'] ?? '',
+        receiverImageUrl: migrateAssetPath(receiverDoc.data()?['profileImageUrl'] ?? ''),
         text: text.trim(),
         createdAt: DateTime.now(),
         isRead: false,

@@ -16,6 +16,7 @@ import '../models/message.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../utils/badge_helper.dart';
+import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
 import 'deal_detail_screen.dart';
 import 'profile_screen.dart';
@@ -1946,7 +1947,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   final username = (userData['username'] ?? 'Kullanıcı').toString();
                   final nickname = (userData['nickname'] ?? '').toString();
                   final displayName = nickname.isNotEmpty ? nickname : username;
-                  final profileImageUrl = (userData['profileImageUrl'] ?? '').toString();
+                  final profileImageUrl = migrateAssetPath((userData['profileImageUrl'] ?? '').toString());
                   final points = (userData['points'] ?? 0) as int;
                   final totalLikes = (userData['totalLikes'] ?? 0) as int;
                   final badges = (userData['badges'] ?? []) as List<dynamic>;

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
@@ -71,47 +71,47 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   String _getStoreAsset(String storeName) {
     switch (storeName) {
       case 'Trendyol':
-        return 'assets/trendyol.jpg';
+        return 'assets/trendyol.webp';
       case 'Hepsiburada':
-        return 'assets/hepsiburada.jpg';
+        return 'assets/hepsiburada.webp';
       case 'N11':
-        return 'assets/n11.jpg';
+        return 'assets/n11.webp';
       case 'Amazon':
-        return 'assets/amazon.jpg';
+        return 'assets/amazon.webp';
       case 'Pazarama':
-        return 'assets/pazarama.jpg';
+        return 'assets/pazarama.webp';
       case 'Vatan Bilgisayar':
-        return 'assets/vatan.jpg';
+        return 'assets/vatan.webp';
       case 'MediaMarkt':
-        return 'assets/mediamarkt.jpg';
+        return 'assets/mediamarkt.webp';
       case 'İtopya':
-        return 'assets/itopya.jpg';
+        return 'assets/itopya.webp';
       case 'İdefix':
-        return 'assets/idefix.jpg';
+        return 'assets/idefix.webp';
       case 'Teknosa':
-        return 'assets/teknosa.jpg';
+        return 'assets/teknosa.webp';
       case 'Mavi':
-        return 'assets/mavi.jpg';
+        return 'assets/mavi.webp';
       case 'DeFacto':
-        return 'assets/defacto.jpg';
+        return 'assets/defacto.webp';
       case 'Zara':
-        return 'assets/zara.jpg';
+        return 'assets/zara.webp';
       case 'Mango':
-        return 'assets/mango.jpg';
+        return 'assets/mango.webp';
       case 'Beymen':
-        return 'assets/beymen.jpg';
+        return 'assets/beymen.webp';
       case 'PttAVM':
-        return 'assets/pttavm.jpg';
+        return 'assets/pttavm.webp';
       case 'İncehesap':
-        return 'assets/incehesap.jpg';
+        return 'assets/incehesap.webp';
       case 'Havit':
-        return 'assets/havit.jpg';
+        return 'assets/havit.webp';
       case 'Migros':
-        return 'assets/migros.jpg';
+        return 'assets/migros.webp';
       case 'Getir':
-        return 'assets/getir.jpg';
+        return 'assets/getir.webp';
       case 'Boyner':
-        return 'assets/boyner.jpg';
+        return 'assets/boyner.webp';
       default:
         return 'assets/store-icon.png';
     }
@@ -784,7 +784,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     try {
       final uri = Uri.parse(url);
       final path = uri.path.toLowerCase();
-      final imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+      final imageExtensions = ['.webp', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
       if (imageExtensions.any((ext) => path.endsWith(ext) || path.contains(ext))) {
         return true;
       }

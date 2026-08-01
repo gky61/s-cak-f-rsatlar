@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/deal.dart';
@@ -28,27 +28,27 @@ class StrikeThroughPainter extends CustomPainter {
 
 String getStoreAsset(String storeName) {
   final lower = storeName.toLowerCase().trim();
-  if (lower.contains('trendyol')) return 'assets/trendyol.jpg';
-  if (lower.contains('hepsiburada')) return 'assets/hepsiburada.jpg';
-  if (lower.contains('n11')) return 'assets/n11.jpg';
-  if (lower.contains('amazon')) return 'assets/amazon.jpg';
-  if (lower.contains('pazarama')) return 'assets/pazarama.jpg';
-  if (lower.contains('vatan')) return 'assets/vatan.jpg';
-  if (lower.contains('mediamarkt') || lower.contains('media markt')) return 'assets/mediamarkt.jpg';
-  if (lower.contains('incehesap') || lower.contains('ince hesap')) return 'assets/incehesap.jpg';
-  if (lower.contains('itopya')) return 'assets/itopya.jpg';
-  if (lower.contains('teknosa')) return 'assets/teknosa.jpg';
-  if (lower.contains('zara')) return 'assets/zara.jpg';
-  if (lower.contains('mango')) return 'assets/mango.jpg';
-  if (lower.contains('mavi')) return 'assets/mavi.jpg';
-  if (lower.contains('defacto')) return 'assets/defacto.jpg';
-  if (lower.contains('beymen')) return 'assets/beymen.jpg';
-  if (lower.contains('idefix')) return 'assets/idefix.jpg';
-  if (lower.contains('havit')) return 'assets/havit.jpg';
-  if (lower.contains('migros')) return 'assets/migros.jpg';
-  if (lower.contains('getir')) return 'assets/getir.jpg';
-  if (lower.contains('boyner')) return 'assets/boyner.jpg';
-  return 'assets/logo.jpg';
+  if (lower.contains('trendyol')) return 'assets/trendyol.webp';
+  if (lower.contains('hepsiburada')) return 'assets/hepsiburada.webp';
+  if (lower.contains('n11')) return 'assets/n11.webp';
+  if (lower.contains('amazon')) return 'assets/amazon.webp';
+  if (lower.contains('pazarama')) return 'assets/pazarama.webp';
+  if (lower.contains('vatan')) return 'assets/vatan.webp';
+  if (lower.contains('mediamarkt') || lower.contains('media markt')) return 'assets/mediamarkt.webp';
+  if (lower.contains('incehesap') || lower.contains('ince hesap')) return 'assets/incehesap.webp';
+  if (lower.contains('itopya')) return 'assets/itopya.webp';
+  if (lower.contains('teknosa')) return 'assets/teknosa.webp';
+  if (lower.contains('zara')) return 'assets/zara.webp';
+  if (lower.contains('mango')) return 'assets/mango.webp';
+  if (lower.contains('mavi')) return 'assets/mavi.webp';
+  if (lower.contains('defacto')) return 'assets/defacto.webp';
+  if (lower.contains('beymen')) return 'assets/beymen.webp';
+  if (lower.contains('idefix')) return 'assets/idefix.webp';
+  if (lower.contains('havit')) return 'assets/havit.webp';
+  if (lower.contains('migros')) return 'assets/migros.webp';
+  if (lower.contains('getir')) return 'assets/getir.webp';
+  if (lower.contains('boyner')) return 'assets/boyner.webp';
+  return 'assets/logo.webp';
 }
 
 Widget buildStoreLogo(String storeName, {double size = 16, double borderRadius = 4}) {

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -213,7 +214,7 @@ class AppUser {
       return AppUser(
         uid: doc.id,
         username: data['username']?.toString() ?? '',
-        profileImageUrl: data['profileImageUrl']?.toString() ?? '',
+        profileImageUrl: migrateAssetPath(data['profileImageUrl']?.toString() ?? ''),
         followedCategories: followedCategories,
         watchKeywords: watchKeywords,
         following: following,
@@ -238,7 +239,7 @@ class AppUser {
     return AppUser(
       uid: doc.id,
         username: dataMap['username']?.toString() ?? 'Kullanıcı',
-        profileImageUrl: dataMap['profileImageUrl']?.toString() ?? '',
+        profileImageUrl: migrateAssetPath(dataMap['profileImageUrl']?.toString() ?? ''),
         followedCategories: [],
         watchKeywords: [],
         following: [],

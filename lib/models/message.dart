@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -58,10 +59,10 @@ class Message {
       id: doc.id,
       senderId: data['senderId'] ?? '',
       senderName: data['senderName'] ?? '',
-      senderImageUrl: data['senderImageUrl'] ?? '',
+      senderImageUrl: migrateAssetPath(data['senderImageUrl'] ?? ''),
       receiverId: data['receiverId'] ?? '',
       receiverName: data['receiverName'] ?? '',
-      receiverImageUrl: data['receiverImageUrl'] ?? '',
+      receiverImageUrl: migrateAssetPath(data['receiverImageUrl'] ?? ''),
       text: data['text'] ?? '',
       createdAt: createdAt,
       isRead: data['isRead'] ?? false,

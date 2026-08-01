@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'katalog_listesi_page.dart';
 
@@ -21,26 +21,26 @@ class AktuelMagazalarPage extends StatelessWidget {
 
   static const List<Magaza> _magazalar = [
     // 1. Öncelik – Süpermarket / Marketler
-    Magaza(code: 'bim', name: 'BİM', logoAsset: 'assets/bim.jpg', brandColor: Color(0xFF005691)),
-    Magaza(code: 'a101', name: 'A-101', logoAsset: 'assets/a101.jpg', brandColor: Color(0xFF14B4C8)),
-    Magaza(code: 'sok', name: 'ŞOK', logoAsset: 'assets/sok.jpg', brandColor: Color(0xFFFFD200)),
-    Magaza(code: 'migros', name: 'Migros', logoAsset: 'assets/migros.jpg', brandColor: Color(0xFFEE7C11)),
-    Magaza(code: 'carrefoursa', name: 'CarrefourSA', logoAsset: 'assets/carrefoursa.jpg', brandColor: Color(0xFF0F4C81)),
-    Magaza(code: 'metro', name: 'Metro', logoAsset: 'assets/metro.jpg', brandColor: Color(0xFF002F6C)),
-    Magaza(code: 'macrocenter', name: 'MacroCenter', logoAsset: 'assets/macrocenter.jpg', brandColor: Color(0xFF1B1B1B)),
-    Magaza(code: 'getirbuyuk', name: 'GetirBüyük', logoAsset: 'assets/getirbuyuk.jpg', brandColor: Color(0xFF5D3EBC)),
-    Magaza(code: 'bizim', name: 'Bizim Toptan', logoAsset: 'assets/bizim.jpg', brandColor: Color(0xFFFFCC00)),
-    Magaza(code: 'file', name: 'File', logoAsset: 'assets/file.jpg', brandColor: Color(0xFF3498DB)),
-    Magaza(code: 'happycenter', name: 'Happy Center', logoAsset: 'assets/happycenter.jpg', brandColor: Color(0xFF8DC63F)),
-    Magaza(code: 'hakmar', name: 'Hakmar', logoAsset: 'assets/hakmar-express.jpg', brandColor: Color(0xFFD32F2F)),
-    Magaza(code: 'cagri', name: 'Çağrı Hipermarket', logoAsset: 'assets/cagri.jpg', brandColor: Color(0xFFE31B23)),
-    Magaza(code: 'kooperatifmarket', name: 'Kooperatif Market', logoAsset: 'assets/kooperatif.jpg', brandColor: Color(0xFF00755F)),
+    Magaza(code: 'bim', name: 'BİM', logoAsset: 'assets/bim.webp', brandColor: Color(0xFF005691)),
+    Magaza(code: 'a101', name: 'A-101', logoAsset: 'assets/a101.webp', brandColor: Color(0xFF14B4C8)),
+    Magaza(code: 'sok', name: 'ŞOK', logoAsset: 'assets/sok.webp', brandColor: Color(0xFFFFD200)),
+    Magaza(code: 'migros', name: 'Migros', logoAsset: 'assets/migros.webp', brandColor: Color(0xFFEE7C11)),
+    Magaza(code: 'carrefoursa', name: 'CarrefourSA', logoAsset: 'assets/carrefoursa.webp', brandColor: Color(0xFF0F4C81)),
+    Magaza(code: 'metro', name: 'Metro', logoAsset: 'assets/metro.webp', brandColor: Color(0xFF002F6C)),
+    Magaza(code: 'macrocenter', name: 'MacroCenter', logoAsset: 'assets/macrocenter.webp', brandColor: Color(0xFF1B1B1B)),
+    Magaza(code: 'getirbuyuk', name: 'GetirBüyük', logoAsset: 'assets/getirbuyuk.webp', brandColor: Color(0xFF5D3EBC)),
+    Magaza(code: 'bizim', name: 'Bizim Toptan', logoAsset: 'assets/bizim.webp', brandColor: Color(0xFFFFCC00)),
+    Magaza(code: 'file', name: 'File', logoAsset: 'assets/file.webp', brandColor: Color(0xFF3498DB)),
+    Magaza(code: 'happycenter', name: 'Happy Center', logoAsset: 'assets/happycenter.webp', brandColor: Color(0xFF8DC63F)),
+    Magaza(code: 'hakmar', name: 'Hakmar', logoAsset: 'assets/hakmar-express.webp', brandColor: Color(0xFFD32F2F)),
+    Magaza(code: 'cagri', name: 'Çağrı Hipermarket', logoAsset: 'assets/cagri.webp', brandColor: Color(0xFFE31B23)),
+    Magaza(code: 'kooperatifmarket', name: 'Kooperatif Market', logoAsset: 'assets/kooperatif.webp', brandColor: Color(0xFF00755F)),
     // 2. Öncelik – Makyaj / Kişisel Bakım
-    Magaza(code: 'watsons', name: 'Watsons', logoAsset: 'assets/watsons.jpg', brandColor: Color(0xFF00A19B)),
-    Magaza(code: 'gratis', name: 'Gratis', logoAsset: 'assets/gratis.jpg', brandColor: Color(0xFF8B1E87)),
+    Magaza(code: 'watsons', name: 'Watsons', logoAsset: 'assets/watsons.webp', brandColor: Color(0xFF00A19B)),
+    Magaza(code: 'gratis', name: 'Gratis', logoAsset: 'assets/gratis.webp', brandColor: Color(0xFF8B1E87)),
     // 3. Öncelik – Teknoloji
-    Magaza(code: 'teknosa', name: 'Teknosa', logoAsset: 'assets/teknosa.jpg', brandColor: Color(0xFFFF5F00)),
-    Magaza(code: 'vatan', name: 'Vatan Bilgisayar', logoAsset: 'assets/vatan.jpg', brandColor: Color(0xFF005691)),
+    Magaza(code: 'teknosa', name: 'Teknosa', logoAsset: 'assets/teknosa.webp', brandColor: Color(0xFFFF5F00)),
+    Magaza(code: 'vatan', name: 'Vatan Bilgisayar', logoAsset: 'assets/vatan.webp', brandColor: Color(0xFF005691)),
   ];
 
   @override

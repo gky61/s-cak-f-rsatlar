@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
 
 class Comment {
   final String id;
@@ -38,7 +39,7 @@ class Comment {
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? '',
       userEmail: data['userEmail'] ?? '',
-      userProfileImageUrl: data['userProfileImageUrl'] ?? '',
+      userProfileImageUrl: migrateAssetPath(data['userProfileImageUrl'] ?? ''),
       text: data['text'] ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       parentCommentId: data['parentCommentId'],

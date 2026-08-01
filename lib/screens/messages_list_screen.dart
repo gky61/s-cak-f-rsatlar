@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../models/message.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
 import 'message_screen.dart';
 
@@ -139,7 +140,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                   if (userSnapshot.hasData && userSnapshot.data!.exists) {
                     final userData = userSnapshot.data!.data();
                     displayName = userData?['username'] ?? userData?['displayName'] ?? otherUserName;
-                    profileImageUrl = userData?['profileImageUrl'] ?? otherUserImageUrl;
+                    profileImageUrl = migrateAssetPath(userData?['profileImageUrl'] ?? otherUserImageUrl);
                   }
 
                   return InkWell(
