@@ -97,6 +97,8 @@ class UserService {
         'link': finalLink,
         'magazaAdi': finalStore,
         'eklenmeTarihi': FieldValue.serverTimestamp(),
+        'savedAt': FieldValue.serverTimestamp(),
+        'addedAt': FieldValue.serverTimestamp(),
       });
       return true;
     } catch (e) {
