@@ -2206,6 +2206,130 @@ exports.cleanupExpiredDealsManual = functions
   }));
 
 /**
+ * 🔥 30 GÜN GEÇMİŞ FIRSATLARI KALıCı OLARAK SİLER (Haftalık)
+ * Deals dokümanı + subcollection'ları (votes, comments) + tüm kullanıcıların
+ * favorites referansları + Storage görselleri dahil tüm izleri temizler.
+ */
+async function _purgeOldDealsCore() {
+  const db = admin.firestore();
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+
+  let deletedCount = 0;
+  let errorCount = 0;
+  const deletedDeals = [];
+
+  // 1. 30 günden eski deal'leri bul
+  const targetDocIds = new Set();
+  const docsToDelete = [];
+
+  const snap1 = await db.collection('deals').where('createdAt', '<', thirtyDaysAgo).get();
+  snap1.forEach(doc => {
+    if (!targetDocIds.has(doc.id)) {
+      targetDocIds.add(doc.id);
+      docsToDelete.push(doc);
+    }
+  });
+
+  const snap2 = await db.collection('deals').where('timestamp', '<', thirtyDaysAgo).get();
+  snap2.forEach(doc => {
+    if (!targetDocIds.has(doc.id)) {
+      targetDocIds.add(doc.id);
+      docsToDelete.push(doc);
+    }
+  });
+
+  functions.logger.info(`🔍 30 günden eski ${docsToDelete.length} fırsat bulundu. Kalıcı silme başlıyor...`);
+
+  for (const doc of docsToDelete) {
+    try {
+      const deal = doc.data();
+      const dealId = doc.id;
+      const dealRef = db.collection('deals').doc(dealId);
+
+      // A. Subcollection: votes silme
+      const votesSnap = await dealRef.collection('votes').get();
+      if (!votesSnap.empty) {
+        const batch = db.batch();
+        votesSnap.docs.forEach(v => batch.delete(v.ref));
+        await batch.commit();
+      }
+
+      // B. Subcollection: comments silme
+      const commentsSnap = await dealRef.collection('comments').get();
+      if (!commentsSnap.empty) {
+        const batch = db.batch();
+        commentsSnap.docs.forEach(c => batch.delete(c.ref));
+        await batch.commit();
+      }
+
+      // C. Tüm kullanıcıların favorites'ından bu deal referansını sil
+      const usersSnap = await db.collection('users').get();
+      for (const userDoc of usersSnap.docs) {
+        try {
+          const favRef = userDoc.ref.collection('favorites').doc(dealId);
+          const favDoc = await favRef.get();
+          if (favDoc.exists) {
+            await favRef.delete();
+          }
+        } catch (favErr) {
+          // Sessizce devam et — kullanıcı bazında hata önemsiz
+        }
+      }
+
+      // D. Storage görselini sil
+      const url = deal.imageUrl || deal.image_url;
+      if (url) {
+        await deleteDealImage(url);
+      }
+
+      // E. Deal dokümanını sil
+      await dealRef.delete();
+      deletedCount++;
+      deletedDeals.push({ id: dealId, title: deal.title || 'Başlıksız' });
+      functions.logger.info(`🗑️ Kalıcı silindi: ${dealId} - ${deal.title}`);
+    } catch (docError) {
+      errorCount++;
+      functions.logger.error(`❌ Deal kalıcı silme hatası (${doc.id}):`, docError.message);
+    }
+  }
+
+  functions.logger.info(`✅ 30 günlük derin temizlik bitti. Silinen: ${deletedCount}, Hata: ${errorCount}`);
+  return { totalFound: docsToDelete.length, deletedCount, errorCount, deletedDeals };
+}
+
+exports.purgeOldDeals = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .pubsub.schedule('0 4 * * 0') // Her Pazar 04:00'da çalışır
+  .timeZone('Europe/Istanbul')
+  .onRun(wrapTrigger('purgeOldDeals', async (context) => {
+    functions.logger.info('🔥 30 günlük fırsat kalıcı silme görevi başladı...');
+    await _purgeOldDealsCore();
+    return null;
+  }));
+
+exports.purgeOldDealsManual = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .https.onCall(wrapCall('purgeOldDealsManual', async (data, context) => {
+    // Admin kontrolü
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Giriş yapmalısınız.');
+    }
+    const callerDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
+    if (!callerDoc.exists || callerDoc.data().role !== 'admin') {
+      throw new functions.https.HttpsError('permission-denied', 'Admin yetkisi gerekli.');
+    }
+
+    functions.logger.info(`🔥 Admin ${context.auth.uid} tarafından manuel kalıcı silme tetiklendi.`);
+    const result = await _purgeOldDealsCore();
+    return {
+      success: true,
+      message: `${result.deletedCount} fırsat kalıcı olarak silindi.`,
+      stats: result
+    };
+  }));
+
+/**
  * 14. KULLANICI AUTH HESABI SİLİNDİĞİNDE TETİKLENEN SİLME İŞLEMİ
  * Kullanıcıya ait Firestore'daki tüm verileri (profil, fırsatlar, cihazlar, abonelikler, yorumlar vb.) kalıcı olarak siler.
  */

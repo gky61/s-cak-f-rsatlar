@@ -4,24 +4,31 @@ const cheerio = require('cheerio');
 const { spawnSync } = require('child_process');
 
 const STORES = [
-  { code: 'a101', name: 'A101', url: 'https://www.akakce.com/brosurler/a101' },
-  { code: 'bim', name: 'BİM', url: 'https://www.akakce.com/brosurler/bim' },
-  { code: 'sok', name: 'ŞOK', url: 'https://www.akakce.com/brosurler/sok' },
-  { code: 'migros', name: 'Migros', url: 'https://www.akakce.com/brosurler/migros' },
-  { code: 'carrefoursa', name: 'CarrefourSA', url: 'https://www.akakce.com/brosurler/carrefoursa' },
-  { code: 'cagri', name: 'Çağrı', url: 'https://www.akakce.com/brosurler/cagrihipermarket' },
-  { code: 'happycenter', name: 'HappyCenter', url: 'https://www.akakce.com/brosurler/happy-center' },
-  { code: 'macrocenter', name: 'MacroCenter', url: 'https://www.akakce.com/brosurler/macrocenter' },
-  { code: 'getirbuyuk', name: 'GetirBüyük', url: 'https://www.akakce.com/brosurler/getirbuyuk' },
-  { code: 'file', name: 'File', url: 'https://www.akakce.com/brosurler/filemarket' },
-  { code: 'hakmar', name: 'Hakmar', url: 'https://www.akakce.com/brosurler/hakmarexpress' },
-  { code: 'gratis', name: 'Gratis', url: 'https://www.akakce.com/brosurler/gratis' },
-  { code: 'watsons', name: 'Watsons', url: 'https://www.akakce.com/brosurler/watsons' },
-  { code: 'kooperatifmarket', name: 'Kooperatif Market', url: 'https://www.akakce.com/brosurler/kooperatifmarket' },
-  { code: 'metro', name: 'Metro', url: 'https://www.akakce.com/brosurler/metro-tr' },
-  { code: 'bizim', name: 'Bizim', url: 'https://www.akakce.com/brosurler/bizimtoptan' },
-  { code: 'teknosa', name: 'Teknosa', url: 'https://www.akakce.com/brosurler/teknosacom' },
-  { code: 'vatan', name: 'Vatan', url: 'https://www.akakce.com/brosurler/vatanbilgisayar' }
+  { code: 'a101', name: 'A101', url: 'https://www.akakce.com/brosurler/a101', keywords: ['a101', 'a-101'] },
+  { code: 'bim', name: 'BİM', url: 'https://www.akakce.com/brosurler/bim', keywords: ['bim'] },
+  { code: 'sok', name: 'ŞOK', url: 'https://www.akakce.com/brosurler/sok', keywords: ['sok', 'şok'] },
+  { code: 'migros', name: 'Migros', url: 'https://www.akakce.com/brosurler/migros', keywords: ['migros'] },
+  { code: 'carrefoursa', name: 'CarrefourSA', url: 'https://www.akakce.com/brosurler/carrefoursa', keywords: ['carrefour'] },
+  { code: 'cagri', name: 'Çağrı', url: 'https://www.akakce.com/brosurler/cagrihipermarket', keywords: ['cagri', 'çağrı'] },
+  { code: 'happycenter', name: 'HappyCenter', url: 'https://www.akakce.com/brosurler/happy-center', keywords: ['happy'] },
+  { code: 'macrocenter', name: 'MacroCenter', url: 'https://www.akakce.com/brosurler/macrocenter', keywords: ['macro'] },
+  { code: 'getirbuyuk', name: 'GetirBüyük', url: 'https://www.akakce.com/brosurler/getirbuyuk', keywords: ['getir'] },
+  { code: 'file', name: 'File', url: 'https://www.akakce.com/brosurler/filemarket', keywords: ['file'] },
+  { code: 'hakmarexpress', name: 'Hakmar Express', url: 'https://www.akakce.com/brosurler/hakmarexpress', keywords: ['express'] },
+  { code: 'hakmar', name: 'Hakmar', url: 'https://www.akakce.com/brosurler/hakmar', keywords: ['hakmar'], excludeKeywords: ['express'] },
+  { code: 'cetinkaya', name: 'Çetinkaya', url: 'https://www.akakce.com/brosurler/cetinkaya', keywords: ['cetinkaya', 'çetinkaya'] },
+  { code: 'gratis', name: 'Gratis', url: 'https://www.akakce.com/brosurler/gratis', keywords: ['gratis'] },
+  { code: 'watsons', name: 'Watsons', url: 'https://www.akakce.com/brosurler/watsons', keywords: ['watsons'] },
+  { code: 'rossmann', name: 'Rossmann', url: 'https://www.akakce.com/brosurler/rossmann', keywords: ['rossmann'] },
+  { code: 'civil', name: 'Civil', url: 'https://www.akakce.com/brosurler/civil', keywords: ['civil'] },
+  { code: 'evkur', name: 'Evkur', url: 'https://www.akakce.com/brosurler/evkur', keywords: ['evkur'] },
+  { code: 'mrdiy', name: 'MR.DIY', url: 'https://www.akakce.com/brosurler/mrdiy', keywords: ['mrdiy', 'mr.diy', 'diy'] },
+  { code: 'kooperatifmarket', name: 'Kooperatif Market', url: 'https://www.akakce.com/brosurler/kooperatifmarket', keywords: ['kooperatif', 'tarim', 'tarım'] },
+  { code: 'metro', name: 'Metro', url: 'https://www.akakce.com/brosurler/metro-tr', keywords: ['metro'] },
+  { code: 'bizim', name: 'Bizim', url: 'https://www.akakce.com/brosurler/bizimtoptan', keywords: ['bizim'] },
+  { code: 'teknosa', name: 'Teknosa', url: 'https://www.akakce.com/brosurler/teknosacom', keywords: ['teknosa'] },
+  { code: 'vatan', name: 'Vatan', url: 'https://www.akakce.com/brosurler/vatanbilgisayar', keywords: ['vatan'] },
+  { code: 'vestel', name: 'Vestel', url: 'https://www.akakce.com/brosurler/vestel', keywords: ['vestel'] }
 ];
 
 /**
@@ -252,6 +259,27 @@ async function scrapeAndSaveCatalogs() {
         }
 
         if (href.includes('/brosurler/')) {
+          const storeNameText = (aTag.find('.blid b').text() || '').toLowerCase();
+          const hrefLower = href.toLowerCase();
+
+          // Exclude check
+          if (store.excludeKeywords && store.excludeKeywords.some(ex => hrefLower.includes(ex) || storeNameText.includes(ex))) {
+            return;
+          }
+
+          // Store Validation: Ensure brochure actually matches the target store
+          const matchesStore = store.keywords.some(kw => 
+            hrefLower.includes(`/${kw}`) || 
+            hrefLower.includes(`${kw}-`) || 
+            hrefLower.includes(`-${kw}`) || 
+            storeNameText.includes(kw)
+          );
+
+          if (!matchesStore) {
+            functions.logger.debug(`Skipping unrelated brochure on ${store.name} page: ${href}`);
+            return;
+          }
+
           const imgStyle = aTag.find('.dt img').attr('style') || '';
           const bgUrlMatch = imgStyle.match(/url\((?:&quot;|"|')?([^)'"]+?)(?:&quot;|"|')?\)/);
           let coverImage = '';

@@ -6,7 +6,6 @@ import '../models/comment.dart';
 import '../models/message.dart';
 import '../models/admin_to_user_message.dart';
 import '../models/user.dart';
-import 'auth_service.dart';
 import 'deal_service.dart';
 import 'user_service.dart';
 import 'message_service.dart';
@@ -238,7 +237,7 @@ class FirestoreService {
         .snapshots()
         .map((snapshot) {
       final now = DateTime.now();
-      final cutoffTime = now.subtract(const Duration(days: 30)); // 30-day time window for popular deals
+      final cutoffTime = now.subtract(const Duration(hours: 48)); // Tüm menülerle tutarlı
       
       final deals = snapshot.docs
           .map((doc) {
@@ -253,10 +252,13 @@ class FirestoreService {
               deal.isTest != true &&
               deal.isExpired != true &&
               deal.hotVotes >= minHotVotes &&
+              deal.netScore > 0 && // Net skoru pozitif olmalı (topluluk onaylı)
               !deal.createdAt.isBefore(cutoffTime))
           .cast<Deal>()
           .toList();
-      deals.sort((a, b) => b.hotVotes.compareTo(a.hotVotes));
+
+      // Popülerlik skoruna göre sırala (Wilson Score + Zaman Çürümesi + Engagement)
+      deals.sort((a, b) => b.popularityScore.compareTo(a.popularityScore));
       return deals.take(50).toList();
     });
   }
@@ -270,16 +272,26 @@ class FirestoreService {
     StreamSubscription? subSubscription;
     StreamSubscription? dealsSubscription;
     
-    List<String> followedCategories = [];
+    Set<String> followedCategoryKeys = {};
+    Set<String> followedSubCategoryKeys = {};
     List<Deal> approvedDeals = [];
     
     void updateList() {
       if (controller.isClosed) return;
-      if (followedCategories.isEmpty) {
+      if (followedCategoryKeys.isEmpty && followedSubCategoryKeys.isEmpty) {
         controller.add([]);
         return;
       }
-      final filtered = approvedDeals.where((d) => followedCategories.contains(d.category)).toList();
+      final filtered = approvedDeals.where((d) {
+        final catLower = d.category.toLowerCase();
+        if (followedCategoryKeys.contains(catLower)) return true;
+        
+        if (d.subCategory != null && d.subCategory!.isNotEmpty) {
+          final subKey = '$catLower:${d.subCategory!.toLowerCase()}';
+          if (followedSubCategoryKeys.contains(subKey)) return true;
+        }
+        return false;
+      }).toList();
       controller.add(filtered);
     }
     
@@ -292,10 +304,17 @@ class FirestoreService {
             .where('enabled', isEqualTo: true)
             .snapshots()
             .listen((snapshot) {
-          followedCategories = snapshot.docs
-              .map((doc) => doc.data()['key'] as String? ?? '')
-              .where((key) => key.isNotEmpty && !key.contains(':'))
-              .toList();
+          followedCategoryKeys.clear();
+          followedSubCategoryKeys.clear();
+          for (var doc in snapshot.docs) {
+            final key = (doc.data()['key'] as String? ?? '').toLowerCase();
+            if (key.isEmpty) continue;
+            if (key.contains(':')) {
+              followedSubCategoryKeys.add(key);
+            } else {
+              followedCategoryKeys.add(key);
+            }
+          }
           updateList();
         }, onError: (e) {
           if (!controller.isClosed) controller.addError(e);
@@ -309,7 +328,7 @@ class FirestoreService {
             .snapshots()
             .map((snapshot) {
           final now = DateTime.now();
-          final cutoffTime = now.subtract(const Duration(days: 30)); // 30-day time window for category deals
+          final cutoffTime = now.subtract(const Duration(hours: 48)); // Anasayfa ile tutarlı
           
           return snapshot.docs
               .map((doc) {

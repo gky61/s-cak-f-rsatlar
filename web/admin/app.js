@@ -743,6 +743,35 @@ function initEventListeners() {
         console.warn('⚠️ Refresh Deals button NOT FOUND!');
     }
 
+    // Purge Old Deals button (30+ Günlük Temizlik)
+    const purgeOldDealsBtn = document.getElementById('purgeOldDealsBtn');
+    if (purgeOldDealsBtn) {
+        console.log('✅ Purge Old Deals button found, adding event listener...');
+        purgeOldDealsBtn.addEventListener('click', async () => {
+            if (!confirm('30 günden eski TÜM fırsatları (oylar, yorumlar, favori kayıtları dahil) kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) {
+                return;
+            }
+            try {
+                purgeOldDealsBtn.disabled = true;
+                const originalHTML = purgeOldDealsBtn.innerHTML;
+                purgeOldDealsBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>Temizleniyor...</span>';
+
+                const deletedCount = await purgeOldDealsWeb();
+                showSuccess(`${deletedCount} adet 30+ günlük eski fırsat kalıcı olarak temizlendi!`);
+                await loadDeals();
+                updateStats();
+
+                purgeOldDealsBtn.disabled = false;
+                purgeOldDealsBtn.innerHTML = originalHTML;
+            } catch (error) {
+                console.error('❌ Purge hatası:', error);
+                showError('Kalıcı silme hatası: ' + error.message);
+                purgeOldDealsBtn.disabled = false;
+                purgeOldDealsBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">auto_delete</span><span>30+ Günlük Temizlik</span>';
+            }
+        });
+    }
+
     // Add Deal button (Fırsat Ekle)
     const addDealBtn = document.getElementById('addDealBtn');
     if (addDealBtn) {
@@ -4896,6 +4925,77 @@ async function toggleDealSharing() {
         console.error('❌ Error toggling deal sharing:', error);
         showError('Paylaşım durumu değiştirilirken hata oluştu: ' + error.message);
     }
+}
+
+// 30+ Günlük Fırsatları Kalıcı Olarak Temizleme (Derin Temizlik)
+async function purgeOldDealsWeb() {
+    console.log('🔥 30+ günlük derin temizlik işlemi başlatılıyor...');
+    const thirtyDaysAgo = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
+    const thirtyDaysAgoTimestamp = firebase.firestore.Timestamp.fromDate(thirtyDaysAgo);
+
+    const targetDocs = new Map();
+
+    try {
+        const snap1 = await db.collection('deals').where('createdAt', '<', thirtyDaysAgoTimestamp).get();
+        snap1.forEach(doc => targetDocs.set(doc.id, doc));
+    } catch (e) {
+        console.warn('createdAt sorgusu uyarısı:', e);
+    }
+
+    try {
+        const snap2 = await db.collection('deals').where('timestamp', '<', thirtyDaysAgoTimestamp).get();
+        snap2.forEach(doc => targetDocs.set(doc.id, doc));
+    } catch (e) {
+        console.warn('timestamp sorgusu uyarısı:', e);
+    }
+
+    console.log(`🔍 30 günden eski toplam ${targetDocs.size} adet fırsat bulundu.`);
+
+    let deletedCount = 0;
+
+    for (const [dealId, doc] of targetDocs) {
+        try {
+            const dealRef = db.collection('deals').doc(dealId);
+
+            // A. votes subcollection
+            const votesSnap = await dealRef.collection('votes').get();
+            if (!votesSnap.empty) {
+                const batch = db.batch();
+                votesSnap.forEach(v => batch.delete(v.ref));
+                await batch.commit();
+            }
+
+            // B. comments subcollection
+            const commentsSnap = await dealRef.collection('comments').get();
+            if (!commentsSnap.empty) {
+                const batch = db.batch();
+                commentsSnap.forEach(c => batch.delete(c.ref));
+                await batch.commit();
+            }
+
+            // C. users favorites references
+            const usersSnap = await db.collection('users').get();
+            for (const userDoc of usersSnap.docs) {
+                try {
+                    const favRef = userDoc.ref.collection('favorites').doc(dealId);
+                    const favDoc = await favRef.get();
+                    if (favDoc.exists) {
+                        await favRef.delete();
+                    }
+                } catch (favErr) {}
+            }
+
+            // D. Main deal doc delete
+            await dealRef.delete();
+            deletedCount++;
+            console.log(`🗑️ Kalıcı silindi: ${dealId}`);
+        } catch (docError) {
+            console.error(`❌ Deal silme hatası (${dealId}):`, docError);
+        }
+    }
+
+    console.log(`✅ 30+ günlük derin temizlik bitti. Silinen: ${deletedCount}`);
+    return deletedCount;
 }
 
 // Deal Approval durumunu toggle et

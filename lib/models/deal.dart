@@ -346,6 +346,29 @@ class Deal {
     return 2;
   }
 
+  /// Popülerlik Skoru — "Popüler Fırsatlar" ekranı için özel sıralama.
+  ///
+  /// 3 bileşenden oluşur:
+  ///  1. **Wilson Score** (kalite): Oy oranı + oy hacmini dengeler.
+  ///     - 10/12 oy alan fırsat, 2/2 oy alandan daha güvenilir kabul edilir.
+  ///  2. **Zaman Çürümesi** (tazelik): Yeni fırsatlar daha yukarıda.
+  ///     - Yarı ömür = 48 saat → 2 gün sonra skor yarıya düşer.
+  ///  3. **Engagement Bonusu**: Yorum sayısı ekstra popülerlik sinyali.
+  ///     - log2(1 + commentCount) → kalabalık tartışmalar yukarı çıkar.
+  ///
+  /// Formül: (wilsonScore + engagementBonus) * timeDecay
+  double get popularityScore {
+    final ageInHours = DateTime.now().difference(createdAt).inMinutes / 60.0;
+    const halfLifeHours = 24.0; // Anlık fırsat uygulaması: agresif tazelik ödülü
+    final timeDecay = 1.0 / (1.0 + ageInHours / halfLifeHours);
+
+    // Engagement bonus: yorum sayısı popülerlik sinyali
+    final engagementBonus = log(1 + commentCount) / ln2 * 0.05; // max ~0.3
+
+    return (wilsonScore + engagementBonus) * timeDecay;
+  }
+
+
   // Profesyonel Sıralama Karşılaştırıcısı (Comparator)
   static int compareDeals(Deal a, Deal b) {
     final groupA = a.sortingGroup;

@@ -229,6 +229,38 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
         return Column(
           children: [
+            // 30 gün bilgilendirme mesajı
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.amber.withValues(alpha: 0.08)
+                      : Colors.amber.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.amber.withValues(alpha: 0.3),
+                    width: 0.5,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.amber[700]),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '30 günden eski fırsatlar otomatik olarak kalıcı silinir.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.amber[200] : Colors.amber[800],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             if (hasExpired)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),

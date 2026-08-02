@@ -120,8 +120,6 @@ class UserService {
         .asyncMap((snapshot) async {
       final now = DateTime.now();
       final cutoffTime = now.subtract(const Duration(hours: 48));
-      List<Deal> deals = [];
-      
       final docs = snapshot.docs.toList();
       docs.sort((a, b) {
         final aTime = (a.data()['eklenmeTarihi'] ?? a.data()['addedAt']) as Timestamp?;
@@ -129,8 +127,7 @@ class UserService {
         if (aTime == null || bTime == null) return 0;
         return bTime.compareTo(aTime);
       });
-
-      for (var doc in docs) {
+      final deals = await Future.wait(docs.map((doc) async {
         final data = doc.data();
         final dealId = doc.id;
         final dealDoc = await _firestore.collection('deals').doc(dealId).get();
@@ -142,7 +139,7 @@ class UserService {
         if (dealDoc.exists) {
           final deal = Deal.fromFirestore(dealDoc);
           if (isOld || deal.isExpired || deal.createdAt.isBefore(cutoffTime)) {
-            deals.add(Deal(
+            return Deal(
               id: deal.id,
               title: deal.title,
               description: deal.description,
@@ -164,18 +161,18 @@ class UserService {
               isApproved: deal.isApproved,
               isExpired: true,
               isUserSubmitted: deal.isUserSubmitted,
-            ));
+            );
           } else {
-            deals.add(deal);
+            return deal;
           }
         } else {
           final baslik = data['baslik'] ?? data['title'] ?? 'Süresi Dolan Fırsat';
-          final fiyatStr = data['fiyat'] ?? '0';
+          final fiyatStr = data['fiyat']?.toString() ?? '0';
           final fiyat = double.tryParse(fiyatStr) ?? 0.0;
           final store = data['magazaAdi'] ?? data['store'] ?? 'Mağaza';
           final link = data['link'] ?? '';
           
-          deals.add(Deal(
+          return Deal(
             id: dealId,
             title: baslik,
             description: 'Bu fırsatın süresi dolmuştur.',
@@ -193,9 +190,9 @@ class UserService {
             isApproved: true,
             isExpired: true,
             isUserSubmitted: false,
-          ));
+          );
         }
-      }
+      }));
       return deals;
     });
   }

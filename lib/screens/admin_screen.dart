@@ -493,6 +493,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   ),
                 ),
               ),
+
             Expanded(
               child: ListView.builder(
           padding: const EdgeInsets.all(12),
@@ -1067,6 +1068,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       }
     }
   }
+
+
 
   // Kısa link çözme (Firebase Function çağrısı)
   Future<String?> _resolveShortLink(String shortUrl) async {

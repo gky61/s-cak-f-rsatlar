@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import 'katalog_listesi_page.dart';
 
@@ -32,15 +33,23 @@ class AktuelMagazalarPage extends StatelessWidget {
     Magaza(code: 'bizim', name: 'Bizim Toptan', logoAsset: 'assets/bizim.webp', brandColor: Color(0xFFFFCC00)),
     Magaza(code: 'file', name: 'File', logoAsset: 'assets/file.webp', brandColor: Color(0xFF3498DB)),
     Magaza(code: 'happycenter', name: 'Happy Center', logoAsset: 'assets/happycenter.webp', brandColor: Color(0xFF8DC63F)),
-    Magaza(code: 'hakmar', name: 'Hakmar', logoAsset: 'assets/hakmar-express.webp', brandColor: Color(0xFFD32F2F)),
+    Magaza(code: 'hakmarexpress', name: 'Hakmar Express', logoAsset: 'assets/hakmar-express.webp', brandColor: Color(0xFFD32F2F)),
+    Magaza(code: 'hakmar', name: 'Hakmar', logoAsset: 'assets/hakmar.webp', brandColor: Color(0xFFD32F2F)),
     Magaza(code: 'cagri', name: 'Çağrı Hipermarket', logoAsset: 'assets/cagri.webp', brandColor: Color(0xFFE31B23)),
     Magaza(code: 'kooperatifmarket', name: 'Kooperatif Market', logoAsset: 'assets/kooperatif.webp', brandColor: Color(0xFF00755F)),
     // 2. Öncelik – Makyaj / Kişisel Bakım
     Magaza(code: 'watsons', name: 'Watsons', logoAsset: 'assets/watsons.webp', brandColor: Color(0xFF00A19B)),
     Magaza(code: 'gratis', name: 'Gratis', logoAsset: 'assets/gratis.webp', brandColor: Color(0xFF8B1E87)),
-    // 3. Öncelik – Teknoloji
+    Magaza(code: 'rossmann', name: 'Rossmann', logoAsset: 'assets/rossmann.webp', brandColor: Color(0xFFE2001A)),
+    // 3. Öncelik – Giyim / Ev / Yaşam / Anne & Bebek
+    Magaza(code: 'cetinkaya', name: 'Çetinkaya', logoAsset: 'assets/cetinkaya.webp', brandColor: Color(0xFFE31E24)),
+    Magaza(code: 'civil', name: 'Civil', logoAsset: 'assets/civil.webp', brandColor: Color(0xFFFF6600)),
+    Magaza(code: 'evkur', name: 'Evkur', logoAsset: 'assets/evkur.webp', brandColor: Color(0xFF003399)),
+    Magaza(code: 'mrdiy', name: 'MR.DIY', logoAsset: 'assets/mrdiy.webp', brandColor: Color(0xFFFFD100)),
+    // 4. Öncelik – Teknoloji & Elektronik
     Magaza(code: 'teknosa', name: 'Teknosa', logoAsset: 'assets/teknosa.webp', brandColor: Color(0xFFFF5F00)),
     Magaza(code: 'vatan', name: 'Vatan Bilgisayar', logoAsset: 'assets/vatan.webp', brandColor: Color(0xFF005691)),
+    Magaza(code: 'vestel', name: 'Vestel', logoAsset: 'assets/vestel.webp', brandColor: Color(0xFFCC0000)),
   ];
 
   @override
@@ -91,24 +100,90 @@ class AktuelMagazalarPage extends StatelessWidget {
             ),
           ),
 
-          // Mağaza Grid'i
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-                childAspectRatio: 0.85,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final magaza = _magazalar[index];
-                  return _buildMagazaCard(context, magaza, isDark);
-                },
-                childCount: _magazalar.length,
-              ),
-            ),
+          // Mağaza Grid'i (Yalnızca yayında aktif kataloğu olan mağazaları dinamik filtrele)
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('kataloglar')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final now = DateTime.now();
+              final today = DateTime(now.year, now.month, now.day);
+              final activeStoreCodes = <String>{};
+
+              if (snapshot.hasData) {
+                for (var doc in snapshot.data!.docs) {
+                  try {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final bitisTimestamp = data['bitisTarihi'] as Timestamp?;
+                    if (bitisTimestamp != null) {
+                      final bitis = bitisTimestamp.toDate();
+                      final expiryDay = DateTime(bitis.year, bitis.month, bitis.day);
+                      if (!expiryDay.isBefore(today)) {
+                        final magazaKodu = data['magazaKodu'] as String?;
+                        if (magazaKodu != null && magazaKodu.isNotEmpty) {
+                          activeStoreCodes.add(magazaKodu.toLowerCase());
+                        }
+                      }
+                    }
+                  } catch (_) {}
+                }
+              }
+
+              final visibleStores = _magazalar
+                  .where((m) => activeStoreCodes.contains(m.code.toLowerCase()))
+                  .toList();
+
+              if (visibleStores.isEmpty) {
+                return SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.menu_book_outlined,
+                          size: 64,
+                          color: isDark ? Colors.grey[700] : Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Yayında Aktif Katalog Bulunmuyor',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                    childAspectRatio: 0.85,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final magaza = visibleStores[index];
+                      return _buildMagazaCard(context, magaza, isDark);
+                    },
+                    childCount: visibleStores.length,
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),

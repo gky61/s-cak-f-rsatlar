@@ -25,7 +25,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
     super.initState();
     _viewMode = _themeService.viewMode;
     _themeService.addListener(_onThemeChanged);
-    _popularDealsStream = _firestoreService.getPopularDeals(minHotVotes: 1);
+    _popularDealsStream = _firestoreService.getPopularDeals();
   }
 
   @override
@@ -135,8 +135,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
           }
 
           final deals = List<Deal>.from(snapshot.data ?? []);
-          // Profesyonel Oylama ve Sıcaklık Algoritması ile Sırala (Wilson Score + Hot Votes)
-          deals.sort(Deal.compareDeals);
+          // Sıralama zaten firestore_service'te popularityScore ile yapılıyor
 
           if (deals.isEmpty) {
             return Center(
@@ -174,7 +173,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
           return RefreshIndicator(
             onRefresh: () async {
               setState(() {
-                _popularDealsStream = _firestoreService.getPopularDeals(minHotVotes: 1);
+                _popularDealsStream = _firestoreService.getPopularDeals();
               });
             },
             color: primaryColor,
