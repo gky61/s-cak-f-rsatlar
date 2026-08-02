@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
@@ -12,6 +12,7 @@ import '../services/domain_allowlist_service.dart';
 import '../models/category.dart';
 import '../widgets/category_selector_widget.dart';
 import '../theme/app_theme.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 import 'deal_detail_screen.dart';
 
 void _log(String message) {
@@ -1131,6 +1132,80 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    final currentUser = _authService.currentUser;
+
+    if (currentUser == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'Fırsat Paylaş',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.add_circle_outline_rounded,
+                  size: 64,
+                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Fırsat Paylaşmak İçin Giriş Yap',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Yakaladığınız indirimleri tüm toplulukla paylaşmak için hızlıca giriş yapın.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.4,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    showGuestLoginBottomSheet(
+                      context,
+                      title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
+                      message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
+                      primaryButtonText: '🚀 Google ile Giriş Yap',
+                      onLoginSuccess: () => setState(() {}),
+                    );
+                  },
+                  icon: const Icon(Icons.login_rounded, size: 18),
+                  label: const Text(
+                    'Giriş Yap',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     
     return Scaffold(
       appBar: AppBar(

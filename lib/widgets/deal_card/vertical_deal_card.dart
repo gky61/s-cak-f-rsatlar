@@ -38,10 +38,8 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return Opacity(
-      opacity: isExpired ? 0.5 : 1.0,
-      child: AnimatedScale(
-        scale: _isPressed ? 0.97 : (_isHovered ? 1.03 : 1.0),
+    return AnimatedScale(
+      scale: _isPressed ? 0.97 : (_isHovered ? 1.03 : 1.0),
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutBack,
         child: AnimatedContainer(
@@ -168,6 +166,48 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                               ),
                             ),
                           ),
+                          // FOMO Rozeti (Sağ Üst - Biten / Tükenen Fırsatlar İçin)
+                          if (isExpired)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFD32F2F), Color(0xFFC62828)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.3),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.hourglass_bottom_rounded,
+                                      size: 10,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'FIRSAT KAÇTI',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           // İndirim Rozeti (Sağ Alt)
                           if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
                             Positioned(
@@ -633,7 +673,6 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }

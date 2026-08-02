@@ -285,6 +285,25 @@ class _AuthScreenState extends State<AuthScreen> {
         child: SafeArea(
           child: Stack(
             children: [
+              // Geri / Misafir olarak kapat butonu
+              Positioned(
+                top: 8,
+                left: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 28),
+                  tooltip: 'Kapat',
+                  onPressed: () {
+                    if (Navigator.canPop(context)) {
+                      Navigator.pop(context);
+                    } else {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (_) => const HomeScreen()),
+                      );
+                    }
+                  },
+                ),
+              ),
               Center(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),

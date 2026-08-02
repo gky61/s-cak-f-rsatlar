@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -16,6 +17,7 @@ import '../main.dart'; // navigatorKey için
 
 import '../widgets/report_dialog.dart';
 import '../widgets/comments_bottom_sheet.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/deal_thermometer.dart';
 import '../widgets/money_badge.dart';
 import '../widgets/deal_card/deal_card_helpers.dart';
@@ -65,6 +67,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   bool _dealNotFound = false;
   bool _hasAutoOpenedComments = false; // Bildirimden açılan yorum penceresinin tekrar tekrar açılmasını engeller
 
+  StreamSubscription? _authSub;
+
   @override
   void initState() {
     super.initState();
@@ -72,10 +76,19 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     _checkAdminStatus();
     _checkFavoriteStatus();
     _checkUserVote();
+    _authSub = _authService.authStateChanges.listen((user) {
+      if (mounted) {
+        _checkAdminStatus();
+        _checkFavoriteStatus();
+        _checkUserVote();
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     super.dispose();
   }
 
@@ -110,12 +123,16 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   Future<void> _toggleFavorite() async {
     final user = _authService.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Kaydetmek için giriş yapmalısınız'),
-          backgroundColor: Colors.orange,
-        ),
+      final loggedIn = await showGuestLoginBottomSheet(
+        context,
+        title: 'Fırsatı Kaydetmek İçin Giriş Yap! 🔖',
+        message: 'Beğendiğin fırsatları daha sonra kolayca bulmak ve kaçırmamak için hesabına kaydet.',
+        primaryButtonText: '🚀 Google ile Giriş Yap',
       );
+      if (loggedIn == true && mounted) {
+        _checkFavoriteStatus();
+        _toggleFavorite();
+      }
       return;
     }
     if (_currentDeal == null) return;
@@ -156,12 +173,16 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   Future<void> _handleVote(bool isHot) async {
     final user = _authService.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Oy vermek için giriş yapmalısınız'),
-          backgroundColor: Colors.orange,
-        ),
+      final loggedIn = await showGuestLoginBottomSheet(
+        context,
+        title: 'Bu Fırsatı Oylamak İçin Giriş Yap! 🔥',
+        message: 'Topluluğa yön vermek ve fırsatın sıcaklığını oylamak için hızlıca giriş yapabilirsin.',
+        primaryButtonText: '🚀 Google ile Giriş Yap',
       );
+      if (loggedIn == true && mounted) {
+        _checkUserVote();
+        _handleVote(isHot);
+      }
       return;
     }
 
@@ -252,12 +273,16 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   Future<void> _handleExpiredVote() async {
     final user = _authService.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Oy vermek için giriş yapmalısınız'),
-          backgroundColor: Colors.orange,
-        ),
+      final loggedIn = await showGuestLoginBottomSheet(
+        context,
+        title: 'Fırsat Bildirimi Yapmak İçin Giriş Yap! ⚠️',
+        message: 'Fırsatın bittiğini topluluğa bildirmek için hızlıca giriş yapabilirsin.',
+        primaryButtonText: '🚀 Google ile Giriş Yap',
       );
+      if (loggedIn == true && mounted) {
+        _checkUserVote();
+        _handleExpiredVote();
+      }
       return;
     }
 

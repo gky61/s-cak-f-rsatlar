@@ -1,9 +1,12 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:ui' show ImageFilter;
+import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/kupon.dart';
 import '../services/kupon_service.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 import 'kupon_form_page.dart';
 
 class KuponlarPage extends StatefulWidget {
@@ -26,11 +29,25 @@ class _KuponlarPageState extends State<KuponlarPage> {
   late Stream<List<Kupon>> _kuponlarStream;
   String _selectedStoreFilter = 'Tümü';
 
+  StreamSubscription? _authSub;
+
   @override
   void initState() {
     super.initState();
     _kuponlarStream = _kuponService.getKuponlarStream();
     _checkAdminStatus();
+    _authSub = AuthService().authStateChanges.listen((user) {
+      if (mounted) {
+        _checkAdminStatus();
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkAdminStatus() async {
@@ -192,9 +209,19 @@ class _KuponlarPageState extends State<KuponlarPage> {
 
   Future<void> _handleVote(String kuponId, dynamic currentUser, String voteType) async {
     if (currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Oy vermek için önce giriş yapmalısınız.')),
+      final loggedIn = await showGuestLoginBottomSheet(
+        context,
+        title: 'Bu Kuponu Oylamak İçin Giriş Yap! 🔥',
+        message: 'Topluluğa yön vermek ve kuponun çalışıp çalışmadığını bildirmek için hızlıca giriş yapabilirsin.',
+        primaryButtonText: '🚀 Google ile Giriş Yap',
       );
+      if (loggedIn == true && mounted) {
+        setState(() {});
+        final freshUser = AuthService().currentUser;
+        if (freshUser != null) {
+          _handleVote(kuponId, freshUser, voteType);
+        }
+      }
       return;
     }
 
@@ -549,9 +576,25 @@ class _KuponlarPageState extends State<KuponlarPage> {
                   ),
                   const SizedBox(width: 8),
 
-                  // Sağ Alan: Kupon Kodu Kutusu
+                  // Sağ Alan: Kupon Kodu Kutusu (Misafir kullanıcı için blurlu)
                   InkWell(
-                    onTap: () => _copyToClipboard(kupon.id, kupon.kuponKodu),
+                    onTap: () async {
+                      if (currentUser == null) {
+                        final loggedIn = await showGuestLoginBottomSheet(
+                          context,
+                          title: 'Kupon Kodunu Açmak İçin Giriş Yap! 🎟️',
+                          message: 'Sana özel tanımlanan indirim kodunu kopyalamak ve hemen kullanmak için Google ile tek tıkla giriş yap.',
+                          primaryButtonText: '🚀 Google ile Giriş Yap',
+                        );
+                        if (loggedIn == true && mounted) {
+                          _checkAdminStatus();
+                          setState(() {});
+                          _copyToClipboard(kupon.id, kupon.kuponKodu);
+                        }
+                      } else {
+                        _copyToClipboard(kupon.id, kupon.kuponKodu);
+                      }
+                    },
                     borderRadius: BorderRadius.circular(8),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
@@ -568,34 +611,58 @@ class _KuponlarPageState extends State<KuponlarPage> {
                           width: 1.2,
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            kupon.kuponKodu,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              letterSpacing: 0.4,
-                              color: isCopied
-                                  ? AppTheme.success
-                                  : (isDark ? Colors.white : AppTheme.textPrimary),
+                      child: currentUser == null
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ImageFiltered(
+                                  imageFilter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
+                                  child: Text(
+                                    kupon.kuponKodu.isNotEmpty ? kupon.kuponKodu : 'CODE100',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      letterSpacing: 0.4,
+                                      color: isDark ? Colors.white : AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                const Icon(
+                                  Icons.lock_rounded,
+                                  size: 14,
+                                  color: AppTheme.primary,
+                                ),
+                              ],
+                            )
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  kupon.kuponKodu,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    letterSpacing: 0.4,
+                                    color: isCopied
+                                        ? AppTheme.success
+                                        : (isDark ? Colors.white : AppTheme.textPrimary),
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 200),
+                                  child: Icon(
+                                    isCopied ? Icons.check_circle_rounded : Icons.copy_rounded,
+                                    key: ValueKey<bool>(isCopied),
+                                    size: 15,
+                                    color: isCopied
+                                        ? AppTheme.success
+                                        : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 5),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            child: Icon(
-                              isCopied ? Icons.check_circle_rounded : Icons.copy_rounded,
-                              key: ValueKey<bool>(isCopied),
-                              size: 15,
-                              color: isCopied
-                                  ? AppTheme.success
-                                  : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ],
@@ -923,8 +990,11 @@ class _KuponlarPageState extends State<KuponlarPage> {
           onPressed: () {
             final currentUser = AuthService().currentUser;
             if (currentUser == null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Kupon paylaşmak için önce giriş yapmalısınız.')),
+              showGuestLoginBottomSheet(
+                context,
+                title: 'Kupon Paylaşmak İçin Giriş Yap! 🎟️',
+                message: 'Topluluğa katkıda bulunmak ve indirim kuponunu paylaşmak için hemen giriş yap.',
+                primaryButtonText: '🚀 Google ile Giriş Yap',
               );
               return;
             }

@@ -346,26 +346,86 @@ class Deal {
     return 2;
   }
 
-  /// Popülerlik Skoru — "Popüler Fırsatlar" ekranı için özel sıralama.
+  /// Ana Sayfa Akış Skoru — Timeline / Newsfeed için %85 Tazelik + FOMO sıralaması.
   ///
-  /// 3 bileşenden oluşur:
-  ///  1. **Wilson Score** (kalite): Oy oranı + oy hacmini dengeler.
-  ///     - 10/12 oy alan fırsat, 2/2 oy alandan daha güvenilir kabul edilir.
-  ///  2. **Zaman Çürümesi** (tazelik): Yeni fırsatlar daha yukarıda.
-  ///     - Yarı ömür = 48 saat → 2 gün sonra skor yarıya düşer.
-  ///  3. **Engagement Bonusu**: Yorum sayısı ekstra popülerlik sinyali.
-  ///     - log2(1 + commentCount) → kalabalık tartışmalar yukarı çıkar.
+  ///  homeFeedScore = FreshnessScore + TrendingBonus - SoftTrollPenalty - ExpiredFOMODemotion
   ///
-  /// Formül: (wilsonScore + engagementBonus) * timeDecay
+  /// 1. FreshnessScore (0 - 100 taban puan):
+  ///    - Son paylaşılan ürünler yüksek taban puan alır (0 dk = 100.0, 48 saat = 0.0).
+  /// 2. Immunity Period (İlk 45 Dakika Koruma):
+  ///    - İlk 45 dk boyunca olumsuz oylar sıralamayı düşüremez (SoftTrollPenalty = 0).
+  /// 3. TrendingBonus (Alevlenme Bonusu):
+  ///    - Hızlı oy alan taze ürünler 1-2 adım yukarı tırmanır (+0.0 ile +8.0 puan).
+  /// 4. SoftTrollPenalty (45+ Dakikadan Sonra):
+  ///    - Pas/Soğuk oyları %65'i aşan ürünlere yumuşak geriye kaydırma cezası.
+  /// 5. ExpiredFOMODemotion (Süresi Biten Fırsatlara FOMO Düşüşü):
+  ///    - Süresi batan/tükenen taze fırsatlar gizlenmez; -25.0 puan kırılması ile 
+  ///      en üstteki 3-5 taze aktif ürünün hemen altına düşer ("FOMO Vurgusu").
+  double get homeFeedScore {
+    final ageInMinutes = (DateTime.now().difference(createdAt).inMinutes.toDouble()).clamp(0.0, 2880.0);
+
+    // 1. FreshnessScore: 48 saatlik lineer/tazelik taban puanı (0 - 100)
+    final freshnessScore = 100.0 * (1.0 - (ageInMinutes / 2880.0));
+
+    // 2. TrendingBonus: Hızlı oy alan taze fırsatlar için küçük tırmanma desteği (max +8.0)
+    final totalVotes = hotVotes + coldVotes;
+    double trendingBonus = 0.0;
+    if (totalVotes > 0) {
+      final hotRatio = hotVotes / totalVotes;
+      trendingBonus = (hotVotes * 1.2 * hotRatio + commentCount * 0.4).clamp(0.0, 8.0);
+    }
+
+    // 3. SoftTrollPenalty (İlk 45 dakika dokunulmazlık / Immunity Period)
+    double softTrollPenalty = 0.0;
+    if (ageInMinutes > 45.0 && totalVotes >= 3) {
+      final coldRatio = coldVotes / totalVotes;
+      if (coldRatio >= 0.65) {
+        softTrollPenalty = (coldVotes * 1.5).clamp(0.0, 15.0);
+      }
+    }
+
+    // 4. ExpiredFOMODemotion (Süresi Biten Fırsatlara Yumuşak Düşüş - FOMO)
+    double expiredFOMODemotion = 0.0;
+    if (isExpired) {
+      expiredFOMODemotion = 25.0; // Puanı 25.0 kırılır; böylece en üstteki 3-5 taze aktif ürünün hemen altında yer alır.
+    }
+
+    return freshnessScore + trendingBonus - softTrollPenalty - expiredFOMODemotion;
+  }
+
+  /// Popülerlik Skoru — "Popüler Fırsatlar" ekranı için geliştirilmiş akıllı sıralama.
+  ///
+  /// Anlık fırsat dinamiklerine uygun 4 bileşenli mimari:
+  ///  1. **Kalite Skoru (Wilson/Oy Oranı)**: Oy oranı ve oy kalitesini hesaplar.
+  ///  2. **Agresif Üstel Zaman Çürümesi (12 Saat Yarı Ömür)**:
+  ///     - pow(0.5, ageInHours / 12.0) → Dünün fırsatı hızla alt sıralara iner.
+  ///  3. **Tazelik Bonusu (Freshness Boost)**:
+  ///     - Son 6 saatte paylaşılan ve alevlenen taze fırsatlara +0.40 ekstra puan.
+  ///     - Son 12 saattekilere +0.20 puan.
+  ///  4. **Engagement Bonusu**: Yorum ve tartışma sayısı desteği.
   double get popularityScore {
-    final ageInHours = DateTime.now().difference(createdAt).inMinutes / 60.0;
-    const halfLifeHours = 24.0; // Anlık fırsat uygulaması: agresif tazelik ödülü
-    final timeDecay = 1.0 / (1.0 + ageInHours / halfLifeHours);
+    final ageInHours = (DateTime.now().difference(createdAt).inMinutes / 60.0).clamp(0.0, 48.0);
+
+    // 12 saatlik agresif üstel zaman çürümesi (24 saat sonra çarpan 0.25'e düşer)
+    final timeDecay = pow(0.5, ageInHours / 12.0).toDouble();
+
+    // Tazelik Bonusu: Bugün alevlenen taze fırsatların dünün fırsatlarını geçmesini sağlar
+    double freshnessBoost = 0.0;
+    if (ageInHours <= 6.0) {
+      freshnessBoost = 0.40;
+    } else if (ageInHours <= 12.0) {
+      freshnessBoost = 0.20;
+    }
 
     // Engagement bonus: yorum sayısı popülerlik sinyali
-    final engagementBonus = log(1 + commentCount) / ln2 * 0.05; // max ~0.3
+    final engagementBonus = log(1 + commentCount) / ln2 * 0.05;
 
-    return (wilsonScore + engagementBonus) * timeDecay;
+    // Küçük oy sayısında Wilson alt sınırını esnetmek için oy oranı ağırlığı
+    final totalVotes = hotVotes + coldVotes;
+    final rawRatio = totalVotes > 0 ? (hotVotes / totalVotes) : 0.0;
+    final effectiveScore = (wilsonScore * 0.6) + (rawRatio * 0.4);
+
+    return (effectiveScore + engagementBonus + freshnessBoost) * timeDecay;
   }
 
 

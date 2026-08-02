@@ -273,95 +273,161 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               iconBg = isDark ? Colors.blue.withValues(alpha: 0.15) : Colors.blue[50]!;
             }
 
-            return InkWell(
-              onTap: () => _openNotification(item),
-              onLongPress: () => _showDeleteNotificationDialog(context, currentUserId, item),
-              child: Container(
-                padding: const EdgeInsets.all(12),
+            final notifId = item['id'] as String;
+
+            return Dismissible(
+              key: Key(notifId),
+              direction: DismissDirection.endToStart,
+              background: Container(
+                margin: const EdgeInsets.symmetric(vertical: 2),
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 20),
                 decoration: BoxDecoration(
-                  color: isUnread
-                      ? (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF3F6FF))
-                      : (isDark ? AppTheme.darkSurface : Colors.white),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200]!,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFEF5350), Color(0xFFD32F2F)],
                   ),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: iconBg,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(icon, color: iconColor),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withValues(alpha: 0.25),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Sil',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    SizedBox(width: 6),
+                    Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+              onDismissed: (direction) async {
+                final notifTitle = item['title'] as String? ?? 'Bildirim';
+
+                // Firestore'dan tamamen sil
+                await _firestoreService.deleteNotification(currentUserId, notifId);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('"$notifTitle" silindi'),
+                      duration: const Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                      margin: const EdgeInsets.all(12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: InkWell(
+                onTap: () => _openNotification(item),
+                onLongPress: () => _showDeleteNotificationDialog(context, currentUserId, item),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isUnread
+                        ? (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF3F6FF))
+                        : (isDark ? AppTheme.darkSurface : Colors.white),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200]!,
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: iconBg,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(icon, color: iconColor),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item['title'] as String,
+                                    style: TextStyle(
+                                      fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
+                                      fontSize: 15,
+                                      color: isDark ? Colors.white : Colors.black87,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  DateFormat('HH:mm').format(item['createdAt'] as DateTime),
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            if (item['dealTitle'].toString().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 2.0),
                                 child: Text(
-                                  item['title'] as String,
+                                  item['dealTitle'] as String,
                                   style: TextStyle(
-                                    fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
-                                    fontSize: 15,
-                                    color: isDark ? Colors.white : Colors.black87,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: primaryColor,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                DateFormat('HH:mm').format(item['createdAt'] as DateTime),
-                                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          if (item['dealTitle'].toString().isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 2.0),
-                              child: Text(
-                                item['dealTitle'] as String,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: primaryColor,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                            Text(
+                              item['body'] as String,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.grey[400] : Colors.grey[700],
                               ),
                             ),
-                          Text(
-                            item['body'] as String,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark ? Colors.grey[400] : Colors.grey[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (isUnread) ...[
-                      const SizedBox(width: 10),
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
+                          ],
                         ),
                       ),
+                      if (isUnread) ...[
+                        const SizedBox(width: 10),
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             );

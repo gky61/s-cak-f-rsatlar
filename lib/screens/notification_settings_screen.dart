@@ -273,7 +273,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           communityNotificationsEnabled: val,
                           submissionStatusNotificationsEnabled: val,
                           marketingNotificationsEnabled: val,
-                          quietHoursEnabled: val,
+                          quietHoursEnabled: _preferences.quietHoursEnabled,
                           quietHoursStart: _preferences.quietHoursStart,
                           quietHoursEnd: _preferences.quietHoursEnd,
                           timezone: _preferences.timezone,

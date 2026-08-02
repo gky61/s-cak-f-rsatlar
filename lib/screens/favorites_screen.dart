@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/deal.dart';
@@ -7,8 +8,10 @@ import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 import 'category_preferences_screen.dart';
 import 'deal_detail_screen.dart';
+import 'auth_screen.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -26,11 +29,18 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   Stream<List<Deal>>? _myFavoritesStream;
   Stream<List<Deal>>? _followedCategoriesStream;
   String? _cachedUserId;
+  StreamSubscription? _authSub;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (mounted) {
+        _initializeStreams(user?.uid);
+        setState(() {});
+      }
+    });
   }
 
   void _initializeStreams(String? userId) {
@@ -49,6 +59,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -129,33 +140,62 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   Widget _buildMyFavorites(User? currentUser, bool isDark) {
     if (currentUser == null) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.bookmark_border,
-              size: 64,
-              color: isDark ? Colors.grey[600] : Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Giriş yapmalısınız',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.bookmark_border,
+                size: 64,
+                color: isDark ? Colors.grey[600] : Colors.grey[400],
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Kaydettiğiniz fırsatları görmek için\ngiriş yapın',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+              const SizedBox(height: 16),
+              Text(
+                'Kaydedilenler İçin Giriş Yap',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                'Kaydettiğiniz fırsatları görmek ve listenize yeni fırsatlar eklemek için giriş yapmalısınız.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  showGuestLoginBottomSheet(
+                    context,
+                    title: 'Fırsatları Kaydetmek İçin Giriş Yap! 🔖',
+                    message: 'Beğendiğin fırsatları arşivine eklemek ve dilediğin zaman ulaşmak için hızlıca giriş yap.',
+                    primaryButtonText: '🚀 Google ile Giriş Yap',
+                    onLoginSuccess: () => setState(() {}),
+                  );
+                },
+                icon: const Icon(Icons.login_rounded, size: 18),
+                label: const Text(
+                  'Giriş Yap',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -353,33 +393,62 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   Widget _buildFollowedCategories(User? currentUser, bool isDark, Color primaryColor) {
     if (currentUser == null) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.category_outlined,
-              size: 64,
-              color: isDark ? Colors.grey[600] : Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Giriş yapmalısınız',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.category_outlined,
+                size: 64,
+                color: isDark ? Colors.grey[600] : Colors.grey[400],
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Takip ettiğiniz kategorilerin fırsatlarını\ngörmek için giriş yapın',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+              const SizedBox(height: 16),
+              Text(
+                'Favori Kategoriler İçin Giriş Yap',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                'Takip ettiğiniz özel kategorilerin anlık akışını görmek için giriş yapmalısınız.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  showGuestLoginBottomSheet(
+                    context,
+                    title: 'Kategorileri Takip Etmek İçin Giriş Yap! 🏷️',
+                    message: 'İlgilendiğin kategorileri takibe almak ve özel akışını oluşturmak için giriş yap.',
+                    primaryButtonText: '🚀 Google ile Giriş Yap',
+                    onLoginSuccess: () => setState(() {}),
+                  );
+                },
+                icon: const Icon(Icons.login_rounded, size: 18),
+                label: const Text(
+                  'Giriş Yap',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }

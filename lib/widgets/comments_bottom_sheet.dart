@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,6 +11,7 @@ import '../services/auth_service.dart';
 import '../utils/badge_helper.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_dialog.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 import '../screens/profile_screen.dart';
 
 void _log(String message) {
@@ -42,10 +44,18 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
   final Map<String, GlobalKey> _commentKeys = {}; // Yorum ID'leri için GlobalKey'ler
   bool _hasScrolledToComment = false; // Belirli bir yoruma scroll edildi mi?
 
+  StreamSubscription? _authSub;
+
   @override
   void initState() {
     super.initState();
     _checkAdminStatus();
+    _authSub = _authService.authStateChanges.listen((user) {
+      if (mounted) {
+        _checkAdminStatus();
+        setState(() {});
+      }
+    });
   }
 
   Future<void> _checkAdminStatus() async {
@@ -59,6 +69,7 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _commentController.dispose();
     _commentFocusNode.dispose();
     super.dispose();
@@ -74,9 +85,19 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
 
     final user = _authService.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Yorum yapmak için giriş yapmalısınız')),
+      final loggedIn = await showGuestLoginBottomSheet(
+        context,
+        title: 'Yorum Yapmak İçin Giriş Yap! 💬',
+        message: 'Fırsat hakkındaki düşüncelerini paylaşmak ve diğer avcılarla tartışmak için hemen giriş yap.',
+        primaryButtonText: '🚀 Google ile Giriş Yap',
       );
+      if (loggedIn == true && mounted) {
+        _checkAdminStatus();
+        setState(() {});
+        if (_commentController.text.trim().isNotEmpty) {
+          _submitComment();
+        }
+      }
       return;
     }
 

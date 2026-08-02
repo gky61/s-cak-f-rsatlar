@@ -50,11 +50,12 @@ Push bildirimlerinin telefona ulaşma karar ağacı Cloud Functions `onNotificat
 #### A. Telefon Bildirimleri (Master Switch - `pushMasterEnabled`)
 * **Uygulama İçi Menü Değişikliği:** Profilim ekranındaki "Bildirim Ayarları" satırındaki switch kaldırılmış, sadece detay sayfasına yönlendiren bir buton (`chevron_right`) yerleştirilmiştir. Asıl master kontrol "Bildirim Ayarları" sayfasındaki "Telefon Bildirimleri" şalteri üzerinden yapılır.
 * **Senaryo PUSH-MASTER-OFF:** `pushMasterEnabled: false` yapıldığında:
-  * Eski tercihlere veya hafızaya (`lastStates`) bakılmaksızın **TÜM alt bildirim ayarları** (yazar, topluluk, kampanya, kategori, anahtar kelime, sessiz saatler) otomatik olarak kapalı konuma getirilir (`false` olarak Firestore'a yazılır).
+  * Alt bildirim kanalları (yazar, topluluk, kampanya, kategori, anahtar kelime) kapalı konuma getirilir.
+  * **Kritik İstisna (Sessiz Saatler Bağımsızlığı):** **Sessiz Saatler (`quietHoursEnabled`) Master switch'ten tamamen bağımsızdır.** Master kapatıldığında veya açıldığında Sessiz Saatler şalteri değişmez; varsayılan olarak kapalıdır (`false`) ve sadece kullanıcı istediğinde bağımsız olarak açıp kapatır.
   * Master switch kapalı olsa bile kullanıcı alt ayarları tek tek elle manuel olarak bağımsız şekilde açıp kapatabilir.
   * *Karar Mekanizması:* Alt ayarı kapalı olan tüm bildirimler `pushEligible: false`, `pushStatus: 'disabled_by_user_master_switch'` olarak engellenir. Master kapalıyken manuel olarak açılan alt kanallar ise push uyarısı almaya devam eder (`pushEligible: true`).
 * **Senaryo PUSH-MASTER-ON:** `pushMasterEnabled: true` yapıldığında:
-  * Eski tercihlere veya hafızaya (`lastStates`) bakılmaksızın **TÜM alt bildirim ayarları** otomatik olarak **AÇIK (`true`)** konuma getirilir.
+  * Alt bildirim kanalları otomatik olarak **AÇIK (`true`)** konuma getirilir (Sessiz Saatler durumu korunur, etkilenmez).
   * Master switch açıkken de kullanıcı alt ayarları tek tek elle manuel olarak bağımsız şekilde açıp kapatabilir.
   * *Karar Mekanizması:* Alt kanallar, limit ve sessiz saat kuralları olağan şekilde denetlenmeye başlar.
 

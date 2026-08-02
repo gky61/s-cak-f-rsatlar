@@ -182,6 +182,48 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                     ),
                                   ),
                                 ),
+                          // FOMO Rozeti (Sağ Üst - Biten / Tükenen Fırsatlar İçin)
+                          if (isExpired)
+                            Positioned(
+                              top: 6,
+                              right: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFD32F2F), Color(0xFFC62828)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.3),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.hourglass_bottom_rounded,
+                                      size: 9,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 2),
+                                    Text(
+                                      'KAÇTI',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           // 🔥 Fırsat Termometresi Emoji (Sol Alt) - Gerçek Zamanlı
                           Positioned(
                             bottom: 6,

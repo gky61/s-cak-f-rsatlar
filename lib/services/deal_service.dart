@@ -44,12 +44,14 @@ class DealService {
           .where((deal) {
             if (deal == null) return false;
             if (deal.isTest == true) return false;
-            if (deal.isExpired == true) return false;
             if (deal.createdAt.isBefore(cutoffTime)) return false;
             return true;
           })
           .cast<Deal>()
           .toList();
+      
+      // Home Feed Skoru (homeFeedScore) ile sırala (Freshness + Trending - TrollPenalty - ExpiredFOMO)
+      deals.sort((a, b) => b.homeFeedScore.compareTo(a.homeFeedScore));
       return DealsSnapshot(deals: deals, isFromCache: snapshot.metadata.isFromCache);
     });
   }
@@ -80,15 +82,17 @@ class DealService {
       final now = DateTime.now();
       final cutoffTime = now.subtract(const Duration(hours: 48));
       
-      return snapshot.docs
+      final deals = snapshot.docs
           .map((doc) => Deal.fromFirestore(doc))
           .where((deal) {
             if (deal.isTest == true) return false;
-            if (deal.isExpired) return false;
             if (deal.createdAt.isBefore(cutoffTime)) return false;
             return true;
           })
           .toList();
+
+      deals.sort((a, b) => b.homeFeedScore.compareTo(a.homeFeedScore));
+      return deals;
     } catch (e) {
       _log('Pagination hatası: $e');
       return [];

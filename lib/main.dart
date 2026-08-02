@@ -668,8 +668,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
           _blockedUserListener = null;
         }
         _lastUserId = null;
-        _log('No user logged in');
-        return const AuthScreen();
+        _log('No user logged in (Guest Mode Active)');
+        return const HomeScreen();
       },
     );
   }

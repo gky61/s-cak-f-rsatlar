@@ -42,7 +42,7 @@ void main() {
       expect(map['timezone'], 'Europe/Istanbul');
     });
 
-    test('Master switch toggle ON/OFF updates all sub-settings without relying on memory', () {
+    test('Master switch toggle ON/OFF updates sub-settings while quietHoursEnabled remains independent', () {
       // 1. Initial state with mixed sub-settings
       var prefs = NotificationPreferences(
         pushMasterEnabled: true,
@@ -56,7 +56,7 @@ void main() {
         updatedAt: DateTime.now(),
       );
 
-      // 2. Turn Master OFF -> All sub-settings must become false
+      // 2. Turn Master OFF -> Sub-setting channels become false, quietHoursEnabled remains preserved (false)
       final masterOffVal = false;
       prefs = NotificationPreferences(
         pushMasterEnabled: masterOffVal,
@@ -66,7 +66,7 @@ void main() {
         communityNotificationsEnabled: masterOffVal,
         submissionStatusNotificationsEnabled: masterOffVal,
         marketingNotificationsEnabled: masterOffVal,
-        quietHoursEnabled: masterOffVal,
+        quietHoursEnabled: prefs.quietHoursEnabled,
         quietHoursStart: prefs.quietHoursStart,
         quietHoursEnd: prefs.quietHoursEnd,
         timezone: prefs.timezone,
@@ -82,16 +82,16 @@ void main() {
       expect(prefs.marketingNotificationsEnabled, isFalse);
       expect(prefs.quietHoursEnabled, isFalse);
 
-      // 3. Enable an individual sub-setting while Master is OFF
+      // 3. Enable quietHoursEnabled independently
       prefs = NotificationPreferences(
         pushMasterEnabled: prefs.pushMasterEnabled,
         dealNotificationsEnabled: prefs.dealNotificationsEnabled,
         categoryNotificationsEnabled: prefs.categoryNotificationsEnabled,
         keywordNotificationsEnabled: prefs.keywordNotificationsEnabled,
-        communityNotificationsEnabled: true, // turned ON independently
+        communityNotificationsEnabled: prefs.communityNotificationsEnabled,
         submissionStatusNotificationsEnabled: prefs.submissionStatusNotificationsEnabled,
         marketingNotificationsEnabled: prefs.marketingNotificationsEnabled,
-        quietHoursEnabled: prefs.quietHoursEnabled,
+        quietHoursEnabled: true, // turned ON independently
         quietHoursStart: prefs.quietHoursStart,
         quietHoursEnd: prefs.quietHoursEnd,
         timezone: prefs.timezone,
@@ -99,9 +99,9 @@ void main() {
       );
 
       expect(prefs.pushMasterEnabled, isFalse);
-      expect(prefs.communityNotificationsEnabled, isTrue);
+      expect(prefs.quietHoursEnabled, isTrue);
 
-      // 4. Turn Master ON -> All sub-settings must become true (memory ignored)
+      // 4. Turn Master ON -> Sub-setting channels become true, quietHoursEnabled remains preserved (true)
       final masterOnVal = true;
       prefs = NotificationPreferences(
         pushMasterEnabled: masterOnVal,
@@ -111,7 +111,7 @@ void main() {
         communityNotificationsEnabled: masterOnVal,
         submissionStatusNotificationsEnabled: masterOnVal,
         marketingNotificationsEnabled: masterOnVal,
-        quietHoursEnabled: masterOnVal,
+        quietHoursEnabled: prefs.quietHoursEnabled,
         quietHoursStart: prefs.quietHoursStart,
         quietHoursEnd: prefs.quietHoursEnd,
         timezone: prefs.timezone,

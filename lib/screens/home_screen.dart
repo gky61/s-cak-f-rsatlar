@@ -28,6 +28,8 @@ import 'aktuel_magazalar_page.dart';
 import 'notification_settings_screen.dart';
 import 'admin_notifications_screen.dart';
 import 'popular_deals_screen.dart';
+import 'auth_screen.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -80,12 +82,15 @@ class _HomeScreenState extends State<HomeScreen> {
   // Engelleme kontrolü için
   StreamSubscription? _blockedUserListener;
   
-  // Okunmamış mesaj sayıları
+  // Okunmamış mesaj ve bildirim sayıları
   int _unreadMessageCount = 0;
   int _unreadAdminMessageCount = 0;
+  int _unreadNotificationCount = 0;
   StreamSubscription? _messageCountSubscription;
   StreamSubscription? _adminMessageCountSubscription;
+  StreamSubscription? _unreadNotificationsSubscription;
   StreamSubscription? _intentSub;
+  StreamSubscription? _authSub;
 
   @override
   void initState() {
@@ -99,6 +104,14 @@ class _HomeScreenState extends State<HomeScreen> {
     _cleanupExpiredDeals();
     _loadFollowedCategories();
     _loadUnreadMessageCounts();
+    _authSub = _authService.authStateChanges.listen((user) {
+      if (mounted) {
+        _checkAdminStatus();
+        _loadFollowedCategories();
+        _loadUnreadMessageCounts();
+        setState(() {});
+      }
+    });
     // Theme service listener ekle
     _themeService.addListener(_onThemeChanged);
     // Scroll listener ekle
@@ -109,9 +122,11 @@ class _HomeScreenState extends State<HomeScreen> {
   
   @override
   void dispose() {
+    _authSub?.cancel();
     _blockedUserListener?.cancel();
     _messageCountSubscription?.cancel();
     _adminMessageCountSubscription?.cancel();
+    _unreadNotificationsSubscription?.cancel();
     _intentSub?.cancel();
     _themeService.removeListener(_onThemeChanged);
     _scrollController.removeListener(_onScroll);
@@ -204,21 +219,21 @@ class _HomeScreenState extends State<HomeScreen> {
         onError: (err) => _log('⚠️ HomeScreen unread message count stream error: $err'),
       );
 
-      // Admin mesajları için stream
-      _adminMessageCountSubscription?.cancel();
-      _adminMessageCountSubscription = _firestoreService.getAdminToUserMessagesStream(currentUserId).listen(
-        (messages) {
+      // Bildirim kutusu (Notifications Center) için stream
+      _unreadNotificationsSubscription?.cancel();
+      _unreadNotificationsSubscription = _firestoreService.getUserNotificationsStream(currentUserId).listen(
+        (notifications) {
           if (mounted) {
-            final unreadCount = messages.where((m) => !m.isRead).length;
+            final unreadCount = notifications.where((n) => n['read'] != true).length;
             setState(() {
-              _unreadAdminMessageCount = unreadCount;
+              _unreadNotificationCount = unreadCount;
             });
           }
         },
-        onError: (err) => _log('⚠️ HomeScreen unread admin message count stream error: $err'),
+        onError: (err) => _log('⚠️ HomeScreen unread notification count stream error: $err'),
       );
     } catch (e) {
-      _log('❌ Okunmamış mesaj sayısı yükleme hatası: $e');
+      _log('❌ Okunmamış mesaj/bildirim sayısı yükleme hatası: $e');
     }
   }
   
@@ -780,31 +795,67 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             _buildHeaderAction(
                               icon: Icons.notifications_none_rounded,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AdminNotificationsScreen(),
-                                ),
-                              ),
+                              onTap: () {
+                                if (_authService.currentUser == null) {
+                                  showGuestLoginBottomSheet(
+                                    context,
+                                    title: 'Bildirimler İçin Giriş Yap! 🔔',
+                                    message: 'Kişiselleştirilmiş fırsat bildirimlerinizi görmek ve yönetmek için giriş yapın.',
+                                    primaryButtonText: '🚀 Google ile Giriş Yap',
+                                  );
+                                  return;
+                                }
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const AdminNotificationsScreen(),
+                                  ),
+                                );
+                              },
                               isDark: isDark,
                             ),
-                            if (_unreadAdminMessageCount > 0)
+                            if (_unreadNotificationCount > 0)
                               Positioned(
-                                top: 6,
-                                right: 6,
+                                top: 5,
+                                right: 5,
                                 child: Container(
-                                  width: 8,
-                                  height: 8,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: _unreadNotificationCount > 9 ? 4 : 0,
+                                    vertical: _unreadNotificationCount > 9 ? 2 : 0,
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 9,
+                                    minHeight: 9,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFFFF3B30), Color(0xFFFF5E36)],
+                                    ),
+                                    shape: _unreadNotificationCount > 9 ? BoxShape.rectangle : BoxShape.circle,
+                                    borderRadius: _unreadNotificationCount > 9 ? BorderRadius.circular(10) : null,
                                     border: Border.all(
-                                      color: isDark
-                                          ? AppTheme.darkBackground
-                                          : Colors.white,
+                                      color: isDark ? AppTheme.darkBackground : Colors.white,
                                       width: 1.5,
                                     ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.red.withValues(alpha: 0.5),
+                                        blurRadius: 4,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
                                   ),
+                                  child: _unreadNotificationCount > 9
+                                      ? Text(
+                                          _unreadNotificationCount > 99 ? '99+' : '$_unreadNotificationCount',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 8.5,
+                                            fontWeight: FontWeight.w900,
+                                            height: 1,
+                                          ),
+                                        )
+                                      : null,
                                 ),
                               ),
                           ],
@@ -1375,6 +1426,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 label: 'Fırsat Paylaş',
                 isSelected: false,
                 onTap: () {
+                  final user = _authService.currentUser;
+                  if (user == null) {
+                    showGuestLoginBottomSheet(
+                      context,
+                      title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
+                      message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
+                      primaryButtonText: '🚀 Google ile Giriş Yap',
+                    );
+                    return;
+                  }
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const SubmitDealScreen()),
@@ -1388,6 +1449,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 isSelected: false,
                 badgeCount: _unreadMessageCount + _unreadAdminMessageCount,
                 onTap: () {
+                  final user = _authService.currentUser;
+                  if (user == null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AuthScreen()),
+                    );
+                    return;
+                  }
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const ProfileScreen()),
