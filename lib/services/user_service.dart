@@ -96,9 +96,7 @@ class UserService {
         'fiyat': finalPrice.toString(),
         'link': finalLink,
         'magazaAdi': finalStore,
-        'eklenmeTarihi': FieldValue.serverTimestamp(),
         'savedAt': FieldValue.serverTimestamp(),
-        'addedAt': FieldValue.serverTimestamp(),
       });
       return true;
     } catch (e) {
@@ -123,10 +121,10 @@ class UserService {
       final now = DateTime.now();
       final docs = snapshot.docs.toList();
       
-      // Saf Kronoloji: Kullanıcının favoriye kaydettiği tarihe göre sırala (savedAt / addedAt DESC)
+      // Saf Kronoloji: Kullanıcının favoriye kaydettiği tarihe göre sırala (savedAt DESC)
       docs.sort((a, b) {
-        final aTime = (a.data()['savedAt'] ?? a.data()['eklenmeTarihi'] ?? a.data()['addedAt']) as Timestamp?;
-        final bTime = (b.data()['savedAt'] ?? b.data()['eklenmeTarihi'] ?? b.data()['addedAt']) as Timestamp?;
+        final aTime = (a.data()['savedAt'] ?? a.data()['eklenmeTarihi']) as Timestamp?;
+        final bTime = (b.data()['savedAt'] ?? b.data()['eklenmeTarihi']) as Timestamp?;
         if (aTime == null || bTime == null) return 0;
         return bTime.compareTo(aTime);
       });
@@ -146,7 +144,7 @@ class UserService {
           final fiyat = double.tryParse(fiyatStr) ?? 0.0;
           final store = data['magazaAdi'] ?? data['store'] ?? 'Mağaza';
           final link = data['link'] ?? '';
-          final addedAtTimestamp = (data['savedAt'] ?? data['eklenmeTarihi'] ?? data['addedAt']) as Timestamp?;
+          final addedAtTimestamp = (data['savedAt'] ?? data['eklenmeTarihi']) as Timestamp?;
           final addedAt = addedAtTimestamp?.toDate() ?? now;
           
           return Deal(
