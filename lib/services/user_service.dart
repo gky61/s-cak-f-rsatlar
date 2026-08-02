@@ -119,58 +119,33 @@ class UserService {
         .snapshots()
         .asyncMap((snapshot) async {
       final now = DateTime.now();
-      final cutoffTime = now.subtract(const Duration(hours: 48));
       final docs = snapshot.docs.toList();
+      
+      // Saf Kronoloji: Kullanıcının favoriye kaydettiği tarihe göre sırala (savedAt / addedAt DESC)
       docs.sort((a, b) {
-        final aTime = (a.data()['eklenmeTarihi'] ?? a.data()['addedAt']) as Timestamp?;
-        final bTime = (b.data()['eklenmeTarihi'] ?? b.data()['addedAt']) as Timestamp?;
+        final aTime = (a.data()['savedAt'] ?? a.data()['eklenmeTarihi'] ?? a.data()['addedAt']) as Timestamp?;
+        final bTime = (b.data()['savedAt'] ?? b.data()['eklenmeTarihi'] ?? b.data()['addedAt']) as Timestamp?;
         if (aTime == null || bTime == null) return 0;
         return bTime.compareTo(aTime);
       });
+
       final deals = await Future.wait(docs.map((doc) async {
         final data = doc.data();
         final dealId = doc.id;
         final dealDoc = await _firestore.collection('deals').doc(dealId).get();
         
-        final addedAtTimestamp = (data['eklenmeTarihi'] ?? data['addedAt']) as Timestamp?;
-        final addedAt = addedAtTimestamp?.toDate() ?? now;
-        final isOld = addedAt.isBefore(cutoffTime);
-        
         if (dealDoc.exists) {
-          final deal = Deal.fromFirestore(dealDoc);
-          if (isOld || deal.isExpired || deal.createdAt.isBefore(cutoffTime)) {
-            return Deal(
-              id: deal.id,
-              title: deal.title,
-              description: deal.description,
-              price: deal.price,
-              originalPrice: deal.originalPrice,
-              discountRate: deal.discountRate,
-              store: deal.store,
-              category: deal.category,
-              subCategory: deal.subCategory,
-              link: deal.link,
-              imageUrl: deal.imageUrl,
-              hotVotes: deal.hotVotes,
-              coldVotes: deal.coldVotes,
-              expiredVotes: deal.expiredVotes,
-              commentCount: deal.commentCount,
-              postedBy: deal.postedBy,
-              createdAt: deal.createdAt,
-              isEditorPick: deal.isEditorPick,
-              isApproved: deal.isApproved,
-              isExpired: true,
-              isUserSubmitted: deal.isUserSubmitted,
-            );
-          } else {
-            return deal;
-          }
+          // Canlı Durum Güncellemesi: Firestore'daki güncel stok/fırsat durumunu yansıt
+          return Deal.fromFirestore(dealDoc);
         } else {
+          // İlan silinmişse yedek süresi doldu verisi oluştur
           final baslik = data['baslik'] ?? data['title'] ?? 'Süresi Dolan Fırsat';
           final fiyatStr = data['fiyat']?.toString() ?? '0';
           final fiyat = double.tryParse(fiyatStr) ?? 0.0;
           final store = data['magazaAdi'] ?? data['store'] ?? 'Mağaza';
           final link = data['link'] ?? '';
+          final addedAtTimestamp = (data['savedAt'] ?? data['eklenmeTarihi'] ?? data['addedAt']) as Timestamp?;
+          final addedAt = addedAtTimestamp?.toDate() ?? now;
           
           return Deal(
             id: dealId,

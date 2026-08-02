@@ -38,8 +38,10 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return AnimatedScale(
-      scale: _isPressed ? 0.97 : (_isHovered ? 1.03 : 1.0),
+    return Opacity(
+      opacity: isExpired ? 0.8 : 1.0,
+      child: AnimatedScale(
+        scale: _isPressed ? 0.97 : (_isHovered ? 1.03 : 1.0),
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutBack,
         child: AnimatedContainer(

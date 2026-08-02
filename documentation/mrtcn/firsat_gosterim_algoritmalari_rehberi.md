@@ -11,8 +11,8 @@ FırsatKolik anlık indirim ve kampanya odaklı bir uygulama olduğu için, içe
 | Menü Başlığı | Zaman Penceresi | Sıralama Ölçütü | Kullanım Amacı |
 |---|---|---|---|
 | 🏠 **1. Anasayfa** | Son **48 Saat** | **`homeFeedScore` ↓** (Tazelik + Trending - TrollCeza - FOMO) | %85 Kronoloji + FOMO odaklı canlı haber akışında taze indirimleri keşfetmek |
-| 📑 **2. Kaydedilenlerim** | **Sınırsız / 30 Gün** | Favoriye eklenme tarihi (`addedAt ↓`) | Kullanıcının daha sonra bakmak üzere kaydettiği kişisel kütüphanesi |
-| 🏷️ **3. Favori Kategorilerim** | Son **48 Saat** | En yeni eklenen en üstte (`createdAt ↓`) | Sadece kullanıcının takip ettiği kategori ve alt kategorilerdeki taze fırsatlar |
+| 📑 **2. Kaydedilenlerim** | **Sınırsız / 30 Gün** | Favoriye eklenme tarihi (`savedAt ↓`) | "Benim Özel Dijital Depom" — Kaydedilen taze/süresi dolan tüm fırsatların kronolojik arşiv kütüphanesi |
+| 🏷️ **3. Favori Kategorilerim** | Son **48 Saat** | **`homeFeedScore` ↓** (Tazelik + Trending - TrollCeza - FOMO) | "Kişiselleştirilmiş Özel Fırsat Akışım" — Sadece takip edilen kategorilere filtrelenmiş Ana Sayfa akışı |
 | 🔥 **4. Popüler Fırsatlar** | Son **48 Saat** | **`popularityScore` ↓** (Wilson + Time Decay + Engagement) | Topluluk tarafından alevlendirilen ve en çok ilgi gören trend indirimler |
 
 ---
@@ -37,33 +37,36 @@ Kullanıcının uygulamayı açtığında karşılaştığı canlı haber akış
 
 ## 📑 2. Kaydedilenlerim (Saved Deals / Favorites Tab 1)
 
-### 🎯 Amacı
-Kullanıcıların beğendikleri veya daha sonra satın almak/incelemek üzere yer işaretlerine ("Bookmark") ekledikleri kişisel fırsat arşivdir.
+### 🎯 Kullanıcı Hissiyatı & Amacı
+Kullanıcı bu sayfaya girdiğinde **"Benim Özel Dijital Depom"** hissini yaşamalıdır (*"Buraya attığım hiçbir fırsat kaybolmaz, kontrol tamamen bende ve hepsi elimin altında."*).
 
-### ⚙️ Çalışma Mantığı ve Algoritması
-1. **Kişisel Veri Saklama:** Kullanıcı bir fırsatı kaydettiğinde `users/{userId}/favorites/{dealId}` altına kayıt oluşturulur.
-2. **Süreksiz Erişim (Süresi Doldu Etiketi):** Fırsat 48 saati doldurduğunda veya fırsatın süresi bittiğinde, bu menüden **silinmez**. Bunun yerine kartın üzerinde belirgin bir **"Süresi Doldu"** rozeti görüntülenir.
-3. **Çift Katmanlı Koruma (Fallback Mechanism):**
-   - **Fırsat Veritabanında Duruyorsa:** Oluşturulma tarihi veya favori eklenme tarihi 48 saati geçtiyse nesne `isExpired = true` olarak işaretlenip gösterilir.
-   - **Fırsat Veritabanından Silinmişse:** Kullanıcının favoriler dokümanında saklanan yedek bilgiler (başlık, fiyat, mağaza adı) okunur ve yine "Süresi Doldu" etiketiyle listelenir.
-4. **Performans Mimarisi (Parallel Fetching):** Kaydedilen tüm fırsatlar `Future.wait` ile eşzamanlı (paralel) çekilir. Böylece 20 favori fırsat 100ms gibi çok kısa bir sürede ekrana gelir.
-5. **Kullanıcı Kontrolü:** Ekranın üst kısmında yer alan **"Süresi Dolanları Temizle"** butonu sayesinde kullanıcı istediği zaman süresi bitmiş kayıtları tek tıkla topluca kaldırabilir.
+### ⚙️ Algoritma ve Gösterim Stratejisi
+1. **Saf Kronoloji (Son Kaydedilen En Üstte - `savedAt DESC`):**
+   - Buradaki ana sıralama metriği ürünün paylaşılma tarihi değil, **kullanıcının o fırsatı favoriye eklediği tarihtir (`savedAt` / `addedAt` DESC)**.
+   - Kullanıcı 2 dakika önce 3 günlük bir fırsatı kaydettiyse, o fırsat en üstte görünür.
+2. **Canlı Durum Güncellemesi (Stok/Fiyat Değişimi):**
+   - Kullanıcının kaydettiği bir fırsatın stoğu tükenirse veya indirim biterse (`isExpired == true`), bu fırsat listeden silinmez veya en alta atılmaz.
+   - Kronolojik sıralamadaki yerini tam olarak korur.
+   - Kartın üzerinde belirgin bir **"⌛ Süresi Doldu"** / **"🔥 FIRSAT KAÇTI"** rozeti görüntülenir ve kart hafifçe grileşir (`opacity: 0.8`).
+3. **Performans Mimarisi (Parallel Fetching):** Kaydedilen tüm fırsatlar `Future.wait` ile eşzamanlı (paralel) çekilir. Böylece favori fırsatlar milisaniyeler içinde ekrana gelir.
+4. **Kullanıcı Kontrolü:** Ekranın üst kısmında yer alan **"Süresi Dolanları Temizle"** butonu sayesinde kullanıcı istediği zaman süresi bitmiş kayıtları tek tıkla topluca temizleyebilir.
 
 ---
 
 ## 🏷️ 3. Favori Kategorilerim (Followed Categories / Favorites Tab 2)
 
-### 🎯 Amacı
-Kullanıcının sadece ilgi duyduğu alışveriş kategorilerini (örn: Elektronik, Moda, Ev & Yaşam, Bilgisayar) takip ederek, bu kategorilere özel kişiselleştirilmiş bir akış oluşturmasını sağlar.
+### 🎯 Kullanıcı Hissiyatı & Amacı
+Kullanıcı bu sayfaya girdiğinde **"Kişiselleştirilmiş Özel Fırsat Akışım"** hissini yaşamalıdır (*"Tüm uygulamanın gürültüsünden uzaklaştım, sadece ilgilendiğim ürün gruplarını (Örn: Teknoloji, Moda) görüyorum."*).
 
-### ⚙️ Çalışma Mantığı ve Algoritması
-1. **Abonelik Dinleme:** Kullanıcının takip ettiği ana kategoriler (`elektronik`) ve alt kategoriler (`elektronik:bilgisayar`) `notificationSubscriptions` koleksiyonundan canlı olarak dinlenir.
-2. **Kategori ve Alt Kategori Eşleşmesi:**
-   - Eşleşmeler **case-insensitive (`toLowerCase()`)** olarak yapılır.
-   - Kullanıcı ana kategoriyi takip ediyorsa o kategorideki tüm ürünler görünür.
-   - Kullanıcı sadece spesifik bir alt kategoriyi takip ediyorsa (`Laptop`), yalnızca o alt kategorideki ürünler süzülür.
-3. **Zaman Sınırı (48 Saat):** Anasayfa ile %100 tutarlı olarak sadece son **48 saatlik** taze fırsatlar gösterilir.
-4. **Sıralama:** En yeni eklenen fırsatlar en üstte listelenir.
+### ⚙️ Algoritma ve Gösterim Stratejisi
+1. **Ana Sayfa Algoritmasının Kategori Filtreli Versiyonu:**
+   - Burada Ana Sayfa’daki skorlama ve sıralama algoritmasının (`homeFeedScore`) **sadece kullanıcının seçtiği/takip ettiği kategorilere filtrelenmiş hali** çalışır.
+   - $$\text{homeFeedScore} = \text{FreshnessScore} + \text{TrendingBonus} - \text{SoftTrollPenalty} - \text{ExpiredFOMODemotion}$$
+2. **Abonelik Dinleme & Filtreleme:**
+   - Kullanıcının takip ettiği ana kategoriler (`elektronik`) ve alt kategoriler (`elektronik:bilgisayar`) `notificationSubscriptions` koleksiyonundan canlı dinlenir ve eşleşen fırsatlar çekilir.
+3. **Birebir Ana Sayfa Deneyimi:**
+   - Eşleşen kategorilerdeki taze ürünler %85 tazelik + kuluçka dönemi dokunulmazlığı + alevlenme desteği ile üst sıralara yerleşir.
+   - Süresi biten fırsatlar `-25.0` FOMO puan kırma kuralı ile aktif taze fırsatların hemen altında yer alır.
 
 ---
 

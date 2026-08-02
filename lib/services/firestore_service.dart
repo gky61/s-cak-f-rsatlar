@@ -292,6 +292,10 @@ class FirestoreService {
         }
         return false;
       }).toList();
+
+      // Ana Sayfa Algoritması (homeFeedScore DESC) ile birebir aynı skorlama ve sıralama
+      filtered.sort((a, b) => b.homeFeedScore.compareTo(a.homeFeedScore));
+
       controller.add(filtered);
     }
     
@@ -341,7 +345,6 @@ class FirestoreService {
               .where((deal) =>
                   deal != null &&
                   deal.isTest != true &&
-                  deal.isExpired != true &&
                   !deal.createdAt.isBefore(cutoffTime))
               .cast<Deal>()
               .toList();
