@@ -81,164 +81,115 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
       opacity: isExpired ? 0.8 : 1.0,
       child: AnimatedScale(
         scale: _isPressed ? 0.97 : (_isHovered ? 1.03 : 1.0),
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutBack,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: cardBgColor,
-            borderRadius: BorderRadius.circular(16), // rounded-2xl
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(
-                  alpha: isDark 
-                      ? (_isHovered ? 0.45 : 0.25) 
-                      : (_isHovered ? 0.10 : 0.06)
-                ),
-                blurRadius: _isHovered ? 24 : 16,
-                offset: Offset(0, _isHovered ? 8 : 4),
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOutBack,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: cardBgColor,
+          borderRadius: BorderRadius.circular(16), // rounded-2xl
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(
+                isDark 
+                    ? (_isHovered ? 0.45 : 0.25) 
+                    : (_isHovered ? 0.10 : 0.06)
               ),
-              BoxShadow(
-                color: Colors.black.withValues(
-                  alpha: isDark 
-                      ? (_isHovered ? 0.25 : 0.15) 
-                      : (_isHovered ? 0.06 : 0.04)
-                ),
-                blurRadius: _isHovered ? 12 : 6,
-                spreadRadius: _isHovered ? 2 : 1,
-                offset: Offset.zero,
-              ),
-            ],
-            border: Border.all(
-              color: cardBorderColor,
-              width: borderWidth,
+              blurRadius: _isHovered ? 24 : 16,
+              offset: Offset(0, _isHovered ? 8 : 4),
             ),
+            BoxShadow(
+              color: Colors.black.withOpacity(
+                isDark 
+                    ? (_isHovered ? 0.25 : 0.15) 
+                    : (_isHovered ? 0.06 : 0.04)
+              ),
+              blurRadius: _isHovered ? 12 : 6,
+              spreadRadius: _isHovered ? 2 : 1,
+              offset: Offset.zero,
+            ),
+          ],
+          border: Border.all(
+            color: cardBorderColor,
+            width: borderWidth,
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: widget.onTap,
-              onHover: (hovering) {
-                setState(() {
-                  _isHovered = hovering;
-                });
-              },
-              onHighlightChanged: (highlighted) {
-                setState(() {
-                  _isPressed = highlighted;
-                });
-              },
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Sol Taraf: Görsel Container (Sabit Genişlik - Taşmayı Önler)
-                    SizedBox(
-                      width: 140, // Sabit genişlik
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(15)),
-                        child: Stack(
-                          children: [
-                            // Görsel
-                            Container(
-                              width: double.infinity,
-                              height: double.infinity,
-                              decoration: const BoxDecoration(
-                                color: Colors.white, // Beyaz arka plan
-                              ),
-                              child: (isExpired || widget.effectiveImageUrl == null || widget.effectiveImageUrl!.isEmpty)
-                                  ? Image.asset(getStoreAsset(deal.store), fit: BoxFit.contain)
-                                  : Padding(
-                                      padding: const EdgeInsets.all(8.0), // Elegant floating padding
-                                      child: CachedNetworkImage(
-                                        imageUrl: widget.effectiveImageUrl!,
-                                        fit: BoxFit.contain,
-                                        width: double.infinity,
-                                        height: double.infinity,
-                                        memCacheWidth: 1000,
-                                        memCacheHeight: 1000,
-                                        maxHeightDiskCache: 1000,
-                                        maxWidthDiskCache: 1000,
-                                        fadeInDuration: const Duration(milliseconds: 300),
-                                        fadeOutDuration: const Duration(milliseconds: 100),
-                                        placeholder: (context, url) => Container(
-                                          color: Colors.grey[100],
-                                          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                        ),
-                                        errorWidget: (context, url, error) => Image.asset(
-                                          getStoreAsset(deal.store),
-                                          fit: BoxFit.contain,
-                                        ),
-                                      ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: widget.onTap,
+            onHover: (hovering) {
+              setState(() {
+                _isHovered = hovering;
+              });
+            },
+            onHighlightChanged: (highlighted) {
+              setState(() {
+                _isPressed = highlighted;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(10), // p-2.5
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Sol tarafta görsel - Daha büyük ve kaliteli (140x140px)
+                  Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white, // Beyaz arka plan
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Stack(
+                        children: [
+                          // Beyaz arka plan
+                          Container(
+                            width: 140,
+                            height: 140,
+                            color: Colors.white,
+                          ),
+                          // Görsel
+                          (isExpired || widget.effectiveImageUrl == null || widget.effectiveImageUrl!.isEmpty)
+                              ? Image.asset(getStoreAsset(deal.store), width: double.infinity, height: double.infinity, fit: BoxFit.contain)
+                              : Padding(
+                                  padding: const EdgeInsets.all(4.0),
+                                  child: CachedNetworkImage(
+                                    imageUrl: widget.effectiveImageUrl!,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    fit: BoxFit.contain,
+                                    memCacheWidth: 1000,
+                                    memCacheHeight: 1000,
+                                    maxHeightDiskCache: 1000,
+                                    maxWidthDiskCache: 1000,
+                                    fadeInDuration: const Duration(milliseconds: 300),
+                                    fadeOutDuration: const Duration(milliseconds: 100),
+                                    placeholder: (context, url) => Container(
+                                      color: Colors.grey[100],
+                                      child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                                     ),
-                            ),
-                            // FOMO Rozeti (Sağ Üst - Biten / Tükenen Fırsatlar İçin)
-                            if (isExpired)
-                              Positioned(
-                                top: 6,
-                                right: 6,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [Color(0xFFD32F2F), Color(0xFFC62828)],
+                                    errorWidget: (context, url, error) => Image.asset(
+                                      getStoreAsset(deal.store),
+                                      fit: BoxFit.contain,
                                     ),
-                                    borderRadius: BorderRadius.circular(6),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.3),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.hourglass_bottom_rounded,
-                                        size: 9,
-                                        color: Colors.white,
-                                      ),
-                                      SizedBox(width: 2),
-                                      Text(
-                                        'KAÇTI',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 8.5,
-                                          fontWeight: FontWeight.w900,
-                                          letterSpacing: 0.3,
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                 ),
-                              ),
-                            // İndirim Rozeti (Sol Üst)
-                            if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
-                              Positioned(
-                                top: 8,
-                                left: 8,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: primaryColor,
-                                    borderRadius: BorderRadius.circular(4),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.2),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Text(
-                                    '%${deal.effectiveDiscountRate!.toInt()}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                          // 🔥 Fırsat Termometresi Emoji (Sol Alt) - Gerçek Zamanlı
+                          Positioned(
+                            bottom: 6,
+                            left: 6,
+                            child: StreamBuilder<DocumentSnapshot>(
+                              stream: FirebaseFirestore.instance
                                   .collection('deals')
                                   .doc(deal.id)
                                   .snapshots(),
@@ -730,6 +681,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
