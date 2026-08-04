@@ -1,6 +1,6 @@
 # 🚀 FırsatKolik — Fırsat Gösterim Algoritmaları ve Menü Mimarisi Rehberi
 
-Bu doküman, FırsatKolik mobil uygulamasında yer alan **4 ana menünün (Anasayfa, Kaydedilenlerim, Favori Kategorilerim, Popüler Fırsatlar)** çalışma prensiplerini, arka planda çalışan algoritmalarını, zaman pencerelerini ve kullanıcı deneyimi (UX) esaslarını detaylı bir şekilde açıklamaktadır.
+Bu doküman, FırsatKolik mobil uygulamasında yer alan **4 ana menünün (Anasayfa, Kaydedilenlerim, Favori Kategorilerim, Popüler Fırsatlar)** çalışma prensiplerini, arka planda çalışan algoritmalarını, süresi dolan/stoğu biten fırsatların gösterim esaslarını, zaman pencerelerini ve kullanıcı deneyimi (UX) esaslarını detaylı bir şekilde açıklamaktadır.
 
 ---
 
@@ -8,12 +8,29 @@ Bu doküman, FırsatKolik mobil uygulamasında yer alan **4 ana menünün (Anasa
 
 FırsatKolik anlık indirim ve kampanya odaklı bir uygulama olduğu için, içeriklerin **tazeliği (freshness)** ve **güncelliği** en kritik parametredir. Stokları hızlı tükenen kampanyalarda kullanıcının güncel kalması amaçlanmıştır.
 
-| Menü Başlığı | Zaman Penceresi | Sıralama Ölçütü | Kullanım Amacı |
-|---|---|---|---|
-| 🏠 **1. Anasayfa** | Son **48 Saat** | **`homeFeedScore` ↓** (Tazelik + Trending - TrollCeza - FOMO) | %85 Kronoloji + FOMO odaklı canlı haber akışında taze indirimleri keşfetmek |
-| 📑 **2. Kaydedilenlerim** | **Sınırsız / 30 Gün** | Favoriye eklenme tarihi (`savedAt ↓`) | "Benim Özel Dijital Depom" — Kaydedilen taze/süresi dolan tüm fırsatların kronolojik arşiv kütüphanesi |
-| 🏷️ **3. Favori Kategorilerim** | Son **48 Saat** | **`homeFeedScore` ↓** (Tazelik + Trending - TrollCeza - FOMO) | "Kişiselleştirilmiş Özel Fırsat Akışım" — Sadece takip edilen kategorilere filtrelenmiş Ana Sayfa akışı |
-| 🔥 **4. Popüler Fırsatlar** | Son **48 Saat** | **`popularityScore` ↓** (Wilson + Time Decay + Engagement) | Topluluk tarafından alevlendirilen ve en çok ilgi gören trend indirimler |
+| Menü Başlığı | Zaman Penceresi | Sıralama Ölçütü | Biten Fırsat Gösterimi (`isExpired`) | Kullanım Amacı |
+|---|---|---|---|---|
+| 🏠 **1. Anasayfa** | Son **48 Saat** | **`homeFeedScore` ↓** (Tazelik + Trending - TrollCeza - FOMO) | **Gösterilir** (`-25.0` FOMO Kırılması + `Opacity: 0.8` + "KAÇTI" Rozeti) | %85 Kronoloji + FOMO odaklı canlı haber akışında taze indirimleri keşfetmek |
+| 📑 **2. Kaydedilenlerim** | **Sınırsız / 30 Gün** | Favoriye eklenme tarihi (`savedAt ↓`) | **Gösterilir** (Silinmez, `savedAt` sırasını korur + `Opacity: 0.8` + "KAÇTI" Rozeti) | "Benim Özel Dijital Depom" — Kaydedilen taze/süresi dolan tüm fırsatların kronolojik arşiv kütüphanesi |
+| 🏷️ **3. Favori Kategorilerim** | Son **48 Saat** | **`homeFeedScore` ↓** (Tazelik + Trending - TrollCeza - FOMO) | **Gösterilir** (`-25.0` FOMO Kırılması + `Opacity: 0.8` + "KAÇTI" Rozeti) | "Kişiselleştirilmiş Özel Fırsat Akışım" — Sadece takip edilen kategorilere filtrelenmiş Ana Sayfa akışı |
+| 🔥 **4. Popüler Fırsatlar** | Son **48 Saat** | **`popularityScore` ↓** (Wilson + Time Decay + Engagement) | **GÖSTERİLMEZ (%100 Elenir)** | Topluluk tarafından alevlendirilen ve en çok ilgi gören trend indirimler |
+
+---
+
+## ⌛ 0. Süresi Biten / Stok Biten Fırsatların Görsel ve Algoritmik Standardı
+
+FırsatKolik uygulamasında bir fırsatın süresi dolduğunda veya stoğu tükendiğinde (`isExpired == true` veya `expiredVotes >= dynamicLimit`) izlenen temel tasarım ve tespit esasları şunlardır:
+
+### 1. Görsel Sunum Esasları (Visual Standards)
+* **Orijinal Ürün Görseli Korunur:** Fırsat bittiğinde ürünün orijinal görseli (`CachedNetworkImage`) **kesinlikle silinmez veya varsayılan mağaza logosu ile değiştirilmez**. Mağaza logosu yalnızca ürün görsel URL'si veritabanında gerçekten yoksa veya boşsa fallback olarak kullanılır.
+* **Karartma ve Matlık (`Opacity: 0.8`):** Kartın tamamı (görsel dahil) hafifçe karartılarak (`opacity: 0.8` / `0.75`) pasif durumu hissettirilir.
+* **Kırmızı Gradyanlı Rozet ("⌛ KAÇTI"):** Kartın ve ürün görselinin sağ üst köşesine kırmızı gradyanlı, dikkat çekici **"⌛ KAÇTI"** / **"SÜRESİ DOLDU"** rozeti yerleştirilir.
+* **Aksiyon Butonu Değişimi:** Buton metni `"İncele ↗"` yerine **`"Şansını Dene ↗"`** ifadesine dönüşür (Stokların yenilenmiş olma ihtimaline karşı).
+
+### 2. Bitiş Tespit Mekanizmaları
+* **Topluluk Oylaması (`expiredVotes`):** Kullanıcıların detay sayfasındaki "Bitti/Stok Yok" oyları dinamik eşiği ($\operatorname{clamp}(5 + \lfloor\text{hotVotes}/5\rfloor, 5, 20)$) aştığında sistem otomatik olarak `isExpired = true` işaretler.
+* **Yönetici Müdahalesi / Scraper Botlar:** Admin panelinden "Fırsatı Kaldır" yapıldığında veya botlar mağaza sayfasında `Stok Yok` / `404` algıladığında `isExpired = true` güncellenir.
+* **48 Saatlik Zamansal Sınır:** 48 saati dolduran tüm fırsatlar kronolojik olarak bitti kabul edilerek ana akışlardan kademeli olarak kaldırılır.
 
 ---
 
@@ -30,7 +47,7 @@ Kullanıcının uygulamayı açtığında karşılaştığı canlı haber akış
    - **İlk 45 Dakika Dokunulmazlık (Immunity Period):** İlk 45 dakika boyunca olumsuz oylar ürünü düşüremez.
    - **Alevlenme Bonusu ($\text{TrendingBonus}$):** 1 saat içinde hızlı oy alan fırsatlar kendinden önceki oylanmamış 1-2 ürünün üzerine tırmanır.
    - **Yumuşak Pas Cezası ($\text{SoftTrollPenalty}$):** 45 dakikadan sonra olumsuz oyları %65'i geçen fırsatların puanı hafifçe düşürülerek akışta %20-30 geriye kaydırılır.
-   - **FOMO Bitiş Düzeltmesi ($\text{ExpiredFOMODemotion}$):** Süresi batan/tükenen fırsatlar **gizlenmez**. `-25.0` küçük puan kırılması ile en üstteki 3-5 aktif taze ürünün hemen altına düşer. Kırmızı **"⌛ FIRSAT KAÇTI"** rozeti ile sergilenerek kullanıcıda tatlı bir FOMO hissi uyandırır.
+   - **FOMO Bitiş Düzeltmesi ($\text{ExpiredFOMODemotion}$):** Süresi batan/tükenen taze fırsatlar **akıştan anında silinmez**. `-25.0` puan kırılması ile en üstteki 3-5 aktif taze ürünün hemen altına düşer. Orijinal ürün görseli korunarak `Opacity: 0.8` ve kırmızı **"⌛ KAÇTI"** rozeti ile sergilenir. Böylece kullanıcıda *"İndirimi kaçırdım, uygulamaya daha sık girmeliyim"* hissi (FOMO) uyandırılır. 48 saati doldurduğunda ise akıştan tamamen kalkar.
 3. **Pagination & Reklam:** 20'şerli sonsuz kaydırma ("Infinite Scroll") ve 5-6 kart aralıklarıyla doğal reklam kartları.
 
 ---
@@ -42,12 +59,12 @@ Kullanıcı bu sayfaya girdiğinde **"Benim Özel Dijital Depom"** hissini yaşa
 
 ### ⚙️ Algoritma ve Gösterim Stratejisi
 1. **Saf Kronoloji (Son Kaydedilen En Üstte - `savedAt DESC`):**
-   - Buradaki ana sıralama metriği ürünün paylaşılma tarihi değil, **kullanıcının o fırsatı favoriye eklediği tarihtir (`savedAt` / `addedAt` DESC)**.
+   - Buradaki ana sıralama metriği ürünün paylaşılma tarihi değil, **kullanıcının o fırsatı favoriye eklediği tarihtir (`savedAt` DESC)**.
    - Kullanıcı 2 dakika önce 3 günlük bir fırsatı kaydettiyse, o fırsat en üstte görünür.
-2. **Canlı Durum Güncellemesi (Stok/Fiyat Değişimi):**
-   - Kullanıcının kaydettiği bir fırsatın stoğu tükenirse veya indirim biterse (`isExpired == true`), bu fırsat listeden silinmez veya en alta atılmaz.
-   - Kronolojik sıralamadaki yerini tam olarak korur.
-   - Kartın üzerinde belirgin bir **"⌛ Süresi Doldu"** / **"🔥 FIRSAT KAÇTI"** rozeti görüntülenir ve kart hafifçe grileşir (`opacity: 0.8`).
+2. **Canlı Durum Güncellemesi (Stok/Fiyat Değişimi & Bitiş Yönetimi):**
+   - Kullanıcının kaydettiği bir fırsatın stoğu tükenirse veya indirim biterse (`isExpired == true`), bu fırsat **LİSTEDEN ASLA SİLİNMEZ VEYA EN ALTA ATILMAZ.**
+   - Kaydedildiği kronolojik sıradaki (`savedAt`) yerini milisaniyesi milisaniyesine korur.
+   - Orijinal ürün görseli korunarak kart üzerinde `opacity: 0.8` matlaşma ve belirgin bir **"⌛ KAÇTI"** rozeti görüntülenir.
 3. **Performans Mimarisi (Parallel Fetching):** Kaydedilen tüm fırsatlar `Future.wait` ile eşzamanlı (paralel) çekilir. Böylece favori fırsatlar milisaniyeler içinde ekrana gelir.
 4. **Kullanıcı Kontrolü:** Ekranın üst kısmında yer alan **"Süresi Dolanları Temizle"** butonu sayesinde kullanıcı istediği zaman süresi bitmiş kayıtları tek tıkla topluca temizleyebilir.
 
@@ -64,9 +81,9 @@ Kullanıcı bu sayfaya girdiğinde **"Kişiselleştirilmiş Özel Fırsat Akış
    - $$\text{homeFeedScore} = \text{FreshnessScore} + \text{TrendingBonus} - \text{SoftTrollPenalty} - \text{ExpiredFOMODemotion}$$
 2. **Abonelik Dinleme & Filtreleme:**
    - Kullanıcının takip ettiği ana kategoriler (`elektronik`) ve alt kategoriler (`elektronik:bilgisayar`) `notificationSubscriptions` koleksiyonundan canlı dinlenir ve eşleşen fırsatlar çekilir.
-3. **Birebir Ana Sayfa Deneyimi:**
+3. **Birebir Ana Sayfa Deneyimi & Biten Fırsat Yönetimi:**
    - Eşleşen kategorilerdeki taze ürünler %85 tazelik + kuluçka dönemi dokunulmazlığı + alevlenme desteği ile üst sıralara yerleşir.
-   - Süresi biten fırsatlar `-25.0` FOMO puan kırma kuralı ile aktif taze fırsatların hemen altında yer alır.
+   - Süresi biten fırsatlar `-25.0` FOMO puan kırma kuralı ile takip edilen aktif taze fırsatların hemen altında, orijinal ürün resmi korunarak `Opacity: 0.8` ve kırmızı **"⌛ KAÇTI"** rozetiyle gösterilir.
 
 ---
 
@@ -76,10 +93,10 @@ Kullanıcı bu sayfaya girdiğinde **"Kişiselleştirilmiş Özel Fırsat Akış
 Topluluk tarafından yüksek oranda alevlendirilen ("AL! / Sıcak Oy"), yorumlarla etkileşimi artan ve fırsat değeri en yüksek olan trend indirimlerin sergilendiği vitrindir.
 
 ### ⚙️ Çalışma Mantığı ve Algoritması
-1. **Eşik ve Filtre Şartları:**
+1. **Sert Eşik ve Filtre Şartları (Biten Fırsatlar Kesin Elenir):**
    - `hotVotes >= 3` (En az 3 sıcak oy almış olmalı)
    - `netScore > 0` (Net oy sayısı pozitif olmalı, soğuk oylarla ekside kalan sorunlu ürünler elenir)
-   - `isExpired == false` (Süresi bitmiş ürünler gösterilmez)
+   - **`isExpired == false` & `expiredVotes < 15` (Süresi bitmiş veya stoğu tükenmiş ürünler Popüler vitrininden %100 ELENİR, anında kaldırılır)**
    - `createdAt >= 48h ago` (Son 48 saat içerisinde paylaşılmış olmalı)
 2. **Geliştirilmiş Popülerlik Skoru Akıllı Formülü (`popularityScore`):**
    Anlık fırsat dinamiklerine uygun olarak 4 bileşenden oluşur:
@@ -107,7 +124,7 @@ Veritabanı şişkinliğini önlemek, sunucu maliyetlerini optimize etmek ve kul
        │
        ├─► 0 - 48 Saat ───► Anasayfa, Favori Kategorilerim ve Popüler'de Canlı
        │
-       ├─► 48 Saat Sonrası ─► Anasayfadan kalkar. Favorilerde "Süresi Doldu" rozeti alır.
+       ├─► 48 Saat Sonrası ─► Anasayfadan kalkar. Favorilerde "KAÇTI" rozeti ile arşivde kalır.
        │
        └─► 30 Gün Sonrası ──► Purge Job (Haftalık Otomatik Cloud Function veya Web Admin)
                               └─► Fırsat dokümanı, oylar, yorumlar, görseller ve 
@@ -126,7 +143,7 @@ Veritabanı şişkinliğini önlemek, sunucu maliyetlerini optimize etmek ve kul
 ## 💡 Özet
 
 Bu mimari sayesinde FırsatKolik;
-- **Anasayfasında** her zaman taze ve anlık indirimleri sunar,
-- **Favorilerim** menüsünde kullanıcının kişisel arşivini korur,
+- **Anasayfasında** taze indirimleri sunarken, süresi bitenleri `-25.0` FOMO puanı, orijinal görselleri ve **"⌛ KAÇTI"** rozetiyle sergileyip kullanıcıda dinamik haber akışı algısı yaratır,
+- **Kaydedilenlerim** menüsünde kullanıcının kişisel arşivini korur, süresi bitse dahi ürün görseli ve `savedAt` kronolojik sırasını bozmaz,
 - **Favori Kategorilerim** sekmesinde ilgi alanına özel anlık akış sağlar,
-- **Popüler Fırsatlar** ekranında ise topluluğun alevlendirdiği en kaliteli trendleri matematiksel bir skorlama algoritması ile öne çıkarır.
+- **Popüler Fırsatlar** ekranında ise süresi bitenleri %100 eleyerek sadece canlı ve topluluğun alevlendirdiği trendleri sergiler.
