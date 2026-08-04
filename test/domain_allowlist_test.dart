@@ -49,4 +49,30 @@ void main() {
       }
     });
   });
+
+  group('isProductUrl Tests (Fallback - product_path_rules yüklenmemiş)', () {
+    // Test ortamında JSON yüklenmediğinden _productPathRules null kalır → tüm URL'ler BYPASS
+    // Bu test, fallback davranışının doğru çalıştığını doğrular
+
+    test('product_path_rules yüklenmemişse tüm allowlist URL\'leri bypass olmalı', () {
+      // Fallback stores'ta olan domainler BYPASS olmalı (kural yüklenmemiş)
+      expect(DomainAllowlistService.isProductUrl('https://www.trendyol.com/kampanya/xyz'), isTrue,
+          reason: 'Kural yüklenmemiş → bypass');
+      expect(DomainAllowlistService.isProductUrl('https://www.hepsiburada.com/magaza/xyz'), isTrue,
+          reason: 'Kural yüklenmemiş → bypass');
+      expect(DomainAllowlistService.isProductUrl('https://www.n11.com/arama?q=test'), isTrue,
+          reason: 'Kural yüklenmemiş → bypass');
+    });
+
+    test('Allowlist dışı domain\'ler false dönmeli', () {
+      expect(DomainAllowlistService.isProductUrl('https://www.google.com/search?q=trendyol'), isFalse);
+      expect(DomainAllowlistService.isProductUrl('https://www.facebook.com/posts/123'), isFalse);
+    });
+
+    test('Edge cases', () {
+      expect(DomainAllowlistService.isProductUrl(''), isFalse, reason: 'Boş string');
+      expect(DomainAllowlistService.isProductUrl('   '), isFalse, reason: 'Sadece boşluk');
+      expect(DomainAllowlistService.isProductUrl('not-a-url'), isFalse, reason: 'Geçersiz URL');
+    });
+  });
 }

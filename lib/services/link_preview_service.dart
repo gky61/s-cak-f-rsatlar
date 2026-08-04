@@ -249,6 +249,12 @@ class LinkPreviewService {
         _log('🛑 [ALLOWLIST REJECT] URL desteklenen mağaza domain allowlist\'inde bulunamadı: $targetUrl');
         return null;
       }
+
+      // 🛡️ Ürün Sayfası Doğrulaması (Product Path Validation)
+      if (!DomainAllowlistService.isProductUrl(targetUrl)) {
+        _log('🛑 [PRODUCT PATH REJECT] URL bir ürün sayfası değil (kampanya/arama/kategori sayfası olabilir): $targetUrl');
+        return null;
+      }
       
       // Eşleşen bir scraper var mı kontrol et
       BaseProductScraper? matchedScraper;

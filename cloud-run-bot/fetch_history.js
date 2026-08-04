@@ -484,6 +484,13 @@ async function saveDealToFirebase(message, chatInfo) {
       return false;
     }
 
+    // 🛡️ ÜRÜN SAYFASI DOĞRULAMASI (Product Path Validation)
+    if (!domainAllowlist.isProductUrl(mainLink)) {
+      const storeKey = domainAllowlist.getStoreKeyForUrl(mainLink);
+      console.log(`🛑 [PRODUCT PATH REJECT] URL bir ürün sayfası değil (kampanya/arama/kategori sayfası olabilir). Store: ${storeKey}, URL: ${mainLink}`);
+      return false;
+    }
+
     const messageId = message.id;
     const chatIdentifier = chatInfo.username ? `@${chatInfo.username}` : chatInfo.id.toString();
     const uniqueDocId = `telegram_${chatInfo.id}_${messageId}`;

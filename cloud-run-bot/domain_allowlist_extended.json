@@ -227,6 +227,9 @@
         "game_garaj": [
             "gamegaraj.com"
         ],
+        "ulugames": [
+            "ulugames.com.tr"
+        ],
         "teknobiyotik": [
             "teknobiyotik.com"
         ],
@@ -857,5 +860,66 @@
         "hobium": [
             "hobium.com"
         ]
+    },
+    "product_path_rules": {
+        "trendyol": [
+            "-p-\\d+\\/?$"
+        ],
+        "hepsiburada": [
+            "-(?:p|pm)-[a-z0-9]+\\/?$"
+        ],
+        "amazon_tr": [
+            "\\/dp\\/[a-z0-9]{10}(?:\\/|$)",
+            "\\/gp\\/product\\/[a-z0-9]{10}(?:\\/|$)",
+            "\\/gp\\/aw\\/d\\/[a-z0-9]{10}(?:\\/|$)"
+        ],
+        "n11": [
+            "\\/urun\\/.+-\\d+\\/?$"
+        ],
+        "pazarama": [
+            "-p-[a-z0-9][a-z0-9-]*\\/?$"
+        ],
+        "idefix": [
+            "-p-\\d+\\/?$"
+        ],
+        "pttavm": [
+            "-p-\\d+\\/?$"
+        ],
+        "teknosa": [
+            "-p-\\d+\\/?$"
+        ],
+        "mediamarkt_tr": [
+            "\\/tr\\/product\\/_?(?:[^/]*-)?\\d+\\.html\\/?$"
+        ],
+        "vatan_bilgisayar": [],
+        "itopya": [
+            "_u\\d+\\/?$"
+        ],
+        "incehesap": [
+            "-fiyati-\\d+\\/?$"
+        ],
+        "mavi": [
+            "\\/p\\/[a-z0-9-]+\\/?$"
+        ],
+        "defacto": [
+            "-\\d{6,10}\\/?$"
+        ],
+        "zara": [
+            "-p\\d+\\.html\\/?$"
+        ],
+        "mango": [
+            "\\/tr\\/tr\\/p\\/.+_\\d{7,10}\\/?$",
+            "\\/tr\\/tr\\/p\\/.+\\/\\d{7,10}\\/[a-z0-9]{2}\\/[a-z0-9]{2}\\/?$"
+        ],
+        "beymen": [
+            "\\/(?:tr|en)\\/p_.+_\\d+\\/?$"
+        ],
+        "migros": [
+            "-p-[a-z0-9]+\\/?$"
+        ],
+        "getir": [
+            "\\/(?:buyuk\\/)?urun\\/.+-[a-z0-9]+\\/?$"
+        ],
+        "havit_turkiye": []
     }
 }

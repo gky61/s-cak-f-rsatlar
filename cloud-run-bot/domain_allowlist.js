@@ -51,6 +51,15 @@ if (!allowlistConfig || !allowlistConfig.stores) {
 
 const ALLOWED_DOMAINS = Object.values(allowlistConfig.stores).flat().map(d => d.toLowerCase());
 
+// Ürün sayfası regex kurallarını yükle
+const PRODUCT_PATH_RULES = {};
+if (allowlistConfig.product_path_rules) {
+  for (const [storeKey, patterns] of Object.entries(allowlistConfig.product_path_rules)) {
+    PRODUCT_PATH_RULES[storeKey] = patterns.map(p => new RegExp(p, 'i'));
+  }
+  console.log(`✅ Product Path Rules yüklendi: ${Object.keys(PRODUCT_PATH_RULES).length} mağaza kuralı`);
+}
+
 /**
  * Verilen URL string'inin (veya hostname'inin) domain allowlist'te olup olmadığını kontrol eder.
  * Hostname exact match ("trendyol.com") veya subdomain match (".trendyol.com") olmalıdır.
@@ -106,9 +115,69 @@ function getStoreKeyForUrl(urlStr) {
   return null;
 }
 
+/**
+ * Verilen URL'nin bir ürün sayfası olup olmadığını kontrol eder.
+ * 
+ * Çalışma mantığı:
+ * 1. URL'den pathname çıkarılır
+ * 2. storeKey tespit edilir (getStoreKeyForUrl)
+ * 3. product_path_rules[storeKey] kuralları alınır
+ * 4. Kural tanımlı DEĞİLSE (undefined) → BYPASS (izin ver)
+ * 5. Kural boş diziyse ([]) → BYPASS (bilinçli bypass, izin ver)
+ * 6. Kural varsa → pathname ANY regex ile eşleşiyor mu? Evet → ürün sayfası, Hayır → değil
+ * 
+ * @param {string} urlStr - Kontrol edilecek URL
+ * @returns {boolean} true = ürün sayfası veya bypass, false = ürün sayfası değil
+ */
+function isProductUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  try {
+    let urlObj;
+    const trimmed = urlStr.trim();
+    try {
+      urlObj = new URL(trimmed);
+    } catch (_) {
+      urlObj = new URL('https://' + trimmed);
+    }
+
+    const storeKey = getStoreKeyForUrl(trimmed);
+    if (!storeKey) {
+      // Allowlist'te domain bulunamadı, bu aşamaya gelmemeli ama güvenlik için false
+      return false;
+    }
+
+    const rules = PRODUCT_PATH_RULES[storeKey];
+
+    // Kural tanımlı değilse → BYPASS (tanımlanmamış mağaza, filtre yok)
+    if (rules === undefined) {
+      return true;
+    }
+
+    // Kural boş diziyse → BYPASS (bilinçli olarak filtresiz bırakılmış)
+    if (rules.length === 0) {
+      return true;
+    }
+
+    // Pathname'e regex uygula (query parametreleri ve hash hariç)
+    const pathname = urlObj.pathname;
+    for (const regex of rules) {
+      if (regex.test(pathname)) {
+        return true;
+      }
+    }
+
+    // Hiçbir regex eşleşmedi → ürün sayfası değil
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
 module.exports = {
   allowlistConfig,
   ALLOWED_DOMAINS,
+  PRODUCT_PATH_RULES,
   isDomainAllowed,
-  getStoreKeyForUrl
+  getStoreKeyForUrl,
+  isProductUrl
 };

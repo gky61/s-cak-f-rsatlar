@@ -37,6 +37,7 @@ class DomainAllowlistService {
 
   static Map<String, List<String>>? _dynamicStores;
   static Set<String>? _dynamicAllowedDomains;
+  static Map<String, List<RegExp>>? _productPathRules;
   static bool _isInitializing = false;
 
   /// Aktif kullanılan mağazalar haritası
@@ -74,6 +75,24 @@ class DomainAllowlistService {
           if (parsedStores.isNotEmpty) {
             _dynamicStores = parsedStores;
             _dynamicAllowedDomains = parsedDomains;
+
+            // product_path_rules alanını da yükle
+            if (data.containsKey('product_path_rules') && data['product_path_rules'] is Map) {
+              final Map<String, dynamic> rulesJson = data['product_path_rules'];
+              final Map<String, List<RegExp>> parsedRules = {};
+              rulesJson.forEach((storeKey, patterns) {
+                if (patterns is List) {
+                  parsedRules[storeKey] = patterns
+                      .map((p) => RegExp(p.toString(), caseSensitive: false))
+                      .toList();
+                }
+              });
+              _productPathRules = parsedRules;
+              if (kDebugMode) {
+                print('✅ Product Path Rules yüklendi: ${parsedRules.length} mağaza kuralı');
+              }
+            }
+
             if (kDebugMode) {
               print('✅ DomainAllowlistService dinamik olarak yüklendi ($path): ${parsedStores.length} mağaza, ${parsedDomains.length} domain');
             }
@@ -137,13 +156,23 @@ class DomainAllowlistService {
   }
 
   /// URL bir kısa link ise yönlendirmeyi çözer ve nihai URL'yi allowlist ile kontrol eder.
+  /// Ayrıca ürün sayfası kontrolü de yapar.
   static Future<bool> isResolvedUrlAllowed(String urlStr) async {
     if (urlStr.trim().isEmpty) return false;
     
     await initialize();
 
     // Doğrudan eşleşiyorsa çözmeye gerek kalmadan onay ver
-    if (isDomainAllowed(urlStr)) return true;
+    if (isDomainAllowed(urlStr)) {
+      // Domain allowlist'te ama ürün sayfası mı kontrol et
+      if (!isProductUrl(urlStr)) {
+        if (kDebugMode) {
+          print('🛑 [PRODUCT PATH REJECT] URL bir ürün sayfası değil: $urlStr');
+        }
+        return false;
+      }
+      return true;
+    }
 
     // Kısa link yönlendirmesini çöz ve tekrar kontrol et
     try {
@@ -159,7 +188,16 @@ class DomainAllowlistService {
         resolved = await linkPreviewService.resolveUrlRedirects(resolved);
       }
       
-      return isDomainAllowed(resolved);
+      if (!isDomainAllowed(resolved)) return false;
+
+      // Çözülen URL ürün sayfası mı kontrol et
+      if (!isProductUrl(resolved)) {
+        if (kDebugMode) {
+          print('🛑 [PRODUCT PATH REJECT] Çözülen URL bir ürün sayfası değil: $resolved');
+        }
+        return false;
+      }
+      return true;
     } catch (_) {
       return false;
     }
@@ -186,5 +224,66 @@ class DomainAllowlistService {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// URL'nin bir ürün sayfası olup olmadığını kontrol eder.
+  /// 
+  /// Çalışma mantığı:
+  /// 1. URL'den pathname çıkarılır
+  /// 2. storeKey tespit edilir (getStoreNameForUrl)
+  /// 3. product_path_rules[storeKey] kuralları alınır
+  /// 4. Kural tanımlı DEĞİLSE → BYPASS (izin ver)
+  /// 5. Kural boş diziyse → BYPASS (bilinçli bypass, izin ver)
+  /// 6. Kural varsa → pathname ANY regex ile eşleşiyor mu? Evet → ürün sayfası, Hayır → değil
+  static bool isProductUrl(String urlStr) {
+    if (urlStr.trim().isEmpty) return false;
+
+    if (_dynamicStores == null && !_isInitializing) {
+      unawaited(initialize());
+    }
+
+    try {
+      final trimmed = urlStr.trim();
+      Uri uri = Uri.parse(trimmed);
+      if (!uri.hasScheme) {
+        uri = Uri.parse('https://$trimmed');
+      }
+
+      final storeKey = getStoreNameForUrl(trimmed);
+      if (storeKey == null) {
+        // Allowlist'te domain bulunamadı, bu aşamaya gelmemeli ama güvenlik için false
+        return false;
+      }
+
+      // product_path_rules yüklenmemişse → BYPASS
+      if (_productPathRules == null) {
+        return true;
+      }
+
+      final rules = _productPathRules![storeKey];
+
+      // Kural tanımlı değilse → BYPASS (tanımlanmamış mağaza, filtre yok)
+      if (rules == null) {
+        return true;
+      }
+
+      // Kural boş diziyse → BYPASS (bilinçli olarak filtresiz bırakılmış)
+      if (rules.isEmpty) {
+        return true;
+      }
+
+      // Pathname'e regex uygula (query parametreleri ve hash hariç)
+      final pathname = uri.path;
+      for (final regex in rules) {
+        if (regex.hasMatch(pathname)) {
+          return true;
+        }
+      }
+
+      // Hiçbir regex eşleşmedi → ürün sayfası değil
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 }
