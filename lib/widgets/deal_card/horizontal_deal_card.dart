@@ -159,7 +159,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                             color: Colors.white,
                           ),
                           // Görsel
-                          (isExpired || widget.effectiveImageUrl == null || widget.effectiveImageUrl!.isEmpty)
+                          (widget.effectiveImageUrl == null || widget.effectiveImageUrl!.isEmpty)
                               ? Image.asset(getStoreAsset(deal.store), width: double.infinity, height: double.infinity, fit: BoxFit.contain)
                               : Padding(
                                   padding: const EdgeInsets.all(4.0),

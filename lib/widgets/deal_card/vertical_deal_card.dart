@@ -111,7 +111,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                             decoration: const BoxDecoration(
                               color: Colors.white, // Beyaz arka plan
                             ),
-                            child: (isExpired || widget.effectiveImageUrl == null || widget.effectiveImageUrl!.isEmpty)
+                            child: (widget.effectiveImageUrl == null || widget.effectiveImageUrl!.isEmpty)
                                 ? Image.asset(getStoreAsset(deal.store), fit: BoxFit.contain)
                                 : Padding(
                                     padding: const EdgeInsets.all(8.0), // Elegant floating padding
