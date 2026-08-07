@@ -9,6 +9,11 @@ const { execSync, spawnSync } = require('child_process');
 
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36';
 
+function checkIsAmazonWarehouse(url) {
+  if (!url || typeof url !== 'string') return false;
+  return url.toLowerCase().includes('smid=a215jx4s9canso');
+}
+
 function getHeadersForUrl(url) {
   const lowerUrl = url.toLowerCase();
   let userAgent = DEFAULT_USER_AGENT;
@@ -1073,6 +1078,11 @@ async function scrapeProductFromUrl(url) {
       const brand = matchedScraper.scrapeBrand ? matchedScraper.scrapeBrand($) : null;
       console.log(`[SCRAPE-SERVICE] [RATING & BRAND] Rating: ${JSON.stringify(rating)}, Brand: "${brand || 'BULUNAMADI'}"`);
 
+      const isAmazonWarehouse = checkIsAmazonWarehouse(url) || checkIsAmazonWarehouse(targetUrl);
+      if (isAmazonWarehouse) {
+        console.log(`[SCRAPE-SERVICE] 📦 Amazon Depo ürünü tespit edildi! (smid=A215JX4S9CANSO)`);
+      }
+
       const totalDuration = Date.now() - startTime;
       console.log(`============================================================`);
       console.log(`[SCRAPE-SERVICE] ✅ Scrape tamamlandı! Toplam süre: ${totalDuration}ms`);
@@ -1090,6 +1100,7 @@ async function scrapeProductFromUrl(url) {
         ratingValue: rating?.ratingValue || null,
         ratingCount: rating?.ratingCount || null,
         brand: brand || null,
+        isAmazonWarehouse: isAmazonWarehouse,
       };
     } else {
       console.log(`[SCRAPE-SERVICE] Genel Fallback akışı (Open Graph) başlıyor...`);
@@ -1152,5 +1163,6 @@ async function scrapeProductFromUrl(url) {
 module.exports = {
   scrapeProductFromUrl,
   resolveUrlRedirects,
-  getHeadersForUrl
+  getHeadersForUrl,
+  checkIsAmazonWarehouse
 };

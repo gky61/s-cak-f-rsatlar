@@ -168,6 +168,48 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                               ),
                             ),
                           ),
+                          // Amazon Depo Rozeti (Sol Üst - Zaman Rozetinin Altında)
+                          if (deal.isAmazonWarehouse)
+                            Positioned(
+                              top: 28,
+                              left: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFD97706), Color(0xFFB45309)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(5),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFD97706).withValues(alpha: 0.4),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.inventory_2_rounded,
+                                      size: 9,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 2.5),
+                                    Text(
+                                      'AMAZON DEPO',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           // FOMO Rozeti (Sağ Üst - Biten / Tükenen Fırsatlar İçin)
                           if (isExpired)
                             Positioned(
@@ -431,15 +473,41 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   buildStoreLogo(deal.store, size: 14, borderRadius: 3),
                                   const SizedBox(width: 4),
                                   Expanded(
-                                    child: Text(
-                                      deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
-                                      style: TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: isDark ? Colors.grey[300] : AppTheme.textPrimary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
+                                            style: TextStyle(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark ? Colors.grey[300] : AppTheme.textPrimary,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (deal.isAmazonWarehouse) ...[
+                                          const SizedBox(width: 3),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(3),
+                                              border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.4), width: 0.5),
+                                            ),
+                                            child: const Text(
+                                              'Depo',
+                                              style: TextStyle(
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.w800,
+                                                color: Color(0xFFD97706),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
                                   // Sadece Profil Resmi (sadece kullanıcı paylaşımı ise, sağda)

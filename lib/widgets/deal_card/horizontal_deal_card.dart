@@ -251,6 +251,48 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                               },
                             ),
                           ),
+                          // Amazon Depo Rozeti (Sol Üst)
+                          if (deal.isAmazonWarehouse)
+                            Positioned(
+                              top: 6,
+                              left: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFD97706), Color(0xFFB45309)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(5),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFD97706).withValues(alpha: 0.4),
+                                      blurRadius: 3,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.inventory_2_rounded,
+                                      size: 8,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 2),
+                                    Text(
+                                      'DEPO',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 7.5,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           // İndirim Rozeti (Sağ Alt)
                           if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
                             Positioned(
@@ -434,6 +476,25 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
+                                          if (deal.isAmazonWarehouse) ...[
+                                            const SizedBox(width: 3),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(3),
+                                                border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.4), width: 0.5),
+                                              ),
+                                              child: const Text(
+                                                'Depo',
+                                                style: TextStyle(
+                                                  fontSize: 8,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: Color(0xFFD97706),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                           // Sadece Profil Resmi (sadece kullanıcı paylaşımı ise, sağda)
                                           if (deal.isUserSubmitted && deal.postedBy.isNotEmpty) ...[
                                             const SizedBox(width: 6),

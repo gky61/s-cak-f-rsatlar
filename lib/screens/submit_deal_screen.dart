@@ -1012,6 +1012,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           ratingValue: _scrapedRatingValue,
           ratingCount: _scrapedRatingCount,
           brand: _scrapedBrand,
+          isAmazonWarehouse: Deal.checkIsAmazonWarehouse(urlControllerText),
         );
 
         if (mounted) {

@@ -700,6 +700,7 @@ async function saveDealToFirebase(message, chatInfo) {
       ratingValue: scrapeResult.ratingValue || null,
       ratingCount: scrapeResult.ratingCount || null,
       brand: scrapeResult.brand || null,
+      isAmazonWarehouse: Boolean(scrapeResult.isAmazonWarehouse || linkScraperService.checkIsAmazonWarehouse(mainLink) || linkScraperService.checkIsAmazonWarehouse(scrapeResult.url)),
     };
 
     console.log(`💾 Kaydediliyor: ${uniqueDocId} (imageUrl: ${imageUrl ? 'VAR ✅' : 'YOK ❌'})`);

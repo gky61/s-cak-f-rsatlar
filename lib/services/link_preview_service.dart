@@ -51,6 +51,7 @@ class LinkPreviewResult {
   final double? ratingValue;
   final int? ratingCount;
   final String? brand;
+  final bool isAmazonWarehouse;
 
   LinkPreviewResult({
     String? title,
@@ -64,6 +65,7 @@ class LinkPreviewResult {
     this.ratingValue,
     this.ratingCount,
     this.brand,
+    this.isAmazonWarehouse = false,
   })  : title = (title == 'null' || title == 'NULL') ? null : title,
         description = (description == 'null' || description == 'NULL') ? null : description,
         imageUrl = (imageUrl == 'null' || imageUrl == 'NULL') ? null : imageUrl,
@@ -331,6 +333,11 @@ class LinkPreviewService {
                 print('[aggregateRating] LinkPreviewService -> Marka bulunamadı (null)');
               }
 
+              final isAmazonWarehouse = Deal.checkIsAmazonWarehouse(targetUrl) || Deal.checkIsAmazonWarehouse(url);
+              if (isAmazonWarehouse) {
+                _log('📦 Amazon Depo tespiti yapıldı! (smid=A215JX4S9CANSO)');
+              }
+
               return LinkPreviewResult(
                 title: title,
                 description: description,
@@ -343,6 +350,7 @@ class LinkPreviewService {
                 ratingValue: ratingValue,
                 ratingCount: ratingCount,
                 brand: brand,
+                isAmazonWarehouse: isAmazonWarehouse,
               );
             }
           }
@@ -403,6 +411,7 @@ class LinkPreviewService {
 
       final resolvedImage = _resolveImageUrl(imageUrl, targetUrl);
       final provider = metadata != null ? _inferProvider(metadata, targetUrl) : _cleanHost(targetUrl);
+      final isAmazonWarehouseFallback = Deal.checkIsAmazonWarehouse(targetUrl) || Deal.checkIsAmazonWarehouse(url);
 
       _log('✅ LinkPreviewService sonuç:');
       _log('   - Başlık: ${metadata?.title ?? "yok"}');
@@ -414,6 +423,7 @@ class LinkPreviewService {
         description: metadata?.description,
         imageUrl: resolvedImage,
         provider: provider,
+        isAmazonWarehouse: isAmazonWarehouseFallback,
       );
     } catch (e, stackTrace) {
       _log('❌ LinkPreviewService error: $e');

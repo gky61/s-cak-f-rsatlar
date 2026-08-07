@@ -38,6 +38,7 @@ class Deal {
   final double? ratingValue; // Değerlendirme puanı (ör. 4.8)
   final int? ratingCount; // Değerlendirme sayısı (ör. 1173)
   final String? brand; // Marka (ör. Apple)
+  final bool isAmazonWarehouse; // Amazon Depo (smid=A215JX4S9CANSO) ürünü mü?
 
   Deal({
     required this.id,
@@ -67,7 +68,19 @@ class Deal {
     this.ratingValue,
     this.ratingCount,
     this.brand,
+    this.isAmazonWarehouse = false,
   });
+
+  /// Bir URL'in Amazon Depo (smid=A215JX4S9CANSO) ürünü olup olmadığını kontrol eder.
+  static bool checkIsAmazonWarehouse(String urlStr) {
+    if (urlStr.trim().isEmpty) return false;
+    try {
+      final lower = urlStr.trim().toLowerCase();
+      return lower.contains('smid=a215jx4s9canso');
+    } catch (_) {
+      return false;
+    }
+  }
 
 
 
@@ -273,6 +286,9 @@ class Deal {
       ratingValue: data['ratingValue'] != null ? (data['ratingValue'] as num).toDouble() : null,
       ratingCount: data['ratingCount'] != null ? (data['ratingCount'] as num).toInt() : null,
       brand: data['brand']?.toString(),
+      isAmazonWarehouse: data['isAmazonWarehouse'] == true ||
+          data['isAmazonDepo'] == true ||
+          checkIsAmazonWarehouse(data['link'] ?? data['url'] ?? ''),
     );
   }
 
@@ -305,6 +321,7 @@ class Deal {
       'ratingValue': ratingValue,
       'ratingCount': ratingCount,
       'brand': brand,
+      'isAmazonWarehouse': isAmazonWarehouse || checkIsAmazonWarehouse(link),
     };
   }
 

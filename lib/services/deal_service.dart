@@ -206,6 +206,7 @@ class DealService {
     double? ratingValue,
     int? ratingCount,
     String? brand,
+    bool isAmazonWarehouse = false,
   }) async {
     try {
       final isAdmin = await _authService.isAdmin();
@@ -313,6 +314,7 @@ class DealService {
         ratingValue: ratingValue,
         ratingCount: ratingCount,
         brand: brand,
+        isAmazonWarehouse: isAmazonWarehouse || Deal.checkIsAmazonWarehouse(url) || Deal.checkIsAmazonWarehouse(resolvedUrl),
       );
 
       final docRef = await _firestore.collection('deals').add(deal.toFirestore());
