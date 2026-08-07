@@ -9,6 +9,7 @@ import 'package:html/dom.dart';
 import 'package:metadata_fetch/metadata_fetch.dart';
 
 import 'domain_allowlist_service.dart';
+import '../models/deal.dart';
 
 // Scrapers
 import 'scrapers/base_scraper.dart';
