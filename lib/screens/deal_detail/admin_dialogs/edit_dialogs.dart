@@ -23,3 +23,51 @@ Future<void> showAdminEditDialog({
     onDealUpdated: onDealUpdated,
   );
 }
+
+/// Fiyat düzenleme dialog'u - tek ve zengin showAdminEditSheet'e yönlendirir.
+Future<void> showPriceEditDialog({
+  required BuildContext context,
+  required Deal deal,
+  required String dealId,
+  required FirestoreService firestoreService,
+  required VoidCallback onDealUpdated,
+}) async {
+  showAdminEditSheet(
+    context: context,
+    deal: deal,
+    firestoreService: firestoreService,
+    onDealUpdated: onDealUpdated,
+  );
+}
+
+/// Açıklama düzenleme dialog'u - tek ve zengin showAdminEditSheet'e yönlendirir.
+Future<void> showEditDescriptionDialog({
+  required BuildContext context,
+  required Deal deal,
+  required String dealId,
+  required FirestoreService firestoreService,
+  required VoidCallback onDealUpdated,
+}) async {
+  showAdminEditSheet(
+    context: context,
+    deal: deal,
+    firestoreService: firestoreService,
+    onDealUpdated: onDealUpdated,
+  );
+}
+
+/// Kategori düzenleme dialog'u - tek ve zengin showAdminEditSheet'e yönlendirir.
+Future<void> showCategoryEditDialog({
+  required BuildContext context,
+  required Deal deal,
+  required String dealId,
+  required FirestoreService firestoreService,
+  required VoidCallback onDealUpdated,
+}) async {
+  showAdminEditSheet(
+    context: context,
+    deal: deal,
+    firestoreService: firestoreService,
+    onDealUpdated: onDealUpdated,
+  );
+}
