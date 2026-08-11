@@ -45,6 +45,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   String? _selectedStore;
   String? _priceLabel;
   double? _scrapedOriginalPrice;
+  bool _hidePrice = false;
   final List<String> _stores = [
     'Trendyol',
     'Hepsiburada',
@@ -664,7 +665,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         final List<String> missingFields = [];
         if (_imageUrlController.text.trim().isEmpty) missingFields.add('Görsel');
         if (_titleController.text.trim().isEmpty) missingFields.add('Başlık');
-        if (_priceController.text.trim().isEmpty) missingFields.add('Fiyat');
+        if (!_hidePrice && _priceController.text.trim().isEmpty) missingFields.add('Fiyat');
         if (_storeController.text.trim().isEmpty) missingFields.add('Mağaza');
 
         String msg;
@@ -1041,7 +1042,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         await _firestoreService.createDeal(
           title: _titleController.text.trim(),
           description: _descriptionController.text.trim(),
-          price: double.parse(_priceController.text.trim()),
+          price: double.tryParse(_priceController.text.trim()) ?? 0.0,
           store: _storeController.text.trim(),
           category: categoryId, // Kategori ID'si kaydediliyor (kategori adı yerine)
           subCategory: subCategoryName, // Alt kategori adı (varsa)
@@ -1054,6 +1055,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           ratingCount: _scrapedRatingCount,
           brand: _scrapedBrand,
           isAmazonWarehouse: _isAmazonWarehouse,
+          hidePrice: _hidePrice,
         );
 
         if (mounted) {
@@ -1592,6 +1594,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           ),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           validator: (value) {
+            if (_hidePrice) return null;
             if (value == null || value.isEmpty) {
               return 'Fiyat gerekli';
             }
@@ -1599,6 +1602,24 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               return 'Geçerli bir fiyat girin';
             }
             return null;
+          },
+        ),
+        SwitchListTile(
+          value: _hidePrice,
+          contentPadding: EdgeInsets.zero,
+          title: const Text(
+            'Fiyatı Gizle (Kampanya / Fiyatsız Paylaşım)',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          subtitle: const Text(
+            'Fiyatı olmayan bir kampanya veya duyuru paylaşıyorsanız aktifleştirin',
+            style: TextStyle(fontSize: 11),
+          ),
+          activeColor: primaryColor,
+          onChanged: (val) {
+            setState(() {
+              _hidePrice = val;
+            });
           },
         ),
         const SizedBox(height: 16),

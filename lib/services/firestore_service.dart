@@ -77,9 +77,9 @@ class FirestoreService {
     double? originalPrice,
     String? priceLabel,
     double? ratingValue,
-    int? ratingCount,
     String? brand,
     bool isAmazonWarehouse = false,
+    bool hidePrice = false,
   }) => _dealService.createDeal(
         title: title,
         description: description,
@@ -96,6 +96,7 @@ class FirestoreService {
         ratingCount: ratingCount,
         brand: brand,
         isAmazonWarehouse: isAmazonWarehouse,
+        hidePrice: hidePrice,
       );
 
   Future<bool> updateDeal(String dealId, Map<String, dynamic> updates) => _dealService.updateDeal(dealId, updates);

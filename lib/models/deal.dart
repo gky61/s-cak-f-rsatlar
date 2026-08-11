@@ -39,6 +39,7 @@ class Deal {
   final int? ratingCount; // Değerlendirme sayısı (ör. 1173)
   final String? brand; // Marka (ör. Apple)
   final bool isAmazonWarehouse; // Amazon Depo (smid=A215JX4S9CANSO) ürünü mü?
+  final bool hidePrice; // Fiyat gizlensin mi? (Fiyatsız kampanya vs.)
 
   Deal({
     required this.id,
@@ -69,6 +70,7 @@ class Deal {
     this.ratingCount,
     this.brand,
     this.isAmazonWarehouse = false,
+    this.hidePrice = false,
   });
 
   /// Bir URL'in Amazon Depo (smid=A215JX4S9CANSO) ürünü olup olmadığını kontrol eder.
@@ -289,6 +291,7 @@ class Deal {
       isAmazonWarehouse: data['isAmazonWarehouse'] == true ||
           data['isAmazonDepo'] == true ||
           checkIsAmazonWarehouse(data['link'] ?? data['url'] ?? ''),
+      hidePrice: data['hidePrice'] == true || data['isPriceHidden'] == true,
     );
   }
 
@@ -322,6 +325,7 @@ class Deal {
       'ratingCount': ratingCount,
       'brand': brand,
       'isAmazonWarehouse': isAmazonWarehouse || checkIsAmazonWarehouse(link),
+      'hidePrice': hidePrice,
     };
   }
 

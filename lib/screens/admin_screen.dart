@@ -640,34 +640,59 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ),
                   ),
                 ],
-                Row(
-                  children: [
-                    FormattedPriceText(
-                      value: deal.price,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.primary,
-                      ),
+                if (deal.hidePrice)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 0.5),
                     ),
-                    if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                      const SizedBox(width: 6),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.visibility_off, size: 12, color: Colors.blue),
+                        SizedBox(width: 3),
+                        Text(
+                          'Fiyat Gizli (Kampanya)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Row(
+                    children: [
                       FormattedPriceText(
-                        value: deal.originalPrice,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.grey[600],
-                          decoration: TextDecoration.lineThrough,
+                        value: deal.price,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.primary,
                         ),
                       ),
-                      if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0) ...[
-                        const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primary,
-                            borderRadius: BorderRadius.circular(3),
+                      if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                        const SizedBox(width: 6),
+                        FormattedPriceText(
+                          value: deal.originalPrice,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.grey[600],
+                            decoration: TextDecoration.lineThrough,
                           ),
+                        ),
+                        if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
                           child: Text(
                             '%${deal.effectiveDiscountRate}',
                             style: const TextStyle(

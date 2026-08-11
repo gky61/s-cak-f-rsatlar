@@ -33,6 +33,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
 
   Widget _buildPriceAndBadgeSection(bool isDark, bool isExpired) {
     final deal = widget.deal;
+    if (deal.hidePrice) return const SizedBox.shrink();
     final hasOriginalPrice = deal.originalPrice != null && deal.originalPrice! > deal.price;
 
     return Column(
@@ -258,7 +259,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                               ),
                             ),
                           // İndirim Rozeti (Sağ Alt)
-                          if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
+                          if (!deal.hidePrice && deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
                             Positioned(
                               bottom: 8,
                               right: 8,

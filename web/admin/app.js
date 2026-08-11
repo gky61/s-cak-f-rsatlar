@@ -1413,13 +1413,18 @@ function createDealRow(deal) {
                 </div>
             </div>
         </td>
-        <td class="p-4">${sourceBadge}</td>
         <td class="p-4">
-            <p class="text-slate-900 dark:text-white font-bold">${price.toLocaleString('tr-TR')} TL</p>
-            ${originalPrice > price ? `<p class="text-slate-400 text-xs line-through">${originalPrice.toLocaleString('tr-TR')} TL</p>` : ''}
+            ${deal.hidePrice ? `
+                <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                    <span class="material-symbols-outlined text-[14px]">visibility_off</span>Fiyat Gizli
+                </span>
+            ` : `
+                <p class="text-slate-900 dark:text-white font-bold">${price.toLocaleString('tr-TR')} TL</p>
+                ${originalPrice > price ? `<p class="text-slate-400 text-xs line-through">${originalPrice.toLocaleString('tr-TR')} TL</p>` : ''}
+            `}
         </td>
         <td class="p-4">
-            ${discount > 0 ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-100 dark:bg-emerald-500/10 px-2 py-1 rounded text-xs">%${discount} İndirim</span>` : '<span class="text-slate-400 text-xs">-</span>'}
+            ${(!deal.hidePrice && discount > 0) ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-100 dark:bg-emerald-500/10 px-2 py-1 rounded text-xs">%${discount} İndirim</span>` : '<span class="text-slate-400 text-xs">-</span>'}
         </td>
         <td class="p-4">
             <p class="text-slate-700 dark:text-slate-300">${timeAgo}</p>
@@ -1858,6 +1863,12 @@ async function showDealModal(deal) {
                             <input id="editPrice" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white font-bold h-12 pl-8 pr-4 text-base" type="number" value="${price}"/>
                         </div>
                         <span id="discountDisplay" class="text-xs text-green-600 dark:text-green-400 font-medium px-1 text-right">${discount > 0 ? `%${discount} İndirim` : 'İndirim yok'}</span>
+                    </label>
+                </div>
+                <div class="pt-2">
+                    <label class="flex items-center gap-3 cursor-pointer select-none">
+                        <input id="editHidePrice" type="checkbox" class="w-5 h-5 rounded text-primary focus:ring-primary border-slate-300 dark:border-slate-700" ${deal.hidePrice ? 'checked' : ''}/>
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Fiyatı Gizle (Kampanya / Fiyatsız Fırsat)</span>
                     </label>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
@@ -2486,12 +2497,14 @@ async function saveDealChanges() {
         // imageUrl'i de güncelle (ilk görsel)
         const imageUrl = imageUrls.length > 0 ? imageUrls[0] : (currentDeal.imageUrl || '');
 
+        const hidePrice = document.getElementById('editHidePrice')?.checked || false;
+
         // Validasyon - hata varsa throw et ki buton geri açılsın
         if (!title.trim()) {
             showError('Başlık gereklidir!');
             throw new Error('Başlık gereklidir!');
         }
-        if (price <= 0) {
+        if (!hidePrice && price <= 0) {
             showError('Geçerli bir fiyat giriniz!');
             throw new Error('Geçerli bir fiyat giriniz!');
         }
@@ -2528,6 +2541,7 @@ async function saveDealChanges() {
             link: url.trim(), // link alanı da ekle (geriye dönük uyumluluk için)
             category: category,
             imageUrl: imageUrl || '',
+            hidePrice: hidePrice,
             imageUrls: imageUrls.length > 0 ? imageUrls : [],
             status: status,
             isApproved: (status === 'active'),

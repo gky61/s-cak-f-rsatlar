@@ -33,6 +33,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
 
   Widget _buildPriceAndBadgeSection(bool isDark, bool isExpired) {
     final deal = widget.deal;
+    if (deal.hidePrice) return const SizedBox.shrink();
     final hasOriginalPrice = deal.originalPrice != null && deal.originalPrice! > deal.price;
 
     return Column(

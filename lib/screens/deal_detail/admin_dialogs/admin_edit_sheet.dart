@@ -42,6 +42,7 @@ void showAdminEditSheet({
   bool isEditorPick = deal.isEditorPick;
   bool isApproved = deal.isApproved ?? false;
   bool isExpired = deal.isExpired;
+  bool isHidePrice = deal.hidePrice;
   bool isSaving = false;
   String? errorText;
 
@@ -61,7 +62,7 @@ void showAdminEditSheet({
             }
 
             final price = parseDouble(priceController.text);
-            if (price == null || price <= 0) {
+            if (!isHidePrice && (price == null || price <= 0)) {
               setSheetState(() => errorText = 'Lütfen geçerli bir fiyat girin.');
               return;
             }
@@ -84,12 +85,13 @@ void showAdminEditSheet({
               'category': selectedCategoryId,
               'subCategory': selectedSubCategory,
               'link': linkController.text.trim(),
-              'price': price,
+              'price': price ?? 0.0,
               'originalPrice': (originalPrice ?? 0) > 0 ? originalPrice : null,
               'discountRate': (discountRate ?? 0) > 0 ? discountRate : null,
               'isEditorPick': isEditorPick,
               'isApproved': isApproved,
               'isExpired': isExpired,
+              'hidePrice': isHidePrice,
             };
 
             final success = await firestoreService.updateDeal(deal.id, updates);
@@ -247,6 +249,13 @@ void showAdminEditSheet({
                       ),
                       _buildAdminTextField(context, 'İndirim Oranı (%)', discountController, keyboardType: TextInputType.number),
                       const SizedBox(height: 12),
+                      SwitchListTile(
+                        value: isHidePrice,
+                        title: const Text('Fiyatı Gizle (Kampanya / Fiyatsız Fırsat)'),
+                        subtitle: const Text('Aktif edilirse kartlarda ve detay sayfasında fiyat gösterilmez'),
+                        activeColor: Colors.orange[700],
+                        onChanged: (val) => setSheetState(() => isHidePrice = val),
+                      ),
                       SwitchListTile(
                         value: isEditorPick,
                         title: const Text('Editörün Seçimi'),
