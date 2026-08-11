@@ -1918,7 +1918,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 final originalPrice = originalPriceController.text.trim();
                 if (originalPrice.isNotEmpty) {
                   final origPrice = double.tryParse(originalPrice.replaceAll(',', '.'));
-                  if (origPrice != null && origPrice > price) {
+                  if (origPrice != null && price != null && origPrice > price) {
                     updates['originalPrice'] = origPrice;
                     // İndirim oranını hesapla
                     final discountRate = ((origPrice - price) / origPrice * 100).round();
