@@ -69,7 +69,7 @@ void showAdminEditSheet({
 
             final originalPrice = parseDouble(originalPriceController.text);
             var discountRate = int.tryParse(discountController.text.trim());
-            if (discountRate == null && originalPrice != null && originalPrice > price && price > 0) {
+            if (discountRate == null && originalPrice != null && price != null && originalPrice > price && price > 0) {
               discountRate = (((originalPrice - price) / originalPrice) * 100).round();
             }
 
