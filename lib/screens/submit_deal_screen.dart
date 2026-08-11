@@ -201,6 +201,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   double? _scrapedRatingValue;
   int? _scrapedRatingCount;
   String? _scrapedBrand;
+  bool _isAmazonWarehouse = false;
   
   String _lastProcessedUrl = '';
   String _lastProcessedTitle = '';
@@ -281,21 +282,50 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     );
   }
 
-  void _showUnsupportedStoreDialog() {
+  void _showUrlValidationErrorDialog(UrlValidationResult result) {
     if (!mounted) return;
+    
+    String titleText = 'Geçersiz Link';
+    String messageText = 'Girdiğiniz link geçerli bir ürün sayfası değildir.';
+    IconData icon = Icons.warning_amber_rounded;
+    Color iconColor = const Color(0xFFEF6C00);
+
+    switch (result) {
+      case UrlValidationResult.invalidFormat:
+        titleText = 'Geçersiz Link Formatı';
+        messageText = 'Girdiğiniz link geçerli bir URL formatında değildir. Lütfen kontrol edip tekrar deneyin.';
+        icon = Icons.error_outline_rounded;
+        iconColor = const Color(0xFFC62828);
+        break;
+      case UrlValidationResult.domainNotAllowed:
+        titleText = 'Desteklenmeyen Mağaza';
+        messageText = 'Girdiğiniz ürün linki topluluk tarafından desteklenen mağazalardan birine ait değildir.';
+        icon = Icons.storefront_outlined;
+        iconColor = const Color(0xFFE65100);
+        break;
+      case UrlValidationResult.notProductUrl:
+        titleText = 'Ürün Sayfası Değil';
+        messageText = 'Girdiğiniz link desteklenen bir mağazaya ait ancak bir ürün detay sayfası değildir. Kampanya, arama veya kategori sayfaları yerine doğrudan satın alma yapılabilecek ürün sayfasının linkini paylaşmalısınız.';
+        icon = Icons.shopping_bag_outlined;
+        iconColor = const Color(0xFF2E7D32);
+        break;
+      case UrlValidationResult.valid:
+        return; // Valid ise pencere gösterme
+    }
+
     showDialog(
       context: context,
       builder: (BuildContext ctx) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
-            children: const [
-              Icon(Icons.warning_amber_rounded, color: Color(0xFFEF6C00), size: 28),
-              SizedBox(width: 10),
+            children: [
+              Icon(icon, color: iconColor, size: 28),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Desteklenmeyen Mağaza Linki',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  titleText,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -304,15 +334,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Girdiğiniz ürün linki topluluk tarafından desteklenen mağazalardan birine ait değildir veya otomatik algılanamadı.',
-                style: TextStyle(fontSize: 14, height: 1.4),
+              Text(
+                messageText,
+                style: const TextStyle(fontSize: 14, height: 1.4),
               ),
-              if (_lastProcessedUrl.isNotEmpty) ...[
-                const SizedBox(height: 8),
+              if (_urlController.text.trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
                 Text(
-                  '🔗 URL: $_lastProcessedUrl',
-                  style: const TextStyle(fontSize: 13, color: Colors.grey, fontStyle: FontStyle.italic),
+                  '🔗 URL: ${_urlController.text.trim()}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
                 ),
               ]
             ],
@@ -383,6 +413,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _selectedSubCategory = null;
         _isLoadingImage = false;
         _isCategoryLockedByScraper = false;
+        _isAmazonWarehouse = false;
       });
       return;
     }
@@ -399,14 +430,14 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     if (_isAutoDetecting || _isLoadingImage) return;
 
     // Domain Allowlist Kontrolü
-    final isAllowed = await DomainAllowlistService.isResolvedUrlAllowed(url);
-    if (!isAllowed) {
+    final validationResult = await DomainAllowlistService.validateUrl(url);
+    if (validationResult != UrlValidationResult.valid) {
       if (mounted) {
         setState(() {
           _isAutoDetecting = false;
           _isLoadingImage = false;
         });
-        _showUnsupportedStoreDialog();
+        _showUrlValidationErrorDialog(validationResult);
       }
       return;
     }
@@ -427,6 +458,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       _selectedSubCategory = null;
       _isCategoryLockedByScraper = false;
       _priceLabel = null;
+      _isAmazonWarehouse = false;
     });
 
     _log('🔄 Otomatik ürün bilgisi çekme başlatıldı: $url');
@@ -529,6 +561,14 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             _scrapedOriginalPrice = preview?.originalPrice;
           });
           _log('⭐ Scraper rating/marka/eskiFiyat tespiti: Rating=$_scrapedRatingValue ($_scrapedRatingCount), Brand=$_scrapedBrand, OriginalPrice=$_scrapedOriginalPrice');
+        }
+
+        // Amazon Depo ürünü tespiti
+        if (preview.isAmazonWarehouse || Deal.checkIsAmazonWarehouse(url)) {
+          setState(() {
+            _isAmazonWarehouse = true;
+          });
+          _log('📦 Amazon Depo ürünü tespit edildi');
         }
 
         // Kategori ekmek kırıntılarını (breadcrumbs) ve başlığı birleştirip sınıflandır
@@ -924,9 +964,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     }
 
     final urlControllerText = _urlController.text.trim();
-    final isAllowed = await DomainAllowlistService.isResolvedUrlAllowed(urlControllerText);
-    if (!isAllowed) {
-      _showUnsupportedStoreDialog();
+    final validationResult = await DomainAllowlistService.validateUrl(urlControllerText);
+    if (validationResult != UrlValidationResult.valid) {
+      _showUrlValidationErrorDialog(validationResult);
       return;
     }
 
@@ -1013,7 +1053,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           ratingValue: _scrapedRatingValue,
           ratingCount: _scrapedRatingCount,
           brand: _scrapedBrand,
-          isAmazonWarehouse: Deal.checkIsAmazonWarehouse(urlControllerText),
+          isAmazonWarehouse: _isAmazonWarehouse,
         );
 
         if (mounted) {
@@ -1640,6 +1680,57 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               }
               return null;
             },
+          ),
+        ],
+
+        // Amazon Depo Ürünü Checkbox (Sadece Amazon seçili ise göster)
+        if (_selectedStore == 'Amazon') ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFD97706).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0xFFD97706).withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: CheckboxListTile(
+              value: _isAmazonWarehouse,
+              onChanged: (value) {
+                setState(() {
+                  _isAmazonWarehouse = value ?? false;
+                });
+              },
+              title: const Row(
+                children: [
+                  Icon(
+                    Icons.inventory_2_rounded,
+                    size: 18,
+                    color: Color(0xFFD97706),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Amazon Depo Ürünü',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFD97706),
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: const Text(
+                'Bu ürün Amazon Depo tarafından satılmaktadır.',
+                style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
+              ),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              activeColor: const Color(0xFFD97706),
+              checkColor: Colors.white,
+              controlAffinity: ListTileControlAffinity.trailing,
+            ),
           ),
         ],
         const SizedBox(height: 16),

@@ -4,6 +4,7 @@ import 'package:app_settings/app_settings.dart';
 import '../services/notification_service.dart';
 import '../models/notification_preferences.dart';
 import 'category_preferences_screen.dart';
+import 'keyword_tracking_screen.dart';
 import '../theme/app_theme.dart';
 
 void _log(String message) {
@@ -41,7 +42,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // App came back to foreground, check system permission status again
       _checkSystemPermission();
     }
   }
@@ -76,7 +76,21 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     }
   }
 
+  void _showDisabledSnackbar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFF2C2C2C),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Future<void> _updatePrefs(NotificationPreferences newPrefs) async {
+    final oldPrefs = _preferences;
     setState(() {
       _preferences = newPrefs;
     });
@@ -85,19 +99,27 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     } catch (e) {
       _log('Error updating preferences: $e');
       if (mounted) {
+        setState(() {
+          _preferences = oldPrefs;
+        });
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
+          const SnackBar(
+            content: Text('Ayarlarınız güncellenemedi, lütfen bağlantınızı kontrol edin.'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
         );
-        _loadAllSettings();
       }
     }
   }
 
   Future<void> _selectTime(BuildContext context, bool isStart) async {
+    if (!_preferences.pushMasterEnabled) {
+      _showDisabledSnackbar('Bu ayarı değiştirmek için önce yukarıdan Telefon Bildirimleri\'ni açmalısınız.');
+      return;
+    }
+
     final initialTimeStr = isStart ? _preferences.quietHoursStart : _preferences.quietHoursEnd;
     final parts = initialTimeStr.split(':');
     final initialHour = parts.length == 2 ? int.tryParse(parts[0]) ?? 0 : 0;
@@ -113,27 +135,101 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       final minuteStr = picked.minute.toString().padLeft(2, '0');
       final newTime = '$hourStr:$minuteStr';
 
-      final updatedPrefs = NotificationPreferences(
-        pushMasterEnabled: _preferences.pushMasterEnabled,
-        dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-        communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-        submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-        marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-        categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-        keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
-        quietHoursEnabled: _preferences.quietHoursEnabled,
+      _updatePrefs(_preferences.copyWith(
         quietHoursStart: isStart ? newTime : _preferences.quietHoursStart,
         quietHoursEnd: isStart ? _preferences.quietHoursEnd : newTime,
-        timezone: _preferences.timezone,
-        updatedAt: DateTime.now(),
-        lastStates: _preferences.lastStates,
-      );
-
-      _updatePrefs(updatedPrefs);
+      ));
     }
   }
 
+  Widget _buildChannelTile({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final isMasterOn = _preferences.pushMasterEnabled;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
+    final tile = SwitchListTile(
+      title: Text(
+        title,
+        style: const TextStyle(fontWeight: FontWeight.w500),
+      ),
+      subtitle: Text(subtitle),
+      value: value,
+      activeColor: primaryColor,
+      onChanged: isMasterOn ? onChanged : null,
+    );
+
+    if (!isMasterOn) {
+      return Opacity(
+        opacity: 0.5,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _showDisabledSnackbar(
+            'Bu ayarı değiştirmek için önce yukarıdan Telefon Bildirimleri\'ni açmalısınız.',
+          ),
+          child: IgnorePointer(child: tile),
+        ),
+      );
+    }
+    return tile;
+  }
+
+  Widget _buildDetailTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool channelEnabled,
+    required String channelName,
+    required VoidCallback onTap,
+  }) {
+    final isMasterOn = _preferences.pushMasterEnabled;
+    final isFullyActive = isMasterOn && channelEnabled;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    final card = Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark 
+              ? Colors.white.withValues(alpha: 0.05) 
+              : Colors.black.withValues(alpha: 0.05),
+        ),
+      ),
+      child: ListTile(
+        leading: Icon(icon, color: isFullyActive ? primaryColor : Colors.grey),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: isFullyActive ? onTap : null,
+      ),
+    );
+
+    if (!isFullyActive) {
+      final String warningMessage = !isMasterOn
+          ? 'Bu ayarı değiştirmek için önce yukarıdan Telefon Bildirimleri\'ni açmalısınız.'
+          : 'Bu ayarı değiştirmek için önce $channelName\'ni açmalısınız.';
+
+      return Opacity(
+        opacity: 0.5,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _showDisabledSnackbar(warningMessage),
+          child: IgnorePointer(child: card),
+        ),
+      );
+    }
+
+    return card;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -143,6 +239,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     final primaryColor = Theme.of(context).colorScheme.primary;
     final textMain = isDark ? Colors.white : const Color(0xFF1C1C0D);
     final textSub = isDark ? Colors.grey[400] : const Color(0xFF5C5C4F);
+
+    final isMasterOn = _preferences.pushMasterEnabled;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -238,7 +336,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                     const SizedBox(height: 16),
                   ],
 
-                  // Master Toggle: Cihaz Bildirimleri
+                  // Katman 1: Master Switch (Telefon Bildirimleri)
                   Container(
                     decoration: BoxDecoration(
                       color: surfaceColor,
@@ -265,21 +363,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                       value: _preferences.pushMasterEnabled,
                       activeColor: primaryColor,
                       onChanged: (val) {
-                        _updatePrefs(NotificationPreferences(
-                          pushMasterEnabled: val,
-                          dealNotificationsEnabled: val,
-                          categoryNotificationsEnabled: val,
-                          keywordNotificationsEnabled: val,
-                          communityNotificationsEnabled: val,
-                          submissionStatusNotificationsEnabled: val,
-                          marketingNotificationsEnabled: val,
-                          quietHoursEnabled: _preferences.quietHoursEnabled,
-                          quietHoursStart: _preferences.quietHoursStart,
-                          quietHoursEnd: _preferences.quietHoursEnd,
-                          timezone: _preferences.timezone,
-                          updatedAt: DateTime.now(),
-                          lastStates: _preferences.lastStates,
-                        ));
+                        // STATE PRESERVATION: Only toggle pushMasterEnabled, keep all sub-channel states preserved!
+                        _updatePrefs(_preferences.copyWith(pushMasterEnabled: val));
                       },
                     ),
                   ),
@@ -296,7 +381,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   ),
                   const SizedBox(height: 8),
 
-                  // Notification Groups
+                  // Katman 2: Notification Groups (Channels)
                   Container(
                     decoration: BoxDecoration(
                       color: surfaceColor,
@@ -309,134 +394,48 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                     ),
                     child: Column(
                       children: [
-                        SwitchListTile(
-                          title: const Text('Takip Edilen Yazar Bildirimleri'),
-                          subtitle: const Text('Profillerinden bildirimlerini (zilini) açtığınız usta avcıların paylaştığı yeni fırsatlar.'),
+                        _buildChannelTile(
+                          title: 'Takip Edilen Yazar Bildirimleri',
+                          subtitle: 'Profillerinden bildirimlerini (zilini) açtığınız usta avcıların paylaştığı yeni fırsatlar.',
                           value: _preferences.dealNotificationsEnabled,
-                          activeColor: primaryColor,
                           onChanged: (val) {
-                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
-                            newLastStates['dealNotificationsEnabled'] = val;
-                            _updatePrefs(NotificationPreferences(
-                              pushMasterEnabled: _preferences.pushMasterEnabled,
-                              dealNotificationsEnabled: val,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
-                              communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-                              submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-                              marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              quietHoursEnabled: _preferences.quietHoursEnabled,
-                              quietHoursStart: _preferences.quietHoursStart,
-                              quietHoursEnd: _preferences.quietHoursEnd,
-                              timezone: _preferences.timezone,
-                              updatedAt: DateTime.now(),
-                              lastStates: newLastStates,
-                            ));
+                            _updatePrefs(_preferences.copyWith(dealNotificationsEnabled: val));
                           },
                         ),
                         const Divider(height: 1),
-                        SwitchListTile(
-                          title: const Text('Topluluk Bildirimleri'),
-                          subtitle: const Text('Paylaşımlarınıza gelen yorumlar, yanıtlar ve etiketlemeler.'),
+                        _buildChannelTile(
+                          title: 'Topluluk Bildirimleri',
+                          subtitle: 'Paylaşımlarınıza gelen yorumlar, yanıtlar ve etiketlemeler.',
                           value: _preferences.communityNotificationsEnabled,
-                          activeColor: primaryColor,
                           onChanged: (val) {
-                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
-                            newLastStates['communityNotificationsEnabled'] = val;
-                            _updatePrefs(NotificationPreferences(
-                              pushMasterEnabled: _preferences.pushMasterEnabled,
-                              dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
-                              communityNotificationsEnabled: val,
-                              submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-                              marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              quietHoursEnabled: _preferences.quietHoursEnabled,
-                              quietHoursStart: _preferences.quietHoursStart,
-                              quietHoursEnd: _preferences.quietHoursEnd,
-                              timezone: _preferences.timezone,
-                              updatedAt: DateTime.now(),
-                              lastStates: newLastStates,
-                            ));
+                            _updatePrefs(_preferences.copyWith(communityNotificationsEnabled: val));
                           },
                         ),
-
                         const Divider(height: 1),
-                        SwitchListTile(
-                          title: const Text('Kampanya Bildirimleri'),
-                          subtitle: const Text('Özel kampanyalar, hediye çekleri ve önemli sistem duyuruları'),
+                        _buildChannelTile(
+                          title: 'Kampanya Bildirimleri',
+                          subtitle: 'Özel kampanyalar, hediye çekleri ve önemli sistem duyuruları',
                           value: _preferences.marketingNotificationsEnabled,
-                          activeColor: primaryColor,
                           onChanged: (val) {
-                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
-                            newLastStates['marketingNotificationsEnabled'] = val;
-                            _updatePrefs(NotificationPreferences(
-                              pushMasterEnabled: _preferences.pushMasterEnabled,
-                              dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
-                              communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-                              submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-                              marketingNotificationsEnabled: val,
-                              quietHoursEnabled: _preferences.quietHoursEnabled,
-                              quietHoursStart: _preferences.quietHoursStart,
-                              quietHoursEnd: _preferences.quietHoursEnd,
-                              timezone: _preferences.timezone,
-                              updatedAt: DateTime.now(),
-                              lastStates: newLastStates,
-                            ));
+                            _updatePrefs(_preferences.copyWith(marketingNotificationsEnabled: val));
                           },
                         ),
                         const Divider(height: 1),
-                        SwitchListTile(
-                          title: const Text('Kategori Bildirimleri'),
-                          subtitle: const Text('Takip ettiğiniz alışveriş kategorilerine eklenen yeni fırsatlar'),
+                        _buildChannelTile(
+                          title: 'Kategori Bildirimleri',
+                          subtitle: 'Takip ettiğiniz alışveriş kategorilerine eklenen yeni fırsatlar',
                           value: _preferences.categoryNotificationsEnabled,
-                          activeColor: primaryColor,
                           onChanged: (val) {
-                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
-                            newLastStates['categoryNotificationsEnabled'] = val;
-                            _updatePrefs(NotificationPreferences(
-                              pushMasterEnabled: _preferences.pushMasterEnabled,
-                              dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-                              categoryNotificationsEnabled: val,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
-                              communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-                              submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-                              marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              quietHoursEnabled: _preferences.quietHoursEnabled,
-                              quietHoursStart: _preferences.quietHoursStart,
-                              quietHoursEnd: _preferences.quietHoursEnd,
-                              timezone: _preferences.timezone,
-                              updatedAt: DateTime.now(),
-                              lastStates: newLastStates,
-                            ));
+                            _updatePrefs(_preferences.copyWith(categoryNotificationsEnabled: val));
                           },
                         ),
                         const Divider(height: 1),
-                        SwitchListTile(
-                          title: const Text('Anahtar Kelime Takibi Bildirimleri'),
-                          subtitle: const Text('Takip listenizdeki kelimeleri içeren yeni fırsatlardan haberdar olun'),
+                        _buildChannelTile(
+                          title: 'Anahtar Kelime Takibi Bildirimleri',
+                          subtitle: 'Takip listenizdeki kelimeleri içeren yeni fırsatlardan haberdar olun',
                           value: _preferences.keywordNotificationsEnabled,
-                          activeColor: primaryColor,
                           onChanged: (val) {
-                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
-                            newLastStates['keywordNotificationsEnabled'] = val;
-                            _updatePrefs(NotificationPreferences(
-                              pushMasterEnabled: _preferences.pushMasterEnabled,
-                              dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: val,
-                              communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-                              submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-                              marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              quietHoursEnabled: _preferences.quietHoursEnabled,
-                              quietHoursStart: _preferences.quietHoursStart,
-                              quietHoursEnd: _preferences.quietHoursEnd,
-                              timezone: _preferences.timezone,
-                              updatedAt: DateTime.now(),
-                              lastStates: newLastStates,
-                            ));
+                            _updatePrefs(_preferences.copyWith(keywordNotificationsEnabled: val));
                           },
                         ),
                       ],
@@ -456,106 +455,115 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   const SizedBox(height: 8),
 
                   // Quiet Hours
-                  Container(
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isDark 
-                            ? Colors.white.withValues(alpha: 0.05) 
-                            : Colors.black.withValues(alpha: 0.05),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        SwitchListTile(
-                          title: const Text('Sessiz Saatler'),
-                          subtitle: const Text('Belirlediğiniz saat aralığında telefonunuza anlık sesli uyarı gelmez; bildirimler sessizce Bildirim Kutusu\'na kaydedilir.'),
-                          value: _preferences.quietHoursEnabled,
-                          activeColor: primaryColor,
-                          onChanged: (val) {
-                            final newLastStates = Map<String, bool>.from(_preferences.lastStates);
-                            newLastStates['quietHoursEnabled'] = val;
-                            _updatePrefs(NotificationPreferences(
-                              pushMasterEnabled: _preferences.pushMasterEnabled,
-                              dealNotificationsEnabled: _preferences.dealNotificationsEnabled,
-                              categoryNotificationsEnabled: _preferences.categoryNotificationsEnabled,
-                              keywordNotificationsEnabled: _preferences.keywordNotificationsEnabled,
-                              communityNotificationsEnabled: _preferences.communityNotificationsEnabled,
-                              submissionStatusNotificationsEnabled: _preferences.submissionStatusNotificationsEnabled,
-                              marketingNotificationsEnabled: _preferences.marketingNotificationsEnabled,
-                              quietHoursEnabled: val,
-                              quietHoursStart: _preferences.quietHoursStart,
-                              quietHoursEnd: _preferences.quietHoursEnd,
-                              timezone: _preferences.timezone,
-                              updatedAt: DateTime.now(),
-                              lastStates: newLastStates,
-                            ));
-                          },
+                  Opacity(
+                    opacity: isMasterOn ? 1.0 : 0.5,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: !isMasterOn
+                          ? () => _showDisabledSnackbar(
+                              'Bu ayarı değiştirmek için önce yukarıdan Telefon Bildirimleri\'ni açmalısınız.')
+                          : null,
+                      child: IgnorePointer(
+                        ignoring: !isMasterOn,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: surfaceColor,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isDark 
+                                  ? Colors.white.withValues(alpha: 0.05) 
+                                  : Colors.black.withValues(alpha: 0.05),
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              SwitchListTile(
+                                title: const Text('Sessiz Saatler'),
+                                subtitle: const Text('Belirlediğiniz saat aralığında telefonunuza anlık sesli uyarı gelmez; bildirimler sessizce Bildirim Kutusu\'na kaydedilir.'),
+                                value: _preferences.quietHoursEnabled,
+                                activeColor: primaryColor,
+                                onChanged: (val) {
+                                  _updatePrefs(_preferences.copyWith(quietHoursEnabled: val));
+                                },
+                              ),
+                              if (_preferences.quietHoursEnabled) ...[
+                                const Divider(height: 1),
+                                ListTile(
+                                  title: const Text('Başlangıç Saati'),
+                                  trailing: Text(
+                                    _preferences.quietHoursStart,
+                                    style: TextStyle(
+                                      color: primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  onTap: () => _selectTime(context, true),
+                                ),
+                                const Divider(height: 1),
+                                ListTile(
+                                  title: const Text('Bitiş Saati'),
+                                  trailing: Text(
+                                    _preferences.quietHoursEnd,
+                                    style: TextStyle(
+                                      color: primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  onTap: () => _selectTime(context, false),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                        if (_preferences.quietHoursEnabled) ...[
-                          const Divider(height: 1),
-                          ListTile(
-                            title: const Text('Başlangıç Saati'),
-                            trailing: Text(
-                              _preferences.quietHoursStart,
-                              style: TextStyle(
-                                color: primaryColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            onTap: () => _selectTime(context, true),
-                          ),
-                          const Divider(height: 1),
-                          ListTile(
-                            title: const Text('Bitiş Saati'),
-                            trailing: Text(
-                              _preferences.quietHoursEnd,
-                              style: TextStyle(
-                                color: primaryColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            onTap: () => _selectTime(context, false),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
 
-                  // Categories Button
-                  Container(
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isDark 
-                            ? Colors.white.withValues(alpha: 0.05) 
-                            : Colors.black.withValues(alpha: 0.05),
-                      ),
+                  Text(
+                    'BİLDİRİM TERCİHLERİ / DETAYLARI',
+                    style: TextStyle(
+                      color: textSub,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
                     ),
-                    child: ListTile(
-                      leading: Icon(Icons.category, color: primaryColor),
-                      title: const Text(
-                        'Kategoriler',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: const Text('Tercih ettiğiniz fırsat kategorilerini seçin'),
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                      ),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const CategoryPreferencesScreen(),
-                          ),
-                        );
-                      },
-                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Katman 3: Detay Tercih Satırları (Chevron >)
+                  _buildDetailTile(
+                    icon: Icons.category,
+                    title: 'Kategoriler',
+                    subtitle: 'Tercih ettiğiniz fırsat kategorilerini seçin',
+                    channelEnabled: _preferences.categoryNotificationsEnabled,
+                    channelName: 'Kategori Bildirimleri',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CategoryPreferencesScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildDetailTile(
+                    icon: Icons.label_important_outline,
+                    title: 'Anahtar Kelimeler',
+                    subtitle: 'Takip ettiğiniz özel ürün kelimelerini yönetin',
+                    channelEnabled: _preferences.keywordNotificationsEnabled,
+                    channelName: 'Anahtar Kelime Takibi Bildirimleri',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const KeywordTrackingScreen(),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -564,3 +572,4 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     );
   }
 }
+

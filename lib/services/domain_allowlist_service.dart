@@ -4,6 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'link_preview_service.dart';
 
+enum UrlValidationResult {
+  valid,
+  invalidFormat,
+  domainNotAllowed,
+  notProductUrl,
+}
+
 class DomainAllowlistService {
   /// Fallback (yedek) 20 mağaza tanımı
   static const Map<String, List<String>> _fallbackStores = {
@@ -155,29 +162,28 @@ class DomainAllowlistService {
     return false;
   }
 
-  /// URL bir kısa link ise yönlendirmeyi çözer ve nihai URL'yi allowlist ile kontrol eder.
-  /// Ayrıca ürün sayfası kontrolü de yapar.
-  static Future<bool> isResolvedUrlAllowed(String urlStr) async {
-    if (urlStr.trim().isEmpty) return false;
+  static Future<UrlValidationResult> validateUrl(String urlStr) async {
+    if (urlStr.trim().isEmpty) return UrlValidationResult.invalidFormat;
     
     await initialize();
 
-    // Doğrudan eşleşiyorsa çözmeye gerek kalmadan onay ver
-    if (isDomainAllowed(urlStr)) {
-      // Domain allowlist'te ama ürün sayfası mı kontrol et
-      if (!isProductUrl(urlStr)) {
-        if (kDebugMode) {
-          print('🛑 [PRODUCT PATH REJECT] URL bir ürün sayfası değil: $urlStr');
-        }
-        return false;
+    try {
+      final trimmed = urlStr.trim();
+      Uri uri = Uri.parse(trimmed);
+      if (!uri.hasScheme) {
+        uri = Uri.parse('https://$trimmed');
       }
-      return true;
+      final host = uri.host.toLowerCase();
+      if (host.isEmpty) return UrlValidationResult.invalidFormat;
+    } catch (_) {
+      return UrlValidationResult.invalidFormat;
     }
 
-    // Kısa link yönlendirmesini çöz ve tekrar kontrol et
+    // Kısa link veya yönlendirmeleri çöz
+    String resolved = urlStr;
     try {
       final linkPreviewService = LinkPreviewService();
-      String resolved = linkPreviewService.extractAdjustFallback(urlStr);
+      resolved = linkPreviewService.extractAdjustFallback(urlStr);
       if (resolved.toLowerCase().contains('sl.n11.com/n/') || resolved.toLowerCase().contains('n11.com/n/')) {
         resolved = await linkPreviewService.resolveN11ShortLink(resolved);
       }
@@ -187,20 +193,26 @@ class DomainAllowlistService {
       if (isShort) {
         resolved = await linkPreviewService.resolveUrlRedirects(resolved);
       }
-      
-      if (!isDomainAllowed(resolved)) return false;
-
-      // Çözülen URL ürün sayfası mı kontrol et
-      if (!isProductUrl(resolved)) {
-        if (kDebugMode) {
-          print('🛑 [PRODUCT PATH REJECT] Çözülen URL bir ürün sayfası değil: $resolved');
-        }
-        return false;
-      }
-      return true;
     } catch (_) {
-      return false;
+      return UrlValidationResult.invalidFormat;
     }
+
+    if (!isDomainAllowed(resolved)) {
+      return UrlValidationResult.domainNotAllowed;
+    }
+
+    if (!isProductUrl(resolved)) {
+      return UrlValidationResult.notProductUrl;
+    }
+
+    return UrlValidationResult.valid;
+  }
+
+  /// URL bir kısa link ise yönlendirmeyi çözer ve nihai URL'yi allowlist ile kontrol eder.
+  /// Ayrıca ürün sayfası kontrolü de yapar.
+  static Future<bool> isResolvedUrlAllowed(String urlStr) async {
+    final result = await validateUrl(urlStr);
+    return result == UrlValidationResult.valid;
   }
 
   /// URL'ye karşılık gelen mağaza adını verir

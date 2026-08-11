@@ -31,16 +31,74 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   String? _cachedUserId;
   StreamSubscription? _authSub;
 
+  late ScrollController _myFavoritesScrollController;
+  late ScrollController _followedCategoriesScrollController;
+  bool _showBanner = true;
+  bool _showCleanupButton = true;
+  bool _showScrollToTop = false;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
+    _myFavoritesScrollController = ScrollController();
+    _followedCategoriesScrollController = ScrollController();
+    
+    _myFavoritesScrollController.addListener(_scrollListener);
+    _followedCategoriesScrollController.addListener(_scrollListener);
+    
+    _tabController.addListener(_tabListener);
+    
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (mounted) {
         _initializeStreams(user?.uid);
         setState(() {});
       }
     });
+  }
+
+  void _scrollListener() {
+    double offset = 0;
+    if (_tabController.index == 0 && _myFavoritesScrollController.hasClients) {
+      offset = _myFavoritesScrollController.offset;
+    } else if (_tabController.index == 1 && _followedCategoriesScrollController.hasClients) {
+      offset = _followedCategoriesScrollController.offset;
+    }
+    
+    // 15px scroll sonrası banner ve temizle butonu durum kontrolü
+    bool showBannerNow = _showBanner;
+    if (offset > 15) {
+      showBannerNow = false;
+    }
+    bool showCleanupNow = offset <= 15;
+    
+    // 800px scroll sonrası yukarı fırlatma butonu kontrolü
+    bool showScrollToTopNow = offset > 800;
+
+    if (showBannerNow != _showBanner || showCleanupNow != _showCleanupButton || showScrollToTopNow != _showScrollToTop) {
+      setState(() {
+        _showBanner = showBannerNow;
+        _showCleanupButton = showCleanupNow;
+        _showScrollToTop = showScrollToTopNow;
+      });
+    }
+  }
+
+  void _tabListener() {
+    if (!_tabController.indexIsChanging) {
+      double offset = 0;
+      if (_tabController.index == 0 && _myFavoritesScrollController.hasClients) {
+        offset = _myFavoritesScrollController.offset;
+      } else if (_tabController.index == 1 && _followedCategoriesScrollController.hasClients) {
+        offset = _followedCategoriesScrollController.offset;
+      }
+      
+      setState(() {
+        _showBanner = true;
+        _showCleanupButton = offset <= 15;
+        _showScrollToTop = offset > 800;
+      });
+    }
   }
 
   void _initializeStreams(String? userId) {
@@ -60,7 +118,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   @override
   void dispose() {
     _authSub?.cancel();
+    _tabController.removeListener(_tabListener);
     _tabController.dispose();
+    _myFavoritesScrollController.removeListener(_scrollListener);
+    _myFavoritesScrollController.dispose();
+    _followedCategoriesScrollController.removeListener(_scrollListener);
+    _followedCategoriesScrollController.dispose();
     super.dispose();
   }
 
@@ -134,6 +197,27 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           _buildFollowedCategories(currentUser, isDark, primaryColor),
         ],
       ),
+      floatingActionButton: _showScrollToTop
+          ? FloatingActionButton(
+              heroTag: 'favorites_scroll_to_top',
+              mini: true,
+              onPressed: () {
+                final controller = _tabController.index == 0 
+                    ? _myFavoritesScrollController 
+                    : _followedCategoriesScrollController;
+                if (controller.hasClients) {
+                  controller.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                  );
+                }
+              },
+              backgroundColor: primaryColor,
+              child: const Icon(Icons.keyboard_arrow_up, color: Colors.black),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -269,87 +353,125 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
         return Column(
           children: [
-            // 30 gün bilgilendirme mesajı
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.amber.withValues(alpha: 0.08)
-                      : Colors.amber.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.amber.withValues(alpha: 0.3),
-                    width: 0.5,
+            // 30 gün bilgilendirme mesajı (Kaydırınca gizlenir, tab değişince geri gelir)
+            AnimatedCrossFade(
+              firstChild: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.amber.withValues(alpha: 0.08)
+                        : Colors.amber.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.amber.withValues(alpha: 0.3),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: Colors.amber[700]),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '30 günden eski fırsatlar otomatik olarak kalıcı silinir.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.amber[200] : Colors.amber[800],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ),
+              secondChild: const SizedBox.shrink(),
+              crossFadeState: _showBanner ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              duration: const Duration(milliseconds: 200),
+            ),
+            AnimatedCrossFade(
+              firstChild: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Icon(Icons.info_outline, size: 16, color: Colors.amber[700]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '30 günden eski fırsatlar otomatik olarak kalıcı silinir.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? Colors.amber[200] : Colors.amber[800],
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Temizle'),
+                              content: const Text('Süresi dolmuş tüm kayıtlı ilanları listenizden kaldırmak istediğinize emin misiniz?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, false),
+                                  child: const Text('İptal'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                  child: const Text('Temizle'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            final expiredDeals = deals.where((d) => d.isExpired).toList();
+                            for (var d in expiredDeals) {
+                              await _firestoreService.removeFromFavorites(currentUser.uid, d.id);
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Süresi dolan kayıtlar temizlendi')),
+                              );
+                            }
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.redAccent.withValues(alpha: 0.18),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.auto_delete_outlined,
+                                color: Colors.redAccent,
+                                size: 14,
+                              ),
+                              SizedBox(width: 5),
+                              Text(
+                                'Süresi Dolanları Temizle',
+                                style: TextStyle(
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 10.5,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
+              secondChild: const SizedBox.shrink(),
+              crossFadeState: (hasExpired && _showCleanupButton) ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              duration: const Duration(milliseconds: 200),
             ),
-            if (hasExpired)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      onPressed: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Temizle'),
-                            content: const Text('Süresi dolmuş tüm kayıtlı ilanları listenizden kaldırmak istediğinize emin misiniz?'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('İptal'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                child: const Text('Temizle'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          final expiredDeals = deals.where((d) => d.isExpired).toList();
-                          for (var d in expiredDeals) {
-                            await _firestoreService.removeFromFavorites(currentUser.uid, d.id);
-                          }
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Süresi dolan kayıtlar temizlendi')),
-                            );
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.delete_sweep, color: Colors.redAccent, size: 18),
-                      label: const Text(
-                        'Süresi Dolanları Temizle',
-                        style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             Expanded(
-              child: _buildDealGrid(deals, isDark),
+              child: _buildDealGrid(deals, isDark, _myFavoritesScrollController),
             ),
           ],
         );
@@ -357,16 +479,23 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildDealGrid(List<Deal> deals, bool isDark) {
+  Widget _buildDealGrid(List<Deal> deals, bool isDark, ScrollController scrollController) {
     return RefreshIndicator(
       onRefresh: () async {
-        setState(() {});
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          setState(() {
+            _myFavoritesStream = _firestoreService.getFavoriteDeals(currentUser.uid);
+            _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
+          });
+        }
       },
       child: GridView.builder(
+        controller: scrollController,
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          childAspectRatio: 0.63,
+          childAspectRatio: 0.61,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
         ),
@@ -549,79 +678,84 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
         return Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.local_offer_outlined,
-                        size: 16,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${deals.length} Fırsat',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+            AnimatedCrossFade(
+              firstChild: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.local_offer_outlined,
+                          size: 16,
                           color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
                         ),
-                      ),
-                    ],
-                  ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CategoryPreferencesScreen(),
-                        ),
-                      ).then((_) {
-                        setState(() {
-                          _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
-                        });
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.tune_rounded,
-                            size: 15,
-                            color: primaryColor,
+                        const SizedBox(width: 6),
+                        Text(
+                          '${deals.length} Fırsat',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Kategorileri Düzenle',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                        ),
+                      ],
+                    ),
+                    InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CategoryPreferencesScreen(),
+                          ),
+                        ).then((_) {
+                          setState(() {
+                            _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
+                          });
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: primaryColor.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.tune_rounded,
+                              size: 15,
                               color: primaryColor,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 6),
+                            Text(
+                              'Kategorileri Düzenle',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: primaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              secondChild: const SizedBox.shrink(),
+              crossFadeState: _showCleanupButton ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              duration: const Duration(milliseconds: 200),
             ),
             Expanded(
-              child: _buildDealGrid(deals, isDark),
+              child: _buildDealGrid(deals, isDark, _followedCategoriesScrollController),
             ),
           ],
         );
@@ -634,7 +768,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.63,
+        childAspectRatio: 0.61,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),

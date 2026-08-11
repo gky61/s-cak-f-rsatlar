@@ -14,7 +14,6 @@ import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
 import '../models/category.dart';
 import 'notification_settings_screen.dart';
-import 'keyword_tracking_screen.dart';
 import 'auth_screen.dart';
 // import 'edit_profile_screen.dart'; // Dosya bulunamadı, geçici olarak yorum satırı
 import 'privacy_policy_screen.dart';
@@ -1254,24 +1253,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           },
                           isDark: isDark,
                         ),
-                        _buildDivider(isDark),
-                        // Anahtar Kelime Takibi
-                        _buildSettingItem(
-                          icon: Icons.search,
-                          title: 'Anahtar Kelime Takibi',
-                          iconBgColor: Colors.teal.withValues(alpha: 0.2),
-                          iconColor: Colors.teal,
-                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const KeywordTrackingScreen(),
-                              ),
-                            );
-                          },
-                          isDark: isDark,
-                        ),
+
                         _buildDivider(isDark),
                         // Dark Mode
                         _buildSettingItem(

@@ -38,7 +38,7 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 *   **Kısa Link ve Yönlendirme Desteği:** `amzn.eu`, `amzn.to` ve `link.amazon` kısa linkleri yönlendirme zinciri takibiyle (`resolveUrlRedirects`) asıl uzun linklerine çözümlenir. `link.amazon` kısa domain'i de taranarak Amazon mağazası olarak doğru tanınması sağlanır.
 *   **Görsel Kazıma Zorluğu:** Amazon bazen ürün görseli olarak 43-byte boyutunda boş siyah piksel placeholder resmi döner.
 *   **Çözüm:** `isLogoUrl` fonksiyonu ve byte kontrolü ile bu boş görseller elenerek HTML içerisindeki asıl `img#landingImage` veya `img#imgBlkFront` DOM elemanları taranır.
-*   **Fiyat Çekme:** DOM üzerindeki `.a-price-whole` ve `.a-price-fraction` birleştirilerek tam kuruşlu fiyat elde edilir.
+*   **Fiyat Çekme:** DOM üzerindeki `.a-price-whole` ve `.a-price-fraction` birleştirilerek tam kuruşlu fiyat elde edilir. Amazon Depo (`smid=A215JX4S9CANSO`) ve ikinci el/açılmış kutu ürünlerinde ise `#apex-pricetopay-accessibility-label`, `.apex-pricetopay-value`, `#usedBuySection .offer-price` ve `.aok-offscreen` seçicileri ile 2. el/Depo fiyatı öncelikli ve eksiksiz çekilir.
 
 ### 2. DeFacto (`defacto.com.tr`)
 *   **User-Agent Politikası:** `WhatsApp/2.23.4.15 A` ile Cloudflare engelleri aşılır.

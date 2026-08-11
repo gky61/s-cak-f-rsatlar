@@ -125,9 +125,7 @@ class LinkPreviewService {
     final lowerUrl = url.toLowerCase();
     String userAgent = _defaultUserAgent;
     
-    if (lowerUrl.contains('incehesap.com')) {
-      userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1';
-    } else if (lowerUrl.contains('n11.com') || 
+    if (lowerUrl.contains('n11.com') || 
         lowerUrl.contains('teknosa.com') ||
         lowerUrl.contains('amazon.') ||
         lowerUrl.contains('amzn.') ||
@@ -141,6 +139,7 @@ class LinkPreviewService {
         lowerUrl.contains('hb.biz') ||
         lowerUrl.contains('trendyol.com') ||
         lowerUrl.contains('ty.gl') ||
+        lowerUrl.contains('incehesap.com') ||
         lowerUrl.contains('pttavm.com')) {
       userAgent = 'WhatsApp/2.23.4.15 A';
     } else if (lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('havitstore.com.tr')) {

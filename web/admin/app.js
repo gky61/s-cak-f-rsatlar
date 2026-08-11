@@ -1401,6 +1401,7 @@ function createDealRow(deal) {
                     <p class="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
                         ${escapeHtml(deal.category || 'Genel')} • ${escapeHtml(deal.store || 'Bilinmeyen')}
                         ${deal.brand ? ` • <span class="font-semibold text-slate-700 dark:text-slate-300">Marka: ${escapeHtml(deal.brand)}</span>` : ''}
+                        ${deal.isAmazonWarehouse ? ` • <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-600/40"><span class="material-symbols-outlined text-[12px]">inventory_2</span>Depo</span>` : ''}
                     </p>
                     ${(deal.ratingValue || deal.ratingCount) ? `
                         <div class="flex items-center gap-1 text-amber-500 font-bold text-xs mt-0.5">
@@ -1946,6 +1947,13 @@ async function showDealModal(deal) {
                         <label class="relative inline-flex items-center cursor-pointer">
                             <input id="editIsHot" class="sr-only peer" type="checkbox" ${(deal.isEditorPick || deal.isHot) ? 'checked' : ''}/>
                             <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                        </label>
+                    </div>
+                    <div class="flex items-center justify-between text-sm py-2 border-t border-slate-200 dark:border-slate-700">
+                        <span class="text-amber-600 dark:text-amber-400 flex items-center gap-1.5"><span class="material-symbols-outlined text-[16px]">inventory_2</span>Amazon Depo Ürünü</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input id="editIsAmazonWarehouse" class="sr-only peer" type="checkbox" ${deal.isAmazonWarehouse ? 'checked' : ''}/>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-500/20 dark:peer-focus:ring-amber-500/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-amber-600"></div>
                         </label>
                     </div>
                 </div>
@@ -2541,6 +2549,7 @@ async function saveDealChanges() {
             brand: brand,
             ratingValue: (ratingValue !== null && !isNaN(ratingValue)) ? ratingValue : null,
             ratingCount: (ratingCount !== null && !isNaN(ratingCount)) ? ratingCount : null,
+            isAmazonWarehouse: document.getElementById('editIsAmazonWarehouse')?.checked || false,
         };
 
         // Track approvedAt when transitioning to active/approved state

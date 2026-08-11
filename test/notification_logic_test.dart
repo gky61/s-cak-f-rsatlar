@@ -42,8 +42,8 @@ void main() {
       expect(map['timezone'], 'Europe/Istanbul');
     });
 
-    test('Master switch toggle ON/OFF updates sub-settings while quietHoursEnabled remains independent', () {
-      // 1. Initial state with mixed sub-settings
+    test('Master switch toggle ON/OFF preserves sub-settings (State Preservation)', () {
+      // 1. Initial state with specific sub-settings
       var prefs = NotificationPreferences(
         pushMasterEnabled: true,
         dealNotificationsEnabled: true,
@@ -56,76 +56,29 @@ void main() {
         updatedAt: DateTime.now(),
       );
 
-      // 2. Turn Master OFF -> Sub-setting channels become false, quietHoursEnabled remains preserved (false)
-      final masterOffVal = false;
-      prefs = NotificationPreferences(
-        pushMasterEnabled: masterOffVal,
-        dealNotificationsEnabled: masterOffVal,
-        categoryNotificationsEnabled: masterOffVal,
-        keywordNotificationsEnabled: masterOffVal,
-        communityNotificationsEnabled: masterOffVal,
-        submissionStatusNotificationsEnabled: masterOffVal,
-        marketingNotificationsEnabled: masterOffVal,
-        quietHoursEnabled: prefs.quietHoursEnabled,
-        quietHoursStart: prefs.quietHoursStart,
-        quietHoursEnd: prefs.quietHoursEnd,
-        timezone: prefs.timezone,
-        updatedAt: DateTime.now(),
-      );
+      // 2. Turn Master OFF -> Only pushMasterEnabled changes to false, sub-channel settings are preserved!
+      prefs = prefs.copyWith(pushMasterEnabled: false);
 
       expect(prefs.pushMasterEnabled, isFalse);
-      expect(prefs.dealNotificationsEnabled, isFalse);
-      expect(prefs.categoryNotificationsEnabled, isFalse);
-      expect(prefs.keywordNotificationsEnabled, isFalse);
-      expect(prefs.communityNotificationsEnabled, isFalse);
-      expect(prefs.submissionStatusNotificationsEnabled, isFalse);
-      expect(prefs.marketingNotificationsEnabled, isFalse);
+      expect(prefs.dealNotificationsEnabled, isTrue); // Preserved!
+      expect(prefs.categoryNotificationsEnabled, isFalse); // Preserved!
+      expect(prefs.keywordNotificationsEnabled, isTrue); // Preserved!
+      expect(prefs.communityNotificationsEnabled, isFalse); // Preserved!
+      expect(prefs.submissionStatusNotificationsEnabled, isTrue); // Preserved!
+      expect(prefs.marketingNotificationsEnabled, isFalse); // Preserved!
       expect(prefs.quietHoursEnabled, isFalse);
 
-      // 3. Enable quietHoursEnabled independently
-      prefs = NotificationPreferences(
-        pushMasterEnabled: prefs.pushMasterEnabled,
-        dealNotificationsEnabled: prefs.dealNotificationsEnabled,
-        categoryNotificationsEnabled: prefs.categoryNotificationsEnabled,
-        keywordNotificationsEnabled: prefs.keywordNotificationsEnabled,
-        communityNotificationsEnabled: prefs.communityNotificationsEnabled,
-        submissionStatusNotificationsEnabled: prefs.submissionStatusNotificationsEnabled,
-        marketingNotificationsEnabled: prefs.marketingNotificationsEnabled,
-        quietHoursEnabled: true, // turned ON independently
-        quietHoursStart: prefs.quietHoursStart,
-        quietHoursEnd: prefs.quietHoursEnd,
-        timezone: prefs.timezone,
-        updatedAt: DateTime.now(),
-      );
-
-      expect(prefs.pushMasterEnabled, isFalse);
-      expect(prefs.quietHoursEnabled, isTrue);
-
-      // 4. Turn Master ON -> Sub-setting channels become true, quietHoursEnabled remains preserved (true)
-      final masterOnVal = true;
-      prefs = NotificationPreferences(
-        pushMasterEnabled: masterOnVal,
-        dealNotificationsEnabled: masterOnVal,
-        categoryNotificationsEnabled: masterOnVal,
-        keywordNotificationsEnabled: masterOnVal,
-        communityNotificationsEnabled: masterOnVal,
-        submissionStatusNotificationsEnabled: masterOnVal,
-        marketingNotificationsEnabled: masterOnVal,
-        quietHoursEnabled: prefs.quietHoursEnabled,
-        quietHoursStart: prefs.quietHoursStart,
-        quietHoursEnd: prefs.quietHoursEnd,
-        timezone: prefs.timezone,
-        updatedAt: DateTime.now(),
-      );
+      // 3. Turn Master back ON -> All sub-settings remain in their preserved state!
+      prefs = prefs.copyWith(pushMasterEnabled: true);
 
       expect(prefs.pushMasterEnabled, isTrue);
       expect(prefs.dealNotificationsEnabled, isTrue);
-      expect(prefs.categoryNotificationsEnabled, isTrue);
+      expect(prefs.categoryNotificationsEnabled, isFalse);
       expect(prefs.keywordNotificationsEnabled, isTrue);
-      expect(prefs.communityNotificationsEnabled, isTrue);
+      expect(prefs.communityNotificationsEnabled, isFalse);
       expect(prefs.submissionStatusNotificationsEnabled, isTrue);
-      expect(prefs.marketingNotificationsEnabled, isTrue);
-      expect(prefs.quietHoursEnabled, isTrue);
+      expect(prefs.marketingNotificationsEnabled, isFalse);
     });
   });
 }
+

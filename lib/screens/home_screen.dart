@@ -150,6 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ReceiveSharingIntent.instance.getInitialMedia().then((value) {
       if (value.isNotEmpty) {
         _handleSharedMedia(value);
+        ReceiveSharingIntent.instance.reset();
       }
     });
   }
@@ -816,46 +817,37 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             if (_unreadNotificationCount > 0)
                               Positioned(
-                                top: 5,
-                                right: 5,
+                                top: -6,
+                                right: -6,
                                 child: Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: _unreadNotificationCount > 9 ? 4 : 0,
-                                    vertical: _unreadNotificationCount > 9 ? 2 : 0,
-                                  ),
-                                  constraints: const BoxConstraints(
-                                    minWidth: 9,
-                                    minHeight: 9,
+                                  padding: _unreadNotificationCount < 10
+                                      ? const EdgeInsets.all(3)
+                                      : const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                  constraints: BoxConstraints(
+                                    minWidth: _unreadNotificationCount < 10 ? 18 : 22,
+                                    minHeight: 18,
                                   ),
                                   decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [Color(0xFFFF3B30), Color(0xFFFF5E36)],
-                                    ),
-                                    shape: _unreadNotificationCount > 9 ? BoxShape.rectangle : BoxShape.circle,
-                                    borderRadius: _unreadNotificationCount > 9 ? BorderRadius.circular(10) : null,
+                                    color: const Color(0xFFE57373),
+                                    shape: _unreadNotificationCount < 10 ? BoxShape.circle : BoxShape.rectangle,
+                                    borderRadius: _unreadNotificationCount < 10 ? null : BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: isDark ? AppTheme.darkBackground : Colors.white,
-                                      width: 1.5,
+                                      color: isDark ? AppTheme.darkBackground : const Color(0xFFF2F3F5),
+                                      width: 2.5,
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.red.withValues(alpha: 0.5),
-                                        blurRadius: 4,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
                                   ),
-                                  child: _unreadNotificationCount > 9
-                                      ? Text(
-                                          _unreadNotificationCount > 99 ? '99+' : '$_unreadNotificationCount',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 8.5,
-                                            fontWeight: FontWeight.w900,
-                                            height: 1,
-                                          ),
-                                        )
-                                      : null,
+                                  child: Center(
+                                    child: Text(
+                                      _unreadNotificationCount > 99 ? '99+' : '$_unreadNotificationCount',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w900,
+                                        height: 1.0,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
                                 ),
                               ),
                           ],
@@ -1061,7 +1053,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisCount: 2,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
-                        childAspectRatio: 0.63,
+                        childAspectRatio: 0.61,
                       ),
                       itemCount: 6,
                       itemBuilder: (context, index) {
@@ -1195,7 +1187,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
-                          childAspectRatio: 0.63,
+                          childAspectRatio: 0.61,
                         ),
                         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                         cacheExtent: 500, // Optimize edilmiş cache

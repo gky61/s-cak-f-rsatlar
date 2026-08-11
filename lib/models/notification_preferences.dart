@@ -110,4 +110,39 @@ class NotificationPreferences {
       'lastStates': lastStates,
     };
   }
+
+  NotificationPreferences copyWith({
+    bool? pushMasterEnabled,
+    bool? dealNotificationsEnabled,
+    bool? categoryNotificationsEnabled,
+    bool? keywordNotificationsEnabled,
+    bool? communityNotificationsEnabled,
+    bool? submissionStatusNotificationsEnabled,
+    bool? marketingNotificationsEnabled,
+    bool? quietHoursEnabled,
+    String? quietHoursStart,
+    String? quietHoursEnd,
+    String? timezone,
+    DateTime? updatedAt,
+    int? schemaVersion,
+    Map<String, bool>? lastStates,
+  }) {
+    return NotificationPreferences(
+      pushMasterEnabled: pushMasterEnabled ?? this.pushMasterEnabled,
+      dealNotificationsEnabled: dealNotificationsEnabled ?? this.dealNotificationsEnabled,
+      categoryNotificationsEnabled: categoryNotificationsEnabled ?? this.categoryNotificationsEnabled,
+      keywordNotificationsEnabled: keywordNotificationsEnabled ?? this.keywordNotificationsEnabled,
+      communityNotificationsEnabled: communityNotificationsEnabled ?? this.communityNotificationsEnabled,
+      submissionStatusNotificationsEnabled: submissionStatusNotificationsEnabled ?? this.submissionStatusNotificationsEnabled,
+      marketingNotificationsEnabled: marketingNotificationsEnabled ?? this.marketingNotificationsEnabled,
+      quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
+      quietHoursStart: quietHoursStart ?? this.quietHoursStart,
+      quietHoursEnd: quietHoursEnd ?? this.quietHoursEnd,
+      timezone: timezone ?? this.timezone,
+      updatedAt: updatedAt ?? DateTime.now(),
+      schemaVersion: schemaVersion ?? this.schemaVersion,
+      lastStates: lastStates ?? this.lastStates,
+    );
+  }
 }
+

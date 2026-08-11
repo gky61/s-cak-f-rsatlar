@@ -28,6 +28,13 @@ class UserDealsScreen extends StatefulWidget {
 class _UserDealsScreenState extends State<UserDealsScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final ThemeService _themeService = ThemeService();
+  late Stream<List<Deal>> _userDealsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _userDealsStream = _firestoreService.getUserDealsStream(widget.userId, limit: widget.limit);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +60,7 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
         ),
       ),
       body: StreamBuilder<List<Deal>>(
-        stream: _firestoreService.getUserDealsStream(widget.userId, limit: widget.limit),
+        stream: _userDealsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return _buildLoadingGrid();
@@ -123,13 +130,15 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
 
           return RefreshIndicator(
             onRefresh: () async {
-              setState(() {});
+              setState(() {
+                _userDealsStream = _firestoreService.getUserDealsStream(widget.userId, limit: widget.limit);
+              });
             },
             child: GridView.builder(
               padding: const EdgeInsets.all(16),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                childAspectRatio: 0.63,
+                childAspectRatio: 0.61,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
@@ -161,7 +170,7 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.63,
+        childAspectRatio: 0.61,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),

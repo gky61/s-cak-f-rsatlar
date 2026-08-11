@@ -31,6 +31,52 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
   bool _isHovered = false; // Hover durumu takibi
   bool _isPressed = false; // Dokunma durumu takibi
 
+  Widget _buildPriceAndBadgeSection(bool isDark, bool isExpired) {
+    final deal = widget.deal;
+    final hasOriginalPrice = deal.originalPrice != null && deal.originalPrice! > deal.price;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (MoneyBadge.isMoneyDeal(deal)) ...[
+          const MoneyBadge(
+            fontSize: 8,
+            iconSize: 10,
+            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+          ),
+          const SizedBox(height: 6),
+        ],
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          runSpacing: 2,
+          children: [
+            FormattedPriceText(
+              value: deal.price,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                color: isExpired ? Colors.red[700] : AppTheme.primary,
+              ),
+            ),
+            if (hasOriginalPrice)
+              FormattedPriceText(
+                value: deal.originalPrice,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                  decoration: TextDecoration.lineThrough,
+                  decorationThickness: 1.5,
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final deal = widget.deal;
@@ -47,6 +93,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(16),
@@ -168,48 +215,6 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                               ),
                             ),
                           ),
-                          // Amazon Depo Rozeti (Sol Üst - Zaman Rozetinin Altında)
-                          if (deal.isAmazonWarehouse)
-                            Positioned(
-                              top: 28,
-                              left: 8,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFD97706), Color(0xFFB45309)],
-                                  ),
-                                  borderRadius: BorderRadius.circular(5),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFD97706).withValues(alpha: 0.4),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.inventory_2_rounded,
-                                      size: 9,
-                                      color: Colors.white,
-                                    ),
-                                    SizedBox(width: 2.5),
-                                    Text(
-                                      'AMAZON DEPO',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.3,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                           // FOMO Rozeti (Sağ Üst - Biten / Tükenen Fırsatlar İçin)
                           if (isExpired)
                             Positioned(
@@ -459,7 +464,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                   // İçerik
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -497,13 +502,24 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                               borderRadius: BorderRadius.circular(3),
                                               border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.4), width: 0.5),
                                             ),
-                                            child: const Text(
-                                              'Depo',
-                                              style: TextStyle(
-                                                fontSize: 8,
-                                                fontWeight: FontWeight.w800,
-                                                color: Color(0xFFD97706),
-                                              ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.inventory_2_rounded,
+                                                  size: 9,
+                                                  color: Color(0xFFD97706),
+                                                ),
+                                                SizedBox(width: 2),
+                                                Text(
+                                                  'Depo',
+                                                  style: TextStyle(
+                                                    fontSize: 8,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: Color(0xFFD97706),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
@@ -606,7 +622,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                     ),
                                 ],
                               ),
-                              const SizedBox(height: 8), // Başlık için üst padding artırıldı
+                              const SizedBox(height: 4), // Başlık için üst padding optimize edildi
                               // Başlık
                               Stack(
                                 children: [
@@ -667,51 +683,16 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ),
                               ],
-                               if (MoneyBadge.isMoneyDeal(deal)) ...[
-                                 const SizedBox(height: 4),
-                                 const MoneyBadge(
-                                   fontSize: 9,
-                                   iconSize: 11,
-                                   padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                                 ),
-                               ],
-                               const SizedBox(height: 6),
-                               // Fiyat ve İndirimsiz Fiyat (Eski Fiyat)
-                              Wrap(
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 4,
-                                children: [
-                                  FormattedPriceText(
-                                    value: deal.price,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w900,
-                                      color: isExpired 
-                                          ? Colors.red[700] 
-                                          : AppTheme.primary,
-                                    ),
-                                  ),
-                                  if (deal.originalPrice != null && deal.originalPrice! > deal.price)
-                                    FormattedPriceText(
-                                      value: deal.originalPrice,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                        decoration: TextDecoration.lineThrough,
-                                        decorationThickness: 1.5,
-                                      ),
-                                    ),
-                                ],
-                              ),
+                               const SizedBox(height: 7),
+                               _buildPriceAndBadgeSection(isDark, isExpired),
                             ],
                           ),
-                          if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(
+                           if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty)
+                             Padding(
+                               padding: const EdgeInsets.only(top: 2.5),
+                               child: Container(
+                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                 decoration: BoxDecoration(
                                   color: const Color(0xFFFFF3E0), // Soft orange amber container
                                   borderRadius: BorderRadius.circular(6), // Rounded pill shape
                                   border: Border.all(
@@ -722,7 +703,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                 child: Text(
                                   deal.priceLabel!,
                                   style: const TextStyle(
-                                    fontSize: 10.5, // Font size bumped from 9 to 10.5 to stand out
+                                    fontSize: 9.5, // Font size reduced to fit perfectly and look neat
                                     fontWeight: FontWeight.bold,
                                     letterSpacing: 0.1,
                                     color: Color(0xFFE65100), // Clean deep orange tone

@@ -19,6 +19,8 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   final ThemeService _themeService = ThemeService();
   late CardViewMode _viewMode;
   late Stream<List<Deal>> _popularDealsStream;
+  late ScrollController _scrollController;
+  bool _showScrollToTop = false;
 
   @override
   void initState() {
@@ -26,12 +28,26 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
     _viewMode = _themeService.viewMode;
     _themeService.addListener(_onThemeChanged);
     _popularDealsStream = _firestoreService.getPopularDeals();
+    _scrollController = ScrollController()..addListener(_scrollListener);
   }
 
   @override
   void dispose() {
     _themeService.removeListener(_onThemeChanged);
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollListener() {
+    if (!_scrollController.hasClients) return;
+    final offset = _scrollController.offset;
+    final shouldShow = offset > 800;
+    if (shouldShow != _showScrollToTop && mounted) {
+      setState(() {
+        _showScrollToTop = shouldShow;
+      });
+    }
   }
 
   void _onThemeChanged() {
@@ -179,12 +195,13 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
             color: primaryColor,
             child: _viewMode == CardViewMode.vertical
                 ? GridView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.all(12),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
-                      childAspectRatio: 0.63,
+                      childAspectRatio: 0.61,
                     ),
                     itemCount: deals.length,
                     itemBuilder: (context, index) {
@@ -205,6 +222,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                     },
                   )
                 : ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.all(16),
                     itemCount: deals.length,
                     itemBuilder: (context, index) {
@@ -230,6 +248,24 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
           );
         },
       ),
+      floatingActionButton: _showScrollToTop
+          ? FloatingActionButton(
+              heroTag: 'popular_scroll_to_top',
+              mini: true,
+              onPressed: () {
+                if (_scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                  );
+                }
+              },
+              backgroundColor: primaryColor,
+              child: const Icon(Icons.keyboard_arrow_up, color: Colors.black),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -280,7 +316,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         crossAxisCount: 2,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 0.63,
+        childAspectRatio: 0.61,
       ),
       itemCount: 6,
       itemBuilder: (context, index) {

@@ -614,6 +614,32 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ],
                   ),
                 ],
+                if (deal.isAmazonWarehouse) ...[
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD97706).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFD97706).withOpacity(0.4), width: 0.5),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.inventory_2_rounded, size: 11, color: Color(0xFFD97706)),
+                        SizedBox(width: 3),
+                        Text(
+                          'Depo',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 Row(
                   children: [
                     FormattedPriceText(
@@ -1332,6 +1358,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final primaryColor = Theme.of(context).colorScheme.primary;
+    bool isAmazonWarehouse = deal.isAmazonWarehouse;
     
     await showDialog(
       context: context,
@@ -1685,6 +1712,52 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                       },
                     ),
                   ],
+                  const SizedBox(height: 16),
+                  // Amazon Depo Ürünü Toggle
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isAmazonWarehouse
+                          ? const Color(0xFFD97706).withOpacity(0.08)
+                          : (isDark ? AppTheme.darkSurfaceElevated : Colors.grey[50]),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isAmazonWarehouse
+                            ? const Color(0xFFD97706).withOpacity(0.3)
+                            : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
+                        width: 1,
+                      ),
+                    ),
+                    child: SwitchListTile(
+                      value: isAmazonWarehouse,
+                      onChanged: (value) {
+                        setState(() {
+                          isAmazonWarehouse = value;
+                        });
+                      },
+                      title: Row(
+                        children: [
+                          Icon(
+                            Icons.inventory_2_rounded,
+                            size: 18,
+                            color: isAmazonWarehouse ? const Color(0xFFD97706) : Colors.grey,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Amazon Depo Ürünü',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: isAmazonWarehouse ? const Color(0xFFD97706) : textColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: const Color(0xFFD97706),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1772,6 +1845,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 } else {
                   updates['subCategory'] = null;
                 }
+
+                // Amazon Depo durumu
+                updates['isAmazonWarehouse'] = isAmazonWarehouse;
 
                 // Firestore'a güncelle
                 final success = await _firestoreService.updateDeal(deal.id, updates);

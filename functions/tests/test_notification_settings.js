@@ -127,51 +127,52 @@ async function runSettingsTests() {
     console.log('🧪 [TEST 1] Parametrik Bildirim Tercihleri ve Karar Matrisi Testleri Başlatılıyor...');
 
     const testMatrix = [
-      // A. Master Switch Kapalı, Alt Switch Açık Durumları (Bypass / Gönderim)
+      // A. Master Switch Kapalı (Master OFF) -> Tüm bildirimler disabled_by_user_master_switch ile engellenir (Tercihler korunur)
       {
-        name: 'Master Switch Kapalı - Kategori Bildirimi (Açık)',
+        name: 'Master Switch Kapalı - Kategori Bildirimi (Sub-channel Açık)',
         prefs: { pushMasterEnabled: false, categoryNotificationsEnabled: true },
         notifData: { type: 'deal', reason: 'category', title: 'İndirim', body: 'Test' },
-        expectedEligible: true,
-        expectedStatus: 'failed'
+        expectedEligible: false,
+        expectedStatus: 'disabled_by_user_master_switch'
       },
       {
-        name: 'Master Switch Kapalı - Yazar Bildirimi (Açık)',
+        name: 'Master Switch Kapalı - Yazar Bildirimi (Sub-channel Açık)',
         prefs: { pushMasterEnabled: false, dealNotificationsEnabled: true },
         notifData: { type: 'deal', reason: 'author', title: 'Yazar Fırsatı', body: 'Test' },
-        expectedEligible: true,
-        expectedStatus: 'failed'
+        expectedEligible: false,
+        expectedStatus: 'disabled_by_user_master_switch'
       },
       {
-        name: 'Master Switch Kapalı - Topluluk Bildirimi (Açık)',
+        name: 'Master Switch Kapalı - Topluluk Bildirimi (Sub-channel Açık)',
         prefs: { pushMasterEnabled: false, communityNotificationsEnabled: true },
         notifData: { type: 'comment_reply', title: 'Yorum', body: 'Test' },
-        expectedEligible: true,
-        expectedStatus: 'failed'
+        expectedEligible: false,
+        expectedStatus: 'disabled_by_user_master_switch'
       },
 
       // B. Master Switch Kapalı, Alt Switch Kapalı Durumları (Master Switch nedeniyle engellenmeli)
       {
-        name: 'Master Switch Kapalı - Kategori Bildirimi (Kapalı)',
+        name: 'Master Switch Kapalı - Kategori Bildirimi (Sub-channel Kapalı)',
         prefs: { pushMasterEnabled: false, categoryNotificationsEnabled: false },
         notifData: { type: 'deal', reason: 'category', title: 'İndirim', body: 'Test' },
         expectedEligible: false,
         expectedStatus: 'disabled_by_user_master_switch'
       },
       {
-        name: 'Master Switch Kapalı - Yazar Bildirimi (Kapalı)',
+        name: 'Master Switch Kapalı - Yazar Bildirimi (Sub-channel Kapalı)',
         prefs: { pushMasterEnabled: false, dealNotificationsEnabled: false },
         notifData: { type: 'deal', reason: 'author', title: 'Yazar Fırsatı', body: 'Test' },
         expectedEligible: false,
         expectedStatus: 'disabled_by_user_master_switch'
       },
       {
-        name: 'Master Switch Kapalı - Topluluk Bildirimi (Kapalı)',
+        name: 'Master Switch Kapalı - Topluluk Bildirimi (Sub-channel Kapalı)',
         prefs: { pushMasterEnabled: false, communityNotificationsEnabled: false },
         notifData: { type: 'comment_reply', title: 'Yorum', body: 'Test' },
         expectedEligible: false,
         expectedStatus: 'disabled_by_user_master_switch'
       },
+
 
       // C. Master Switch Açık, Alt Switch Kapalı Durumları (Kanal bazında engellenmeli)
       {

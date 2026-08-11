@@ -760,49 +760,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               ),
                             ),
                           ),
-                        // Amazon Depo Rozeti (Top Left over Image)
-                        if (deal.isAmazonWarehouse)
-                          Positioned(
-                            top: 32,
-                            left: 16,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFFD97706), Color(0xFFB45309)],
-                                ),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  width: 1.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFD97706).withValues(alpha: 0.4),
-                                    blurRadius: 10,
-                                    spreadRadius: 1,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.inventory_2_rounded, color: Colors.white, size: 15),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    'AMAZON DEPO FIRSATI',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w900,
-                                      color: Colors.white,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -900,6 +857,36 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
+                                              if (deal.isAmazonWarehouse) ...[
+                                                const SizedBox(width: 5),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.4), width: 0.5),
+                                                  ),
+                                                  child: const Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.inventory_2_rounded,
+                                                        size: 10,
+                                                        color: Color(0xFFD97706),
+                                                      ),
+                                                      SizedBox(width: 2.5),
+                                                      Text(
+                                                        'Depo',
+                                                        style: TextStyle(
+                                                          fontSize: 9,
+                                                          fontWeight: FontWeight.w800,
+                                                          color: Color(0xFFD97706),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
                                             ],
                                           ),
                                         ),
@@ -1074,64 +1061,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               ),
 
                               const SizedBox(height: 14),
-
-                              // Amazon Depo Bilgilendirme Kartı
-                              if (deal.isAmazonWarehouse)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4, bottom: 12),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFD97706).withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: const Color(0xFFD97706).withValues(alpha: 0.4),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFD97706).withValues(alpha: 0.2),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.inventory_2_rounded,
-                                            color: Color(0xFFD97706),
-                                            size: 20,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              const Text(
-                                                '📦 Amazon Depo (Resale) Ürünü',
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: Color(0xFFD97706),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                'Bu ürün Amazon Depo satıcılıdır. Açılmış kutu, yenilenmiş veya 2. el ürün olabilir.',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: isDark ? Colors.grey[300] : Colors.grey[800],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
 
                               // Editor's Pick Badge
                               if (deal.isEditorPick)
@@ -1364,6 +1293,65 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ],
                               ),
                               const SizedBox(height: 14),
+
+                              // Amazon Depo Bilgilendirme Kartı (Ürün Detayları Alanı)
+                              if (deal.isAmazonWarehouse) ...[
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: const Color(0xFFD97706).withValues(alpha: 0.4),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFD97706).withValues(alpha: 0.2),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.inventory_2_rounded,
+                                          color: Color(0xFFD97706),
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              '📦 Amazon Depo Ürünü',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
+                                                color: Color(0xFFD97706),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              'Bu ürün Amazon Depo satıcılıdır. Ürün yenilenmiş veya ikinci el olabilir.',
+                                              style: TextStyle(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w500,
+                                                color: isDark ? Colors.grey[300] : Colors.grey[800],
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                              ],
 
                               // Description Content Card
                               if (deal.description.isNotEmpty || _isAdmin) ...[

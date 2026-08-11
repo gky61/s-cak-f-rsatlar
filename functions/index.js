@@ -1132,34 +1132,27 @@ exports.onNotificationCreated = functions.firestore
     }
 
     // 4. ADIM 2 - FİLTRE C ve D: Alt Kanal ve Ana Şalter (Telefon Bildirimleri) Kontrolleri
+    if (prefs.pushMasterEnabled === false) {
+      functions.logger.info(`🚫 Kullanıcı ${userId} için Telefon Bildirimleri (Master Switch) kapalı. Status: disabled_by_user_master_switch`);
+      await snap.ref.update({
+        pushEligible: false,
+        pushStatus: 'disabled_by_user_master_switch',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return null;
+    }
+
     let groupEnabled = true;
     let groupName = type || reason;
     const reasons = notification.reasons || {};
     const hasReasons = Object.keys(reasons).length > 0;
 
-    const isKeywordPrefEnabled = prefs.pushMasterEnabled !== false
-      ? prefs.keywordNotificationsEnabled !== false
-      : prefs.keywordNotificationsEnabled === true;
-
-    const isDealPrefEnabled = prefs.pushMasterEnabled !== false
-      ? prefs.dealNotificationsEnabled !== false
-      : prefs.dealNotificationsEnabled === true;
-
-    const isCategoryPrefEnabled = prefs.pushMasterEnabled !== false
-      ? prefs.categoryNotificationsEnabled !== false
-      : prefs.categoryNotificationsEnabled === true;
-
-    const isCommunityPrefEnabled = prefs.pushMasterEnabled !== false
-      ? prefs.communityNotificationsEnabled !== false
-      : prefs.communityNotificationsEnabled === true;
-
-    const isSubmissionStatusPrefEnabled = prefs.pushMasterEnabled !== false
-      ? prefs.submissionStatusNotificationsEnabled !== false
-      : prefs.submissionStatusNotificationsEnabled === true;
-
-    const isMarketingPrefEnabled = prefs.pushMasterEnabled !== false
-      ? prefs.marketingNotificationsEnabled !== false
-      : prefs.marketingNotificationsEnabled === true;
+    const isKeywordPrefEnabled = prefs.keywordNotificationsEnabled !== false;
+    const isDealPrefEnabled = prefs.dealNotificationsEnabled !== false;
+    const isCategoryPrefEnabled = prefs.categoryNotificationsEnabled !== false;
+    const isCommunityPrefEnabled = prefs.communityNotificationsEnabled !== false;
+    const isSubmissionStatusPrefEnabled = prefs.submissionStatusNotificationsEnabled !== false;
+    const isMarketingPrefEnabled = prefs.marketingNotificationsEnabled !== false;
 
     if (hasReasons) {
       // Hangi sebebin aktif olarak kullanılacağını belirleyelim.
@@ -1261,9 +1254,7 @@ exports.onNotificationCreated = functions.firestore
     }
 
     if (!groupEnabled) {
-      const status = prefs.pushMasterEnabled !== false
-        ? `disabled_by_user_group_${groupName}`
-        : `disabled_by_user_master_switch`;
+      const status = `disabled_by_user_group_${groupName}`;
 
       functions.logger.info(`🚫 Kullanıcı ${userId} için bu bildirim grubu kapalı: ${groupName} (Status: ${status})`);
       await snap.ref.update({
@@ -1273,6 +1264,7 @@ exports.onNotificationCreated = functions.firestore
       });
       return null;
     }
+
 
     // 6. FCM Push Gönder
     const devices = await getUserDeviceTokens(userId);
