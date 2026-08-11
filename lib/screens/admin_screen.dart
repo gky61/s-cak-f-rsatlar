@@ -1323,19 +1323,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       onDealUpdated: () => setState(() {}),
     );
   }
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('Kaydet'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildUsersList() {
     final primaryColor = Theme.of(context).colorScheme.primary;

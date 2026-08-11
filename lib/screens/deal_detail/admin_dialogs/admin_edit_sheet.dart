@@ -838,8 +838,4 @@ Widget _buildSwitchTile({
       ),
     ),
   );
-}       ),
-      ],
-    ),
-  );
 }
