@@ -839,6 +839,20 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             child: const Text('Normal Onayla'),
           ),
           TextButton(
+            onPressed: () => Navigator.pop(context, 'hide_price'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.blue[700],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.visibility_off, size: 18),
+                SizedBox(width: 4),
+                Text('Fiyatı Gizle & Onayla'),
+              ],
+            ),
+          ),
+          TextButton(
             onPressed: () => Navigator.pop(context, 'editor'),
             style: TextButton.styleFrom(
               foregroundColor: Colors.orange[700],
@@ -860,16 +874,22 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
     if (option == 'normal') {
       await _approveDeal(id, isEditorPick: false);
+    } else if (option == 'hide_price') {
+      await _approveDeal(id, isEditorPick: false, hidePrice: true);
     } else if (option == 'editor') {
       await _approveDeal(id, isEditorPick: true);
     }
   }
 
-  Future<void> _approveDeal(String id, {bool isEditorPick = false}) async {
-    await _firestoreService.updateDeal(id, {
+  Future<void> _approveDeal(String id, {bool isEditorPick = false, bool hidePrice = false}) async {
+    final updates = <String, dynamic>{
       'isApproved': true,
       'isEditorPick': isEditorPick,
-    });
+    };
+    if (hidePrice) {
+      updates['hidePrice'] = true;
+    }
+    await _firestoreService.updateDeal(id, updates);
     
     // Anahtar kelime kontrolü yap - onaylanan fırsat için
     try {
@@ -1384,6 +1404,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final primaryColor = Theme.of(context).colorScheme.primary;
     bool isAmazonWarehouse = deal.isAmazonWarehouse;
+    bool hidePrice = deal.hidePrice;
     
     await showDialog(
       context: context,
@@ -1783,6 +1804,52 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                       activeColor: const Color(0xFFD97706),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  // Fiyatı Gizle (Kampanya) Toggle
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: hidePrice
+                          ? Colors.blue.withOpacity(0.08)
+                          : (isDark ? AppTheme.darkSurfaceElevated : Colors.grey[50]),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: hidePrice
+                            ? Colors.blue.withOpacity(0.3)
+                            : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
+                        width: 1,
+                      ),
+                    ),
+                    child: SwitchListTile(
+                      value: hidePrice,
+                      onChanged: (value) {
+                        setState(() {
+                          hidePrice = value;
+                        });
+                      },
+                      title: Row(
+                        children: [
+                          Icon(
+                            Icons.visibility_off,
+                            size: 18,
+                            color: hidePrice ? Colors.blue : Colors.grey,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Fiyatı Gizle (Kampanya / Fiyatsız Fırsat)',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: hidePrice ? Colors.blue : textColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: Colors.blue,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1803,7 +1870,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 }
 
                 final price = double.tryParse(priceController.text.replaceAll(',', '.'));
-                if (price == null || price <= 0) {
+                if (!hidePrice && (price == null || price <= 0)) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Geçerli bir fiyat giriniz')),
                   );
@@ -1821,7 +1888,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 final updates = <String, dynamic>{
                   'title': titleController.text.trim(),
                   'description': descriptionController.text.trim(),
-                  'price': price,
+                  'price': price ?? 0.0,
+                  'hidePrice': hidePrice,
                   'store': storeController.text.trim(),
                   'brand': brandController.text.trim().isNotEmpty ? brandController.text.trim() : null,
                   'link': linkController.text.trim(),

@@ -44,6 +44,20 @@ Future<void> showApproveOptions({
           child: const Text('Normal Onayla'),
         ),
         TextButton(
+          onPressed: () => Navigator.pop(context, 'hide_price'),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.blue[700],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.visibility_off, size: 18),
+              SizedBox(width: 4),
+              Text('Fiyatı Gizle & Onayla'),
+            ],
+          ),
+        ),
+        TextButton(
           onPressed: () => Navigator.pop(context, 'editor'),
           style: TextButton.styleFrom(
             foregroundColor: Colors.orange[700],
@@ -72,6 +86,16 @@ Future<void> showApproveOptions({
       onDealUpdated: onDealUpdated,
       isEditorPick: false,
     );
+  } else if (option == 'hide_price') {
+    await _approveDeal(
+      context: context,
+      dealId: dealId,
+      currentDeal: currentDeal,
+      firestoreService: firestoreService,
+      onDealUpdated: onDealUpdated,
+      isEditorPick: false,
+      hidePrice: true,
+    );
   } else if (option == 'editor') {
     await _approveDeal(
       context: context,
@@ -92,11 +116,16 @@ Future<void> _approveDeal({
   required FirestoreService firestoreService,
   required VoidCallback onDealUpdated,
   bool isEditorPick = false,
+  bool hidePrice = false,
 }) async {
-  await firestoreService.updateDeal(dealId, {
+  final updates = <String, dynamic>{
     'isApproved': true,
     'isEditorPick': isEditorPick,
-  });
+  };
+  if (hidePrice) {
+    updates['hidePrice'] = true;
+  }
+  await firestoreService.updateDeal(dealId, updates);
   
   if (currentDeal != null) {
     try {
