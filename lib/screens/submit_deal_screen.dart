@@ -1615,7 +1615,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             'Fiyatı olmayan bir kampanya veya duyuru paylaşıyorsanız aktifleştirin',
             style: TextStyle(fontSize: 11),
           ),
-          activeColor: primaryColor,
+          activeColor: AppTheme.primary,
           onChanged: (val) {
             setState(() {
               _hidePrice = val;

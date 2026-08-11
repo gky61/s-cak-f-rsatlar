@@ -77,6 +77,7 @@ class FirestoreService {
     double? originalPrice,
     String? priceLabel,
     double? ratingValue,
+    int? ratingCount,
     String? brand,
     bool isAmazonWarehouse = false,
     bool hidePrice = false,
