@@ -27,22 +27,26 @@ void showAdminEditSheet({
         ? deal.price.toInt().toString()
         : deal.price.toStringAsFixed(2),
   );
+  final origP = deal.originalPrice;
   final originalPriceController = TextEditingController(
-    text: deal.originalPrice != null
-        ? (deal.originalPrice == deal.originalPrice!.toInt()
-            ? deal.originalPrice!.toInt().toString()
-            : deal.originalPrice!.toStringAsFixed(2))
+    text: origP != null
+        ? (origP == origP.toInt()
+            ? origP.toInt().toString()
+            : origP.toStringAsFixed(2))
         : '',
   );
+  final effDisc = deal.effectiveDiscountRate;
   final discountController = TextEditingController(
-    text: deal.effectiveDiscountRate != null ? deal.effectiveDiscountRate!.toString() : '',
+    text: effDisc != null ? effDisc.toString() : '',
   );
 
+  final rValue = deal.ratingValue;
   final ratingValueController = TextEditingController(
-    text: deal.ratingValue != null ? deal.ratingValue.toString() : '',
+    text: rValue != null ? rValue.toString() : '',
   );
+  final rCount = deal.ratingCount;
   final ratingCountController = TextEditingController(
-    text: deal.ratingCount != null ? deal.ratingCount.toString() : '',
+    text: rCount != null ? rCount.toString() : '',
   );
 
   String initialCategoryId = Category.normalizeCategoryId(deal.category);
@@ -522,7 +526,7 @@ void showAdminEditSheet({
                                   color: isDark ? AppTheme.darkSurfaceElevated : Colors.grey[100],
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                                    color: isDark ? AppTheme.darkBorder : const Color(0xFFE0E0E0),
                                   ),
                                 ),
                                 child: Row(
@@ -576,7 +580,7 @@ void showAdminEditSheet({
                               value: isEditorPick,
                               title: 'Editörün Seçimi',
                               subtitle: 'Öne çıkan editör rozeti gösterir',
-                              activeColor: Colors.orange[700]!,
+                              activeColor: const Color(0xFFF57C00),
                               icon: Icons.star_rounded,
                               onChanged: (val) => setSheetState(() => isEditorPick = val),
                             ),
@@ -594,7 +598,7 @@ void showAdminEditSheet({
                               value: isExpired,
                               title: 'Fırsat Bitti (Pasif)',
                               subtitle: 'Süresi bitenler sekmesine alır',
-                              activeColor: Colors.red[600]!,
+                              activeColor: const Color(0xFFE53935),
                               icon: Icons.timer_off_rounded,
                               onChanged: (val) => setSheetState(() => isExpired = val),
                             ),
@@ -616,7 +620,7 @@ void showAdminEditSheet({
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    errorText!,
+                                    errorText ?? '',
                                     style: const TextStyle(
                                       color: Colors.red,
                                       fontSize: 13,
@@ -640,7 +644,7 @@ void showAdminEditSheet({
                     color: isDark ? AppTheme.darkSurface : Colors.white,
                     border: Border(
                       top: BorderSide(
-                        color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
+                        color: isDark ? AppTheme.darkBorder : const Color(0xFFEEEEEE),
                       ),
                     ),
                   ),
@@ -696,7 +700,7 @@ Widget _buildSectionCard({
       color: isDark ? AppTheme.darkSurfaceElevated : Colors.grey[50],
       borderRadius: BorderRadius.circular(16),
       border: Border.all(
-        color: isDark ? AppTheme.darkBorder : Colors.grey[200]!,
+        color: isDark ? AppTheme.darkBorder : const Color(0xFFEEEEEE),
       ),
     ),
     child: Column(
@@ -769,11 +773,11 @@ Widget _buildStyledTextField({
             fillColor: isDark ? AppTheme.darkSurface : Colors.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.grey[300]!),
+              borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : const Color(0xFFE0E0E0)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.grey[300]!),
+              borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : const Color(0xFFE0E0E0)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
@@ -801,7 +805,7 @@ Widget _buildSwitchTile({
       color: value ? activeColor.withValues(alpha: 0.08) : (isDark ? AppTheme.darkSurface : Colors.white),
       borderRadius: BorderRadius.circular(10),
       border: Border.all(
-        color: value ? activeColor.withValues(alpha: 0.3) : (isDark ? AppTheme.darkBorder : Colors.grey[250]!),
+        color: value ? activeColor.withValues(alpha: 0.3) : (isDark ? AppTheme.darkBorder : const Color(0xFFE0E0E0)),
       ),
     ),
     child: SwitchListTile(
