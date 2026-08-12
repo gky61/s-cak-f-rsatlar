@@ -1,6 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../models/deal.dart';
+import '../../theme/app_theme.dart';
 
 class DealCardBadge extends StatelessWidget {
   final Deal deal;
@@ -14,92 +14,98 @@ class DealCardBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Alev rengi: Pozitifse canlı turuncu-kırmızı gradient hissi
+    // Uygulama bütünlüğüne uygun canlı renk tanımları
+    // Alev Rengi: Uygulamanın ana Vibrant Orange rengi (0xFFFF6B35) veya Canlı Alev Turuncusu (0xFFFF5200)
     final bool isHot = deal.hotVotes > 0;
     final Color flameColor = isHot 
-        ? const Color(0xFFFF5252) 
-        : (isDark ? Colors.grey[400]! : Colors.grey[600]!);
+        ? AppTheme.primary 
+        : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B));
     
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: isDark 
-                ? const Color(0xFF1E1E2C).withOpacity(0.75) 
-                : Colors.white.withOpacity(0.85),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isDark 
-                  ? Colors.white.withOpacity(0.15) 
-                  : Colors.black.withOpacity(0.08),
-              width: 0.8,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDark 
-                    ? Colors.black.withOpacity(0.3) 
-                    : Colors.black.withOpacity(0.06),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Alev / Hotness Göstergesi
-              Icon(
-                Icons.local_fire_department_rounded,
-                size: 13,
-                color: flameColor,
-              ),
-              const SizedBox(width: 3),
-              Text(
-                '${deal.hotVotes > 0 ? "+" : ""}${deal.hotVotes}',
-                style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF1F2937),
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                ),
-              ),
+    // Yorum İkon Rengi: Uygulama Secondary Mavi (0xFF004E92) / Canlı Safir Mavi (0xFF2563EB)
+    final Color commentIconColor = isDark 
+        ? const Color(0xFF60A5FA) 
+        : AppTheme.secondary;
 
-              // Zarif Ayırıcı Çizgi
-              Container(
-                width: 1,
-                height: 10,
-                margin: const EdgeInsets.symmetric(horizontal: 5),
-                decoration: BoxDecoration(
-                  color: isDark 
-                      ? Colors.white.withOpacity(0.2) 
-                      : Colors.black.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
+    // Metin Rengi: Yüksek kontrast ve belirginlik
+    final Color textColor = isDark 
+        ? Colors.white 
+        : const Color(0xFF0F172A);
 
-              // Yorum Göstergesi
-              Icon(
-                Icons.chat_bubble_outline_rounded,
-                size: 12,
-                color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF4B5563),
-              ),
-              const SizedBox(width: 3),
-              Text(
-                '${deal.commentCount}',
-                style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF1F2937),
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                ),
-              ),
-            ],
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        // Belirgin, tok ve yüksek opaklıkta zemin (Gece: Koyu Neom | Gündüz: Saf Beyaz)
+        color: isDark 
+            ? const Color(0xFF1E1E2D).withValues(alpha: 0.95) 
+            : Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark 
+              ? const Color(0xFF33354A) 
+              : const Color(0xFFE2E8F0),
+          width: 1.0,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark 
+                ? Colors.black.withValues(alpha: 0.4) 
+                : Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Alev / Hotness Göstergesi (Canlı Uygulama Alev Rengi)
+          Icon(
+            Icons.local_fire_department_rounded,
+            size: 14,
+            color: flameColor,
+          ),
+          const SizedBox(width: 3),
+          Text(
+            '${deal.hotVotes > 0 ? "+" : ""}${deal.hotVotes}',
+            style: TextStyle(
+              color: textColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+            ),
+          ),
+
+          // Canlı ve Belirgin Ayırıcı Çizgi
+          Container(
+            width: 1,
+            height: 11,
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: isDark 
+                  ? const Color(0xFF475569) 
+                  : const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+
+          // Yorum Göstergesi (Canlı Mavi / Secondary)
+          Icon(
+            Icons.chat_bubble_rounded,
+            size: 12,
+            color: commentIconColor,
+          ),
+          const SizedBox(width: 3),
+          Text(
+            '${deal.commentCount}',
+            style: TextStyle(
+              color: textColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+            ),
+          ),
+        ],
       ),
     );
   }
