@@ -387,24 +387,18 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                       ),
                       Row(
                         children: [
-                          // Tümünü Seç Butonu (Kibar Kapsül)
+                          // Tümünü Seç Butonu (Her Zaman Yeşil)
                           InkWell(
-                            onTap: (_isProcessingBulk || _activeCategoryCount == _filteredCategories.length) 
-                                ? null 
-                                : _selectAllCategories,
+                            onTap: _isProcessingBulk ? null : _selectAllCategories,
                             borderRadius: BorderRadius.circular(20),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6.5),
                               decoration: BoxDecoration(
-                                color: _activeCategoryCount == _filteredCategories.length
-                                    ? (isDark ? Colors.white10 : Colors.grey[200])
-                                    : (isDark ? const Color(0xFF1B382B) : const Color(0xFFE8F5E9)),
+                                color: isDark ? const Color(0xFF1B382B) : const Color(0xFFE8F5E9),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: _activeCategoryCount == _filteredCategories.length
-                                      ? Colors.transparent
-                                      : const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                                  color: const Color(0xFF4CAF50).withValues(alpha: 0.6),
                                   width: 1,
                                 ),
                               ),
@@ -419,23 +413,19 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     ),
                                     const SizedBox(width: 6),
                                   ] else ...[
-                                    Icon(
+                                    const Icon(
                                       Icons.done_all_rounded,
                                       size: 14,
-                                      color: _activeCategoryCount == _filteredCategories.length
-                                          ? secondaryTextColor
-                                          : const Color(0xFF2E7D32),
+                                      color: Color(0xFF2E7D32),
                                     ),
                                     const SizedBox(width: 4),
                                   ],
-                                  Text(
+                                  const Text(
                                     'Tümünü Seç',
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w700,
-                                      color: _activeCategoryCount == _filteredCategories.length
-                                          ? secondaryTextColor
-                                          : const Color(0xFF2E7D32),
+                                      color: Color(0xFF2E7D32),
                                     ),
                                   ),
                                 ],
@@ -443,24 +433,18 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Seçimleri Temizle Butonu (Kibar Kapsül)
+                          // Seçimleri Temizle Butonu (Her Zaman Kırmızı)
                           InkWell(
-                            onTap: (_isProcessingBulk || _activeCategoryCount == 0) 
-                                ? null 
-                                : _clearAllCategories,
+                            onTap: _isProcessingBulk ? null : _clearAllCategories,
                             borderRadius: BorderRadius.circular(20),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6.5),
                               decoration: BoxDecoration(
-                                color: _activeCategoryCount == 0
-                                    ? (isDark ? Colors.white10 : Colors.grey[200])
-                                    : (isDark ? const Color(0xFF381B1B) : const Color(0xFFFFEBEE)),
+                                color: isDark ? const Color(0xFF381B1B) : const Color(0xFFFFEBEE),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: _activeCategoryCount == 0
-                                      ? Colors.transparent
-                                      : const Color(0xFFEF5350).withValues(alpha: 0.5),
+                                  color: const Color(0xFFEF5350).withValues(alpha: 0.6),
                                   width: 1,
                                 ),
                               ),
@@ -475,23 +459,19 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     ),
                                     const SizedBox(width: 6),
                                   ] else ...[
-                                    Icon(
+                                    const Icon(
                                       Icons.deselect_rounded,
                                       size: 14,
-                                      color: _activeCategoryCount == 0
-                                          ? secondaryTextColor
-                                          : const Color(0xFFC62828),
+                                      color: Color(0xFFC62828),
                                     ),
                                     const SizedBox(width: 4),
                                   ],
-                                  Text(
+                                  const Text(
                                     'Temizle',
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w700,
-                                      color: _activeCategoryCount == 0
-                                          ? secondaryTextColor
-                                          : const Color(0xFFC62828),
+                                      color: Color(0xFFC62828),
                                     ),
                                   ),
                                 ],
