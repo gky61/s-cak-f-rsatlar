@@ -218,7 +218,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         final items = allItems.where((item) {
           final type = item['type'] as String;
           if (_selectedTab == 'admin') {
-            return type == 'admin_message' || type == 'admin';
+            return type == 'admin_message' || type == 'admin' || type == 'marketing' || type == 'manual_notification';
           } else if (_selectedTab == 'replies') {
             return type == 'comment_reply' || type == 'comment';
           }
@@ -267,7 +267,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               icon = Icons.reply_rounded;
               iconColor = Colors.green;
               iconBg = isDark ? Colors.green.withValues(alpha: 0.15) : Colors.green[50]!;
-            } else if (type == 'admin_message' || type == 'admin') {
+            } else if (type == 'admin_message' || type == 'admin' || type == 'marketing' || type == 'manual_notification') {
               icon = Icons.campaign;
               iconColor = Colors.blue;
               iconBg = isDark ? Colors.blue.withValues(alpha: 0.15) : Colors.blue[50]!;

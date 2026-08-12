@@ -1873,7 +1873,7 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
           .doc(notificationId);
 
         batch.set(notificationRef, {
-          type: 'marketing',
+          type: 'admin_message',
           title: title,
           body: body,
           imageUrl: imageUrl || null,
@@ -1906,13 +1906,33 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
         .doc(notificationId);
 
       await notificationRef.set({
-        type: 'marketing',
+        type: 'admin_message',
         title: title,
         body: body,
         imageUrl: imageUrl || null,
         read: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
+
+      // FCM Push Notification Gönderimi
+      const userDoc = await admin.firestore().collection('users').doc(targetValue).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        const tokens = userData.fcmTokens || (userData.fcmToken ? [userData.fcmToken] : []);
+        if (tokens.length > 0) {
+          const userMessage = {
+            ...message,
+            token: tokens[tokens.length - 1]
+          };
+          try {
+            await admin.messaging().send(userMessage);
+            functions.logger.info(`📱 FCM Push bildirimi gönderildi: ${targetValue}`);
+          } catch (fcmErr) {
+            functions.logger.error(`❌ FCM gönderim hatası (${targetValue}):`, fcmErr);
+          }
+        }
+      }
+
       responseId = `written_to_notifications_of_${targetValue}`;
 
     } else {
