@@ -387,7 +387,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                       ),
                       Row(
                         children: [
-                          // Tümünü Seç Butonu (Her Zaman Yeşil)
+                          // Tümünü Seç Butonu (Varsayılan Şeffaf -> Tıklanınca/Seçilince Yeşil)
                           InkWell(
                             onTap: _isProcessingBulk ? null : _selectAllCategories,
                             borderRadius: BorderRadius.circular(20),
@@ -395,10 +395,14 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6.5),
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF1B382B) : const Color(0xFFE8F5E9),
+                                color: (_activeCategoryCount == _filteredCategories.length && _filteredCategories.isNotEmpty)
+                                    ? (isDark ? const Color(0xFF1B382B) : const Color(0xFFE8F5E9))
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: const Color(0xFF4CAF50).withValues(alpha: 0.6),
+                                  color: (_activeCategoryCount == _filteredCategories.length && _filteredCategories.isNotEmpty)
+                                      ? const Color(0xFF4CAF50)
+                                      : (isDark ? Colors.white24 : Colors.grey[300]!),
                                   width: 1,
                                 ),
                               ),
@@ -413,19 +417,23 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     ),
                                     const SizedBox(width: 6),
                                   ] else ...[
-                                    const Icon(
+                                    Icon(
                                       Icons.done_all_rounded,
                                       size: 14,
-                                      color: Color(0xFF2E7D32),
+                                      color: (_activeCategoryCount == _filteredCategories.length && _filteredCategories.isNotEmpty)
+                                          ? const Color(0xFF2E7D32)
+                                          : secondaryTextColor,
                                     ),
                                     const SizedBox(width: 4),
                                   ],
-                                  const Text(
+                                  Text(
                                     'Tümünü Seç',
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w700,
-                                      color: Color(0xFF2E7D32),
+                                      color: (_activeCategoryCount == _filteredCategories.length && _filteredCategories.isNotEmpty)
+                                          ? const Color(0xFF2E7D32)
+                                          : secondaryTextColor,
                                     ),
                                   ),
                                 ],
@@ -433,7 +441,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Seçimleri Temizle Butonu (Her Zaman Kırmızı)
+                          // Seçimleri Temizle Butonu (Varsayılan Şeffaf -> Tıklanınca/Temizlenince Kırmızı)
                           InkWell(
                             onTap: _isProcessingBulk ? null : _clearAllCategories,
                             borderRadius: BorderRadius.circular(20),
@@ -441,10 +449,14 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6.5),
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF381B1B) : const Color(0xFFFFEBEE),
+                                color: _activeCategoryCount == 0
+                                    ? (isDark ? const Color(0xFF381B1B) : const Color(0xFFFFEBEE))
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: const Color(0xFFEF5350).withValues(alpha: 0.6),
+                                  color: _activeCategoryCount == 0
+                                      ? const Color(0xFFEF5350)
+                                      : (isDark ? Colors.white24 : Colors.grey[300]!),
                                   width: 1,
                                 ),
                               ),
@@ -459,19 +471,23 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     ),
                                     const SizedBox(width: 6),
                                   ] else ...[
-                                    const Icon(
+                                    Icon(
                                       Icons.deselect_rounded,
                                       size: 14,
-                                      color: Color(0xFFC62828),
+                                      color: _activeCategoryCount == 0
+                                          ? const Color(0xFFC62828)
+                                          : secondaryTextColor,
                                     ),
                                     const SizedBox(width: 4),
                                   ],
-                                  const Text(
+                                  Text(
                                     'Temizle',
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w700,
-                                      color: Color(0xFFC62828),
+                                      color: _activeCategoryCount == 0
+                                          ? const Color(0xFFC62828)
+                                          : secondaryTextColor,
                                     ),
                                   ),
                                 ],
