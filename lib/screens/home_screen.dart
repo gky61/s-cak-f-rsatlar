@@ -9,6 +9,7 @@ import '../services/deal_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/theme_service.dart';
+import '../services/deal_search_engine.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../widgets/offline_banner.dart';
@@ -1111,20 +1112,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       }).toList();
                 }
 
-                // Arama filtresi
-                if (_searchQuery.isNotEmpty) {
-                  final query = _searchQuery.toLowerCase();
-                  filteredDeals = filteredDeals.where((deal) {
-                    return deal.title.toLowerCase().contains(query) ||
-                           deal.description.toLowerCase().contains(query) ||
-                           deal.store.toLowerCase().contains(query);
-                  }).toList();
+                // Akıllı Arama Filtresi & Alaka Düzeyi Sıralaması
+                if (_searchQuery.trim().isNotEmpty) {
+                  filteredDeals = DealSearchEngine.searchDeals(filteredDeals, _searchQuery);
+                } else {
+                  // Arama yapılmıyorsa en yeni eklenen fırsatlar en üstte yer alır (Freshness First)
+                  final List<Deal> sortedDeals = List<Deal>.from(filteredDeals);
+                  sortedDeals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+                  filteredDeals = sortedDeals;
                 }
-
-                // Ana sayfada HER ZAMAN en yeni eklenen fırsatlar en üstte yer alır (Freshness First)
-                final List<Deal> sortedDeals = List<Deal>.from(filteredDeals);
-                sortedDeals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-                filteredDeals = sortedDeals;
 
                 // Pagination için deal'leri güncelle
                 _allDeals = filteredDeals;
