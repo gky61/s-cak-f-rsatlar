@@ -410,17 +410,20 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
     required Color? textSub,
     required Color surfaceColor,
   }) {
+    final isAdmin = message.isAdminMessage;
+    final cardDisplayName = isAdmin ? 'FırsatKolik Yönetim' : displayName;
+
     return Container(
       decoration: BoxDecoration(
         color: isUnread
             ? (isDark
-                ? primaryColor.withValues(alpha: 0.16)
-                : primaryColor.withValues(alpha: 0.08))
+                ? (isAdmin ? const Color(0xFF1E293B) : primaryColor.withValues(alpha: 0.16))
+                : (isAdmin ? const Color(0xFFEFF6FF) : primaryColor.withValues(alpha: 0.08)))
             : surfaceColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isUnread
-              ? primaryColor.withValues(alpha: 0.5)
+              ? (isAdmin ? const Color(0xFF3B82F6).withValues(alpha: 0.6) : primaryColor.withValues(alpha: 0.5))
               : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
           width: isUnread ? 1.5 : 1,
         ),
@@ -441,14 +444,15 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
               context,
               MaterialPageRoute(
                 builder: (_) => MessageScreen(
-                  otherUserId: otherUserId,
-                  otherUserName: displayName,
+                  otherUserId: isAdmin ? 'admin' : otherUserId,
+                  otherUserName: cardDisplayName,
                   otherUserImageUrl: profileImageUrl,
+                  isAdminMessage: isAdmin,
                 ),
               ),
             );
           },
-          onLongPress: () => _showDeleteDialog(context, message, displayName),
+          onLongPress: () => _showDeleteDialog(context, message, cardDisplayName),
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -464,11 +468,20 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: isUnread
-                            ? LinearGradient(colors: [primaryColor, primaryColor.withValues(alpha: 0.5)])
+                            ? LinearGradient(
+                                colors: isAdmin
+                                    ? [const Color(0xFF2563EB), const Color(0xFF60A5FA)]
+                                    : [primaryColor, primaryColor.withValues(alpha: 0.5)],
+                              )
                             : null,
                       ),
                       child: ClipOval(
-                        child: _buildAvatar(profileImageUrl, 48),
+                        child: isAdmin
+                            ? Container(
+                                color: const Color(0xFF2196F3).withValues(alpha: 0.15),
+                                child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF2196F3), size: 24),
+                              )
+                            : _buildAvatar(profileImageUrl, 48),
                       ),
                     ),
                     if (isUnread)
@@ -479,7 +492,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                           width: 12,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: primaryColor,
+                            color: isAdmin ? const Color(0xFF2563EB) : primaryColor,
                             shape: BoxShape.circle,
                             border: Border.all(color: surfaceColor, width: 2),
                           ),
@@ -498,15 +511,25 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Text(
-                              displayName,
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: isUnread ? FontWeight.w800 : FontWeight.w700,
-                                color: textMain,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    cardDisplayName,
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: isUnread ? FontWeight.w800 : FontWeight.w700,
+                                      color: textMain,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isAdmin) ...[
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.verified_rounded, color: Color(0xFF2196F3), size: 15),
+                                ],
+                              ],
                             ),
                           ),
                           Text(
@@ -514,7 +537,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
-                              color: isUnread ? primaryColor : textSub,
+                              color: isUnread ? (isAdmin ? const Color(0xFF2563EB) : primaryColor) : textSub,
                             ),
                           ),
                         ],
@@ -612,19 +635,24 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
     if (confirmed == true && mounted) {
       HapticFeedback.mediumImpact();
       try {
-        final currentUserId = _authService.currentUser!.uid;
-        final messages = await _firestoreService.getUserMessagesStream(currentUserId).first;
-        final otherUserId = message.senderId == currentUserId
-            ? message.receiverId
-            : message.senderId;
+        if (message.isAdminMessage) {
+          await _firestoreService.deleteAdminToUserMessage(message.id);
+        } else {
+          final currentUserId = _authService.currentUser!.uid;
+          final messages = await _firestoreService.getUserMessagesStream(currentUserId).first;
+          final otherUserId = message.senderId == currentUserId
+              ? message.receiverId
+              : message.senderId;
 
-        final conversationMessages = messages.where((m) =>
-          (m.senderId == currentUserId && m.receiverId == otherUserId) ||
-          (m.receiverId == currentUserId && m.senderId == otherUserId)
-        ).toList();
+          final conversationMessages = messages.where((m) =>
+            !m.isAdminMessage &&
+            ((m.senderId == currentUserId && m.receiverId == otherUserId) ||
+            (m.receiverId == currentUserId && m.senderId == otherUserId))
+          ).toList();
 
-        for (var msg in conversationMessages) {
-          await _firestoreService.deleteUserMessage(msg.id);
+          for (var msg in conversationMessages) {
+            await _firestoreService.deleteUserMessage(msg.id);
+          }
         }
 
         if (mounted) {

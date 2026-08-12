@@ -15,12 +15,14 @@ class MessageScreen extends StatefulWidget {
   final String otherUserId;
   final String otherUserName;
   final String otherUserImageUrl;
+  final bool isAdminMessage;
 
   const MessageScreen({
     super.key,
     required this.otherUserId,
     required this.otherUserName,
     required this.otherUserImageUrl,
+    this.isAdminMessage = false,
   });
 
   @override
@@ -48,16 +50,20 @@ class _MessageScreenState extends State<MessageScreen> {
     if (currentUserId == null) return;
 
     for (final message in messages) {
-      if (message.receiverId == currentUserId && 
-          !message.isRead && 
-          !_markedAsRead.contains(message.id)) {
+      if (!message.isRead && !_markedAsRead.contains(message.id)) {
         _markedAsRead.add(message.id);
-        await _firestoreService.markMessageAsRead(message.id);
+        if (message.isAdminMessage) {
+          await _firestoreService.markAdminToUserMessageAsRead(message.id);
+        } else if (message.receiverId == currentUserId) {
+          await _firestoreService.markMessageAsRead(message.id);
+        }
       }
     }
   }
 
   Future<void> _sendMessage() async {
+    if (widget.isAdminMessage) return;
+
     final text = _messageController.text.trim();
     if (text.isEmpty || _isSending) return;
 
@@ -129,7 +135,7 @@ class _MessageScreenState extends State<MessageScreen> {
 
             String otherUserImageUrl = widget.otherUserImageUrl;
             String otherUserName = widget.otherUserName;
-            if (otherUserSnapshot.hasData && otherUserSnapshot.data!.exists) {
+            if (!widget.isAdminMessage && otherUserSnapshot.hasData && otherUserSnapshot.data!.exists) {
               otherUserImageUrl = migrateAssetPath(otherUserSnapshot.data!.data()?['profileImageUrl'] ?? otherUserImageUrl);
               otherUserName = otherUserSnapshot.data!.data()?['username'] ?? otherUserSnapshot.data!.data()?['displayName'] ?? otherUserName;
             }
@@ -142,12 +148,14 @@ class _MessageScreenState extends State<MessageScreen> {
                 elevation: 0,
                 titleSpacing: 0,
                 title: InkWell(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => ProfileScreen(userId: widget.otherUserId)),
-                    );
-                  },
+                  onTap: widget.isAdminMessage
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => ProfileScreen(userId: widget.otherUserId)),
+                          );
+                        },
                   borderRadius: BorderRadius.circular(20),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
@@ -158,10 +166,20 @@ class _MessageScreenState extends State<MessageScreen> {
                           height: 38,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: primaryColor.withValues(alpha: 0.3), width: 1.5),
+                            border: Border.all(
+                              color: widget.isAdminMessage
+                                  ? const Color(0xFF2196F3)
+                                  : primaryColor.withValues(alpha: 0.3),
+                              width: 1.5,
+                            ),
                           ),
                           child: ClipOval(
-                            child: _buildAvatar(otherUserImageUrl, 38),
+                            child: widget.isAdminMessage
+                                ? Container(
+                                    color: const Color(0xFF2196F3).withValues(alpha: 0.15),
+                                    child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF2196F3), size: 22),
+                                  )
+                                : _buildAvatar(otherUserImageUrl, 38),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -169,32 +187,42 @@ class _MessageScreenState extends State<MessageScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                otherUserName,
-                                style: TextStyle(
-                                  fontSize: 15.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: textMain,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      widget.isAdminMessage ? 'FırsatKolik Yönetim' : otherUserName,
+                                      style: TextStyle(
+                                        fontSize: 15.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: textMain,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (widget.isAdminMessage) ...[
+                                    const SizedBox(width: 6),
+                                    const Icon(Icons.verified_rounded, color: Color(0xFF2196F3), size: 16),
+                                  ],
+                                ],
                               ),
                               Row(
                                 children: [
                                   Container(
                                     width: 7,
                                     height: 7,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.green,
+                                    decoration: BoxDecoration(
+                                      color: widget.isAdminMessage ? const Color(0xFF2196F3) : Colors.green,
                                       shape: BoxShape.circle,
                                     ),
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'Üye Profili',
+                                    widget.isAdminMessage ? 'Resmi Yönetici Mesajı' : 'Üye Profili',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: textSub,
-                                      fontWeight: FontWeight.w500,
+                                      color: widget.isAdminMessage ? const Color(0xFF2196F3) : textSub,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ],
@@ -212,9 +240,19 @@ class _MessageScreenState extends State<MessageScreen> {
                   // Mesaj Listesi
                   Expanded(
                     child: StreamBuilder<List<Message>>(
-                      stream: currentUserId != null
-                          ? _firestoreService.getConversationStream(currentUserId, widget.otherUserId)
-                          : Stream.value([]),
+                      stream: widget.isAdminMessage
+                          ? FirebaseFirestore.instance
+                              .collection('adminToUserMessages')
+                              .where('userId', isEqualTo: currentUserId)
+                              .snapshots()
+                              .map((snap) {
+                              final list = snap.docs.map((d) => Message.fromAdminFirestore(d)).toList();
+                              list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+                              return list;
+                            })
+                          : (currentUserId != null
+                              ? _firestoreService.getConversationStream(currentUserId, widget.otherUserId)
+                              : Stream.value([])),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
                           return const Center(child: CircularProgressIndicator());
@@ -265,7 +303,7 @@ class _MessageScreenState extends State<MessageScreen> {
                           itemCount: messages.length,
                           itemBuilder: (context, index) {
                             final message = messages[index];
-                            final isMe = message.senderId == currentUserId;
+                            final isMe = !message.isAdminMessage && message.senderId == currentUserId;
                             final showDate = index == 0 ||
                                 messages[index - 1].createdAt.difference(message.createdAt).inDays != 0;
 
@@ -300,20 +338,19 @@ class _MessageScreenState extends State<MessageScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       if (!isMe) ...[
-                                        GestureDetector(
-                                          onTap: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => ProfileScreen(userId: message.senderId),
-                                              ),
-                                            );
-                                          },
-                                          child: Container(
-                                            width: 28,
-                                            height: 28,
-                                            decoration: const BoxDecoration(shape: BoxShape.circle),
-                                            child: ClipOval(child: _buildAvatar(otherUserImageUrl, 28)),
+                                        Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: message.isAdminMessage
+                                                ? const Color(0xFF2196F3).withValues(alpha: 0.15)
+                                                : Colors.transparent,
+                                          ),
+                                          child: ClipOval(
+                                            child: message.isAdminMessage
+                                                ? const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF2196F3), size: 20)
+                                                : _buildAvatar(otherUserImageUrl, 32),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -322,23 +359,29 @@ class _MessageScreenState extends State<MessageScreen> {
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                           decoration: BoxDecoration(
-                                            color: isMe
-                                                ? primaryColor
-                                                : (isDark ? Colors.grey[800] : Colors.white),
+                                            color: message.isAdminMessage
+                                                ? (isDark
+                                                    ? const Color(0xFF1E293B)
+                                                    : const Color(0xFFEFF6FF))
+                                                : (isMe
+                                                    ? primaryColor
+                                                    : (isDark ? Colors.grey[800] : Colors.white)),
                                             borderRadius: BorderRadius.only(
                                               topLeft: const Radius.circular(18),
                                               topRight: const Radius.circular(18),
                                               bottomLeft: Radius.circular(isMe ? 18 : 4),
                                               bottomRight: Radius.circular(isMe ? 4 : 18),
                                             ),
-                                            border: isMe
-                                                ? null
-                                                : Border.all(
-                                                    color: isDark
-                                                        ? Colors.white.withValues(alpha: 0.08)
-                                                        : Colors.black.withValues(alpha: 0.06),
-                                                    width: 1,
-                                                  ),
+                                            border: Border.all(
+                                              color: message.isAdminMessage
+                                                  ? const Color(0xFF3B82F6).withValues(alpha: 0.4)
+                                                  : (isMe
+                                                      ? Colors.transparent
+                                                      : (isDark
+                                                          ? Colors.white.withValues(alpha: 0.08)
+                                                          : Colors.black.withValues(alpha: 0.06))),
+                                              width: 1,
+                                            ),
                                             boxShadow: [
                                               BoxShadow(
                                                 color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
@@ -351,6 +394,24 @@ class _MessageScreenState extends State<MessageScreen> {
                                             crossAxisAlignment:
                                                 isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                                             children: [
+                                              if (message.isAdminMessage) ...[
+                                                const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.campaign_rounded, size: 15, color: Color(0xFF2563EB)),
+                                                    SizedBox(width: 4),
+                                                    Text(
+                                                      'Yönetici Mesajı',
+                                                      style: TextStyle(
+                                                        fontSize: 11.5,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: Color(0xFF2563EB),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 6),
+                                              ],
                                               Text(
                                                 message.text,
                                                 style: TextStyle(
@@ -403,75 +464,124 @@ class _MessageScreenState extends State<MessageScreen> {
                     ),
                   ),
 
-                  // Mesaj Gönderme Çubuğu
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
-                          blurRadius: 10,
-                          offset: const Offset(0, -4),
-                        ),
-                      ],
-                    ),
-                    child: SafeArea(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.05)
-                                    : const Color(0xFFF1F3F5),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.1)
-                                      : Colors.grey[300]!,
-                                  width: 1,
-                                ),
-                              ),
-                              child: TextField(
-                                controller: _messageController,
-                                maxLines: 4,
-                                minLines: 1,
-                                textCapitalization: TextCapitalization.sentences,
-                                style: TextStyle(color: textMain, fontSize: 14),
-                                decoration: InputDecoration(
-                                  hintText: 'Bir mesaj yazın...',
-                                  hintStyle: TextStyle(color: textSub?.withValues(alpha: 0.7), fontSize: 13.5),
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                ),
-                                onSubmitted: (_) => _sendMessage(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          InkWell(
-                            onTap: _isSending ? null : _sendMessage,
-                            borderRadius: BorderRadius.circular(24),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: primaryColor,
-                                shape: BoxShape.circle,
-                              ),
-                              child: _isSending
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                    )
-                                  : const Icon(Icons.send_rounded, color: Colors.white, size: 18),
-                            ),
+                  // Mesaj Gönderme / Kilitli Bilgilendirme Çubuğu
+                  if (widget.isAdminMessage)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: surfaceColor,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, -4),
                           ),
                         ],
                       ),
+                      child: SafeArea(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1E293B)
+                                : const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
+                              width: 1,
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.lock_rounded, size: 16, color: Color(0xFF2563EB)),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Bu resmi bir yönetici duyuru mesajıdır. Yanıt verilemez.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF2563EB),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                      decoration: BoxDecoration(
+                        color: surfaceColor,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, -4),
+                          ),
+                        ],
+                      ),
+                      child: SafeArea(
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.05)
+                                      : const Color(0xFFF1F3F5),
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.1)
+                                        : Colors.grey[300]!,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: TextField(
+                                  controller: _messageController,
+                                  maxLines: 4,
+                                  minLines: 1,
+                                  textCapitalization: TextCapitalization.sentences,
+                                  style: TextStyle(color: textMain, fontSize: 14),
+                                  decoration: InputDecoration(
+                                    hintText: 'Bir mesaj yazın...',
+                                    hintStyle: TextStyle(color: textSub?.withValues(alpha: 0.7), fontSize: 13.5),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  ),
+                                  onSubmitted: (_) => _sendMessage(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            InkWell(
+                              onTap: _isSending ? null : _sendMessage,
+                              borderRadius: BorderRadius.circular(24),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: primaryColor,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: _isSending
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      )
+                                    : const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
             );

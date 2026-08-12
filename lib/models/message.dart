@@ -18,6 +18,7 @@ class Message {
   final DateTime createdAt;
   final bool isRead;
   final bool isReadByAdmin;
+  final bool isAdminMessage;
 
   Message({
     required this.id,
@@ -31,6 +32,7 @@ class Message {
     required this.createdAt,
     this.isRead = false,
     this.isReadByAdmin = false,
+    this.isAdminMessage = false,
   });
 
   // Firestore'dan Message oluşturma
@@ -67,6 +69,48 @@ class Message {
       createdAt: createdAt,
       isRead: data['isRead'] ?? false,
       isReadByAdmin: data['isReadByAdmin'] ?? false,
+      isAdminMessage: data['isAdminMessage'] ?? false,
+    );
+  }
+
+  // adminToUserMessages koleksiyonundan Message dönüştürme
+  factory Message.fromAdminFirestore(DocumentSnapshot doc) {
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+
+    DateTime createdAt;
+    try {
+      final createdAtValue = data['createdAt'];
+      if (createdAtValue is Timestamp) {
+        createdAt = createdAtValue.toDate();
+      } else if (createdAtValue is DateTime) {
+        createdAt = createdAtValue;
+      } else if (createdAtValue is String) {
+        createdAt = DateTime.parse(createdAtValue);
+      } else {
+        createdAt = DateTime.now();
+      }
+    } catch (e) {
+      createdAt = DateTime.now();
+    }
+
+    final title = data['title'] ?? '';
+    final content = data['content'] ?? '';
+    final fullText = title.isNotEmpty ? '$title\n\n$content' : content;
+    final adminName = data['adminName'] ?? 'FırsatKolik Yönetim';
+
+    return Message(
+      id: doc.id,
+      senderId: data['adminId'] ?? 'admin',
+      senderName: adminName,
+      senderImageUrl: 'assets/images/app_icon.png',
+      receiverId: data['userId'] ?? '',
+      receiverName: '',
+      receiverImageUrl: '',
+      text: fullText,
+      createdAt: createdAt,
+      isRead: data['isRead'] ?? false,
+      isReadByAdmin: true,
+      isAdminMessage: true,
     );
   }
 
@@ -98,6 +142,7 @@ class Message {
     DateTime? createdAt,
     bool? isRead,
     bool? isReadByAdmin,
+    bool? isAdminMessage,
   }) {
     return Message(
       id: id ?? this.id,
@@ -111,6 +156,7 @@ class Message {
       createdAt: createdAt ?? this.createdAt,
       isRead: isRead ?? this.isRead,
       isReadByAdmin: isReadByAdmin ?? this.isReadByAdmin,
+      isAdminMessage: isAdminMessage ?? this.isAdminMessage,
     );
   }
 }

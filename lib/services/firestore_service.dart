@@ -422,13 +422,14 @@ class FirestoreService {
     late StreamController<List<Message>> controller;
     StreamSubscription? senderSub;
     StreamSubscription? receiverSub;
+    StreamSubscription? adminSub;
 
     controller = StreamController<List<Message>>(
       onListen: () {
-        List<Message> s = [], r = [];
+        List<Message> s = [], r = [], a = [];
         void emit() {
           if (!controller.isClosed) {
-            final all = [...s, ...r]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            final all = [...s, ...r, ...a]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
             controller.add(all);
           }
         }
@@ -443,9 +444,7 @@ class FirestoreService {
             emit();
           },
           onError: (error) {
-            if (error.toString().contains('permission-denied')) {
-              _log('ℹ️ senderStream çıkış sırasında kapandı (beklenen)');
-            } else {
+            if (!error.toString().contains('permission-denied')) {
               _log('⚠️ senderStream error: $error');
             }
           },
@@ -461,10 +460,24 @@ class FirestoreService {
             emit();
           },
           onError: (error) {
-            if (error.toString().contains('permission-denied')) {
-              _log('ℹ️ receiverStream çıkış sırasında kapandı (beklenen)');
-            } else {
+            if (!error.toString().contains('permission-denied')) {
               _log('⚠️ receiverStream error: $error');
+            }
+          },
+        );
+
+        adminSub = firestore
+            .collection('adminToUserMessages')
+            .where('userId', isEqualTo: userId)
+            .snapshots()
+            .listen(
+          (snap) {
+            a = snap.docs.map((d) => Message.fromAdminFirestore(d)).toList();
+            emit();
+          },
+          onError: (error) {
+            if (!error.toString().contains('permission-denied')) {
+              _log('⚠️ adminStream error: $error');
             }
           },
         );
@@ -472,6 +485,7 @@ class FirestoreService {
       onCancel: () {
         senderSub?.cancel();
         receiverSub?.cancel();
+        adminSub?.cancel();
       },
     );
 
