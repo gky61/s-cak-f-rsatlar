@@ -7,9 +7,12 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Türkçe karakter temizleme fonksiyonu
+// Türkçe karakter temizleme fonksiyonu (Harf duyarsız normalize)
 const normalize = (text = '') =>
   text
+    .toString()
+    .replace(/İ/g, 'i')
+    .replace(/I/g, 'i')
     .toLowerCase()
     .replace(/ç/g, 'c')
     .replace(/ğ/g, 'g')
@@ -222,16 +225,43 @@ async function matchAndCreateDealNotifications(deal, dealId) {
   const postedBy = deal.postedBy || '';
   const isUserSubmitted = deal.isUserSubmitted || false;
 
-  functions.logger.info('🎯 matchAndCreateDealNotifications başlatılıyor:', { dealId, title });
-
-  // 1. Anahtar kelimeleri topla ve normalize et
+  // 1. Anahtar kelimeleri topla, N-gram (1'li, 2'li, 3'lü sözcük öbekleri) üret ve normalize et
   const text = `${title} ${description}`;
   const normalizedText = normalize(text);
-  const allWords = normalizedText.split(/[\s,\.\!\?\(\)\[\]\{\}"']+/);
-  const stopWords = ['bir', 've', 'veya', 'ile', 'icin', 'cok', 'bu', 'su', 'o', 'daha', 'en', 'kadar', 'gibi', 'diye', 'yok', 'var', 'mi', 'mu', 'mü', 'ama', 'fakat', 'lakin', 'bile', 'ben', 'sen', 'biz', 'siz', 'onlar'];
-  const uniqueKeywords = [...new Set(allWords)]
-    .filter(w => w && w.length >= 3 && !stopWords.includes(w));
+  const words = normalizedText
+    .split(/[\s,\.\!\?\(\)\[\]\{\}"'\\/:\-]+/)
+    .filter(w => w && w.length >= 2);
 
+  const stopWords = ['bir', 've', 'veya', 'ile', 'icin', 'cok', 'bu', 'su', 'o', 'daha', 'en', 'kadar', 'gibi', 'diye', 'yok', 'var', 'mi', 'mu', 'mü', 'ama', 'fakat', 'lakin', 'bile', 'ben', 'sen', 'biz', 'siz', 'onlar'];
+
+  // Candidate keyword list (Unigrams, Bigrams, Trigrams)
+  const candidateKeywords = new Set();
+
+  // A. Unigrams (Tekil Kelimeler)
+  words.forEach(w => {
+    if (w.length >= 2 && !stopWords.includes(w)) {
+      candidateKeywords.add(w);
+    }
+  });
+
+  // B. Bigrams (İkili Kelime Öbekleri: "iphone 15", "playstation 5", "kahve makinesi")
+  for (let i = 0; i < words.length - 1; i++) {
+    const w1 = words[i];
+    const w2 = words[i + 1];
+    if (!stopWords.includes(w1) || !stopWords.includes(w2)) {
+      candidateKeywords.add(`${w1} ${w2}`);
+    }
+  }
+
+  // C. Trigrams (Üçlü Kelime Öbekleri: "iphone 15 pro", "playstation 5 slim")
+  for (let i = 0; i < words.length - 2; i++) {
+    const w1 = words[i];
+    const w2 = words[i + 1];
+    const w3 = words[i + 2];
+    candidateKeywords.add(`${w1} ${w2} ${w3}`);
+  }
+
+  const uniqueKeywords = [...candidateKeywords];
   const matchedUsers = new Map(); // userId -> { reason: 'keyword'|'author'|'category', detail: String, reasons: {} }
 
   // A. Takip Edilen Yazarlar (zil açık)
@@ -292,7 +322,7 @@ async function matchAndCreateDealNotifications(deal, dealId) {
     functions.logger.error('⚠️ Kategori abonelik sorgusu hatası:', err);
   }
 
-  // C. Anahtar Kelime Abonelikleri
+  // C. Anahtar Kelime Abonelikleri (Sıkı Kelime Sınırı Doğrulamalı / Strict Word Boundary Check)
   if (uniqueKeywords.length > 0) {
     const chunks = [];
     for (let i = 0; i < uniqueKeywords.length; i += 30) {
@@ -314,18 +344,32 @@ async function matchAndCreateDealNotifications(deal, dealId) {
         snap.forEach(doc => {
           const sub = doc.data();
           if (sub.uid !== postedBy) {
-            if (matchedUsers.has(sub.uid)) {
-              const u = matchedUsers.get(sub.uid);
-              // Anahtar kelime en yüksek önceliklidir!
-              u.reason = 'keyword';
-              u.detail = sub.displayValue;
-              u.reasons.keyword = sub.displayValue;
+            const subKey = sub.key || sub.displayValue || '';
+            const normalizedSubKey = normalize(subKey);
+
+            // SIKI DOĞRULAMA (Strict Verification):
+            // Kelimenin tam kelime sınırlarıyla (Word Boundary) fırsat metninde geçtiğini doğrula.
+            // Örn: "oto" kelimesi "fotokopi" veya "otomatik" içinde geçtiğinde ES GEÇ, sadece "oto" tam kelime ise ONAYLA!
+            const escapedSubKey = normalizedSubKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const strictRegex = new RegExp(`(?:^|[^a-z0-9])${escapedSubKey}(?:$|[^a-z0-9])`, 'i');
+
+            if (strictRegex.test(normalizedText)) {
+              const displayVal = sub.displayValue || subKey;
+              if (matchedUsers.has(sub.uid)) {
+                const u = matchedUsers.get(sub.uid);
+                // Anahtar kelime en yüksek önceliklidir!
+                u.reason = 'keyword';
+                u.detail = displayVal;
+                u.reasons.keyword = displayVal;
+              } else {
+                matchedUsers.set(sub.uid, {
+                  reason: 'keyword',
+                  detail: displayVal,
+                  reasons: { keyword: displayVal }
+                });
+              }
             } else {
-              matchedUsers.set(sub.uid, {
-                reason: 'keyword',
-                detail: sub.displayValue,
-                reasons: { keyword: sub.displayValue }
-              });
+              functions.logger.info(`🚫 Kısmi yalancı eşleşme engellendi: '${subKey}' in '${title}'`);
             }
           }
         });
