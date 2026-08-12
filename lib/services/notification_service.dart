@@ -444,6 +444,22 @@ class NotificationService {
     }
   }
 
+  Future<bool> hasCategorySubscriptionsDoc() async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return false;
+    try {
+      final snap = await _firestore
+          .collection('notificationSubscriptions')
+          .where('uid', isEqualTo: userId)
+          .where('type', isEqualTo: 'category')
+          .limit(1)
+          .get();
+      return snap.docs.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // --- FCM Token Kaydetme ---
   Future<void> saveFCMToken({String? userId}) async {
     try {

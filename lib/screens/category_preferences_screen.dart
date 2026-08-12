@@ -20,10 +20,14 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   final Map<String, bool> _categoryStates = {};
   final Map<String, Set<String>> _subCategoryStates = {};
   bool _isLoading = true;
+  bool _isProcessingBulk = false;
 
   // 'tumu' hariç kategoriler
   List<Category> get _filteredCategories => 
       Category.categories.where((c) => c.id != 'tumu').toList();
+
+  int get _activeCategoryCount =>
+      _categoryStates.values.where((v) => v == true).length;
 
   @override
   void initState() {
@@ -35,11 +39,14 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
     try {
       final followedCategories = await _notificationService.getFollowedCategories();
       final followedSubCategories = await _notificationService.getFollowedSubCategories();
+      final hasDoc = await _notificationService.hasCategorySubscriptionsDoc();
 
       setState(() {
-        // Ana kategorileri yükle
+        // Eğer veritabanında daha önce hiç kayıt oluşturulmamışsa varsayılan olarak HEPSİ AÇIK gelsin
+        final shouldDefaultAll = !hasDoc && followedCategories.isEmpty;
+
         for (final category in _filteredCategories) {
-          _categoryStates[category.id] = followedCategories.contains(category.id);
+          _categoryStates[category.id] = shouldDefaultAll || followedCategories.contains(category.id);
           _subCategoryStates[category.id] = {};
         }
 
@@ -61,6 +68,83 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
     }
   }
 
+  Future<void> _selectAllCategories() async {
+    if (_isProcessingBulk) return;
+    setState(() {
+      _isProcessingBulk = true;
+      for (final cat in _filteredCategories) {
+        _categoryStates[cat.id] = true;
+      }
+    });
+
+    try {
+      for (final cat in _filteredCategories) {
+        await _notificationService.subscribeToCategory(cat.id);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                const Text('Tüm kategoriler için bildirimler açıldı', style: TextStyle(fontWeight: FontWeight.w600)),
+              ],
+            ),
+            backgroundColor: const Color(0xFF2E7D32),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      _log('Tümünü seçme hatası: $e');
+    } finally {
+      if (mounted) setState(() => _isProcessingBulk = false);
+    }
+  }
+
+  Future<void> _clearAllCategories() async {
+    if (_isProcessingBulk) return;
+    setState(() {
+      _isProcessingBulk = true;
+      for (final cat in _filteredCategories) {
+        _categoryStates[cat.id] = false;
+        _subCategoryStates[cat.id]?.clear();
+      }
+    });
+
+    try {
+      for (final cat in _filteredCategories) {
+        await _notificationService.unsubscribeFromCategory(cat.id);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.remove_circle_outline_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Text('Tüm kategori seçimleri temizlendi', style: TextStyle(fontWeight: FontWeight.w600)),
+              ],
+            ),
+            backgroundColor: const Color(0xFFC62828),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      _log('Seçimleri temizleme hatası: $e');
+    } finally {
+      if (mounted) setState(() => _isProcessingBulk = false);
+    }
+  }
+
   Future<void> _toggleCategory(String categoryId, bool value) async {
     setState(() => _categoryStates[categoryId] = value);
 
@@ -69,7 +153,6 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
         await _notificationService.subscribeToCategory(categoryId);
       } else {
         await _notificationService.unsubscribeFromCategory(categoryId);
-        // Ana kategori kapatılınca alt kategorileri de kapat
         final category = _filteredCategories.firstWhere((c) => c.id == categoryId);
         for (final subCat in category.subcategories) {
           if (_subCategoryStates[categoryId]?.contains(subCat) == true) {
@@ -115,86 +198,56 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   IconData _getCategoryIcon(String categoryId) {
     switch (categoryId) {
       case 'elektronik':
-        return Icons.devices;
+        return Icons.devices_rounded;
       case 'moda':
-        return Icons.checkroom;
+        return Icons.checkroom_rounded;
       case 'ev_yasam':
-        return Icons.home;
+        return Icons.home_rounded;
       case 'anne_bebek':
-        return Icons.child_care;
+        return Icons.child_care_rounded;
       case 'kozmetik':
-        return Icons.face;
+        return Icons.face_rounded;
       case 'spor_outdoor':
-        return Icons.directions_run;
+        return Icons.directions_run_rounded;
       case 'supermarket':
-        return Icons.shopping_cart;
+        return Icons.shopping_cart_rounded;
       case 'yapi_oto':
-        return Icons.construction;
+        return Icons.construction_rounded;
       case 'kitap_hobi':
-        return Icons.menu_book;
+        return Icons.menu_book_rounded;
       case 'dijital_hizmetler':
-        return Icons.language;
+        return Icons.language_rounded;
       case 'finans_kampanyalar':
-        return Icons.credit_card;
-      // Legacy or fallback mappings
-      case 'market':
-        return Icons.shopping_cart;
-      case 'seyahat':
-        return Icons.flight;
-      case 'eglence':
-        return Icons.movie;
-      case 'spor':
-        return Icons.fitness_center;
-      case 'saglik':
-        return Icons.favorite;
-      case 'egitim':
-        return Icons.school;
-      case 'otomotiv':
-        return Icons.directions_car;
+        return Icons.credit_card_rounded;
       default:
-        return Icons.category;
+        return Icons.category_rounded;
     }
   }
 
   Color _getCategoryColor(String categoryId) {
     switch (categoryId) {
       case 'elektronik':
-        return Colors.blue;
+        return const Color(0xFF2196F3);
       case 'moda':
-        return Colors.pink;
+        return const Color(0xFFE91E63);
       case 'ev_yasam':
-        return Colors.orange;
+        return const Color(0xFFFF9800);
       case 'anne_bebek':
-        return Colors.purple;
+        return const Color(0xFF9C27B0);
       case 'kozmetik':
-        return Colors.redAccent;
+        return const Color(0xFFFF4081);
       case 'spor_outdoor':
-        return Colors.teal;
+        return const Color(0xFF009688);
       case 'supermarket':
-        return Colors.green;
+        return const Color(0xFF4CAF50);
       case 'yapi_oto':
-        return Colors.blueGrey;
+        return const Color(0xFF607D8B);
       case 'kitap_hobi':
-        return Colors.indigo;
+        return const Color(0xFF3F51B5);
       case 'dijital_hizmetler':
-        return Colors.cyan;
+        return const Color(0xFF00BCD4);
       case 'finans_kampanyalar':
-        return Colors.amber;
-      // Legacy or fallback mappings
-      case 'market':
-        return Colors.green;
-      case 'seyahat':
-        return Colors.purple;
-      case 'eglence':
-        return Colors.red;
-      case 'spor':
-        return Colors.teal;
-      case 'saglik':
-        return Colors.redAccent;
-      case 'egitim':
-        return Colors.indigo;
-      case 'otomotiv':
-        return Colors.blueGrey;
+        return const Color(0xFFFFC107);
       default:
         return AppTheme.primary;
     }
@@ -203,53 +256,192 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF1A1A1A) : Colors.grey[50];
-    final cardColor = isDark ? const Color(0xFF2A2A2A) : Colors.white;
-    final textColor = isDark ? Colors.white : AppTheme.textPrimary;
-    final secondaryTextColor = isDark ? Colors.grey[400] : AppTheme.textSecondary;
+    final backgroundColor = isDark ? const Color(0xFF121212) : const Color(0xFFF8F9FA);
+    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final secondaryTextColor = isDark ? Colors.grey[400] : const Color(0xFF6C757D);
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
         title: const Text(
           'Favori Kategoriler',
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
-        backgroundColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+        backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
         foregroundColor: textColor,
         elevation: 0,
-        scrolledUnderElevation: 0,
+        scrolledUnderElevation: 0.5,
+        centerTitle: false,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               children: [
-                // Bilgi kartı
+                // 1. Üst Modern Gradient Banner & Sayaç
                 Container(
-                  padding: const EdgeInsets.all(16),
-                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(20),
+                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppTheme.primary.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    gradient: LinearGradient(
+                      colors: isDark
+                          ? [const Color(0xFF2C2216), const Color(0xFF1E1E1E)]
+                          : [const Color(0xFFFFF4E5), const Color(0xFFFFFDF9)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
+                    border: Border.all(
+                      color: primaryColor.withValues(alpha: isDark ? 0.3 : 0.2),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withValues(alpha: isDark ? 0.1 : 0.05),
+                        blurRadius: 15,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: primaryColor.withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.notifications_active_rounded,
+                              color: primaryColor,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Kategori Bildirimleri',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Sadece seçtiğin kategorilerdeki yeni fırsatlar cebine gelsin.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: secondaryTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Sayaç Rozeti
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: primaryColor,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '$_activeCategoryCount / ${_filteredCategories.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 2. Hızlı Aksiyon Butonları Barı (Tümünü Seç / Seçimleri Temizle)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: AppTheme.primary,
-                        size: 24,
+                      // Tümünü Seç Butonu
+                      Expanded(
+                        child: InkWell(
+                          onTap: _isProcessingBulk ? null : _selectAllCategories,
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: isDark 
+                                  ? const Color(0xFF1E3A27) 
+                                  : const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFF4CAF50).withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.done_all_rounded, size: 18, color: Color(0xFF2E7D32)),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Tümünü Seç',
+                                  style: TextStyle(
+                                    color: Color(0xFF2E7D32),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 12),
+                      // Seçimleri Temizle Butonu
                       Expanded(
-                        child: Text(
-                          'Seçtiğiniz kategorilerde yeni fırsat paylaşıldığında bildirim alırsınız.',
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 13,
+                        child: InkWell(
+                          onTap: _isProcessingBulk ? null : _clearAllCategories,
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                            decoration: BoxDecoration(
+                              color: isDark 
+                                  ? const Color(0xFF3B1E1E) 
+                                  : const Color(0xFFFFEBEE),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFFEF5350).withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.deselect_rounded, size: 18, color: Color(0xFFC62828)),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Seçimleri Temizle',
+                                  style: TextStyle(
+                                    color: Color(0xFFC62828),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -257,7 +449,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                   ),
                 ),
 
-                // Kategoriler
+                // 3. Modern Kategori Listesi
                 ..._filteredCategories.map((category) {
                   final isExpanded = _categoryStates[category.id] == true;
                   final categoryColor = _getCategoryColor(category.id);
@@ -267,26 +459,34 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
                       color: cardColor,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: isExpanded
+                            ? categoryColor.withValues(alpha: isDark ? 0.4 : 0.25)
+                            : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04)),
+                        width: isExpanded ? 1.5 : 1,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
+                          color: isExpanded
+                              ? categoryColor.withValues(alpha: isDark ? 0.15 : 0.06)
+                              : Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                          blurRadius: 12,
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
                     child: Column(
                       children: [
-                        // Ana kategori
+                        // Ana Kategori Satırı
                         ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                           leading: Container(
                             width: 44,
                             height: 44,
                             decoration: BoxDecoration(
-                              color: categoryColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
+                              color: categoryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                             child: Icon(
                               _getCategoryIcon(category.id),
@@ -298,25 +498,40 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                             category.name,
                             style: TextStyle(
                               color: textColor,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
                               fontSize: 15,
                             ),
                           ),
-                          subtitle: selectedSubCount > 0
-                              ? Text(
-                                  '$selectedSubCount alt kategori seçili',
-                                  style: TextStyle(
-                                    color: categoryColor,
-                                    fontSize: 12,
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: selectedSubCount > 0
+                                ? Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: categoryColor.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '$selectedSubCount alt kategori seçili',
+                                          style: TextStyle(
+                                            color: categoryColor,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Text(
+                                    '${category.subcategories.length} alt kategori',
+                                    style: TextStyle(
+                                      color: secondaryTextColor,
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                )
-                              : Text(
-                                  '${category.subcategories.length} alt kategori',
-                                  style: TextStyle(
-                                    color: secondaryTextColor,
-                                    fontSize: 12,
-                                  ),
-                                ),
+                          ),
                           trailing: Switch.adaptive(
                             value: isExpanded,
                             onChanged: (value) => _toggleCategory(category.id, value),
@@ -324,14 +539,15 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                           ),
                         ),
 
-                        // Alt kategoriler
+                        // Alt Kategoriler (Çipler)
                         if (isExpanded && category.subcategories.isNotEmpty) ...[
                           Divider(
                             height: 1,
-                            color: isDark ? Colors.white10 : Colors.grey[200],
+                            thickness: 0.8,
+                            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200],
                           ),
                           Padding(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(14),
                             child: Wrap(
                               spacing: 8,
                               runSpacing: 8,
@@ -343,19 +559,19 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     style: TextStyle(
                                       color: isSelected ? Colors.white : textColor,
                                       fontSize: 12,
-                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                                     ),
                                   ),
                                   selected: isSelected,
                                   onSelected: (value) => _toggleSubCategory(category.id, subCat, value),
-                                  backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100],
+                                  backgroundColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF1F3F5),
                                   selectedColor: categoryColor,
                                   checkmarkColor: Colors.white,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                   side: BorderSide.none,
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 );
                               }).toList(),
                             ),
@@ -366,10 +582,9 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                   );
                 }),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
               ],
             ),
     );
   }
 }
-
