@@ -655,14 +655,15 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           : Category.categories.first;
     }
 
-    return PopScope(
-      canPop: true,
-      onPopInvoked: (bool didPop) {
-        if (didPop) return;
-      },
-      child: Scaffold(
-        backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
-        body: Stack(
+    return SelectionArea(
+      child: PopScope(
+        canPop: true,
+        onPopInvoked: (bool didPop) {
+          if (didPop) return;
+        },
+        child: Scaffold(
+          backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
+          body: Stack(
           children: [
             // Main CustomScrollView
             CustomScrollView(
@@ -1101,7 +1102,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ),
 
                               // Product Title
-                              Text(
+                              SelectableText(
                                 deal.title,
                                 style: TextStyle(
                                   fontSize: 18,
@@ -1739,7 +1740,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   // Helper Widget for Frosted Glass Header Action Buttons
@@ -2000,12 +2002,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
             style: baseStyle,
           ));
 
-          return Text.rich(TextSpan(children: spans));
+          return SelectableText.rich(TextSpan(children: spans));
         }
       }
     }
 
-    return Text(
+    return SelectableText(
       text.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll('**', ''),
       style: baseStyle,
     );
