@@ -114,85 +114,48 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 child: Column(
                   children: [
-                    // Bilgi & Takipçi Sayacı
+                    // Bilgi & Takipçi Sayacı (Minimalist Compact Header)
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isDark
-                              ? [
-                                  primaryColor.withValues(alpha: 0.20),
-                                  primaryColor.withValues(alpha: 0.08),
-                                ]
-                              : [
-                                  primaryColor.withValues(alpha: 0.12),
-                                  primaryColor.withValues(alpha: 0.04),
-                                ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(18),
+                        color: isDark
+                            ? primaryColor.withValues(alpha: 0.12)
+                            : primaryColor.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.3),
-                          width: 1.2,
+                          color: primaryColor.withValues(alpha: 0.2),
+                          width: 1,
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(7),
-                                    decoration: BoxDecoration(
-                                      color: primaryColor.withValues(alpha: 0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.people_alt_rounded,
-                                      color: primaryColor,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Favori Yayıncılar',
-                                    style: TextStyle(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: textMain,
-                                    ),
-                                  ),
-                                ],
+                          Icon(Icons.notifications_active_outlined, color: primaryColor, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Takip ettiğiniz yayıncıların fırsatları anında bildirim olarak gelir.',
+                              style: TextStyle(
+                                color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: primaryColor,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  '${allFollowing.length} Takip Edilen',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Takip ettiğiniz kullanıcılar yeni bir fırsat paylaştığında anında bildirim alırsınız.',
-                            style: TextStyle(
-                              color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                              fontSize: 12.5,
-                              height: 1.4,
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: primaryColor,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${allFollowing.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                         ],

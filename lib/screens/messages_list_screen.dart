@@ -152,87 +152,50 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 child: Column(
                   children: [
-                    // Header Kartı
+                    // Bilgi & Sohbet İstatistiği (Minimalist Compact Header)
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isDark
-                              ? [
-                                  primaryColor.withValues(alpha: 0.20),
-                                  primaryColor.withValues(alpha: 0.08),
-                                ]
-                              : [
-                                  primaryColor.withValues(alpha: 0.12),
-                                  primaryColor.withValues(alpha: 0.04),
-                                ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(18),
+                        color: isDark
+                            ? primaryColor.withValues(alpha: 0.12)
+                            : primaryColor.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.3),
-                          width: 1.2,
+                          color: primaryColor.withValues(alpha: 0.2),
+                          width: 1,
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(7),
-                                    decoration: BoxDecoration(
-                                      color: primaryColor.withValues(alpha: 0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.chat_bubble_outline_rounded,
-                                      color: primaryColor,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Sohbet Kutusu',
-                                    style: TextStyle(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: textMain,
-                                    ),
-                                  ),
-                                ],
+                          Icon(Icons.forum_outlined, color: primaryColor, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Üyelerle sohbetleriniz ve resmi yönetici duyuruları.',
+                              style: TextStyle(
+                                color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: totalUnreadCount > 0 ? primaryColor : Colors.grey[600],
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  totalUnreadCount > 0
-                                      ? '$totalUnreadCount Okunmadı'
-                                      : '${conversationList.length} Sohbet',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Diğer üyelerle fırsatlar hakkında özel sohbetleriniz ve yöneticilerden gelen resmi mesajlar burada güvenle saklanır.',
-                            style: TextStyle(
-                              color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                              fontSize: 12.5,
-                              height: 1.4,
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: totalUnreadCount > 0 ? primaryColor : (isDark ? Colors.grey[800] : Colors.grey[300]),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              totalUnreadCount > 0
+                                  ? '$totalUnreadCount Yeni'
+                                  : '${conversationList.length}',
+                              style: TextStyle(
+                                color: totalUnreadCount > 0 ? Colors.white : (isDark ? Colors.grey[300] : Colors.grey[800]),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                         ],
