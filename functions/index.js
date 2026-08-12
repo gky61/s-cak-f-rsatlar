@@ -800,7 +800,8 @@ exports.onAdminMessageCreated = functions.firestore
     }
 
     try {
-      // Alıcının notifications koleksiyonuna doküman yaz (tekilleştirilmiş ID ile)
+      // Alıcının notifications koleksiyonuna doküman yaz
+      // (Doküman eklendiğinde onNotificationCreated otomatik olarak tek bir Push Bildirimi atar)
       const notifRef = admin.firestore()
         .collection('users')
         .doc(userId)
@@ -816,73 +817,7 @@ exports.onAdminMessageCreated = functions.firestore
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
-      // Alıcının tüm aktif cihaz token'larını al
-      const devices = await getUserDeviceTokens(userId);
-
-      if (devices.length === 0) {
-        functions.logger.warn('⚠️ Alıcı için aktif cihaz token\'ı bulunamadı:', userId);
-        return null;
-      }
-
-      // Bildirim içeriğini hazırla
-      const notificationTitle = title.length > 50 ? title.substring(0, 50) + '...' : title;
-      const notificationBody = content.length > 100 ? content.substring(0, 100) + '...' : content;
-
-      functions.logger.info(`📤 Admin bildirim ${devices.length} cihaza gönderiliyor...`);
-
-      const promises = devices.map(async (device) => {
-        const messagePayload = {
-          token: device.token,
-          notification: {
-            title: `📬 ${notificationTitle}`,
-            body: notificationBody,
-          },
-          data: {
-            type: 'admin_message',
-            messageId: messageId,
-            userId: userId,
-            title: title,
-            notification_title: `📬 ${notificationTitle}`,
-            notification_body: notificationBody,
-            click_action: 'FLUTTER_NOTIFICATION_CLICK',
-          },
-          android: {
-            priority: 'high',
-            ttl: 86400000,
-            notification: {
-              channelId: 'admin_messages_channel_v3',
-              sound: 'default',
-              color: '#2196F3',
-              tag: `admin_msg_${messageId}`,
-              defaultSound: true,
-              defaultVibrateTimings: true,
-              icon: '@mipmap/ic_launcher',
-            },
-          },
-          apns: {
-            payload: {
-              aps: {
-                sound: 'default',
-                badge: 1,
-                'interruption-level': 'active',
-                category: 'ADMIN_MESSAGE',
-              },
-            },
-          },
-        };
-
-        try {
-          const response = await admin.messaging().send(messagePayload);
-          functions.logger.info(`✅ Cihaza admin bildirim gönderildi. Token: ${device.token.substring(0, 8)}..., Response: ${response}`);
-        } catch (err) {
-          functions.logger.error(`❌ Cihaza admin bildirim gönderilemedi: ${device.id}`, err);
-          if (device.id) {
-            await handleSendFailure(device.id, err);
-          }
-        }
-      });
-
-      await Promise.all(promises);
+      functions.logger.info(`✅ Admin mesaj bildirimi kullanıcıya yazıldı (Push onNotificationCreated tarafından atılacak): ${userId}`);
       return null;
     } catch (error) {
       functions.logger.error('❌ Admin mesaj bildirimi hatası:', {
@@ -1929,25 +1864,6 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
         read: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
-
-      // FCM Push Notification Gönderimi
-      const userDoc = await admin.firestore().collection('users').doc(targetValue).get();
-      if (userDoc.exists) {
-        const userData = userDoc.data();
-        const tokens = userData.fcmTokens || (userData.fcmToken ? [userData.fcmToken] : []);
-        if (tokens.length > 0) {
-          const userMessage = {
-            ...message,
-            token: tokens[tokens.length - 1]
-          };
-          try {
-            await admin.messaging().send(userMessage);
-            functions.logger.info(`📱 FCM Push bildirimi gönderildi: ${targetValue}`);
-          } catch (fcmErr) {
-            functions.logger.error(`❌ FCM gönderim hatası (${targetValue}):`, fcmErr);
-          }
-        }
-      }
 
       responseId = `written_to_notifications_of_${targetValue}`;
 
