@@ -60,7 +60,7 @@ class DealCardBadge extends StatelessWidget {
           ),
           const SizedBox(width: 2.5),
           Text(
-            '${deal.hotVotes > 0 ? "+" : ""}${deal.hotVotes}',
+            '${deal.hotVotes}',
             style: TextStyle(
               color: textColor,
               fontSize: 10,
