@@ -120,6 +120,39 @@ let couponsUnsubscribe = null;
 let catalogs = [];
 let catalogsUnsubscribe = null;
 
+// User info cache for source column display
+const dealUserCache = new Map();
+
+async function getUserDisplayLabel(uid) {
+    if (!uid || uid === 'Bilinmiyor' || uid === 'admin') return 'Admin';
+    if (dealUserCache.has(uid)) return dealUserCache.get(uid);
+
+    // Global users array check
+    if (typeof users !== 'undefined' && Array.isArray(users) && users.length > 0) {
+        const found = users.find(u => u.id === uid || u.uid === uid);
+        if (found) {
+            const label = found.nickname || found.username || found.displayName || found.email || uid;
+            dealUserCache.set(uid, label);
+            return label;
+        }
+    }
+
+    // Fetch from Firestore users collection
+    try {
+        if (typeof db !== 'undefined') {
+            const doc = await db.collection('users').doc(uid).get();
+            if (doc.exists) {
+                const uData = doc.data();
+                const label = uData.nickname || uData.username || uData.displayName || uData.email || uid;
+                dealUserCache.set(uid, label);
+                return label;
+            }
+        }
+    } catch (_) {}
+
+    return uid;
+}
+
 // DOM Elements - Wait for DOM to be ready
 let loginScreen, adminPanel, googleSignInBtn, logoutBtn, userName, userAvatar, loginError;
 let dealsList, loadingIndicator, emptyState, filterBtns, dealModal, closeModal;
@@ -1353,10 +1386,55 @@ function createDealRow(deal) {
         statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>Bekliyor</div>';
     }
 
-    // Source badge
-    const sourceBadge = isUserSubmitted
-        ? `<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-medium"><span class="material-symbols-outlined text-[14px]">person</span>${escapeHtml(deal.postedBy || 'Kullanıcı')}</div>`
-        : `<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium"><span class="material-symbols-outlined text-[14px]">smart_toy</span>Bot</div>`;
+    // Kaynak (Source) Badge Hazırlığı
+    let sourceBadge = '';
+    const postedByRaw = deal.postedBy || '';
+
+    if (isUserSubmitted) {
+        // Kullanıcı paylaşımı
+        let initialUserLabel = postedByRaw;
+        if (dealUserCache.has(postedByRaw)) {
+            initialUserLabel = dealUserCache.get(postedByRaw);
+        } else if (typeof users !== 'undefined' && Array.isArray(users) && users.length > 0) {
+            const found = users.find(u => u.id === postedByRaw || u.uid === postedByRaw);
+            if (found) {
+                initialUserLabel = found.nickname || found.username || found.displayName || found.email || postedByRaw;
+                dealUserCache.set(postedByRaw, initialUserLabel);
+            }
+        }
+
+        const displayLabel = (initialUserLabel.length > 18 && !initialUserLabel.includes('@') && !initialUserLabel.includes(' '))
+            ? initialUserLabel.substring(0, 8) + '...'
+            : initialUserLabel;
+
+        sourceBadge = `
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-semibold" title="${escapeHtml(initialUserLabel)}">
+                <span class="material-symbols-outlined text-[14px]">person</span>
+                <span class="deal-user-source-label truncate max-w-[120px]" data-uid="${escapeHtml(postedByRaw)}">${escapeHtml(displayLabel)}</span>
+            </div>
+        `;
+    } else {
+        // Bot paylaşımı (Telegram Kanalları)
+        let channelName = '';
+        if (deal.telegramChatTitle) {
+            channelName = deal.telegramChatTitle;
+        } else if (deal.telegramChatUsername) {
+            channelName = deal.telegramChatUsername.startsWith('@') ? deal.telegramChatUsername : `@${deal.telegramChatUsername}`;
+        } else if (postedByRaw.startsWith('telegram_')) {
+            channelName = `@${postedByRaw.replace('telegram_', '')}`;
+        } else if (postedByRaw && postedByRaw !== 'admin' && postedByRaw !== 'Bilinmiyor') {
+            channelName = postedByRaw;
+        } else {
+            channelName = 'Bot (Genel)';
+        }
+
+        sourceBadge = `
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-semibold" title="${escapeHtml(channelName)}">
+                <span class="material-symbols-outlined text-[14px]">smart_toy</span>
+                <span class="truncate max-w-[120px]">${escapeHtml(channelName)}</span>
+            </div>
+        `;
+    }
 
     // Image URL - Bot 'image_url' yazıyor, eski kodlar 'imageUrl' kullanıyor - her ikisini de destekle
     let imageUrl = deal.image_url || deal.imageUrl || '';
@@ -1414,6 +1492,9 @@ function createDealRow(deal) {
             </div>
         </td>
         <td class="p-4">
+            ${sourceBadge}
+        </td>
+        <td class="p-4">
             ${deal.hidePrice ? `
                 <span class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                     <span class="material-symbols-outlined text-[14px]">visibility_off</span>Fiyat Gizli
@@ -1439,6 +1520,23 @@ function createDealRow(deal) {
             </div>
         </td>
     `;
+
+    // Eğer kullanıcı fırsatı ise ve kullanıcı ismi henüz UID durumundaysa asenkron çöz
+    if (isUserSubmitted && postedByRaw && postedByRaw !== 'admin' && postedByRaw !== 'Bilinmiyor') {
+        setTimeout(async () => {
+            const userLabel = await getUserDisplayLabel(postedByRaw);
+            if (userLabel && userLabel !== postedByRaw) {
+                const labelSpan = row.querySelector('.deal-user-source-label');
+                if (labelSpan) {
+                    const displayLabel = (userLabel.length > 18 && !userLabel.includes('@') && !userLabel.includes(' '))
+                        ? userLabel.substring(0, 8) + '...'
+                        : userLabel;
+                    labelSpan.textContent = displayLabel;
+                    labelSpan.closest('[title]')?.setAttribute('title', userLabel);
+                }
+            }
+        }, 30);
+    }
 
     // Click event for row
     row.addEventListener('click', async (e) => {
