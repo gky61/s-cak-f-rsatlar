@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
@@ -26,16 +27,36 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
 
   late final Stream<List<AppUser>> _followingStream;
   String _searchQuery = '';
+  bool _showInfoBanner = true;
 
   @override
   void initState() {
     super.initState();
+    _loadBannerState();
     final uid = _authService.currentUser?.uid;
     if (uid != null) {
       _followingStream = _firestoreService.getFollowingUsersStream(uid);
     } else {
       _followingStream = const Stream.empty();
     }
+  }
+
+  Future<void> _loadBannerState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isDismissed = prefs.getBool('followed_info_banner_dismissed') ?? false;
+    if (mounted && isDismissed) {
+      setState(() {
+        _showInfoBanner = false;
+      });
+    }
+  }
+
+  Future<void> _dismissBanner() async {
+    setState(() {
+      _showInfoBanner = false;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('followed_info_banner_dismissed', true);
   }
 
   @override
@@ -114,54 +135,70 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 child: Column(
                   children: [
-                    // Bilgi & Takipçi Sayacı (Minimalist Compact Header)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? primaryColor.withValues(alpha: 0.12)
-                            : primaryColor.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.2),
-                          width: 1,
+                    // Bilgi & Takipçi Sayacı (Kullanıcı dilerse çarpı ile kapatabilir)
+                    if (_showInfoBanner) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? primaryColor.withValues(alpha: 0.12)
+                              : primaryColor.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: primaryColor.withValues(alpha: 0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.notifications_active_outlined, color: primaryColor, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Takip ettiğiniz yayıncıların fırsatları anında bildirim olarak gelir.',
+                                style: TextStyle(
+                                  color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${allFollowing.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            // Şık Kapatma Çarpısı
+                            InkWell(
+                              onTap: _dismissBanner,
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.all(2.0),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.notifications_active_outlined, color: primaryColor, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Takip ettiğiniz yayıncıların fırsatları anında bildirim olarak gelir.',
-                              style: TextStyle(
-                                color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: primaryColor,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '${allFollowing.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                      const SizedBox(height: 12),
+                    ],
 
                     // Arama Barı (TextField sürekli odağını korur!)
                     if (allFollowing.isNotEmpty)

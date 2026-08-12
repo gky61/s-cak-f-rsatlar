@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 
@@ -25,7 +24,6 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   List<String> _watchKeywords = [];
   bool _isLoading = true;
   bool _isAdding = false;
-  bool _showInfoBanner = true;
 
   // Popüler / Hızlı Ekleme Önerileri
   final List<String> _popularSuggestions = [
@@ -42,26 +40,7 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   @override
   void initState() {
     super.initState();
-    _loadBannerState();
     _loadKeywords();
-  }
-
-  Future<void> _loadBannerState() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isDismissed = prefs.getBool('keyword_info_banner_dismissed') ?? false;
-    if (mounted && isDismissed) {
-      setState(() {
-        _showInfoBanner = false;
-      });
-    }
-  }
-
-  Future<void> _dismissBanner() async {
-    setState(() {
-      _showInfoBanner = false;
-    });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('keyword_info_banner_dismissed', true);
   }
 
   @override
@@ -275,117 +254,92 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ─── 1. BİLGİ & İSTATİSTİK KARTI (Kullanıcı dilerse çarpı ile kapatabilir) ───
-                  if (_showInfoBanner) ...[
-                    Stack(
+                  // ─── 1. BİLGİ & İSTATİSTİK KARTI (Glassmorphic Header) ───
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: isDark
+                            ? [
+                                primaryColor.withValues(alpha: 0.20),
+                                primaryColor.withValues(alpha: 0.08),
+                              ]
+                            : [
+                                primaryColor.withValues(alpha: 0.12),
+                                primaryColor.withValues(alpha: 0.04),
+                              ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: primaryColor.withValues(alpha: 0.3),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.fromLTRB(16, 16, 36, 16),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: isDark
-                                  ? [
-                                      primaryColor.withValues(alpha: 0.20),
-                                      primaryColor.withValues(alpha: 0.08),
-                                    ]
-                                  : [
-                                      primaryColor.withValues(alpha: 0.12),
-                                      primaryColor.withValues(alpha: 0.04),
-                                    ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: primaryColor.withValues(alpha: 0.3),
-                              width: 1.2,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: primaryColor.withValues(alpha: 0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.notifications_active_rounded,
-                                      color: primaryColor,
-                                      size: 20,
-                                    ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: primaryColor.withValues(alpha: 0.2),
+                                    shape: BoxShape.circle,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Canlı İndirim Takibi',
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w800,
-                                            color: textMain,
-                                          ),
-                                        ),
-                                        // Takip Edilen Kelime Rozeti
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                          decoration: BoxDecoration(
-                                            color: primaryColor,
-                                            borderRadius: BorderRadius.circular(20),
-                                          ),
-                                          child: Text(
-                                            '${_watchKeywords.length} Kelime Takipte',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  child: Icon(
+                                    Icons.notifications_active_rounded,
+                                    color: primaryColor,
+                                    size: 20,
                                   ),
-                                ],
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  'Canlı İndirim Takibi',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    color: textMain,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            // Takip Edilen Kelime Rozeti
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Eklediğiniz anahtar kelimeler yeni paylaşılan fırsat başlıklarında geçtiğinde özel bildirim alırsınız.',
-                                style: TextStyle(
-                                  color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                                  fontSize: 13,
-                                  height: 1.45,
+                              child: Text(
+                                '${_watchKeywords.length} Kelime Takipte',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                        // Net Belirgin Kapatma Çarpısı (Sağ Üst Köşede)
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: InkWell(
-                            onTap: _dismissBanner,
-                            borderRadius: BorderRadius.circular(20),
-                            child: Padding(
-                              padding: const EdgeInsets.all(4.0),
-                              child: Icon(
-                                Icons.close_rounded,
-                                size: 20,
-                                color: isDark ? Colors.grey[400] : Colors.grey[600],
-                              ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Eklediğiniz anahtar kelimeler yeni paylaşılan fırsat başlıklarında geçtiğinde özel bildirim alırsınız.',
+                          style: TextStyle(
+                            color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                            fontSize: 13,
+                            height: 1.45,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                  ],
+                  ),
+                  const SizedBox(height: 20),
 
                   // ─── 2. YENİ KELİME EKLEME BAR ───
                   Text(
