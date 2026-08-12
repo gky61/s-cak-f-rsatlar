@@ -9,10 +9,8 @@ import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/theme_service.dart';
-import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
-import '../models/category.dart';
 import 'notification_settings_screen.dart';
 import 'auth_screen.dart';
 // import 'edit_profile_screen.dart'; // Dosya bulunamadı, geçici olarak yorum satırı
@@ -22,7 +20,6 @@ import 'category_preferences_screen.dart';
 import '../widgets/report_dialog.dart';
 import 'message_screen.dart';
 import 'messages_list_screen.dart';
-import 'admin_notifications_screen.dart';
 import 'following_users_screen.dart';
 import 'user_deals_screen.dart';
 import '../models/deal.dart';
@@ -60,6 +57,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   StreamSubscription? _messageCountSubscription;
   StreamSubscription? _adminMessageCountSubscription;
   StreamSubscription? _userDataSubscription;
+  Stream<List<Deal>>? _userDealsStream;
 
   @override
   void initState() {
@@ -67,6 +65,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _checkIfOwnProfile();
     _checkAdminStatus();
     _loadUserData();
+    
+    final dealsUserId = widget.userId ?? _authService.currentUser?.uid;
+    if (dealsUserId != null) {
+      _userDealsStream = _firestoreService.getUserDealsStream(dealsUserId, limit: 5);
+    }
+    
     if (_isOwnProfile) {
       _loadUnreadMessageCount();
       _loadUnreadAdminMessageCount();
@@ -302,7 +306,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Kullanıcı bilgileri yüklenirken hata: ${e.toString().length > 50 ? e.toString().substring(0, 50) + "..." : e}'),
+            content: Text('Kullanıcı bilgileri yüklenirken hata: ${e.toString().length > 50 ? "${e.toString().substring(0, 50)}..." : e}'),
             backgroundColor: Colors.orange,
             duration: const Duration(seconds: 3),
           ),
@@ -344,6 +348,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final primaryColor = Theme.of(context).colorScheme.primary;
         
         return AlertDialog(
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
           title: const Text('Profil Resmi Seç'),
           content: SizedBox(
             width: double.maxFinite,
@@ -770,40 +775,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  String _getUserLevel() {
-    if (_user == null) return 'Seviye 1';
-    final points = _user!.points;
-    if (points < 100) return 'Seviye 1';
-    if (points < 500) return 'Seviye 2';
-    if (points < 1000) return 'Seviye 3';
-    if (points < 2000) return 'Seviye 4';
-    return 'Seviye 5';
-  }
-
-  String _getUserBadge() {
-    if (_user == null) return 'Yeni Üye';
-    final points = _user!.points;
-    if (points < 50) return 'Yeni Üye';
-    if (points < 200) return 'Fırsat Avcısı';
-    if (points < 500) return 'Fırsat Uzmanı';
-    if (points < 1000) return 'Fırsat Masterı';
-    return 'Fırsat Kralı';
-  }
-
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF23220F) : const Color(0xFFF8F8F5);
-    final surfaceColor = isDark ? const Color(0xFF2E2D15) : Colors.white;
+    final backgroundColor = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final textMain = isDark ? Colors.white : const Color(0xFF1C1C0D);
-    final textSub = isDark ? Colors.grey[400] : const Color(0xFF5C5C4F);
+    final textMain = isDark ? Colors.white : const Color(0xFF0F172A);
+    final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
     if (_isLoading && _user == null) {
       return Scaffold(
         backgroundColor: backgroundColor,
-        body: const Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: CircularProgressIndicator(color: primaryColor),
+        ),
       );
     }
 
@@ -811,831 +797,1354 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: backgroundColor,
       body: Stack(
         children: [
+          // Scrollable Content
           SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
             child: Column(
               children: [
-                const SizedBox(height: 80), // App bar space
-                
-                // Profile Header Section
+                // Top Header Hero Card
+                _buildHeroHeader(
+                  context,
+                  isDark: isDark,
+                  primaryColor: primaryColor,
+                  surfaceColor: surfaceColor,
+                  backgroundColor: backgroundColor,
+                  textMain: textMain,
+                  textSub: textSub,
+                ),
+
+                const SizedBox(height: 16),
+
+                // Action Buttons Bar (Sadece başka bir kullanıcının profili ise)
+                if (!_isOwnProfile && _user != null && _authService.currentUser != null && widget.userId != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _OtherUserActionBarWidget(
+                      currentUserId: _authService.currentUser!.uid,
+                      targetUserId: widget.userId!,
+                      user: _user!,
+                      initialIsFollowing: _isFollowing,
+                      initialIsFollowNotificationEnabled: _isFollowNotificationEnabled,
+                      isAdmin: _isAdmin,
+                      isDark: isDark,
+                      primaryColor: primaryColor,
+                      surfaceColor: surfaceColor,
+                      textMain: textMain,
+                      onMessageTap: _navigateToMessageScreen,
+                      onBadgeTap: (u) => _showBadgeDialog(u),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // 4-Column Stats Matrix Card
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-              child: Column(
-                children: [
-                      // Avatar with Gradient Ring
-                      Stack(
-                        alignment: Alignment.center,
-                          children: [
-                          // Gradient Ring
-                                  Container(
-                          width: 120,
-                          height: 120,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  primaryColor,
-                                  Colors.orange.shade300,
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                            ),
-                          ),
-                          // Avatar
-                          Container(
-                            width: 112,
-                            height: 112,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: backgroundColor,
-                              border: Border.all(color: backgroundColor, width: 4),
-                                    ),
-                          child: ClipOval(
-                              child: _user?.profileImageUrl != null && _user!.profileImageUrl.isNotEmpty
-                                  ? (_user!.profileImageUrl.startsWith('assets/')
-                                      ? Image.asset(
-                                          _user!.profileImageUrl,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) {
-                                            return Icon(Icons.person, size: 56, color: Colors.grey[400]);
-                                          },
-                                        )
-                                      : CachedNetworkImage(
-                                          imageUrl: _user!.profileImageUrl,
-                                          fit: BoxFit.cover,
-                                          placeholder: (context, url) => Container(
-                                            color: Colors.grey[300],
-                                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                          ),
-                                          errorWidget: (context, url, error) => Icon(Icons.person, size: 56, color: Colors.grey[400]),
-                                        ))
-                                  : Icon(Icons.person, size: 56, color: Colors.grey[400]),
-                            ),
-                        ),
-                          // Edit Button - Sadece kendi profili ise görünür
-                        if (_isOwnProfile)
-                        Positioned(
-                            bottom: 2,
-                            right: 2,
-                          child: GestureDetector(
-                            onTap: () => _showProfileImagePicker(context),
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: primaryColor,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: backgroundColor, width: 2),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.1),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(Icons.edit, size: 16, color: Colors.black),
-                            ),
-                          ),
-                        ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Name & Email
-                      Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              GestureDetector(
-                                onTap: _isOwnProfile ? () => _showEditUsernameDialog(context) : null,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                      Text(
-                        _user?.username ?? 'Kullanıcı',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: textMain,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                                    if (_isOwnProfile) ...[
-                                      const SizedBox(width: 8),
-                                      Icon(
-                                        Icons.edit,
-                                        size: 18,
-                                        color: textSub,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              // Mesaj gönderme butonu (başka kullanıcının profilinde)
-                              if (!_isOwnProfile) ...[
-                                const SizedBox(width: 12),
-                                IconButton(
-                                  icon: Icon(Icons.message, color: primaryColor),
-                                  onPressed: () => _navigateToMessageScreen(),
-                                  tooltip: 'Mesaj Gönder',
-                                ),
-                              ],
-                              // Takip et butonu (başka kullanıcının profilinde)
-                              if (!_isOwnProfile) ...[
-                                const SizedBox(width: 12),
-                                IconButton(
-                                  icon: Icon(
-                                    _isFollowing ? Icons.person_remove : Icons.person_add,
-                                    color: _isFollowing ? Colors.grey : primaryColor,
-                                  ),
-                                  onPressed: () => _toggleFollow(),
-                                  tooltip: _isFollowing ? 'Takipten Çık' : 'Takip Et',
-                                ),
-                              ],
-                              // Admin rozet verme butonu
-                              if (_isAdmin && !_isOwnProfile) ...[
-                                const SizedBox(width: 12),
-                                IconButton(
-                                  icon: Icon(Icons.workspace_premium, color: primaryColor),
-                                  onPressed: () => _showBadgeDialog(_user!),
-                                  tooltip: 'Rozet Ver',
-                                ),
-                              ],
-                            ],
-                          ),
-                          // Takip bildirim butonu (takip ediliyorsa)
-                          if (!_isOwnProfile && _isFollowing) ...[
-                            const SizedBox(height: 8),
-                            InkWell(
-                              onTap: () => _toggleFollowNotification(),
-                              borderRadius: BorderRadius.circular(16),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: _isFollowNotificationEnabled 
-                                      ? primaryColor.withValues(alpha: 0.1)
-                                      : Colors.grey[200],
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: _isFollowNotificationEnabled 
-                                        ? primaryColor 
-                                        : Colors.grey[400]!,
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _isFollowNotificationEnabled 
-                                          ? Icons.notifications_active 
-                                          : Icons.notifications_off,
-                                      size: 16,
-                                      color: _isFollowNotificationEnabled 
-                                          ? primaryColor 
-                                          : Colors.grey[600],
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      _isFollowNotificationEnabled 
-                                          ? 'Bildirimler Açık' 
-                                          : 'Bildirimler Kapalı',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: _isFollowNotificationEnabled 
-                                            ? primaryColor 
-                                            : Colors.grey[700],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                          // Rozetler (kullanıcı adının altında)
-                          if (_user?.badges != null && _user!.badges.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Builder(
-                              builder: (context) {
-                                _log('🔍 Profil ekranında rozetler gösteriliyor: ${_user!.badges}');
-                                final badgeInfos = BadgeHelper.getBadgeInfos(_user!.badges);
-                                _log('🔍 BadgeHelper.getBadgeInfos sonucu: ${badgeInfos.length} rozet');
-                                return Wrap(
-                                  spacing: 6,
-                                  runSpacing: 6,
-                                  alignment: WrapAlignment.center,
-                                  children: badgeInfos
-                                      .map((badge) => Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: badge.color.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: badge.color.withValues(alpha: 0.4),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              badge.icon,
-                                              style: const TextStyle(fontSize: 14),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              badge.name,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                                color: badge.color,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ))
-                                  .toList(),
-                                );
-                              },
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          // Puan ve paylaşım sayısı gösterimi (daha kibar tasarım)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isDark 
-                                  ? Colors.white.withValues(alpha: 0.08)
-                                  : Colors.black.withValues(alpha: 0.04),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: isDark 
-                                    ? Colors.white.withValues(alpha: 0.1)
-                                    : Colors.black.withValues(alpha: 0.08),
-                                width: 0.5,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.star_rounded,
-                                  size: 14,
-                                  color: isDark ? Colors.amber[300] : Colors.amber[700],
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${_user?.points ?? 0} Puan',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSub,
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '•',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: textSub?.withValues(alpha: 0.5),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '${_user?.dealCount ?? 0} Paylaşım',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSub,
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_isOwnProfile) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        _authService.currentUser?.email ?? '',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: textSub,
-                        ),
-                            ),
-                      ],
-                                          ],
-                                        ),
-                                      ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _buildStatsMatrix(
+                    context,
+                    isDark: isDark,
+                    primaryColor: primaryColor,
+                    surfaceColor: surfaceColor,
+                    textMain: textMain,
+                    textSub: textSub,
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Badges Showcase (Kazanılan Rozetler)
+                if (_user?.badges != null && _user!.badges.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildBadgesSection(
+                      context,
+                      isDark: isDark,
+                      primaryColor: primaryColor,
+                      surfaceColor: surfaceColor,
+                      textMain: textMain,
+                      textSub: textSub,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+
+                // If Other User's Profile: Shared Deals Feed
+                if (!_isOwnProfile && _user != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildUserDealsSection(
+                      context,
+                      userId: _user!.uid,
+                      isDark: isDark,
+                      primaryColor: primaryColor,
+                      surfaceColor: surfaceColor,
+                      textMain: textMain,
+                      textSub: textSub,
+                    ),
+                  ),
+                ],
 
                 // Settings Section (sadece kendi profilinde)
                 if (_isOwnProfile) ...[
-                const SizedBox(height: 24),
-                _buildSectionHeader('AYARLAR', textSub!),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                    ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        // Notifications
-                        _buildSettingItem(
-                          icon: Icons.notifications,
-                          title: 'Bildirim Ayarları',
-                          iconBgColor: primaryColor.withValues(alpha: 0.2),
-                          iconColor: isDark ? Colors.yellow[200]! : Colors.yellow[800]!,
-                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const NotificationSettingsScreen(),
-                              ),
-                            );
-                          },
-                          isDark: isDark,
+                  const SizedBox(height: 12),
+                  _buildSectionHeader('HESAP & BİLDİRİMLER', textSub),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: surfaceColor,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+                          width: 1,
                         ),
-                        _buildDivider(isDark),
-                        // Paylaştığım Fırsatlar
-                        _buildSettingItem(
-                          icon: Icons.local_offer,
-                          title: 'Paylaştığım Fırsatlar',
-                          iconBgColor: primaryColor.withValues(alpha: 0.1),
-                          iconColor: primaryColor,
-                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () {
-                            final currentUserId = _authService.currentUser?.uid;
-                            if (currentUserId != null) {
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          // Notifications
+                          _buildSettingItem(
+                            icon: Icons.notifications_rounded,
+                            title: 'Bildirim Ayarları',
+                            iconBgColor: primaryColor.withValues(alpha: 0.15),
+                            iconColor: primaryColor,
+                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                            onTap: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => UserDealsScreen(
-                                    userId: currentUserId,
-                                    username: _user?.username ?? '',
-                                    isOwnProfile: true,
-                                  ),
+                                  builder: (context) => const NotificationSettingsScreen(),
                                 ),
                               );
-                            }
-                          },
-                          isDark: isDark,
-                        ),
-                        _buildDivider(isDark),
-                        // Takip Ettiklerim
-                        _buildSettingItem(
-                          icon: Icons.person_add,
-                          title: 'Takip Ettiklerim',
-                          iconBgColor: Colors.pink.withValues(alpha: 0.2),
-                          iconColor: Colors.pink,
-                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const FollowingUsersScreen(),
-                              ),
-                            );
-                          },
-                          isDark: isDark,
-                        ),
-                        _buildDivider(isDark),
-                        // Mesajlar
-                        _buildSettingItem(
-                          icon: Icons.message,
-                          title: 'Mesajlar',
-                          iconBgColor: Colors.blue.withValues(alpha: 0.2),
-                          iconColor: Colors.blue,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (_unreadMessageCount > 0)
-                                Container(
-                                  margin: const EdgeInsets.only(right: 8),
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    _unreadMessageCount > 99 ? '99+' : _unreadMessageCount.toString(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              Icon(Icons.chevron_right, color: Colors.grey[400]),
-                            ],
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const MessagesListScreen(),
-                              ),
-                            );
-                          },
-                          isDark: isDark,
-                        ),
-
-                        _buildDivider(isDark),
-                        // Dark Mode
-                        _buildSettingItem(
-                          icon: isDark ? Icons.dark_mode : Icons.light_mode,
-                          title: 'Karanlık Mod',
-                          iconBgColor: isDark ? Colors.indigo.withValues(alpha: 0.2) : Colors.amber.withValues(alpha: 0.2),
-                          iconColor: isDark ? Colors.indigo[300]! : Colors.amber[700]!,
-                          trailing: Switch(
-                            value: _themeService.isDarkMode,
-                            onChanged: (value) {
-                              _themeService.toggleTheme();
                             },
-                            activeColor: primaryColor,
-                            activeTrackColor: primaryColor.withValues(alpha: 0.5),
+                            isDark: isDark,
                           ),
-                          isDark: isDark,
-                        ),
-                        _buildDivider(isDark),
-                        // Privacy
-                        _buildSettingItem(
-                          icon: Icons.security,
-                          title: 'Gizlilik',
-                          iconBgColor: Colors.blue.withValues(alpha: 0.1),
-                          iconColor: Colors.blue,
-                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const PrivacyPolicyScreen(),
-                              ),
-                            );
-                          },
-                          isDark: isDark,
-                        ),
-                      ],
-                    ),
-                                  ),
-                ),
-                ], // Ayarlar bölümü sonu
-
-                // Support Section (sadece kendi profilinde)
-                if (_isOwnProfile) ...[
-                const SizedBox(height: 24),
-                  _buildSectionHeader('DESTEK', textSub!),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                      ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        // FAQ
-                        _buildSettingItem(
-                          icon: Icons.help,
-                          title: 'Sıkça Sorulan Sorular',
-                          iconBgColor: Colors.green.withValues(alpha: 0.1),
-                          iconColor: Colors.green,
-                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const FAQScreen(),
-                              ),
-                            );
-                          },
-                          isDark: isDark,
-                        ),
-                        _buildDivider(isDark),
-                        // Contact
-                        _buildSettingItem(
-                          icon: Icons.mail,
-                          title: 'Bize Ulaşın',
-                          iconBgColor: Colors.orange.withValues(alpha: 0.1),
-                          iconColor: Colors.orange,
-                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () async {
-                            final email = 'kolikfirsat@gmail.com';
-                            final uri = Uri.parse('mailto:$email');
-                            try {
-                              if (await canLaunchUrl(uri)) {
-                                await launchUrl(uri);
-                              } else {
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('E-posta uygulaması açılamadı. Lütfen $email adresine manuel olarak e-posta gönderin.'),
-                                      backgroundColor: Colors.orange,
-                                      duration: const Duration(seconds: 4),
+                          _buildDivider(isDark),
+                          // Paylaştığım Fırsatlar
+                          _buildSettingItem(
+                            icon: Icons.local_offer_rounded,
+                            title: 'Paylaştığım Fırsatlar',
+                            iconBgColor: Colors.orange.withValues(alpha: 0.15),
+                            iconColor: Colors.orange,
+                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                            onTap: () {
+                              final currentUserId = _authService.currentUser?.uid;
+                              if (currentUserId != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => UserDealsScreen(
+                                      userId: currentUserId,
+                                      username: _user?.username ?? '',
+                                      isOwnProfile: true,
                                     ),
-                                  );
-                                }
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('E-posta açılırken hata: $e'),
-                                    backgroundColor: Colors.red,
                                   ),
                                 );
                               }
-                            }
-                          },
-                          isDark: isDark,
+                            },
+                            isDark: isDark,
+                          ),
+                          _buildDivider(isDark),
+                          // Takip Ettiklerim
+                          _buildSettingItem(
+                            icon: Icons.people_alt_rounded,
+                            title: 'Takip Ettiklerim',
+                            iconBgColor: Colors.purple.withValues(alpha: 0.15),
+                            iconColor: Colors.purple,
+                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const FollowingUsersScreen(),
+                                ),
+                              );
+                            },
+                            isDark: isDark,
+                          ),
+                          _buildDivider(isDark),
+                          // Mesajlar
+                          _buildSettingItem(
+                            icon: Icons.chat_bubble_rounded,
+                            title: 'Mesajlar',
+                            iconBgColor: Colors.blue.withValues(alpha: 0.15),
+                            iconColor: Colors.blue,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if ((_unreadMessageCount + _unreadAdminMessageCount) > 0)
+                                  Container(
+                                    margin: const EdgeInsets.only(right: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      (_unreadMessageCount + _unreadAdminMessageCount) > 99
+                                          ? '99+'
+                                          : (_unreadMessageCount + _unreadAdminMessageCount).toString(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                Icon(Icons.chevron_right_rounded, color: textSub),
+                              ],
+                            ),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const MessagesListScreen(),
+                                ),
+                              );
+                            },
+                            isDark: isDark,
+                          ),
+                          _buildDivider(isDark),
+                          // Dark Mode
+                          _buildSettingItem(
+                            icon: isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                            title: 'Karanlık Mod',
+                            iconBgColor: isDark ? Colors.indigo.withValues(alpha: 0.2) : Colors.amber.withValues(alpha: 0.2),
+                            iconColor: isDark ? Colors.indigo[300]! : Colors.amber[700]!,
+                            trailing: Switch(
+                              value: _themeService.isDarkMode,
+                              onChanged: (value) {
+                                _themeService.toggleTheme();
+                              },
+                              activeThumbColor: primaryColor,
+                              activeTrackColor: primaryColor.withValues(alpha: 0.5),
+                            ),
+                            isDark: isDark,
+                          ),
+                          _buildDivider(isDark),
+                          // Privacy
+                          _buildSettingItem(
+                            icon: Icons.shield_rounded,
+                            title: 'Gizlilik Politikası',
+                            iconBgColor: Colors.teal.withValues(alpha: 0.15),
+                            iconColor: Colors.teal,
+                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const PrivacyPolicyScreen(),
+                                ),
+                              );
+                            },
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+                  _buildSectionHeader('DESTEK & İLETİŞİM', textSub),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: surfaceColor,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+                          width: 1,
                         ),
-                        _buildDivider(isDark),
-                        // Rate App
-                        _buildSettingItem(
-                          icon: Icons.star,
-                          title: 'Uygulamayı Değerlendir',
-                          iconBgColor: primaryColor.withValues(alpha: 0.1),
-                          iconColor: Colors.yellow[800]!,
-                          trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-                          onTap: () async {
-                            // Play Store'a yönlendir
-                            // Not: Uygulama yayınlandığında gerçek paket adı ile değiştirilmeli
-                            const packageName = 'com.sicakfirsatlar.sicak_firsatlar';
-                            final playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=$packageName');
-                            final marketUrl = Uri.parse('market://details?id=$packageName');
-                            
-                            try {
-                              // Önce market:// protokolünü dene (Play Store uygulaması açılır)
-                              if (await canLaunchUrl(marketUrl)) {
-                                await launchUrl(marketUrl, mode: LaunchMode.externalApplication);
-                              } else if (await canLaunchUrl(playStoreUrl)) {
-                                // Play Store uygulaması yoksa web'de aç
-                                await launchUrl(playStoreUrl, mode: LaunchMode.externalApplication);
-                              } else {
+                      ),
+                      child: Column(
+                        children: [
+                          // FAQ
+                          _buildSettingItem(
+                            icon: Icons.help_outline_rounded,
+                            title: 'Sıkça Sorulan Sorular',
+                            iconBgColor: Colors.purple.withValues(alpha: 0.15),
+                            iconColor: Colors.purple,
+                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const FAQScreen(),
+                                ),
+                              );
+                            },
+                            isDark: isDark,
+                          ),
+                          _buildDivider(isDark),
+                          // Contact
+                          _buildSettingItem(
+                            icon: Icons.alternate_email_rounded,
+                            title: 'Bize Ulaşın',
+                            iconBgColor: Colors.orange.withValues(alpha: 0.15),
+                            iconColor: Colors.orange,
+                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                            onTap: () async {
+                              const email = 'kolikfirsat@gmail.com';
+                              final uri = Uri.parse('mailto:$email');
+                              try {
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri);
+                                } else {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('E-posta uygulaması açılamadı. Lütfen $email adresine manuel olarak e-posta gönderin.'),
+                                        backgroundColor: Colors.orange,
+                                        duration: Duration(seconds: 4),
+                                      ),
+                                    );
+                                  }
+                                }
+                              } catch (e) {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Play Store açılamadı'),
-                                      behavior: SnackBarBehavior.floating,
+                                    SnackBar(
+                                      content: Text('E-posta açılırken hata: $e'),
+                                      backgroundColor: Colors.red,
                                     ),
                                   );
                                 }
                               }
-                            } catch (e) {
-                              _log('Play Store açılırken hata: $e');
-                            }
-                          },
-                          isDark: isDark,
-                                  ),
-                                ],
-                              ),
-                            ),
-                ),
-                ], // DESTEK bölümü sonu
+                            },
+                            isDark: isDark,
+                          ),
+                          _buildDivider(isDark),
+                          // Rate App
+                          _buildSettingItem(
+                            icon: Icons.star_outline_rounded,
+                            title: 'Uygulamayı Değerlendir',
+                            iconBgColor: Colors.amber.withValues(alpha: 0.15),
+                            iconColor: Colors.amber[800]!,
+                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                            onTap: () async {
+                              const packageName = 'com.sicakfirsatlar.sicak_firsatlar';
+                              final playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=$packageName');
+                              final marketUrl = Uri.parse('market://details?id=$packageName');
+                              
+                              try {
+                                if (await canLaunchUrl(marketUrl)) {
+                                  await launchUrl(marketUrl, mode: LaunchMode.externalApplication);
+                                } else if (await canLaunchUrl(playStoreUrl)) {
+                                  await launchUrl(playStoreUrl, mode: LaunchMode.externalApplication);
+                                } else {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Play Store açılamadı'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                }
+                              } catch (e) {
+                                _log('Play Store açılırken hata: $e');
+                              }
+                            },
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
-                // Logout Button (sadece kendi profilinde)
-                if (_isOwnProfile) ...[
-                                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: TextButton.icon(
-                          onPressed: _signOut,
-                          icon: const Icon(Icons.logout),
-                          label: const Text('Çıkış Yap'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            backgroundColor: Colors.red.withValues(alpha: 0.05),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(color: Colors.red.withValues(alpha: 0.1)),
+                  // Logout & Delete Account
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: TextButton.icon(
+                            onPressed: _signOut,
+                            icon: const Icon(Icons.logout_rounded),
+                            label: const Text('Çıkış Yap'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              backgroundColor: Colors.red.withValues(alpha: 0.06),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(color: Colors.red.withValues(alpha: 0.15)),
+                              ),
+                              textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                             ),
-                            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                           ),
-                                        ),
-                                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: TextButton.icon(
-                          onPressed: _deleteAccount,
-                          icon: const Icon(Icons.delete_forever),
-                          label: const Text('Hesabımı Sil'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            backgroundColor: Colors.red.withValues(alpha: 0.05),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(color: Colors.red.withValues(alpha: 0.1)),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: TextButton.icon(
+                            onPressed: _deleteAccount,
+                            icon: const Icon(Icons.delete_forever_rounded),
+                            label: const Text('Hesabımı Sil'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              backgroundColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                             ),
-                            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                           ),
-                                        ),
-                                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'v1.2.4 (Build 302)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          color: Colors.grey[400],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'FırsatKolik v1.2.4 (Build 302)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: textSub.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
-                if (!_isOwnProfile && _user != null) ...[
-                  _buildLastDealsSection(context, _user!.uid),
-                ],
-                SizedBox(height: _isOwnProfile ? 100 : 24), // Bottom nav padding
+
+                SizedBox(height: _isOwnProfile ? 100 : 40), // Bottom nav padding
               ],
             ),
           ),
           
-          // Custom App Bar
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-              color: backgroundColor.withValues(alpha: 0.95),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(
-                      children: [
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    Expanded(
-                      child: Text(
-                        _isOwnProfile ? 'Profilim' : (_user?.username ?? 'Profil'),
-                        textAlign: TextAlign.center,
-                          style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: textMain,
-                          ),
+          // Floating Glassmorphic App Bar
+          _buildCustomAppBar(
+            context,
+            isDark: isDark,
+            backgroundColor: backgroundColor,
+            surfaceColor: surfaceColor,
+            textMain: textMain,
+            primaryColor: primaryColor,
+          ),
+
+          // Bottom Navigation Bar (Sadece kendi profilinde)
+          if (_isOwnProfile)
+            _buildBottomNav(
+              context,
+              isDark: isDark,
+              surfaceColor: surfaceColor,
+              primaryColor: primaryColor,
+            ),
+        ],
+      ),
+    );
+  }
+
+  // 1. HERO HEADER WITH COVER GRADIENT & GLOWING AVATAR
+  Widget _buildHeroHeader(
+    BuildContext context, {
+    required bool isDark,
+    required Color primaryColor,
+    required Color surfaceColor,
+    required Color backgroundColor,
+    required Color textMain,
+    required Color textSub,
+  }) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    final user = _user;
+    final username = user?.username ?? 'Kullanıcı';
+    final displayName = user?.displayName ?? username;
+    final trustLevel = user?.trustLevel ?? 'Yeni Üye';
+    final points = user?.points ?? 0;
+    final isVerified = user?.badges.contains('verified') ?? false;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(20, topPadding + 64, 20, 24),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Avatar
+          Center(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Inner Avatar with Clean Border
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: surfaceColor,
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : Colors.black.withValues(alpha: 0.08),
+                      width: 2.5,
                     ),
                   ),
-
-
-                    // Profil İşlemleri Menüsü (Raporla, Admin işlemleri vb.)
-                    if (!_isOwnProfile && _user != null)
-                      PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert, color: textMain),
-                        onSelected: (value) {
-                          if (value == 'badge') {
-                            _showBadgeDialog(_user!);
-                          } else if (value == 'block') {
-                            _blockUser(_user!);
-                          } else if (value == 'report') {
-                            showReportDialog(
-                              context,
-                              reportedId: _user!.uid,
-                              type: 'user',
-                            );
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          if (_isAdmin) ...[
-                            const PopupMenuItem(
-                              value: 'badge',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.workspace_premium, color: Colors.amber, size: 20),
-                                  SizedBox(width: 8),
-                                  Text('Rozet Yönet'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'block',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.block, color: Colors.red, size: 20),
-                                  SizedBox(width: 8),
-                                  Text('Kullanıcıyı Engelle'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuDivider(),
-                          ],
-                          const PopupMenuItem(
-                            value: 'report',
-                            child: Row(
-                              children: [
-                                Icon(Icons.flag_outlined, color: Colors.red, size: 20),
-                                SizedBox(width: 8),
-                                Text('Kullanıcıyı Raporla'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    if (!(_isAdmin && !_isOwnProfile && _user != null))
-                    const SizedBox(width: 48), // Balancing spacer
-                  ],
+                  child: ClipOval(
+                    child: (user?.profileImageUrl != null && user!.profileImageUrl.isNotEmpty)
+                        ? (user.profileImageUrl.startsWith('assets/')
+                            ? Image.asset(
+                                user.profileImageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Icon(Icons.person_rounded, size: 48, color: textSub),
+                              )
+                            : CachedNetworkImage(
+                                imageUrl: user.profileImageUrl,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: isDark ? Colors.grey[800] : Colors.grey[200],
+                                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                ),
+                                errorWidget: (context, url, error) =>
+                                    Icon(Icons.person_rounded, size: 48, color: textSub),
+                              ))
+                        : Icon(Icons.person_rounded, size: 48, color: textSub),
+                  ),
                 ),
-              ),
+                // Edit Button (Own Profile)
+                if (_isOwnProfile)
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: () => _showProfileImagePicker(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: primaryColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: surfaceColor, width: 2.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                // Verified Badge Indicator (Other user)
+                if (!_isOwnProfile && isVerified)
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00BCD4),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: surfaceColor, width: 2),
+                      ),
+                      child: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+                    ),
+                  ),
+              ],
             ),
           ),
 
-          // Bottom Navigation Bar (HTML Tasarımı)
-          if (_isOwnProfile)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: surfaceColor.withValues(alpha: 0.98),
-                border: Border(
-                  top: BorderSide(
-                    color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-                    width: 1,
+                const SizedBox(height: 12),
+
+                // Name with edit or verified icon
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        displayName,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: textMain,
+                          letterSpacing: -0.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (_isOwnProfile) ...[
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: () => _showEditUsernameDialog(context),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Icon(Icons.edit_rounded, size: 15, color: primaryColor),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+
+                const SizedBox(height: 3),
+
+                // Username handle (@username)
+                Text(
+                  '@$username',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: textSub,
                   ),
                 ),
-              ),
-              child: SafeArea(
-                top: false,
-                          child: Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 12),
+
+                if (_isOwnProfile && _authService.currentUser?.email != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    _authService.currentUser!.email!,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w400,
+                      color: textSub.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 10),
+
+                // Trust Level / Reputation Pill Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? primaryColor.withValues(alpha: 0.12)
+                        : primaryColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: primaryColor.withValues(alpha: 0.22),
+                      width: 1,
+                    ),
+                  ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildBottomNavItem(
-                        icon: Icons.home_outlined,
-                        label: 'Anasayfa',
-                        isSelected: false,
-                        onTap: () => Navigator.pop(context),
-                        isDark: isDark,
-                        primaryColor: primaryColor,
+                      Icon(
+                        Icons.verified_rounded,
+                        size: 13,
+                        color: primaryColor,
                       ),
-                      _buildBottomNavItem(
-                        icon: Icons.category_outlined,
-                        label: 'Kategoriler',
-                        isSelected: false,
-                        onTap: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const CategoryPreferencesScreen(),
-                            ),
-                          );
-                        },
-                        isDark: isDark,
-                        primaryColor: primaryColor,
-                                              ),
-                      _buildBottomNavItem(
-                        icon: Icons.person,
-                        label: 'Profilim',
-                        isSelected: true,
-                        onTap: () {},
-                        isDark: isDark,
-                        primaryColor: primaryColor,
+                      const SizedBox(width: 5),
+                      Text(
+                        trustLevel,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: primaryColor,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 3.5,
+                        height: 3.5,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: textSub.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$points Puan',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: textSub,
+                        ),
                       ),
                     ],
                   ),
                 ),
+              ],
+            ),
+          );
+  }
+
+  // 3. STATS MATRIX (4-COLUMN CARD)
+  Widget _buildStatsMatrix(
+    BuildContext context, {
+    required bool isDark,
+    required Color primaryColor,
+    required Color surfaceColor,
+    required Color textMain,
+    required Color textSub,
+  }) {
+    final user = _user;
+    final dealCount = user?.dealCount ?? 0;
+    final points = user?.points ?? 0;
+    final totalLikes = user?.totalLikes ?? 0;
+    final followingCount = user?.following.length ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildSingleStat(
+            icon: Icons.local_fire_department_rounded,
+            iconColor: Colors.orange.shade600,
+            iconBg: Colors.orange.withValues(alpha: 0.12),
+            value: '$dealCount',
+            label: 'Fırsat',
+            textMain: textMain,
+            textSub: textSub,
+          ),
+          _buildStatDivider(isDark),
+          _buildSingleStat(
+            icon: Icons.star_rounded,
+            iconColor: Colors.amber.shade700,
+            iconBg: Colors.amber.withValues(alpha: 0.12),
+            value: '$points',
+            label: 'Puan',
+            textMain: textMain,
+            textSub: textSub,
+          ),
+          _buildStatDivider(isDark),
+          _buildSingleStat(
+            icon: Icons.favorite_rounded,
+            iconColor: Colors.redAccent,
+            iconBg: Colors.redAccent.withValues(alpha: 0.12),
+            value: '$totalLikes',
+            label: 'Beğeni',
+            textMain: textMain,
+            textSub: textSub,
+          ),
+          _buildStatDivider(isDark),
+          _buildSingleStat(
+            icon: Icons.people_alt_rounded,
+            iconColor: Colors.blue.shade600,
+            iconBg: Colors.blue.withValues(alpha: 0.12),
+            value: '$followingCount',
+            label: 'Takip',
+            textMain: textMain,
+            textSub: textSub,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleStat({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String value,
+    required String label,
+    required Color textMain,
+    required Color textSub,
+  }) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: iconBg,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 14, color: iconColor),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: textMain,
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+              color: textSub,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatDivider(bool isDark) {
+    return Container(
+      width: 1,
+      height: 28,
+      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+    );
+  }
+
+  // 4. BADGES SHOWCASE SECTION
+  Widget _buildBadgesSection(
+    BuildContext context, {
+    required bool isDark,
+    required Color primaryColor,
+    required Color surfaceColor,
+    required Color textMain,
+    required Color textSub,
+  }) {
+    final badgeInfos = BadgeHelper.getBadgeInfos(_user!.badges);
+    if (badgeInfos.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.military_tech_rounded, size: 16, color: primaryColor),
+              const SizedBox(width: 6),
+              Text(
+                'KAZANILAN ROZETLER',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: textSub,
+                ),
               ),
-                                                    ),
-                                              ),
-                                            ],
-                                        ),
-                                      );
-                                    }
-                                    
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${badgeInfos.length}',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: badgeInfos.map((badge) {
+              return InkWell(
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                    builder: (context) => Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(badge.icon, style: const TextStyle(fontSize: 48)),
+                          const SizedBox(height: 12),
+                          Text(
+                            badge.name,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: textMain,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            badge.description,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: textSub,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: badge.color.withValues(alpha: isDark ? 0.15 : 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: badge.color.withValues(alpha: 0.35),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(badge.icon, style: const TextStyle(fontSize: 14)),
+                      const SizedBox(width: 5),
+                      Text(
+                        badge.name,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: badge.color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 5. USER DEALS FEED SECTION
+  Widget _buildUserDealsSection(
+    BuildContext context, {
+    required String userId,
+    required bool isDark,
+    required Color primaryColor,
+    required Color surfaceColor,
+    required Color textMain,
+    required Color textSub,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.local_offer_outlined, size: 16, color: primaryColor),
+                const SizedBox(width: 6),
+                Text(
+                  'PAYLAŞILAN FIRSATLAR',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: textSub,
+                  ),
+                ),
+              ],
+            ),
+            if ((_user?.dealCount ?? 0) > 0)
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => UserDealsScreen(
+                        userId: userId,
+                        username: _user?.username ?? '',
+                        isOwnProfile: false,
+                      ),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Tümü',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: primaryColor,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(Icons.chevron_right_rounded, size: 16, color: primaryColor),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        StreamBuilder<List<Deal>>(
+          stream: _userDealsStream ?? _firestoreService.getUserDealsStream(userId, limit: 5),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+                  ),
+                ),
+                child: Center(
+                  child: CircularProgressIndicator(color: primaryColor, strokeWidth: 2.5),
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Center(
+                  child: Text(
+                    'Fırsatlar yüklenirken bir sorun oluştu.',
+                    style: TextStyle(color: textSub, fontSize: 13),
+                  ),
+                ),
+              );
+            }
+
+            final deals = snapshot.data ?? [];
+
+            if (deals.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.inventory_2_outlined,
+                        size: 32,
+                        color: primaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Henüz Paylaşılan Fırsat Yok',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: textMain,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Bu kullanıcının paylaştığı fırsatlar burada listelenecektir.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: textSub,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: deals.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final deal = deals[index];
+                return Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: DealCard(
+                    deal: deal,
+                    viewMode: CardViewMode.horizontal,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DealDetailScreen(dealId: deal.id),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  // 6. CUSTOM FLOATING GLASS APP BAR
+  Widget _buildCustomAppBar(
+    BuildContext context, {
+    required bool isDark,
+    required Color backgroundColor,
+    required Color surfaceColor,
+    required Color textMain,
+    required Color primaryColor,
+  }) {
+    final topPadding = MediaQuery.of(context).padding.top;
+
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: EdgeInsets.only(top: topPadding + 6, bottom: 8, left: 16, right: 16),
+        decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: 0.85),
+          border: Border(
+            bottom: BorderSide(
+              color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+              width: 0.5,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            // Glass Back Button
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => Navigator.pop(context),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 18,
+                    color: textMain,
+                  ),
+                ),
+              ),
+            ),
+
+            Expanded(
+              child: Text(
+                _isOwnProfile ? 'Profilim' : (_user?.username ?? 'Kullanıcı Profili'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: textMain,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+
+            // More Options (Report, Block, Badge for Admin)
+            if (!_isOwnProfile && _user != null)
+              PopupMenuButton<String>(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.more_horiz_rounded, size: 18, color: textMain),
+                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                color: surfaceColor,
+                onSelected: (value) {
+                  if (value == 'badge') {
+                    _showBadgeDialog(_user!);
+                  } else if (value == 'block') {
+                    _blockUser(_user!);
+                  } else if (value == 'report') {
+                    showReportDialog(
+                      context,
+                      reportedId: _user!.uid,
+                      type: 'user',
+                    );
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (_isAdmin) ...[
+                    const PopupMenuItem(
+                      value: 'badge',
+                      child: Row(
+                        children: [
+                          Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 20),
+                          SizedBox(width: 10),
+                          Text('Rozet Yönet', style: TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'block',
+                      child: Row(
+                        children: [
+                          Icon(Icons.block_rounded, color: Colors.red, size: 20),
+                          SizedBox(width: 10),
+                          Text('Kullanıcıyı Engelle', style: TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                  ],
+                  const PopupMenuItem(
+                    value: 'report',
+                    child: Row(
+                      children: [
+                        Icon(Icons.flag_outlined, color: Colors.redAccent, size: 20),
+                        SizedBox(width: 10),
+                        Text('Kullanıcıyı Bildir', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            else
+              const SizedBox(width: 36),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 7. BOTTOM NAVIGATION BAR
+  Widget _buildBottomNav(
+    BuildContext context, {
+    required bool isDark,
+    required Color surfaceColor,
+    required Color primaryColor,
+  }) {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: 0.98),
+          border: Border(
+            top: BorderSide(
+              color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+              width: 1,
+            ),
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildBottomNavItem(
+                  icon: Icons.home_outlined,
+                  label: 'Anasayfa',
+                  isSelected: false,
+                  onTap: () => Navigator.pop(context),
+                  isDark: isDark,
+                  primaryColor: primaryColor,
+                ),
+                _buildBottomNavItem(
+                  icon: Icons.category_outlined,
+                  label: 'Kategoriler',
+                  isSelected: false,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CategoryPreferencesScreen(),
+                      ),
+                    );
+                  },
+                  isDark: isDark,
+                  primaryColor: primaryColor,
+                ),
+                _buildBottomNavItem(
+                  icon: Icons.person_rounded,
+                  label: 'Profilim',
+                  isSelected: true,
+                  onTap: () {},
+                  isDark: isDark,
+                  primaryColor: primaryColor,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBottomNavItem({
     required IconData icon,
     required String label,
@@ -1646,57 +2155,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     return GestureDetector(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque, // Tüm alanı dokunulabilir yap
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12), // Dokunma alanını genişlet
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         child: SizedBox(
           width: 80,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-            if (isSelected)
-              Container(
-                width: 32,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 4),
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(4)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withValues(alpha: 0.5),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-              )
-            else
-              const SizedBox(height: 8),
-            Icon(
-              icon,
-              color: isSelected 
-                  ? (isDark ? primaryColor : Colors.black) 
-                  : (isDark ? Colors.grey[400] : Colors.grey[600]),
-              size: 24,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              if (isSelected)
+                Container(
+                  width: 28,
+                  height: 3,
+                  margin: const EdgeInsets.only(bottom: 4),
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(4)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withValues(alpha: 0.5),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                )
+              else
+                const SizedBox(height: 7),
+              Icon(
+                icon,
                 color: isSelected 
-                    ? (isDark ? primaryColor : Colors.black) 
+                    ? (isDark ? primaryColor : primaryColor) 
                     : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                size: 24,
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected 
+                      ? (isDark ? primaryColor : primaryColor) 
+                      : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
-                                    
+
   Widget _buildSectionHeader(String title, Color color) {
     return Container(
       width: double.infinity,
@@ -1727,26 +2236,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-      padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
-                                                      decoration: BoxDecoration(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
                   color: iconBgColor,
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: iconColor, size: 20),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.grey[200] : Colors.black,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.grey[200] : Colors.black87,
                   ),
                 ),
               ),
@@ -1761,7 +2270,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildDivider(bool isDark) {
     return Divider(
       height: 1,
-      indent: 64,
+      indent: 68,
       color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
     );
   }
@@ -1778,6 +2287,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
             '${user.username} - Rozet Yönetimi',
             style: TextStyle(
@@ -1833,7 +2343,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       hintText: 'Rozet adı girin (örn: VIP, Moderatör)',
                       hintStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       filled: true,
                       fillColor: isDark ? Colors.grey[800] : Colors.grey[100],
@@ -1861,8 +2371,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Rozet Ekle'),
+                      child: const Text('Rozet Ekle', style: TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -2042,196 +2553,404 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
 
-  // Takip et/Takipten çık
-  Future<void> _toggleFollow() async {
-    final currentUserId = _authService.currentUser?.uid;
-    final targetUserId = widget.userId;
-    if (currentUserId == null || targetUserId == null) return;
+// ---------------------------------------------------------------------------
+// ISOLATED ACTION BAR WIDGET (FOLLOW / MESSAGE / NOTIFICATION / BADGE)
+// Only this widget rebuilds when user toggles follow or notification bell!
+// ---------------------------------------------------------------------------
+class _OtherUserActionBarWidget extends StatefulWidget {
+  final String currentUserId;
+  final String targetUserId;
+  final AppUser user;
+  final bool initialIsFollowing;
+  final bool initialIsFollowNotificationEnabled;
+  final bool isAdmin;
+  final bool isDark;
+  final Color primaryColor;
+  final Color surfaceColor;
+  final Color textMain;
+  final VoidCallback onMessageTap;
+  final Function(AppUser) onBadgeTap;
 
-    try {
-      if (_isFollowing) {
-        // Takipten çık
-        await _firestoreService.unfollowUser(currentUserId, targetUserId);
-        if (mounted) {
-          setState(() {
-            _isFollowing = false;
-            _isFollowNotificationEnabled = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Takipten çıkıldı'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 1),
-            ),
-          );
-        }
-      } else {
-        // Takip et
-        await _firestoreService.followUser(currentUserId, targetUserId);
-        if (mounted) {
-          setState(() {
-            _isFollowing = true;
-            _isFollowNotificationEnabled = true; // Takip edildiğinde bildirimler aktif olarak başlar
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Takip edildi ✅ Bildirimler aktif'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      _log('Takip toggle hatası: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+  const _OtherUserActionBarWidget({
+    required this.currentUserId,
+    required this.targetUserId,
+    required this.user,
+    required this.initialIsFollowing,
+    required this.initialIsFollowNotificationEnabled,
+    required this.isAdmin,
+    required this.isDark,
+    required this.primaryColor,
+    required this.surfaceColor,
+    required this.textMain,
+    required this.onMessageTap,
+    required this.onBadgeTap,
+  });
+
+  @override
+  State<_OtherUserActionBarWidget> createState() => _OtherUserActionBarWidgetState();
+}
+
+class _OtherUserActionBarWidgetState extends State<_OtherUserActionBarWidget> {
+  final FirestoreService _firestoreService = FirestoreService();
+  late bool _isFollowing;
+  late bool _isFollowNotificationEnabled;
+
+  @override
+  void initState() {
+    super.initState();
+    _isFollowing = widget.initialIsFollowing;
+    _isFollowNotificationEnabled = widget.initialIsFollowNotificationEnabled;
+  }
+
+  @override
+  void didUpdateWidget(covariant _OtherUserActionBarWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialIsFollowing != widget.initialIsFollowing) {
+      _isFollowing = widget.initialIsFollowing;
+    }
+    if (oldWidget.initialIsFollowNotificationEnabled != widget.initialIsFollowNotificationEnabled) {
+      _isFollowNotificationEnabled = widget.initialIsFollowNotificationEnabled;
     }
   }
 
-  // Takip bildirimlerini aç/kapat
-  Future<void> _toggleFollowNotification() async {
-    final currentUserId = _authService.currentUser?.uid;
-    final targetUserId = widget.userId;
-    if (currentUserId == null || targetUserId == null || !_isFollowing) return;
+  void _showFloatingSnackBar(String message, {bool isSuccess = true}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: isSuccess ? const Color(0xFF10B981) : const Color(0xFFF97316),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        duration: const Duration(milliseconds: 2000),
+        elevation: 4,
+      ),
+    );
+  }
+
+  Future<void> _toggleFollow() async {
+    final nextFollowing = !_isFollowing;
+    final nextNotification = nextFollowing ? true : false;
+
+    // Instant optimistic local update - only this widget updates
+    setState(() {
+      _isFollowing = nextFollowing;
+      _isFollowNotificationEnabled = nextNotification;
+    });
+
+    if (nextFollowing) {
+      _showFloatingSnackBar('${widget.user.username} takip edildi. Anlık bildirimler açık 🔔', isSuccess: true);
+    } else {
+      _showFloatingSnackBar('Takipten çıkıldı', isSuccess: false);
+    }
 
     try {
-      final newValue = !_isFollowNotificationEnabled;
-      await _firestoreService.toggleFollowNotification(currentUserId, targetUserId, newValue);
-      
+      if (nextFollowing) {
+        await _firestoreService.followUser(widget.currentUserId, widget.targetUserId);
+      } else {
+        await _firestoreService.unfollowUser(widget.currentUserId, widget.targetUserId);
+      }
+    } catch (e) {
+      // Revert upon error
       if (mounted) {
         setState(() {
-          _isFollowNotificationEnabled = newValue;
+          _isFollowing = !nextFollowing;
+          _isFollowNotificationEnabled = !nextFollowing;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(newValue ? 'Bildirimler açıldı ✅' : 'Bildirimler kapatıldı'),
-            backgroundColor: newValue ? Colors.green : Colors.orange,
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      }
-    } catch (e) {
-      _log('Takip bildirim toggle hatası: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        _showFloatingSnackBar('İşlem başarısız oldu: $e', isSuccess: false);
       }
     }
   }
 
+  Future<void> _toggleFollowNotification() async {
+    if (!_isFollowing) return;
+    final nextNotification = !_isFollowNotificationEnabled;
 
-  Widget _buildLastDealsSection(BuildContext context, String userId) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textSub = isDark ? Colors.grey[400] : const Color(0xFF5C5C4F);
-    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+    // Instant optimistic local update - only this widget updates
+    setState(() {
+      _isFollowNotificationEnabled = nextNotification;
+    });
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    if (nextNotification) {
+      _showFloatingSnackBar('${widget.user.username} yeni bir fırsat paylaştığında anlık bildirim alacaksınız 🔔', isSuccess: true);
+    } else {
+      _showFloatingSnackBar('Bu kullanıcı için anlık bildirimler kapatıldı 🔕', isSuccess: false);
+    }
+
+    try {
+      await _firestoreService.toggleFollowNotification(
+        widget.currentUserId,
+        widget.targetUserId,
+        nextNotification,
+      );
+    } catch (e) {
+      // Revert upon error
+      if (mounted) {
+        setState(() {
+          _isFollowNotificationEnabled = !nextNotification;
+        });
+        _showFloatingSnackBar('İşlem başarısız oldu: $e', isSuccess: false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasBadges = widget.user.badges.isNotEmpty;
+
+    return Row(
       children: [
-        const SizedBox(height: 24),
-        _buildSectionHeader('SON PAYLAŞILAN FIRSATLAR', textSub!),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: StreamBuilder<List<Deal>>(
-            stream: _firestoreService.getUserLastDealsStream(userId),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: surfaceColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
+        // Takip Et / Takip Ediliyor Butonu (Expanded)
+        Expanded(
+          flex: 3,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                _toggleFollow();
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeInOut,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _isFollowing
+                      ? widget.primaryColor.withValues(alpha: widget.isDark ? 0.16 : 0.10)
+                      : widget.primaryColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: _isFollowing
+                        ? widget.primaryColor.withValues(alpha: 0.7)
+                        : Colors.transparent,
+                    width: 1.5,
                   ),
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                );
-              }
-
-              if (snapshot.hasError) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: surfaceColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'Fırsatlar yüklenirken bir hata oluştu',
-                      style: TextStyle(color: textSub),
+                  boxShadow: [
+                    if (!_isFollowing)
+                      BoxShadow(
+                        color: widget.primaryColor.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      )
+                    else
+                      BoxShadow(
+                        color: widget.primaryColor.withValues(alpha: widget.isDark ? 0.08 : 0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1),
+                      ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _isFollowing
+                          ? Icons.check_circle_rounded
+                          : Icons.person_add_rounded,
+                      size: 16,
+                      color: _isFollowing ? widget.primaryColor : Colors.white,
                     ),
-                  ),
-                );
-              }
-
-              final deals = snapshot.data ?? [];
-
-              if (deals.isEmpty) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: surfaceColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'Henüz hiçbir fırsat paylaşılmadı.',
-                      style: TextStyle(color: textSub, fontWeight: FontWeight.w500),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isFollowing ? 'Takip Ediliyor' : 'Takip Et',
+                      style: TextStyle(
+                        color: _isFollowing ? widget.primaryColor : Colors.white,
+                        fontWeight: _isFollowing ? FontWeight.w600 : FontWeight.w700,
+                        fontSize: 13,
+                        letterSpacing: -0.2,
+                      ),
                     ),
-                  ),
-                );
-              }
-
-              return ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: deals.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final deal = deals[index];
-                  return Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: DealCard(
-                      deal: deal,
-                      viewMode: CardViewMode.horizontal,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DealDetailScreen(dealId: deal.id),
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                },
-              );
-            },
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
+
+        const SizedBox(width: 8),
+
+        // Mesaj Gönder Butonu
+        Expanded(
+          flex: 2,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                widget.onMessageTap();
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                height: 42,
+                decoration: BoxDecoration(
+                  color: widget.surfaceColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: widget.isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.08),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: widget.isDark ? 0.15 : 0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 15,
+                      color: widget.isDark ? Colors.grey[300] : Colors.grey[800],
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Mesaj',
+                      style: TextStyle(
+                        color: widget.textMain,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Bildirim Zili (Sadece takip ediliyorsa)
+        if (_isFollowing) ...[
+          const SizedBox(width: 8),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                _toggleFollowNotification();
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeInOut,
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _isFollowNotificationEnabled
+                      ? Colors.amber.withValues(alpha: widget.isDark ? 0.22 : 0.15)
+                      : widget.surfaceColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: _isFollowNotificationEnabled
+                        ? Colors.amber.shade600
+                        : (widget.isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.08)),
+                    width: _isFollowNotificationEnabled ? 1.5 : 1.0,
+                  ),
+                  boxShadow: [
+                    if (_isFollowNotificationEnabled)
+                      BoxShadow(
+                        color: Colors.amber.withValues(alpha: 0.25),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      )
+                    else
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: widget.isDark ? 0.15 : 0.03),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                  ],
+                ),
+                child: Icon(
+                  _isFollowNotificationEnabled
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_off_outlined,
+                  size: 18,
+                  color: _isFollowNotificationEnabled
+                      ? Colors.amber.shade500
+                      : (widget.isDark ? Colors.grey[500] : Colors.grey[400]),
+                ),
+              ),
+            ),
+          ),
+        ],
+
+        // Admin Rozet Yönet Butonu (Sadece Admin için)
+        if (widget.isAdmin) ...[
+          const SizedBox(width: 8),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => widget.onBadgeTap(widget.user),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: hasBadges
+                      ? Colors.amber.withValues(alpha: widget.isDark ? 0.18 : 0.12)
+                      : widget.surfaceColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: hasBadges
+                        ? Colors.amber.withValues(alpha: 0.6)
+                        : (widget.isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.08)),
+                    width: hasBadges ? 1.5 : 1.0,
+                  ),
+                  boxShadow: [
+                    if (hasBadges)
+                      BoxShadow(
+                        color: Colors.amber.withValues(alpha: 0.2),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                  ],
+                ),
+                child: Icon(
+                  hasBadges
+                      ? Icons.workspace_premium_rounded
+                      : Icons.workspace_premium_outlined,
+                  size: 19,
+                  color: hasBadges
+                      ? Colors.amber.shade600
+                      : (widget.isDark ? Colors.grey[400] : Colors.grey[600]),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

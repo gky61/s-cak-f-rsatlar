@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 
@@ -31,36 +30,16 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
 
   late final Stream<List<Message>> _messagesStream;
   String _searchQuery = '';
-  bool _showInfoBanner = true;
 
   @override
   void initState() {
     super.initState();
-    _loadBannerState();
     final uid = _authService.currentUser?.uid;
     if (uid != null) {
       _messagesStream = _firestoreService.getUserMessagesStream(uid);
     } else {
       _messagesStream = const Stream.empty();
     }
-  }
-
-  Future<void> _loadBannerState() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isDismissed = prefs.getBool('messages_info_banner_dismissed') ?? false;
-    if (mounted && isDismissed) {
-      setState(() {
-        _showInfoBanner = false;
-      });
-    }
-  }
-
-  Future<void> _dismissBanner() async {
-    setState(() {
-      _showInfoBanner = false;
-    });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('messages_info_banner_dismissed', true);
   }
 
   @override
@@ -129,7 +108,6 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
 
           // Konuşmaları grupla (her kullanıcı ile son mesaj)
           final Map<String, Message> conversations = {};
-          int totalUnreadCount = 0;
 
           for (var message in messages) {
             final otherUserId = message.senderId == currentUserId
@@ -141,10 +119,6 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
             final otherUserImageUrl = message.senderId == currentUserId
                 ? message.receiverImageUrl
                 : message.senderImageUrl;
-
-            if (!message.isRead && message.receiverId == currentUserId) {
-              totalUnreadCount++;
-            }
 
             if (!conversations.containsKey(otherUserId) ||
                 conversations[otherUserId]!.createdAt.isBefore(message.createdAt)) {
@@ -173,71 +147,6 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 child: Column(
                   children: [
-                    // Üst Bilgi Notu (Kullanıcı dilerse çarpı ile kapatabilir)
-                    if (_showInfoBanner) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? primaryColor.withValues(alpha: 0.12)
-                              : primaryColor.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: primaryColor.withValues(alpha: 0.2),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.forum_outlined, color: primaryColor, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Üyelerle sohbetleriniz ve resmi yönetici duyuruları.',
-                                style: TextStyle(
-                                  color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: totalUnreadCount > 0 ? primaryColor : (isDark ? Colors.grey[800] : Colors.grey[300]),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                totalUnreadCount > 0
-                                    ? '$totalUnreadCount Yeni'
-                                    : '${conversationList.length}',
-                                style: TextStyle(
-                                  color: totalUnreadCount > 0 ? Colors.white : (isDark ? Colors.grey[300] : Colors.grey[800]),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            // Şık Kapatma Çarpısı
-                            InkWell(
-                              onTap: _dismissBanner,
-                              borderRadius: BorderRadius.circular(20),
-                              child: Padding(
-                                padding: const EdgeInsets.all(2.0),
-                                child: Icon(
-                                  Icons.close_rounded,
-                                  size: 18,
-                                  color: isDark ? Colors.grey[400] : Colors.grey[600],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
 
                     // Mesaj Arama Barı (Klavye asla kapanmaz)
                     if (conversationList.isNotEmpty)
@@ -630,6 +539,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
     );
 
     if (confirmed == true && mounted) {
+      final messenger = ScaffoldMessenger.of(context);
       HapticFeedback.mediumImpact();
       try {
         if (message.isAdminMessage) {
@@ -653,7 +563,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
         }
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(
               content: Text('🗑️ $userName ile olan sohbet silindi'),
               backgroundColor: Colors.orange[800],

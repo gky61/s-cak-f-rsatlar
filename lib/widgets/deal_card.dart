@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/deal.dart';
 import '../services/link_preview_service.dart';
@@ -29,6 +31,8 @@ class DealCard extends StatefulWidget {
 }
 
 class _DealCardState extends State<DealCard> {
+  static final Map<String, String> _resolvedImageCache = {};
+
   String? _effectiveImageUrl;
   bool _isLoadingImage = false;
   bool _imageLoadAttempted = false;
@@ -63,8 +67,11 @@ class _DealCardState extends State<DealCard> {
     
     if (isBlobUrl) {
       _effectiveImageUrl = null;
+    } else if (dealImageUrl.isNotEmpty) {
+      _effectiveImageUrl = dealImageUrl;
     } else {
-      _effectiveImageUrl = dealImageUrl.isNotEmpty ? dealImageUrl : null;
+      final cached = _resolvedImageCache[widget.deal.id] ?? _resolvedImageCache[widget.deal.link.trim()];
+      _effectiveImageUrl = cached;
     }
     
     if (!_imageLoadAttempted && (_effectiveImageUrl == null || isBlobUrl) && widget.deal.link.isNotEmpty) {
@@ -72,6 +79,23 @@ class _DealCardState extends State<DealCard> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _loadImageFromLink();
       });
+    }
+  }
+
+  void _persistFoundImage(String foundUrl) {
+    _resolvedImageCache[widget.deal.id] = foundUrl;
+    if (widget.deal.link.trim().isNotEmpty) {
+      _resolvedImageCache[widget.deal.link.trim()] = foundUrl;
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && widget.deal.id.isNotEmpty) {
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('favorites')
+          .doc(widget.deal.id)
+          .set({'imageUrl': foundUrl}, SetOptions(merge: true))
+          .catchError((_) {});
     }
   }
   
@@ -86,6 +110,7 @@ class _DealCardState extends State<DealCard> {
       
       if (amazonImage != null && mounted) {
         _log('✅ DealCard: Amazon görsel bulundu (ASIN yöntemi): $amazonImage');
+        _persistFoundImage(amazonImage);
         setState(() {
           _effectiveImageUrl = amazonImage;
           _isLoadingImage = false;
@@ -104,6 +129,7 @@ class _DealCardState extends State<DealCard> {
           .timeout(const Duration(seconds: 5), onTimeout: () => null);
       
       if (mounted && preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
+        _persistFoundImage(preview.imageUrl!);
         setState(() {
           _effectiveImageUrl = preview.imageUrl;
           _isLoadingImage = false;

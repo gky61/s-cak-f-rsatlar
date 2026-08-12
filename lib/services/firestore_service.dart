@@ -207,6 +207,7 @@ class FirestoreService {
             deals.add(deal);
           }
         } else {
+          final savedImageUrl = (item['imageUrl'] ?? item['gorselUrl'] ?? item['image_url'])?.toString() ?? '';
           deals.add(Deal(
             id: dealId,
             title: title,
@@ -215,7 +216,7 @@ class FirestoreService {
             store: store,
             category: 'tumu',
             link: link,
-            imageUrl: '',
+            imageUrl: savedImageUrl,
             hotVotes: 0,
             coldVotes: 0,
             commentCount: 0,
@@ -390,8 +391,8 @@ class FirestoreService {
   // ===========================================================================
 
   Future<bool> isFavorite(String userId, String dealId) => _userService.isFavorite(userId, dealId);
-  Future<bool> addToFavorites(String userId, String dealId, {String? title, double? price, String? store, String? link}) =>
-      _userService.addToFavorites(userId, dealId, title: title, price: price, store: store, link: link);
+  Future<bool> addToFavorites(String userId, String dealId, {String? title, double? price, String? store, String? link, String? imageUrl}) =>
+      _userService.addToFavorites(userId, dealId, title: title, price: price, store: store, link: link, imageUrl: imageUrl);
   Future<bool> removeFromFavorites(String userId, String dealId) => _userService.removeFromFavorites(userId, dealId);
   Stream<List<Deal>> getFavoriteDeals(String userId) => _userService.getFavoriteDeals(userId);
   Future<void> addLastSharedDeal(String userId, {required String dealId, required String title, required double price, required String store, required String link}) =>

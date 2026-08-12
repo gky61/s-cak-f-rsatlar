@@ -72,20 +72,25 @@ class UserService {
     } catch (e) { return false; }
   }
 
-  Future<bool> addToFavorites(String userId, String dealId, {String? title, double? price, String? store, String? link}) async {
+  Future<bool> addToFavorites(String userId, String dealId, {String? title, double? price, String? store, String? link, String? imageUrl}) async {
     try {
       String finalTitle = title ?? '';
       double finalPrice = price ?? 0.0;
       String finalStore = store ?? '';
       String finalLink = link ?? '';
+      String finalImageUrl = imageUrl ?? '';
 
-      if (finalTitle.isEmpty || finalLink.isEmpty) {
+      if (finalTitle.isEmpty || finalLink.isEmpty || finalImageUrl.isEmpty) {
         final doc = await _firestore.collection('deals').doc(dealId).get();
         if (doc.exists) {
-          finalTitle = doc.data()?['title'] ?? '';
-          finalPrice = (doc.data()?['price'] as num?)?.toDouble() ?? 0.0;
-          finalStore = doc.data()?['store'] ?? '';
-          finalLink = doc.data()?['link'] ?? doc.data()?['url'] ?? '';
+          final data = doc.data();
+          if (data != null) {
+            if (finalTitle.isEmpty) finalTitle = data['title'] ?? '';
+            if (finalPrice == 0.0) finalPrice = (data['price'] as num?)?.toDouble() ?? 0.0;
+            if (finalStore.isEmpty) finalStore = data['store'] ?? '';
+            if (finalLink.isEmpty) finalLink = data['link'] ?? data['url'] ?? '';
+            if (finalImageUrl.isEmpty) finalImageUrl = data['imageUrl'] ?? data['image_url'] ?? data['gorselUrl'] ?? '';
+          }
         }
       }
 
@@ -96,8 +101,9 @@ class UserService {
         'fiyat': finalPrice.toString(),
         'link': finalLink,
         'magazaAdi': finalStore,
+        'imageUrl': finalImageUrl,
         'savedAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
       return true;
     } catch (e) {
       return false;
@@ -133,10 +139,17 @@ class UserService {
         final data = doc.data();
         final dealId = doc.id;
         final dealDoc = await _firestore.collection('deals').doc(dealId).get();
+        final savedImageUrl = (data['imageUrl'] ?? data['gorselUrl'] ?? data['image_url'])?.toString() ?? '';
         
         if (dealDoc.exists) {
-          // Canlı Durum Güncellemesi: Firestore'daki güncel stok/fırsat durumunu yansıt
-          return Deal.fromFirestore(dealDoc);
+          final deal = Deal.fromFirestore(dealDoc);
+          // Favoriler alt dokümanında imageUrl eksikse arka planda doldur
+          if (savedImageUrl.isEmpty && deal.imageUrl.isNotEmpty) {
+            _firestore.collection('users').doc(userId).collection('favorites').doc(dealId).set({
+              'imageUrl': deal.imageUrl,
+            }, SetOptions(merge: true)).catchError((_) {});
+          }
+          return deal;
         } else {
           // İlan silinmişse yedek süresi doldu verisi oluştur
           final baslik = data['baslik'] ?? data['title'] ?? 'Süresi Dolan Fırsat';
@@ -155,7 +168,7 @@ class UserService {
             store: store,
             category: 'tumu',
             link: link,
-            imageUrl: '',
+            imageUrl: savedImageUrl,
             hotVotes: 0,
             coldVotes: 0,
             commentCount: 0,
