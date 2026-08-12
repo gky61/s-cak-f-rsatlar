@@ -1449,59 +1449,64 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 const SizedBox(height: 5),
                               ],
                               if (!deal.hidePrice)
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    // Sol: İndirimli (Fırsat) Fiyatı - Dikeyde Ortalı, Font Size: 24
-                                    FormattedPriceText(
-                                      value: deal.price,
-                                      style: const TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w900,
-                                        color: AppTheme.primary,
-                                        height: 1.0,
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Sol: İndirimli (Fırsat) Fiyatı - Dikeyde Ortalı
+                                      FormattedPriceText(
+                                        value: deal.price,
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w900,
+                                          color: AppTheme.primary,
+                                          height: 1.0,
+                                        ),
                                       ),
-                                    ),
-                                    // Sağ: [İndirim Etiketi üstte, İndirimsiz (eski) Fiyat altta] Sütunu
-                                    if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                                      const SizedBox(width: 10),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          // İndirim Etiketi (tam indirimsiz fiyatın üstünde)
-                                          if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
-                                            Container(
-                                              margin: const EdgeInsets.only(bottom: 2),
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: isDark ? AppTheme.primary : const Color(0xFFE53935),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                '%${deal.effectiveDiscountRate} İndirim',
-                                                style: TextStyle(
-                                                  fontSize: 9.5,
-                                                  fontWeight: FontWeight.w900,
-                                                  color: isDark ? Colors.black : Colors.white,
+                                      // Sağ: [İndirim Etiketi üstte, İndirimsiz (eski) Fiyat altta] Sütunu
+                                      if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                                        const SizedBox(width: 8),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            // İndirim Etiketi (tam indirimsiz fiyatın üstünde)
+                                            if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
+                                              Container(
+                                                margin: const EdgeInsets.only(bottom: 2),
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: isDark ? AppTheme.primary : const Color(0xFFE53935),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  '%${deal.effectiveDiscountRate} İndirim',
+                                                  style: TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w900,
+                                                    color: isDark ? Colors.black : Colors.white,
+                                                  ),
                                                 ),
                                               ),
+                                            // İndirimsiz (Eski) Fiyat (üstü çizili)
+                                            FormattedPriceText(
+                                              value: deal.originalPrice,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+                                                decoration: TextDecoration.lineThrough,
+                                                decorationThickness: 1.5,
+                                              ),
                                             ),
-                                          // İndirimsiz (Eski) Fiyat (üstü çizili)
-                                          FormattedPriceText(
-                                            value: deal.originalPrice,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
-                                              color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                              decoration: TextDecoration.lineThrough,
-                                              decorationThickness: 1.5,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                          ],
+                                        ),
+                                      ],
                                     ],
-                                  ],
+                                  ),
                                 ),
                               if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
                                 const SizedBox(height: 6),
@@ -1529,11 +1534,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           ),
                         ),
 
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
 
                         // Main CTA Button ("Mağazaya Git") - Dolgulu Turuncu/Sarı Marka Rengi ve Büyütülmüş
                         Container(
-                          height: 48,
+                          height: 46,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(14),
                             gradient: LinearGradient(
@@ -1553,21 +1558,24 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           ),
                           child: ElevatedButton.icon(
                             onPressed: () => _openLink(context, deal.link),
-                            icon: const Icon(Icons.open_in_new_rounded, size: 18, color: Colors.white),
-                            label: Text(
-                              deal.isExpired ? 'Şansını Dene' : 'Mağazaya Git',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                                letterSpacing: 0.2,
+                            icon: const Icon(Icons.open_in_new_rounded, size: 17, color: Colors.white),
+                            label: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                deal.isExpired ? 'Şansını Dene' : 'Mağazaya Git',
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  letterSpacing: 0.1,
+                                ),
                               ),
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.transparent,
                               foregroundColor: Colors.white,
                               shadowColor: Colors.transparent,
-                              padding: const EdgeInsets.symmetric(horizontal: 18),
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
                               ),
