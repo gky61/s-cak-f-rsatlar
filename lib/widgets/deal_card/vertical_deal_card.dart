@@ -186,31 +186,47 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                     ),
                                   ),
                           ),
-                          // Zaman Rozeti (Sol Üst)
+                          // Zaman Rozeti (Sol Üst - Kart Bütünlüğünde Şık UI)
                           Positioned(
                             top: 8,
                             left: 8,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 3),
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(4),
+                                color: isDark 
+                                    ? const Color(0xFF1E1E2D).withValues(alpha: 0.95) 
+                                    : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark 
+                                      ? const Color(0xFF33354A) 
+                                      : const Color(0xFFCBD5E1),
+                                  width: 1.0,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                                    blurRadius: 3,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
-                                    Icons.schedule,
-                                    size: 8,
-                                    color: Colors.white,
+                                  Icon(
+                                    Icons.access_time_rounded,
+                                    size: 11.5,
+                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                   ),
-                                  const SizedBox(width: 2),
+                                  const SizedBox(width: 2.5),
                                   Text(
                                     formatRelativeTime(deal.createdAt),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.w500,
+                                    style: TextStyle(
+                                      color: isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.2,
                                     ),
                                   ),
                                 ],
