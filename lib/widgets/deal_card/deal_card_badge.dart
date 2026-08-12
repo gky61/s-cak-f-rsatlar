@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../models/deal.dart';
-import '../../theme/app_theme.dart';
 
 class DealCardBadge extends StatelessWidget {
   final Deal deal;
@@ -14,44 +13,38 @@ class DealCardBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Uygulama bütünlüğüne uygun canlı renk tanımları
-    // Alev Rengi: Uygulamanın ana Vibrant Orange rengi (0xFFFF6B35) veya Canlı Alev Turuncusu (0xFFFF5200)
-    final bool isHot = deal.hotVotes > 0;
-    final Color flameColor = isHot 
-        ? AppTheme.primary 
-        : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B));
+    // Canlı Alev Rengi: Sıcaklık 0 bile olsa her zaman göz alıcı Turuncu-Kırmızı (Canlı Alev)
+    const Color flameColor = Color(0xFFFF5722); // Vibrant Flame Orange/Red
     
-    // Yorum İkon Rengi: Uygulama Secondary Mavi (0xFF004E92) / Canlı Safir Mavi (0xFF2563EB)
+    // Yorum İkon Rengi: Kibar, nötr ve şık (Gündüz: Slate Navy, Gece: Soft Grey/Blue)
     final Color commentIconColor = isDark 
-        ? const Color(0xFF60A5FA) 
-        : AppTheme.secondary;
+        ? const Color(0xFF94A3B8) 
+        : const Color(0xFF64748B);
 
-    // Metin Rengi: Yüksek kontrast ve belirginlik
+    // Metin Rengi: Yüksek okunabilirlik
     final Color textColor = isDark 
-        ? Colors.white 
-        : const Color(0xFF0F172A);
+        ? const Color(0xFFF8FAFC) 
+        : const Color(0xFF1E293B);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 3),
       decoration: BoxDecoration(
-        // Belirgin, tok ve yüksek opaklıkta zemin (Gece: Koyu Neom | Gündüz: Saf Beyaz)
+        // Kibar, yumuşak ve şık zemin (Gündüz: Beyaz hafif saydam, Gece: Koyu Neom)
         color: isDark 
-            ? const Color(0xFF1E1E2D).withValues(alpha: 0.95) 
-            : Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(10),
+            ? const Color(0xFF1E1E2D).withValues(alpha: 0.92) 
+            : Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark 
-              ? const Color(0xFF33354A) 
-              : const Color(0xFFE2E8F0),
-          width: 1.0,
+              ? Colors.white.withValues(alpha: 0.15) 
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.8,
         ),
         boxShadow: [
           BoxShadow(
-            color: isDark 
-                ? Colors.black.withValues(alpha: 0.4) 
-                : Colors.black.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+            blurRadius: 4,
+            offset: const Offset(0, 1.5),
           ),
         ],
       ),
@@ -59,50 +52,47 @@ class DealCardBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Alev / Hotness Göstergesi (Canlı Uygulama Alev Rengi)
-          Icon(
+          // Alev Göstergesi (Canlı Turuncu/Kırmızı)
+          const Icon(
             Icons.local_fire_department_rounded,
-            size: 14,
+            size: 13,
             color: flameColor,
           ),
-          const SizedBox(width: 3),
+          const SizedBox(width: 2.5),
           Text(
             '${deal.hotVotes > 0 ? "+" : ""}${deal.hotVotes}',
             style: TextStyle(
               color: textColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.3,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
             ),
           ),
 
-          // Canlı ve Belirgin Ayırıcı Çizgi
+          // Kibar İnce Seperatör
           Container(
-            width: 1,
-            height: 11,
-            margin: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: BoxDecoration(
-              color: isDark 
-                  ? const Color(0xFF475569) 
-                  : const Color(0xFFCBD5E1),
-              borderRadius: BorderRadius.circular(1),
-            ),
+            width: 0.8,
+            height: 9,
+            margin: const EdgeInsets.symmetric(horizontal: 4.5),
+            color: isDark 
+                ? Colors.white.withValues(alpha: 0.2) 
+                : Colors.black.withValues(alpha: 0.12),
           ),
 
-          // Yorum Göstergesi (Canlı Mavi / Secondary)
+          // Yorum Göstergesi (Zarif Outline İkon)
           Icon(
-            Icons.chat_bubble_rounded,
-            size: 12,
+            Icons.chat_bubble_outline_rounded,
+            size: 11.5,
             color: commentIconColor,
           ),
-          const SizedBox(width: 3),
+          const SizedBox(width: 2.5),
           Text(
             '${deal.commentCount}',
             style: TextStyle(
               color: textColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.3,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
             ),
           ),
         ],
