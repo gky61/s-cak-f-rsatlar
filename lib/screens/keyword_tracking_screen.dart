@@ -277,34 +277,33 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                 children: [
                   // ─── 1. BİLGİ & İSTATİSTİK KARTI (Kullanıcı dilerse çarpı ile kapatabilir) ───
                   if (_showInfoBanner) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isDark
-                              ? [
-                                  primaryColor.withValues(alpha: 0.20),
-                                  primaryColor.withValues(alpha: 0.08),
-                                ]
-                              : [
-                                  primaryColor.withValues(alpha: 0.12),
-                                  primaryColor.withValues(alpha: 0.04),
-                                ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.3),
-                          width: 1.2,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Stack(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(16, 16, 36, 16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: isDark
+                                  ? [
+                                      primaryColor.withValues(alpha: 0.20),
+                                      primaryColor.withValues(alpha: 0.08),
+                                    ]
+                                  : [
+                                      primaryColor.withValues(alpha: 0.12),
+                                      primaryColor.withValues(alpha: 0.04),
+                                    ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: primaryColor.withValues(alpha: 0.3),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
@@ -321,63 +320,69 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 10),
-                                  Text(
-                                    'Canlı İndirim Takibi',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                      color: textMain,
+                                  Expanded(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Canlı İndirim Takibi',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                            color: textMain,
+                                          ),
+                                        ),
+                                        // Takip Edilen Kelime Rozeti
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: primaryColor,
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: Text(
+                                            '${_watchKeywords.length} Kelime Takipte',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
-                              Row(
-                                children: [
-                                  // Takip Edilen Kelime Rozeti
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: primaryColor,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      '${_watchKeywords.length} Kelime Takipte',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  // Kapatma Çarpısı
-                                  InkWell(
-                                    onTap: _dismissBanner,
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(2.0),
-                                      child: Icon(
-                                        Icons.close_rounded,
-                                        size: 20,
-                                        color: isDark ? Colors.grey[400] : Colors.grey[600],
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              const SizedBox(height: 10),
+                              Text(
+                                'Eklediğiniz anahtar kelimeler yeni paylaşılan fırsat başlıklarında geçtiğinde özel bildirim alırsınız.',
+                                style: TextStyle(
+                                  color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                                  fontSize: 13,
+                                  height: 1.45,
+                                ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Eklediğiniz anahtar kelimeler yeni paylaşılan fırsat başlıklarında geçtiğinde özel bildirim alırsınız.',
-                            style: TextStyle(
-                              color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                              fontSize: 13,
-                              height: 1.45,
+                        ),
+                        // Net Belirgin Kapatma Çarpısı (Sağ Üst Köşede)
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          child: InkWell(
+                            onTap: _dismissBanner,
+                            borderRadius: BorderRadius.circular(20),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 20,
+                                color: isDark ? Colors.grey[400] : Colors.grey[600],
+                              ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 20),
                   ],
