@@ -11,12 +11,15 @@ if (!admin.apps.length) {
 const normalize = (text = '') =>
   text
     .toString()
+    .replace(/[\-\_]/g, ' ')
+    .replace(/([a-zA-ZçğıöşüÇĞİÖŞÜ])([0-9])/g, '$1 $2')
+    .replace(/([0-9])([a-zA-ZçğıöşüÇĞİÖŞÜ])/g, '$1 $2')
     .replace(/İ/g, 'i')
     .replace(/I/g, 'i')
+    .replace(/ı/g, 'i')
     .toLowerCase()
     .replace(/ç/g, 'c')
     .replace(/ğ/g, 'g')
-    .replace(/ı/g, 'i')
     .replace(/ö/g, 'o')
     .replace(/ş/g, 's')
     .replace(/ü/g, 'u');
@@ -227,10 +230,15 @@ async function matchAndCreateDealNotifications(deal, dealId) {
 
   // 1. Anahtar kelimeleri topla, N-gram (1'li, 2'li, 3'lü sözcük öbekleri) üret ve normalize et
   const text = `${title} ${description}`;
-  const normalizedText = normalize(text);
+  const textWithSpaces = text
+    .replace(/[\-\_]/g, ' ')
+    .replace(/([a-zA-ZçğıöşüÇĞİÖŞÜ])([0-9])/g, '$1 $2')
+    .replace(/([0-9])([a-zA-ZçğıöşüÇĞİÖŞÜ])/g, '$1 $2');
+
+  const normalizedText = normalize(textWithSpaces);
   const words = normalizedText
-    .split(/[\s,\.\!\?\(\)\[\]\{\}"'\\/:\-]+/)
-    .filter(w => w && w.length >= 2);
+    .split(/[\s,\.\!\?\(\)\[\]\{\}"'\\/:]+/)
+    .filter(w => w && w.length >= 1);
 
   const stopWords = ['bir', 've', 'veya', 'ile', 'icin', 'cok', 'bu', 'su', 'o', 'daha', 'en', 'kadar', 'gibi', 'diye', 'yok', 'var', 'mi', 'mu', 'mü', 'ama', 'fakat', 'lakin', 'bile', 'ben', 'sen', 'biz', 'siz', 'onlar'];
 
@@ -347,13 +355,32 @@ async function matchAndCreateDealNotifications(deal, dealId) {
             const subKey = sub.key || sub.displayValue || '';
             const normalizedSubKey = normalize(subKey);
 
-            // SIKI DOĞRULAMA (Strict Verification):
-            // Kelimenin tam kelime sınırlarıyla (Word Boundary) fırsat metninde geçtiğini doğrula.
-            // Örn: "oto" kelimesi "fotokopi" veya "otomatik" içinde geçtiğinde ES GEÇ, sadece "oto" tam kelime ise ONAYLA!
+            // A. SIKI DOĞRULAMA (Strict Word Boundary Regex Check)
             const escapedSubKey = normalizedSubKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const strictRegex = new RegExp(`(?:^|[^a-z0-9])${escapedSubKey}(?:$|[^a-z0-9])`, 'i');
 
-            if (strictRegex.test(normalizedText)) {
+            // B. ÇOK KELİMELİ TAKİP KONTROLÜ (Multi-Word Non-Contiguous Stem Search)
+            // Örn: "sony kulaklik" takibinde metinde "Sony" ve "Kulaklık" ayrı yerlerde geçse bile tolere edilir!
+            let isMultiWordMatch = false;
+            const subWords = normalizedSubKey.split(/\s+/).filter(w => w && !stopWords.includes(w));
+            if (subWords.length > 1) {
+              isMultiWordMatch = subWords.every(word => {
+                const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // k -> g yumuşama toleransı (lastik -> lastiği)
+                const stem = escapedWord.replace(/k$/, '(?:k|g)');
+                const wordRegex = new RegExp(`(?:^|[^a-z0-9])${stem}[a-z0-9çğıöşü]*(?:$|[^a-z0-9çğıöşü])`, 'i');
+                return wordRegex.test(normalizedText);
+              });
+            }
+
+            // Orijinal Türkçe harf korumalı kontrol (Örn: 'mac' takibi yapan kullanıcıya 'maç' bileti bildirimi gitmesini engeller)
+            let isNativeMatched = true;
+            if (normalizedSubKey === 'mac') {
+              const macRegex = /(?:^|[^a-z0-9çğıöşü])mac(?:$|[^a-z0-9çğıöşü])/i;
+              isNativeMatched = macRegex.test(textWithSpaces.toLowerCase());
+            }
+
+            if (isNativeMatched && (strictRegex.test(normalizedText) || isMultiWordMatch)) {
               const displayVal = sub.displayValue || subKey;
               if (matchedUsers.has(sub.uid)) {
                 const u = matchedUsers.get(sub.uid);
