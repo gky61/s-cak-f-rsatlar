@@ -27,12 +27,14 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
 
   String _searchQuery = '';
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -243,6 +245,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                     ),
                     child: TextField(
                       controller: _searchController,
+                      focusNode: _searchFocusNode,
                       onChanged: (val) => setState(() => _searchQuery = val),
                       style: TextStyle(color: textMain, fontSize: 13.5, fontWeight: FontWeight.w600),
                       decoration: InputDecoration(

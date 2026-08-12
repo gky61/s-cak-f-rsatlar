@@ -23,12 +23,14 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   
   String _searchQuery = '';
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -175,7 +177,7 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Takip ettiğiniz kullanıcıların paylaştığı sıcak fırsatlar ve kuponlar anasayfanızda öncelikli gösterilir ve anında bildirim alırsınız.',
+                        'Takip ettiğiniz yayıncılar ve üyeler yeni bir fırsat paylaştığında anında bildirim alırsınız.',
                         style: TextStyle(
                           color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
                           fontSize: 13,
@@ -203,6 +205,7 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
                     ),
                     child: TextField(
                       controller: _searchController,
+                      focusNode: _searchFocusNode,
                       onChanged: (val) => setState(() => _searchQuery = val),
                       style: TextStyle(color: textMain, fontSize: 13.5, fontWeight: FontWeight.w600),
                       decoration: InputDecoration(
