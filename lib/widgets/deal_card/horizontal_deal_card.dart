@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../screens/profile_screen.dart';
 import '../money_badge.dart';
 import 'deal_card_helpers.dart';
+import 'deal_card_badge.dart';
 
 class HorizontalDealCard extends StatefulWidget {
   final Deal deal;
@@ -342,72 +343,13 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                               ),
                             ),
 
-                          // Favorite ve Comment Rozeti (Sağ Üst - Glassmorphism)
+                          // Favorite ve Comment Rozeti (Sağ Üst - Glassmorphism & Modern UI)
                           Positioned(
                             top: 6,
                             right: 6,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isDark 
-                                    ? Colors.black.withOpacity(0.6) 
-                                    : Colors.white.withOpacity(0.9),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: isDark 
-                                      ? Colors.white.withOpacity(0.1) 
-                                      : Colors.grey[200]!.withOpacity(0.5),
-                                  width: 0.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 2,
-                                    offset: const Offset(0, 1),
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.local_fire_department,
-                                    size: 9,
-                                    color: Colors.deepOrange,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '${deal.hotVotes}',
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white : Colors.black,
-                                      fontSize: 7,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  Container(
-                                    width: 0.5,
-                                    height: 7,
-                                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                                    color: isDark 
-                                        ? Colors.white.withOpacity(0.2) 
-                                        : Colors.grey[300],
-                                  ),
-                                  Icon(
-                                    Icons.chat_bubble_outline,
-                                    size: 9,
-                                    color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '${deal.commentCount}',
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white : Colors.black,
-                                      fontSize: 7,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            child: DealCardBadge(
+                              deal: deal,
+                              isDark: isDark,
                             ),
                           ),
                           // SÜRESİ DOLDU Overlay
