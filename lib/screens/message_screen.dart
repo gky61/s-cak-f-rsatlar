@@ -167,17 +167,15 @@ class _MessageScreenState extends State<MessageScreen> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: widget.isAdminMessage
-                                  ? const Color(0xFF2196F3)
-                                  : primaryColor.withValues(alpha: 0.3),
-                              width: 1.5,
+                              color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+                              width: 1,
                             ),
                           ),
                           child: ClipOval(
                             child: widget.isAdminMessage
                                 ? Container(
-                                    color: const Color(0xFF2196F3).withValues(alpha: 0.15),
-                                    child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF2196F3), size: 22),
+                                    color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                                    child: Icon(Icons.shield_outlined, color: primaryColor, size: 20),
                                   )
                                 : _buildAvatar(otherUserImageUrl, 38),
                           ),
@@ -201,28 +199,28 @@ class _MessageScreenState extends State<MessageScreen> {
                                     ),
                                   ),
                                   if (widget.isAdminMessage) ...[
-                                    const SizedBox(width: 6),
-                                    const Icon(Icons.verified_rounded, color: Color(0xFF2196F3), size: 16),
+                                    const SizedBox(width: 5),
+                                    Icon(Icons.verified_user_rounded, color: primaryColor, size: 15),
                                   ],
                                 ],
                               ),
                               Row(
                                 children: [
                                   Container(
-                                    width: 7,
-                                    height: 7,
+                                    width: 6,
+                                    height: 6,
                                     decoration: BoxDecoration(
-                                      color: widget.isAdminMessage ? const Color(0xFF2196F3) : Colors.green,
+                                      color: widget.isAdminMessage ? primaryColor : Colors.green,
                                       shape: BoxShape.circle,
                                     ),
                                   ),
-                                  const SizedBox(width: 4),
+                                  const SizedBox(width: 5),
                                   Text(
-                                    widget.isAdminMessage ? 'Resmi Yönetici Mesajı' : 'Üye Profili',
+                                    widget.isAdminMessage ? 'Resmi Bildirim' : 'Üye Profili',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: widget.isAdminMessage ? const Color(0xFF2196F3) : textSub,
-                                      fontWeight: FontWeight.w600,
+                                      color: textSub,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ],
@@ -339,18 +337,18 @@ class _MessageScreenState extends State<MessageScreen> {
                                     children: [
                                       if (!isMe) ...[
                                         Container(
-                                          width: 32,
-                                          height: 32,
+                                          width: 30,
+                                          height: 30,
                                           decoration: BoxDecoration(
                                             shape: BoxShape.circle,
                                             color: message.isAdminMessage
-                                                ? const Color(0xFF2196F3).withValues(alpha: 0.15)
+                                                ? primaryColor.withValues(alpha: isDark ? 0.2 : 0.1)
                                                 : Colors.transparent,
                                           ),
                                           child: ClipOval(
                                             child: message.isAdminMessage
-                                                ? const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF2196F3), size: 20)
-                                                : _buildAvatar(otherUserImageUrl, 32),
+                                                ? Icon(Icons.shield_outlined, color: primaryColor, size: 18)
+                                                : _buildAvatar(otherUserImageUrl, 30),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -359,13 +357,9 @@ class _MessageScreenState extends State<MessageScreen> {
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                           decoration: BoxDecoration(
-                                            color: message.isAdminMessage
-                                                ? (isDark
-                                                    ? const Color(0xFF1E293B)
-                                                    : const Color(0xFFEFF6FF))
-                                                : (isMe
-                                                    ? primaryColor
-                                                    : (isDark ? Colors.grey[800] : Colors.white)),
+                                            color: isMe
+                                                ? primaryColor
+                                                : surfaceColor,
                                             borderRadius: BorderRadius.only(
                                               topLeft: const Radius.circular(18),
                                               topRight: const Radius.circular(18),
@@ -373,13 +367,11 @@ class _MessageScreenState extends State<MessageScreen> {
                                               bottomRight: Radius.circular(isMe ? 4 : 18),
                                             ),
                                             border: Border.all(
-                                              color: message.isAdminMessage
-                                                  ? const Color(0xFF3B82F6).withValues(alpha: 0.4)
-                                                  : (isMe
-                                                      ? Colors.transparent
-                                                      : (isDark
-                                                          ? Colors.white.withValues(alpha: 0.08)
-                                                          : Colors.black.withValues(alpha: 0.06))),
+                                              color: isMe
+                                                  ? Colors.transparent
+                                                  : (isDark
+                                                      ? Colors.white.withValues(alpha: 0.08)
+                                                      : Colors.black.withValues(alpha: 0.06)),
                                               width: 1,
                                             ),
                                             boxShadow: [
@@ -395,17 +387,17 @@ class _MessageScreenState extends State<MessageScreen> {
                                                 isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                                             children: [
                                               if (message.isAdminMessage) ...[
-                                                const Row(
+                                                Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
-                                                    Icon(Icons.campaign_rounded, size: 15, color: Color(0xFF2563EB)),
-                                                    SizedBox(width: 4),
+                                                    Icon(Icons.shield_outlined, size: 13, color: primaryColor),
+                                                    const SizedBox(width: 4),
                                                     Text(
-                                                      'Yönetici Mesajı',
+                                                      'Yönetici Duyurusu',
                                                       style: TextStyle(
-                                                        fontSize: 11.5,
-                                                        fontWeight: FontWeight.w800,
-                                                        color: Color(0xFF2563EB),
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: primaryColor,
                                                       ),
                                                     ),
                                                   ],
@@ -415,11 +407,11 @@ class _MessageScreenState extends State<MessageScreen> {
                                               Text(
                                                 message.text,
                                                 style: TextStyle(
-                                                  fontSize: 14.5,
+                                                  fontSize: 14,
                                                   height: 1.35,
                                                   color: isMe
                                                       ? Colors.white
-                                                      : (isDark ? Colors.white : AppTheme.textPrimary),
+                                                      : textMain,
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
@@ -481,30 +473,32 @@ class _MessageScreenState extends State<MessageScreen> {
                       ),
                       child: SafeArea(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
                             color: isDark
-                                ? const Color(0xFF1E293B)
-                                : const Color(0xFFEFF6FF),
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : const Color(0xFFF1F3F5),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.1)
+                                  : Colors.grey[300]!,
                               width: 1,
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.lock_rounded, size: 16, color: Color(0xFF2563EB)),
-                              SizedBox(width: 8),
+                              Icon(Icons.lock_outline_rounded, size: 15, color: textSub),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Bu resmi bir yönetici duyuru mesajıdır. Yanıt verilemez.',
+                                  'Resmi Yönetici Bildirimi (Yanıt verilemez)',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF2563EB),
+                                    fontWeight: FontWeight.w600,
+                                    color: textSub,
                                   ),
                                 ),
                               ),

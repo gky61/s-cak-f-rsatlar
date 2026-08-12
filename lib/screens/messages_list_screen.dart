@@ -417,13 +417,13 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
       decoration: BoxDecoration(
         color: isUnread
             ? (isDark
-                ? (isAdmin ? const Color(0xFF1E293B) : primaryColor.withValues(alpha: 0.16))
-                : (isAdmin ? const Color(0xFFEFF6FF) : primaryColor.withValues(alpha: 0.08)))
+                ? primaryColor.withValues(alpha: 0.16)
+                : primaryColor.withValues(alpha: 0.08))
             : surfaceColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isUnread
-              ? (isAdmin ? const Color(0xFF3B82F6).withValues(alpha: 0.6) : primaryColor.withValues(alpha: 0.5))
+              ? primaryColor.withValues(alpha: 0.5)
               : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
           width: isUnread ? 1.5 : 1,
         ),
@@ -469,17 +469,15 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                         shape: BoxShape.circle,
                         gradient: isUnread
                             ? LinearGradient(
-                                colors: isAdmin
-                                    ? [const Color(0xFF2563EB), const Color(0xFF60A5FA)]
-                                    : [primaryColor, primaryColor.withValues(alpha: 0.5)],
+                                colors: [primaryColor, primaryColor.withValues(alpha: 0.5)],
                               )
                             : null,
                       ),
                       child: ClipOval(
                         child: isAdmin
                             ? Container(
-                                color: const Color(0xFF2196F3).withValues(alpha: 0.15),
-                                child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF2196F3), size: 24),
+                                color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                                child: Icon(Icons.shield_outlined, color: primaryColor, size: 22),
                               )
                             : _buildAvatar(profileImageUrl, 48),
                       ),
@@ -492,7 +490,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                           width: 12,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: isAdmin ? const Color(0xFF2563EB) : primaryColor,
+                            color: primaryColor,
                             shape: BoxShape.circle,
                             border: Border.all(color: surfaceColor, width: 2),
                           ),
@@ -527,7 +525,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                 ),
                                 if (isAdmin) ...[
                                   const SizedBox(width: 4),
-                                  const Icon(Icons.verified_rounded, color: Color(0xFF2196F3), size: 15),
+                                  Icon(Icons.verified_user_rounded, color: primaryColor, size: 14),
                                 ],
                               ],
                             ),
@@ -537,7 +535,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
-                              color: isUnread ? (isAdmin ? const Color(0xFF2563EB) : primaryColor) : textSub,
+                              color: isUnread ? primaryColor : textSub,
                             ),
                           ),
                         ],
