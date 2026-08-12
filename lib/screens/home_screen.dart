@@ -676,17 +676,32 @@ class _HomeScreenState extends State<HomeScreen> {
                 // ─── ARAMA MODU ────────────────────────────────────────
                 if (_isSearchMode)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+                    padding: const EdgeInsets.fromLTRB(14, 8, 12, 10),
                     child: Row(
                       children: [
                         Expanded(
                           child: Container(
-                            height: 40,
+                            height: 44,
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? Colors.white.withValues(alpha: 0.08)
-                                  : const Color(0xFFF2F3F5),
-                              borderRadius: BorderRadius.circular(12),
+                                  ? const Color(0xFF1E1E1E)
+                                  : const Color(0xFFF1F3F5),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _searchQuery.isNotEmpty
+                                    ? primaryColor.withValues(alpha: 0.6)
+                                    : (isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06)),
+                                width: _searchQuery.isNotEmpty ? 1.5 : 1,
+                              ),
+                              boxShadow: _searchQuery.isNotEmpty
+                                  ? [
+                                      BoxShadow(
+                                        color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.08),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 2),
+                                      )
+                                    ]
+                                  : null,
                             ),
                             child: TextField(
                               controller: _searchController,
@@ -695,56 +710,53 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: TextStyle(
                                 color: isDark ? Colors.white : AppTheme.textPrimary,
                                 fontSize: 14,
+                                fontWeight: FontWeight.w600,
                               ),
                               decoration: InputDecoration(
-                                hintText: 'Fırsat, mağaza veya ürün ara...',
+                                hintText: 'Fırsat, marka, mağaza veya kupon ara...',
                                 hintStyle: TextStyle(
                                   color: isDark
                                       ? Colors.white.withValues(alpha: 0.35)
                                       : const Color(0xFF9CA3AF),
-                                  fontSize: 14,
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w400,
                                 ),
-                                prefixIcon: Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: Icon(
-                                    Icons.search_rounded,
-                                    color: isDark
-                                        ? Colors.white54
-                                        : const Color(0xFF9CA3AF),
-                                    size: 20,
-                                  ),
+                                prefixIcon: Icon(
+                                  Icons.search_rounded,
+                                  color: _searchQuery.isNotEmpty
+                                      ? primaryColor
+                                      : (isDark ? Colors.white54 : const Color(0xFF9CA3AF)),
+                                  size: 20,
                                 ),
                                 suffixIcon: _searchQuery.isNotEmpty
-                                    ? GestureDetector(
-                                        onTap: _clearSearch,
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(10),
-                                          child: Icon(
-                                            Icons.close_rounded,
-                                            size: 18,
-                                            color: isDark
-                                                ? Colors.white54
-                                                : const Color(0xFF9CA3AF),
-                                          ),
+                                    ? IconButton(
+                                        onPressed: _clearSearch,
+                                        icon: const Icon(
+                                          Icons.cancel_rounded,
+                                          size: 18,
+                                          color: Colors.grey,
                                         ),
+                                        splashRadius: 18,
                                       )
                                     : null,
                                 border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 0, vertical: 10),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 12),
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         GestureDetector(
                           onTap: _toggleSearchMode,
-                          child: Text(
-                            'İptal',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primary,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            child: Text(
+                              'Vazgeç',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                              ),
                             ),
                           ),
                         ),
@@ -1128,16 +1140,65 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 if (filteredDeals.isEmpty) {
                   return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.search_off_rounded, size: 64, color: Colors.grey[300]),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Henüz fırsat yok',
-                          style: TextStyle(color: Colors.grey[500], fontSize: 16),
-                        ),
-                      ],
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(22),
+                            decoration: BoxDecoration(
+                              color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _searchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.inbox_rounded,
+                              size: 56,
+                              color: primaryColor,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            _searchQuery.isNotEmpty
+                                ? '"${_searchQuery.trim()}" ile ilgili fırsat bulunamadı'
+                                : 'Henüz fırsat eklenmemiş',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: isDark ? Colors.white : AppTheme.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _searchQuery.isNotEmpty
+                                ? 'Farklı kelimeler deneyebilir veya aramayı temizleyebilirsiniz.'
+                                : 'Daha sonra tekrar kontrol edebilirsiniz.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                          if (_searchQuery.isNotEmpty) ...[
+                            const SizedBox(height: 22),
+                            ElevatedButton.icon(
+                              onPressed: _clearSearch,
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: const Text('Aramayı Sıfırla'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryColor,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                elevation: 0,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   );
                 }
@@ -1174,161 +1235,234 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   color: AppTheme.primary,
                   strokeWidth: 3.0,
-                  child: _viewMode == CardViewMode.vertical 
-                    ? GridView.builder(
-                        controller: _scrollController,
-                        key: ValueKey('deal_grid_$_selectedCategory'),
-                        padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 0.61,
+                  child: Column(
+                    children: [
+                      if (_searchQuery.trim().isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8.5),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: primaryColor.withValues(alpha: 0.25),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.search_rounded, color: primaryColor, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text.rich(
+                                  TextSpan(
+                                    text: '"${_searchQuery.trim()}" araması: ',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.white : AppTheme.textPrimary,
+                                      fontSize: 13,
+                                    ),
+                                    children: [
+                                      TextSpan(
+                                        text: '${filteredDeals.length} fırsat bulundu',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          color: primaryColor,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: _clearSearch,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.close_rounded, size: 13, color: isDark ? Colors.white70 : Colors.black54),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Temizle',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark ? Colors.white70 : Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                        cacheExtent: 500, // Optimize edilmiş cache
-                        addAutomaticKeepAlives: false, // Performans için
-                        addRepaintBoundaries: true, // Repaint optimizasyonu
-                        addSemanticIndexes: false, // Performans için
-                        itemCount: totalItemCount,
-                        itemBuilder: (context, index) {
-                          // Loading indicator kontrolü
-                          if (index >= dealsToShow.length + adCount) {
-                            return Center(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(3, (dotIndex) {
-                                  return Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: primaryColor,
-                                      shape: BoxShape.circle,
+                      Expanded(
+                        child: _viewMode == CardViewMode.vertical
+                            ? GridView.builder(
+                                controller: _scrollController,
+                                key: ValueKey('deal_grid_$_selectedCategory'),
+                                padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  childAspectRatio: 0.61,
+                                ),
+                                physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                                cacheExtent: 500, // Optimize edilmiş cache
+                                addAutomaticKeepAlives: false, // Performans için
+                                addRepaintBoundaries: true, // Repaint optimizasyonu
+                                addSemanticIndexes: false, // Performans için
+                                itemCount: totalItemCount,
+                                itemBuilder: (context, index) {
+                                  // Loading indicator kontrolü
+                                  if (index >= dealsToShow.length + adCount) {
+                                    return Center(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: List.generate(3, (dotIndex) {
+                                          return Container(
+                                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                                            width: 6,
+                                            height: 6,
+                                            decoration: BoxDecoration(
+                                              color: primaryColor,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          );
+                                        }),
+                                      ),
+                                    );
+                                  }
+                                  
+                                  // Reklam pozisyonunu kontrol et (5-6-5-6-5-6 pattern)
+                                  // Reklam pozisyonları: 5, 12, 18, 25, 31, 38, ...
+                                  
+                                  // Kaç reklam geçtiğini hesapla
+                                  int passedAds = 0;
+                                  for (int i = 0; i < adPositions.length; i++) {
+                                    final adPosition = adPositions[i];
+                                    if (index == adPosition) {
+                                      // Bu pozisyon bir reklam pozisyonu
+                                      return RepaintBoundary(
+                                        key: ValueKey('ad_card_vertical_$i'),
+                                        child: AdDealCard(
+                                          viewMode: CardViewMode.vertical,
+                                        ),
+                                      );
+                                    }
+                                    if (index > adPosition) {
+                                      passedAds++;
+                                    }
+                                  }
+                                  
+                                  // Normal deal kartı (geçilen reklam sayısını çıkar)
+                                  final actualIndex = index - passedAds;
+                                  if (actualIndex >= dealsToShow.length || actualIndex < 0) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final deal = dealsToShow[actualIndex];
+                                  return RepaintBoundary(
+                                    key: ValueKey('deal_card_${deal.id}'),
+                                    child: DealCard(
+                                      key: ValueKey('deal_card_${deal.id}'),
+                                      deal: deal,
+                                      viewMode: CardViewMode.vertical,
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => DealDetailScreen(dealId: deal.id),
+                                        ),
+                                      ),
                                     ),
                                   );
-                                }),
-                              ),
-                            );
-                          }
-                          
-                          // Reklam pozisyonunu kontrol et (5-6-5-6-5-6 pattern)
-                          // Reklam pozisyonları: 5, 12, 18, 25, 31, 38, ...
-                          
-                          // Kaç reklam geçtiğini hesapla
-                          int passedAds = 0;
-                          for (int i = 0; i < adPositions.length; i++) {
-                            final adPosition = adPositions[i];
-                            if (index == adPosition) {
-                              // Bu pozisyon bir reklam pozisyonu
-                              return RepaintBoundary(
-                                key: ValueKey('ad_card_vertical_$i'),
-                                child: AdDealCard(
-                                  viewMode: CardViewMode.vertical,
-                                ),
-                              );
-                            }
-                            if (index > adPosition) {
-                              passedAds++;
-                            }
-                          }
-                          
-                          // Normal deal kartı (geçilen reklam sayısını çıkar)
-                          final actualIndex = index - passedAds;
-                          if (actualIndex >= dealsToShow.length || actualIndex < 0) {
-                            return const SizedBox.shrink();
-                          }
-                          final deal = dealsToShow[actualIndex];
-                          return RepaintBoundary(
-                            key: ValueKey('deal_card_${deal.id}'),
-                            child: DealCard(
-                              key: ValueKey('deal_card_${deal.id}'),
-                              deal: deal,
-                              viewMode: CardViewMode.vertical,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => DealDetailScreen(dealId: deal.id),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        key: ValueKey('deal_list_$_selectedCategory'),
-                        padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
-                        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                        cacheExtent: 500, // Optimize edilmiş cache
-                        addAutomaticKeepAlives: false, // Performans için
-                        addRepaintBoundaries: true, // Repaint optimizasyonu
-                        addSemanticIndexes: false, // Performans için
-                        itemCount: totalItemCount,
-                        itemBuilder: (context, index) {
-                          // Loading indicator kontrolü
-                          if (index >= dealsToShow.length + adCount) {
-                            return Center(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(3, (dotIndex) {
-                                  return Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: primaryColor,
-                                      shape: BoxShape.circle,
+                                },
+                              )
+                            : ListView.builder(
+                                controller: _scrollController,
+                                key: ValueKey('deal_list_$_selectedCategory'),
+                                padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
+                                physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                                cacheExtent: 500, // Optimize edilmiş cache
+                                addAutomaticKeepAlives: false, // Performans için
+                                addRepaintBoundaries: true, // Repaint optimizasyonu
+                                addSemanticIndexes: false, // Performans için
+                                itemCount: totalItemCount,
+                                itemBuilder: (context, index) {
+                                  // Loading indicator kontrolü
+                                  if (index >= dealsToShow.length + adCount) {
+                                    return Center(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: List.generate(3, (dotIndex) {
+                                          return Container(
+                                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                                            width: 6,
+                                            height: 6,
+                                            decoration: BoxDecoration(
+                                              color: primaryColor,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          );
+                                        }),
+                                      ),
+                                    );
+                                  }
+                                  
+                                  // Reklam pozisyonunu kontrol et (5-6-5-6-5-6 pattern)
+                                  // Reklam pozisyonları: 5, 12, 18, 25, 31, 38, ...
+                                  
+                                  // Kaç reklam geçtiğini hesapla
+                                  int passedAds = 0;
+                                  for (int i = 0; i < adPositions.length; i++) {
+                                    final adPosition = adPositions[i];
+                                    if (index == adPosition) {
+                                      // Bu pozisyon bir reklam pozisyonu
+                                      return RepaintBoundary(
+                                        key: ValueKey('ad_card_horizontal_$i'),
+                                        child: AdDealCard(
+                                          viewMode: CardViewMode.horizontal,
+                                        ),
+                                      );
+                                    }
+                                    if (index > adPosition) {
+                                      passedAds++;
+                                    }
+                                  }
+                                  
+                                  // Normal deal kartı (geçilen reklam sayısını çıkar)
+                                  final actualIndex = index - passedAds;
+                                  if (actualIndex >= dealsToShow.length || actualIndex < 0) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final deal = dealsToShow[actualIndex];
+                                  return RepaintBoundary(
+                                    key: ValueKey('deal_card_list_${deal.id}'),
+                                    child: DealCard(
+                                      key: ValueKey('deal_card_list_${deal.id}'),
+                                      deal: deal,
+                                      viewMode: CardViewMode.horizontal,
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => DealDetailScreen(dealId: deal.id),
+                                        ),
+                                      ),
                                     ),
                                   );
-                                }),
+                                },
                               ),
-                            );
-                          }
-                          
-                          // Reklam pozisyonunu kontrol et (5-6-5-6-5-6 pattern)
-                          // Reklam pozisyonları: 5, 12, 18, 25, 31, 38, ...
-                          
-                          // Kaç reklam geçtiğini hesapla
-                          int passedAds = 0;
-                          for (int i = 0; i < adPositions.length; i++) {
-                            final adPosition = adPositions[i];
-                            if (index == adPosition) {
-                              // Bu pozisyon bir reklam pozisyonu
-                              return RepaintBoundary(
-                                key: ValueKey('ad_card_horizontal_$i'),
-                                child: AdDealCard(
-                                  viewMode: CardViewMode.horizontal,
-                                ),
-                              );
-                            }
-                            if (index > adPosition) {
-                              passedAds++;
-                            }
-                          }
-                          
-                          // Normal deal kartı (geçilen reklam sayısını çıkar)
-                          final actualIndex = index - passedAds;
-                          if (actualIndex >= dealsToShow.length || actualIndex < 0) {
-                            return const SizedBox.shrink();
-                          }
-                          final deal = dealsToShow[actualIndex];
-                          return RepaintBoundary(
-                            key: ValueKey('deal_card_list_${deal.id}'),
-                            child: DealCard(
-                              key: ValueKey('deal_card_list_${deal.id}'),
-                              deal: deal,
-                              viewMode: CardViewMode.horizontal,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => DealDetailScreen(dealId: deal.id),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
                       ),
+                    ],
+                  ),
                 );
               },
             ),
