@@ -27,14 +27,24 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
 
+  late final Stream<List<Message>> _messagesStream;
   String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = _authService.currentUser?.uid;
+    if (uid != null) {
+      _messagesStream = _firestoreService.getUserMessagesStream(uid);
+    } else {
+      _messagesStream = const Stream.empty();
+    }
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -75,7 +85,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
         elevation: 0,
       ),
       body: StreamBuilder<List<Message>>(
-        stream: _firestoreService.getUserMessagesStream(currentUserId),
+        stream: _messagesStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -135,246 +145,252 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                 msg.text.toLowerCase().contains(q);
           }).toList();
 
-          return SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ─── 1. HEADER (Glassmorphic Info & Badge Card) ───
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isDark
-                          ? [
-                              primaryColor.withValues(alpha: 0.20),
-                              primaryColor.withValues(alpha: 0.08),
-                            ]
-                          : [
-                              primaryColor.withValues(alpha: 0.12),
-                              primaryColor.withValues(alpha: 0.04),
-                            ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: primaryColor.withValues(alpha: 0.3),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          return Column(
+            children: [
+              // Sabit Header & Arama Barı
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Column(
+                  children: [
+                    // Header Kartı
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isDark
+                              ? [
+                                  primaryColor.withValues(alpha: 0.20),
+                                  primaryColor.withValues(alpha: 0.08),
+                                ]
+                              : [
+                                  primaryColor.withValues(alpha: 0.12),
+                                  primaryColor.withValues(alpha: 0.04),
+                                ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: primaryColor.withValues(alpha: 0.3),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withValues(alpha: 0.2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.chat_bubble_outline_rounded,
-                                  color: primaryColor,
-                                  size: 20,
-                                ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(7),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor.withValues(alpha: 0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.chat_bubble_outline_rounded,
+                                      color: primaryColor,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Sohbet Kutusu',
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: textMain,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 10),
-                              Text(
-                                'Sohbet Kutusu',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: textMain,
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: totalUnreadCount > 0 ? primaryColor : Colors.grey[600],
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  totalUnreadCount > 0
+                                      ? '$totalUnreadCount Okunmadı'
+                                      : '${conversationList.length} Sohbet',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: totalUnreadCount > 0 ? primaryColor : Colors.grey[600],
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              totalUnreadCount > 0
-                                  ? '$totalUnreadCount Okunmadı'
-                                  : '${conversationList.length} Sohbet',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Diğer üyelerle fırsatlar hakkında özel sohbetleriniz ve yöneticilerden gelen resmi mesajlar burada güvenle saklanır.',
+                            style: TextStyle(
+                              color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                              fontSize: 12.5,
+                              height: 1.4,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Diğer üyelerle fırsatlar hakkında özel sohbetleriniz ve yöneticilerden gelen resmi mesajlar burada güvenle saklanır.',
-                        style: TextStyle(
-                          color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                          fontSize: 13,
-                          height: 1.45,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Mesaj Arama Barı (Klavye asla kapanmaz)
+                    if (conversationList.isNotEmpty)
+                      Container(
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: surfaceColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: _searchQuery.isNotEmpty
+                                ? primaryColor.withValues(alpha: 0.6)
+                                : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08)),
+                            width: 1,
+                          ),
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (val) {
+                            setState(() {
+                              _searchQuery = val;
+                            });
+                          },
+                          style: TextStyle(color: textMain, fontSize: 13.5, fontWeight: FontWeight.w600),
+                          decoration: InputDecoration(
+                            hintText: 'Mesajlarda veya kişilerde ara...',
+                            hintStyle: TextStyle(
+                              color: textSub?.withValues(alpha: 0.7),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            prefixIcon: Icon(Icons.search_rounded, size: 18, color: textSub),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                    icon: const Icon(Icons.close_rounded, size: 16),
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 16),
+              ),
 
-                // ─── 2. MESAJ ARAMA BAR ───
-                if (conversationList.isNotEmpty) ...[
-                  Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: _searchQuery.isNotEmpty
-                            ? primaryColor.withValues(alpha: 0.6)
-                            : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
-                        width: 1,
-                      ),
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      focusNode: _searchFocusNode,
-                      onChanged: (val) => setState(() => _searchQuery = val),
-                      style: TextStyle(color: textMain, fontSize: 13.5, fontWeight: FontWeight.w600),
-                      decoration: InputDecoration(
-                        hintText: 'Mesajlarda veya kişilerde ara...',
-                        hintStyle: TextStyle(
-                          color: textSub?.withValues(alpha: 0.7),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                        ),
-                        prefixIcon: Icon(Icons.search_rounded, size: 18, color: textSub),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                },
-                                icon: const Icon(Icons.close_rounded, size: 16),
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 11),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
+              // Dinamik Sohbet Listesi
+              Expanded(
+                child: filteredList.isNotEmpty
+                    ? ListView.separated(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        itemCount: filteredList.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final message = filteredList[index];
+                          final otherUserId = message.senderId == currentUserId
+                              ? message.receiverId
+                              : message.senderId;
+                          final otherUserName = message.senderId == currentUserId
+                              ? message.receiverName
+                              : message.senderName;
+                          final otherUserImageUrl = message.senderId == currentUserId
+                              ? message.receiverImageUrl
+                              : message.senderImageUrl;
+                          final isUnread = !message.isRead && message.receiverId == currentUserId;
 
-                // ─── 3. SOHBET LİSTESİ ───
-                if (filteredList.isNotEmpty) ...[
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredList.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final message = filteredList[index];
-                      final otherUserId = message.senderId == currentUserId
-                          ? message.receiverId
-                          : message.senderId;
-                      final otherUserName = message.senderId == currentUserId
-                          ? message.receiverName
-                          : message.senderName;
-                      final otherUserImageUrl = message.senderId == currentUserId
-                          ? message.receiverImageUrl
-                          : message.senderImageUrl;
-                      final isUnread = !message.isRead && message.receiverId == currentUserId;
+                          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            stream: FirebaseFirestore.instance.collection('users').doc(otherUserId).snapshots(),
+                            builder: (context, userSnapshot) {
+                              String displayName = otherUserName;
+                              String profileImageUrl = otherUserImageUrl;
 
-                      return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                        stream: FirebaseFirestore.instance.collection('users').doc(otherUserId).snapshots(),
-                        builder: (context, userSnapshot) {
-                          String displayName = otherUserName;
-                          String profileImageUrl = otherUserImageUrl;
+                              if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                                final userData = userSnapshot.data!.data();
+                                displayName = userData?['username'] ?? userData?['displayName'] ?? otherUserName;
+                                profileImageUrl = migrateAssetPath(userData?['profileImageUrl'] ?? otherUserImageUrl);
+                              }
 
-                          if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                            final userData = userSnapshot.data!.data();
-                            displayName = userData?['username'] ?? userData?['displayName'] ?? otherUserName;
-                            profileImageUrl = migrateAssetPath(userData?['profileImageUrl'] ?? otherUserImageUrl);
-                          }
-
-                          return _buildConversationCard(
-                            context: context,
-                            message: message,
-                            otherUserId: otherUserId,
-                            displayName: displayName,
-                            profileImageUrl: profileImageUrl,
-                            isUnread: isUnread,
-                            isDark: isDark,
-                            primaryColor: primaryColor,
-                            textMain: textMain,
-                            textSub: textSub,
-                            surfaceColor: surfaceColor,
+                              return _buildConversationCard(
+                                context: context,
+                                message: message,
+                                otherUserId: otherUserId,
+                                displayName: displayName,
+                                profileImageUrl: profileImageUrl,
+                                isUnread: isUnread,
+                                isDark: isDark,
+                                primaryColor: primaryColor,
+                                textMain: textMain,
+                                textSub: textSub,
+                                surfaceColor: surfaceColor,
+                              );
+                            },
                           );
                         },
-                      );
-                    },
-                  ),
-                ] else if (conversationList.isEmpty) ...[
-                  // BOŞ DURUM (Hiç mesaj yok)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(Icons.forum_outlined, size: 48, color: primaryColor),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Henüz mesajlaşmanız bulunmuyor',
-                          style: TextStyle(color: textMain, fontSize: 16, fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Fırsat paylaşımları altındaki satıcı ve üyelerle iletişime geçerek sohbet başlatabilirsiniz.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: textSub, fontSize: 13, height: 1.4),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  // ARAMA SONUCU YOK
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: Text(
-                        '"$_searchQuery" ile eşleşen mesaj veya sohbet bulunamadı',
-                        style: TextStyle(color: textSub, fontSize: 13.5),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+                      )
+                    : (conversationList.isEmpty
+                        ? SingleChildScrollView(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+                                decoration: BoxDecoration(
+                                  color: surfaceColor,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(Icons.forum_outlined, size: 44, color: primaryColor),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      'Henüz mesajlaşmanız bulunmuyor',
+                                      style: TextStyle(color: textMain, fontSize: 15.5, fontWeight: FontWeight.w700),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Fırsat paylaşımları altındaki satıcı ve üyelerle iletişime geçerek sohbet başlatabilirsiniz.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: textSub, fontSize: 12.5, height: 1.4),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Center(
+                              child: Text(
+                                '"$_searchQuery" ile eşleşen mesaj veya sohbet bulunamadı',
+                                style: TextStyle(color: textSub, fontSize: 13.5),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          )),
+              ),
+            ],
           );
         },
       ),
@@ -442,8 +458,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                 Stack(
                   children: [
                     Container(
-                      width: 50,
-                      height: 50,
+                      width: 48,
+                      height: 48,
                       padding: EdgeInsets.all(isUnread ? 2 : 0),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
@@ -452,7 +468,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                             : null,
                       ),
                       child: ClipOval(
-                        child: _buildAvatar(profileImageUrl, 50),
+                        child: _buildAvatar(profileImageUrl, 48),
                       ),
                     ),
                     if (isUnread)
@@ -460,8 +476,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                         right: 0,
                         top: 0,
                         child: Container(
-                          width: 13,
-                          height: 13,
+                          width: 12,
+                          height: 12,
                           decoration: BoxDecoration(
                             color: primaryColor,
                             shape: BoxShape.circle,
@@ -611,16 +627,17 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
           await _firestoreService.deleteUserMessage(msg.id);
         }
 
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('🗑️ $userName ile olan sohbet silindi'),
-            backgroundColor: Colors.orange[800],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🗑️ $userName ile olan sohbet silindi'),
+              backgroundColor: Colors.orange[800],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            ),
+          );
+        }
       } catch (e) {
         _log('Sohbet silme hatası: $e');
       }

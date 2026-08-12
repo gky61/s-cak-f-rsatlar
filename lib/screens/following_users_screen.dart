@@ -23,14 +23,24 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  
+
+  late final Stream<List<AppUser>> _followingStream;
   String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = _authService.currentUser?.uid;
+    if (uid != null) {
+      _followingStream = _firestoreService.getFollowingUsersStream(uid);
+    } else {
+      _followingStream = const Stream.empty();
+    }
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -70,7 +80,7 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
         elevation: 0,
       ),
       body: StreamBuilder<List<AppUser>>(
-        stream: _firestoreService.getFollowingUsersStream(currentUserId),
+        stream: _followingStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -97,214 +107,220 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
                 u.username.toLowerCase().contains(q);
           }).toList();
 
-          return SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ─── 1. BİLGİ VE TOPLAM SAYI KARTI (Glassmorphic Header) ───
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isDark
-                          ? [
-                              primaryColor.withValues(alpha: 0.20),
-                              primaryColor.withValues(alpha: 0.08),
-                            ]
-                          : [
-                              primaryColor.withValues(alpha: 0.12),
-                              primaryColor.withValues(alpha: 0.04),
-                            ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: primaryColor.withValues(alpha: 0.3),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          return Column(
+            children: [
+              // Sabit Header & Arama Alanı (Scroll Etmeyen Sabit Bölüm)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Column(
+                  children: [
+                    // Bilgi & Takipçi Sayacı
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isDark
+                              ? [
+                                  primaryColor.withValues(alpha: 0.20),
+                                  primaryColor.withValues(alpha: 0.08),
+                                ]
+                              : [
+                                  primaryColor.withValues(alpha: 0.12),
+                                  primaryColor.withValues(alpha: 0.04),
+                                ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: primaryColor.withValues(alpha: 0.3),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withValues(alpha: 0.2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.people_alt_rounded,
-                                  color: primaryColor,
-                                  size: 20,
-                                ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(7),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor.withValues(alpha: 0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.people_alt_rounded,
+                                      color: primaryColor,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Favori Yayıncılar',
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: textMain,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 10),
-                              Text(
-                                'Favori Yayıncılar',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: textMain,
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: primaryColor,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '${allFollowing.length} Takip Edilen',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: primaryColor,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              '${allFollowing.length} Takip Edilen',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Takip ettiğiniz kullanıcılar yeni bir fırsat paylaştığında anında bildirim alırsınız.',
+                            style: TextStyle(
+                              color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                              fontSize: 12.5,
+                              height: 1.4,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Takip ettiğiniz yayıncılar ve üyeler yeni bir fırsat paylaştığında anında bildirim alırsınız.',
-                        style: TextStyle(
-                          color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                          fontSize: 13,
-                          height: 1.45,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
+                    ),
+                    const SizedBox(height: 12),
 
-                // ─── 2. KULLANICI ARAMA BAR ───
-                if (allFollowing.isNotEmpty) ...[
-                  Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: _searchQuery.isNotEmpty
-                            ? primaryColor.withValues(alpha: 0.6)
-                            : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
-                        width: 1,
-                      ),
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      focusNode: _searchFocusNode,
-                      onChanged: (val) => setState(() => _searchQuery = val),
-                      style: TextStyle(color: textMain, fontSize: 13.5, fontWeight: FontWeight.w600),
-                      decoration: InputDecoration(
-                        hintText: 'Takip ettiklerinde kullanıcı ara...',
-                        hintStyle: TextStyle(
-                          color: textSub?.withValues(alpha: 0.7),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                        ),
-                        prefixIcon: Icon(Icons.search_rounded, size: 18, color: textSub),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                },
-                                icon: const Icon(Icons.close_rounded, size: 16),
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 11),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-
-                // ─── 3. TAKİP EDİLENLER LİSTESİ ───
-                if (filteredUsers.isNotEmpty) ...[
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredUsers.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final user = filteredUsers[index];
-                      return _buildFollowingUserCard(
-                        user: user,
-                        isDark: isDark,
-                        primaryColor: primaryColor,
-                        textMain: textMain,
-                        textSub: textSub,
-                        surfaceColor: surfaceColor,
-                      );
-                    },
-                  ),
-                ] else if (allFollowing.isEmpty) ...[
-                  // BOŞ DURUM (Hiç kimse takip edilmiyor)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                            shape: BoxShape.circle,
+                    // Arama Barı (TextField sürekli odağını korur!)
+                    if (allFollowing.isNotEmpty)
+                      Container(
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: surfaceColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: _searchQuery.isNotEmpty
+                                ? primaryColor.withValues(alpha: 0.6)
+                                : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08)),
+                            width: 1,
                           ),
-                          child: Icon(Icons.person_add_rounded, size: 48, color: primaryColor),
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Henüz kimseyi takip etmiyorsunuz',
-                          style: TextStyle(color: textMain, fontSize: 16, fontWeight: FontWeight.w700),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (val) {
+                            setState(() {
+                              _searchQuery = val;
+                            });
+                          },
+                          style: TextStyle(color: textMain, fontSize: 13.5, fontWeight: FontWeight.w600),
+                          decoration: InputDecoration(
+                            hintText: 'Takip ettiklerinde kullanıcı ara...',
+                            hintStyle: TextStyle(
+                              color: textSub?.withValues(alpha: 0.7),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            prefixIcon: Icon(Icons.search_rounded, size: 18, color: textSub),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                    icon: const Icon(Icons.close_rounded, size: 16),
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                          ),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Toplulukta beğendiğiniz kullanıcıların profilinden onları takip ederek paylaşımlarını kaçırmayın.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: textSub, fontSize: 13, height: 1.4),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  // ARAMA SONUCU BULUNAMADI
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: Text(
-                        '"$_searchQuery" ile eşleşen takip edilen kullanıcı bulunamadı',
-                        style: TextStyle(color: textSub, fontSize: 13.5),
-                        textAlign: TextAlign.center,
                       ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+                  ],
+                ),
+              ),
+
+              // Dinamik Liste Alanı
+              Expanded(
+                child: filteredUsers.isNotEmpty
+                    ? ListView.separated(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        itemCount: filteredUsers.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final user = filteredUsers[index];
+                          return _buildFollowingUserCard(
+                            user: user,
+                            isDark: isDark,
+                            primaryColor: primaryColor,
+                            textMain: textMain,
+                            textSub: textSub,
+                            surfaceColor: surfaceColor,
+                          );
+                        },
+                      )
+                    : (allFollowing.isEmpty
+                        ? SingleChildScrollView(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+                                decoration: BoxDecoration(
+                                  color: surfaceColor,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(Icons.person_add_rounded, size: 44, color: primaryColor),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      'Henüz kimseyi takip etmiyorsunuz',
+                                      style: TextStyle(color: textMain, fontSize: 15.5, fontWeight: FontWeight.w700),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Toplulukta beğendiğiniz kullanıcıların profilinden onları takip ederek paylaşımlarını kaçırmayın.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: textSub, fontSize: 12.5, height: 1.4),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Center(
+                              child: Text(
+                                '"$_searchQuery" ile eşleşen takip edilen kullanıcı bulunamadı',
+                                style: TextStyle(color: textSub, fontSize: 13.5),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          )),
+              ),
+            ],
           );
         },
       ),
@@ -352,8 +368,8 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
               children: [
                 // Avatar
                 Container(
-                  width: 50,
-                  height: 50,
+                  width: 48,
+                  height: 48,
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
