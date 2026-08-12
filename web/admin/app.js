@@ -4917,7 +4917,7 @@ window.sendAdminMessage = async function (userId, title, content) {
         const adminData = adminDoc.data();
         const adminName = adminData?.username || adminData?.nickname || 'Admin';
 
-        // 1. Create message document in adminToUserMessages
+        // Create message document in adminToUserMessages (triggers Cloud Function onAdminMessageCreated)
         const messageRef = db.collection('adminToUserMessages').doc();
         await messageRef.set({
             id: messageRef.id,
@@ -4930,32 +4930,7 @@ window.sendAdminMessage = async function (userId, title, content) {
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         });
 
-        // 2. Create notification document in user's notifications subcollection (type: admin_message)
-        const notificationRef = db.collection('users').doc(userId).collection('notifications').doc();
-        await notificationRef.set({
-            id: notificationRef.id,
-            type: 'admin_message',
-            title: title,
-            body: content,
-            read: false,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        });
-
-        // 3. Send FCM Push Notification via sendManualNotification Cloud Function
-        try {
-            const sendManualNotificationCall = firebase.functions().httpsCallable('sendManualNotification');
-            await sendManualNotificationCall({
-                title: title,
-                body: content,
-                targetType: 'uid',
-                targetValue: userId
-            });
-            console.log('📱 Push notification dispatched via Cloud Function for user:', userId);
-        } catch (pushErr) {
-            console.warn('⚠️ Push notification dispatch warning:', pushErr);
-        }
-
-        console.log('✅ Admin message and notification sent successfully:', messageRef.id);
+        console.log('✅ Admin message sent successfully:', messageRef.id);
         showSuccess('Mesaj ve bildirim başarıyla gönderildi!');
 
         // Close modal

@@ -800,6 +800,22 @@ exports.onAdminMessageCreated = functions.firestore
     }
 
     try {
+      // Alıcının notifications koleksiyonuna doküman yaz (tekilleştirilmiş ID ile)
+      const notifRef = admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .doc(`admin_msg_${messageId}`);
+
+      await notifRef.set({
+        id: `admin_msg_${messageId}`,
+        type: 'admin_message',
+        title: title,
+        body: content,
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
       // Alıcının tüm aktif cihaz token'larını al
       const devices = await getUserDeviceTokens(userId);
 
