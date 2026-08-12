@@ -6,6 +6,7 @@ import 'notification_service.dart';
 import 'content_moderation_service.dart';
 import 'user_service.dart';
 import 'link_preview_service.dart';
+import 'advertising_compliance_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -291,10 +292,12 @@ class DealService {
         _log('⚠️ Settings loading error: $e');
       }
 
+      final compliantDescription = AdvertisingComplianceService.ensureDisclosure(description);
+
       final deal = Deal(
         id: '',
         title: title,
-        description: description,
+        description: compliantDescription,
         price: price,
         store: store,
         category: category,

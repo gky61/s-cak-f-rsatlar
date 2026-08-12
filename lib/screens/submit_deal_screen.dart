@@ -9,6 +9,7 @@ import '../services/category_detection_service.dart';
 import '../services/ai_service.dart';
 import '../services/link_preview_service.dart';
 import '../services/domain_allowlist_service.dart';
+import '../services/advertising_compliance_service.dart';
 import '../models/category.dart';
 import '../models/deal.dart';
 import '../widgets/category_selector_widget.dart';
@@ -541,7 +542,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         // Açıklamayı al (boşsa)
         final cleanDesc = _cleanScrapedString(preview.description);
         if (_descriptionController.text.trim().isEmpty && cleanDesc != null) {
-          _descriptionController.text = cleanDesc;
+          _descriptionController.text = AdvertisingComplianceService.ensureDisclosure(cleanDesc);
         }
 
         // Fiyat Etiketini al (kampanya/CRM)
@@ -1041,7 +1042,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       try {
         await _firestoreService.createDeal(
           title: _titleController.text.trim(),
-          description: _descriptionController.text.trim(),
+          description: AdvertisingComplianceService.ensureDisclosure(_descriptionController.text.trim()),
           price: double.tryParse(_priceController.text.trim()) ?? 0.0,
           store: _storeController.text.trim(),
           category: categoryId, // Kategori ID'si kaydediliyor (kategori adı yerine)

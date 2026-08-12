@@ -14,6 +14,7 @@ const { spawnSync } = require('child_process');
 const linkScraperService = require('./link_scraper_service');
 const categoryDetectionService = require('./category_detection_service');
 const domainAllowlist = require('./domain_allowlist');
+const advertisingComplianceService = require('./advertising_compliance_service');
 
 // Firebase Admin başlat
 // Cloud Run'da otomatik authentication kullanır
@@ -1094,7 +1095,9 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     // Deal objesi
     const deal = {
       title: cleanedTitle,
-      description: truncateEditorAndFooterInfo(finalDescription || scrapeResult.description || 'Fırsat Ürünü Detayları'),
+      description: advertisingComplianceService.ensureAdvertisingDisclosure(
+        truncateEditorAndFooterInfo(finalDescription || scrapeResult.description || 'Fırsat Ürünü Detayları')
+      ),
       link: scrapeResult.url || mainLink,
       price: finalPrice,
       originalPrice: origPrice,

@@ -2008,8 +2008,42 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       }
     }
 
+    final cleanText = text.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll('**', '');
+
+    // #tanıtım vb. etiketleri göze batmayan, hafif muted (zarif gri) tonda göster
+    final hashtagRegex = RegExp(r'(#(?:reklam|işbirliği|isbirligi|tanıtım|tanitim|sponsorlu)\b)', caseSensitive: false);
+    if (hashtagRegex.hasMatch(cleanText)) {
+      final List<InlineSpan> spans = [];
+      int lastIndex = 0;
+      for (final match in hashtagRegex.allMatches(cleanText)) {
+        if (match.start > lastIndex) {
+          spans.add(TextSpan(
+            text: cleanText.substring(lastIndex, match.start),
+            style: baseStyle,
+          ));
+        }
+        spans.add(TextSpan(
+          text: match.group(0),
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+            color: isDark ? Colors.grey[500] : Colors.grey[400],
+            letterSpacing: 0.2,
+          ),
+        ));
+        lastIndex = match.end;
+      }
+      if (lastIndex < cleanText.length) {
+        spans.add(TextSpan(
+          text: cleanText.substring(lastIndex),
+          style: baseStyle,
+        ));
+      }
+      return SelectableText.rich(TextSpan(children: spans));
+    }
+
     return SelectableText(
-      text.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll('**', ''),
+      cleanText,
       style: baseStyle,
     );
   }
