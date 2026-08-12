@@ -337,7 +337,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Sadece seçtiğin kategorilerdeki yeni fırsatlar cebine gelsin.',
+                                  'Seçtiğin kategorilerdeki fırsatlardan anında haberdar ol. ',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: secondaryTextColor,
@@ -369,81 +369,136 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                   ),
                 ),
 
-                // 2. Hızlı Aksiyon Butonları Barı (Tümünü Seç / Seçimleri Temizle)
+                // 2. Minimalist & Akıllı Aksiyon Barı (Tümünü Seç / Temizle)
                 Container(
-                  margin: const EdgeInsets.only(bottom: 20),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Tümünü Seç Butonu
-                      Expanded(
-                        child: InkWell(
-                          onTap: _isProcessingBulk ? null : _selectAllCategories,
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                            decoration: BoxDecoration(
-                              color: isDark 
-                                  ? const Color(0xFF1E3A27) 
-                                  : const Color(0xFFE8F5E9),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFF4CAF50).withValues(alpha: 0.4),
-                                width: 1,
-                              ),
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.done_all_rounded, size: 18, color: Color(0xFF2E7D32)),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Tümünü Seç',
-                                  style: TextStyle(
-                                    color: Color(0xFF2E7D32),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                      Text(
+                        'KATEGORİ LİSTESİ',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: secondaryTextColor,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      // Seçimleri Temizle Butonu
-                      Expanded(
-                        child: InkWell(
-                          onTap: _isProcessingBulk ? null : _clearAllCategories,
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                            decoration: BoxDecoration(
-                              color: isDark 
-                                  ? const Color(0xFF3B1E1E) 
-                                  : const Color(0xFFFFEBEE),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFFEF5350).withValues(alpha: 0.4),
-                                width: 1,
+                      Row(
+                        children: [
+                          // Tümünü Seç Butonu (Kibar Kapsül)
+                          InkWell(
+                            onTap: (_isProcessingBulk || _activeCategoryCount == _filteredCategories.length) 
+                                ? null 
+                                : _selectAllCategories,
+                            borderRadius: BorderRadius.circular(20),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _activeCategoryCount == _filteredCategories.length
+                                    ? (isDark ? Colors.white10 : Colors.grey[200])
+                                    : (isDark ? const Color(0xFF1B382B) : const Color(0xFFE8F5E9)),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: _activeCategoryCount == _filteredCategories.length
+                                      ? Colors.transparent
+                                      : const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_isProcessingBulk && _activeCategoryCount != 0) ...[
+                                    const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2E7D32)),
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ] else ...[
+                                    Icon(
+                                      Icons.done_all_rounded,
+                                      size: 14,
+                                      color: _activeCategoryCount == _filteredCategories.length
+                                          ? secondaryTextColor
+                                          : const Color(0xFF2E7D32),
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Text(
+                                    'Tümünü Seç',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: _activeCategoryCount == _filteredCategories.length
+                                          ? secondaryTextColor
+                                          : const Color(0xFF2E7D32),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.deselect_rounded, size: 18, color: Color(0xFFC62828)),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Seçimleri Temizle',
-                                  style: TextStyle(
-                                    color: Color(0xFFC62828),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                  ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Seçimleri Temizle Butonu (Kibar Kapsül)
+                          InkWell(
+                            onTap: (_isProcessingBulk || _activeCategoryCount == 0) 
+                                ? null 
+                                : _clearAllCategories,
+                            borderRadius: BorderRadius.circular(20),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _activeCategoryCount == 0
+                                    ? (isDark ? Colors.white10 : Colors.grey[200])
+                                    : (isDark ? const Color(0xFF381B1B) : const Color(0xFFFFEBEE)),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: _activeCategoryCount == 0
+                                      ? Colors.transparent
+                                      : const Color(0xFFEF5350).withValues(alpha: 0.5),
+                                  width: 1,
                                 ),
-                              ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_isProcessingBulk && _activeCategoryCount == 0) ...[
+                                    const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFC62828)),
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ] else ...[
+                                    Icon(
+                                      Icons.deselect_rounded,
+                                      size: 14,
+                                      color: _activeCategoryCount == 0
+                                          ? secondaryTextColor
+                                          : const Color(0xFFC62828),
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Text(
+                                    'Temizle',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: _activeCategoryCount == 0
+                                          ? secondaryTextColor
+                                          : const Color(0xFFC62828),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
