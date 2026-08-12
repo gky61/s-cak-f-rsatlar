@@ -13,38 +13,46 @@ class DealCardBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Canlı Alev Rengi: Sıcaklık 0 bile olsa her zaman göz alıcı Turuncu-Kırmızı (Canlı Alev)
-    const Color flameColor = Color(0xFFFF5722); // Vibrant Flame Orange/Red
-    
-    // Yorum İkon Rengi: Kibar, nötr ve şık (Gündüz: Slate Navy, Gece: Soft Grey/Blue)
+    // Açık Modda Kart Fiyat Etiketinin Rengi (0xFFFFF3E0 & 0xFFE65100)
+    // Gece Modunda Koyu Şık Neom
+    final Color backgroundColor = isDark 
+        ? const Color(0xFF1E1E2D).withValues(alpha: 0.95) 
+        : const Color(0xFFFFF3E0); // Fiyat etiketiyle birebir aynı soft orange zemin
+
+    final Color borderColor = isDark 
+        ? const Color(0xFF33354A) 
+        : const Color(0xFFFFB74D).withValues(alpha: 0.5);
+
+    final Color flameColor = isDark 
+        ? const Color(0xFFFF5722) 
+        : const Color(0xFFE65100); // Fiyat etiketinin derin turuncu tonu
+
     final Color commentIconColor = isDark 
         ? const Color(0xFF94A3B8) 
-        : const Color(0xFF64748B);
+        : const Color(0xFFE65100).withValues(alpha: 0.85);
 
-    // Metin Rengi: Yüksek okunabilirlik
     final Color textColor = isDark 
         ? const Color(0xFFF8FAFC) 
-        : const Color(0xFF1E293B);
+        : const Color(0xFFE65100);
+
+    final Color separatorColor = isDark 
+        ? Colors.white.withValues(alpha: 0.2) 
+        : const Color(0xFFFFB74D).withValues(alpha: 0.6);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 3),
       decoration: BoxDecoration(
-        // Kibar, yumuşak ve şık zemin (Gündüz: Beyaz hafif saydam, Gece: Koyu Neom)
-        color: isDark 
-            ? const Color(0xFF1E1E2D).withValues(alpha: 0.92) 
-            : Colors.white.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(12),
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(8), // Fiyat etiketine uygun kavis
         border: Border.all(
-          color: isDark 
-              ? Colors.white.withValues(alpha: 0.15) 
-              : Colors.black.withValues(alpha: 0.08),
+          color: borderColor,
           width: 0.8,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
-            blurRadius: 4,
-            offset: const Offset(0, 1.5),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -52,8 +60,8 @@ class DealCardBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Alev Göstergesi (Canlı Turuncu/Kırmızı)
-          const Icon(
+          // Alev Göstergesi
+          Icon(
             Icons.local_fire_department_rounded,
             size: 13,
             color: flameColor,
@@ -64,22 +72,20 @@ class DealCardBadge extends StatelessWidget {
             style: TextStyle(
               color: textColor,
               fontSize: 10,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               letterSpacing: -0.2,
             ),
           ),
 
-          // Kibar İnce Seperatör
+          // Seperatör Çizgi
           Container(
             width: 0.8,
             height: 9,
             margin: const EdgeInsets.symmetric(horizontal: 4.5),
-            color: isDark 
-                ? Colors.white.withValues(alpha: 0.2) 
-                : Colors.black.withValues(alpha: 0.12),
+            color: separatorColor,
           ),
 
-          // Yorum Göstergesi (Zarif Outline İkon)
+          // Yorum Göstergesi
           Icon(
             Icons.chat_bubble_outline_rounded,
             size: 11.5,
@@ -91,7 +97,7 @@ class DealCardBadge extends StatelessWidget {
             style: TextStyle(
               color: textColor,
               fontSize: 10,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               letterSpacing: -0.2,
             ),
           ),
