@@ -40,6 +40,7 @@ class Deal {
   final String? brand; // Marka (ör. Apple)
   final bool isAmazonWarehouse; // Amazon Depo (smid=A215JX4S9CANSO) ürünü mü?
   final bool hidePrice; // Fiyat gizlensin mi? (Fiyatsız kampanya vs.)
+  final String? couponCode; // Kupon Kodu (Örn: İNDİRİM50)
 
   Deal({
     required this.id,
@@ -71,6 +72,7 @@ class Deal {
     this.brand,
     this.isAmazonWarehouse = false,
     this.hidePrice = false,
+    this.couponCode,
   });
 
   /// Bir URL'in Amazon Depo (smid=A215JX4S9CANSO) ürünü olup olmadığını kontrol eder.
@@ -292,6 +294,7 @@ class Deal {
           data['isAmazonDepo'] == true ||
           checkIsAmazonWarehouse(data['link'] ?? data['url'] ?? ''),
       hidePrice: data['hidePrice'] == true || data['isPriceHidden'] == true,
+      couponCode: data['couponCode']?.toString(),
     );
   }
 
@@ -318,6 +321,7 @@ class Deal {
       'isApproved': isApproved,
       'isExpired': isExpired,
       'isUserSubmitted': isUserSubmitted,
+      'couponCode': couponCode,
       'isTest': isTest,
       'cleanUrl': cleanUrl.isNotEmpty ? cleanUrl : cleanProductUrl(link),
       'priceLabel': priceLabel,

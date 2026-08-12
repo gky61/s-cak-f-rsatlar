@@ -1871,17 +1871,21 @@ async function showDealModal(deal) {
                         <span class="text-sm font-semibold text-gray-900 dark:text-white">Fiyatı Gizle (Kampanya / Fiyatsız Fırsat)</span>
                     </label>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
+                    <label class="flex flex-col gap-2">
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Mağaza Adı</span>
+                        <input id="editStore" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-12 px-4 text-base" type="text" placeholder="ör. Trendyol" value="${escapeHtml(deal.store || '')}"/>
+                    </label>
                     <label class="flex flex-col gap-2">
                         <span class="text-sm font-semibold text-gray-900 dark:text-white">Marka (Opsiyonel)</span>
                         <input id="editBrand" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-12 px-4 text-base" type="text" placeholder="ör. Apple" value="${escapeHtml(deal.brand || '')}"/>
                     </label>
                     <label class="flex flex-col gap-2">
-                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Rating Puanı (ör. 4.8)</span>
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Rating Puanı</span>
                         <input id="editRatingValue" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-12 px-4 text-base" type="number" step="0.1" placeholder="ör. 4.8" value="${deal.ratingValue != null ? deal.ratingValue : ''}"/>
                     </label>
                     <label class="flex flex-col gap-2">
-                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Oy Sayısı (ör. 1173)</span>
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Oy Sayısı</span>
                         <input id="editRatingCount" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-12 px-4 text-base" type="number" placeholder="ör. 1173" value="${deal.ratingCount != null ? deal.ratingCount : ''}"/>
                     </label>
                 </div>
@@ -1903,21 +1907,13 @@ async function showDealModal(deal) {
                     </div>
                     <p id="affiliateStatus" class="text-xs text-slate-500 dark:text-slate-400 mt-1"></p>
                 </label>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 gap-6">
                     <label class="flex flex-col gap-2">
                         <span class="text-sm font-semibold text-gray-900 dark:text-white">Kupon Kodu (Opsiyonel)</span>
                         <div class="relative">
                             <input id="editCouponCode" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-dashed border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-12 px-4 text-base font-mono uppercase tracking-wider" placeholder="KOD YOK" type="text" value="${escapeHtml(deal.couponCode || '')}"/>
                             <span class="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 dark:text-slate-500 text-lg">local_activity</span>
                         </div>
-                    </label>
-                    <label class="flex flex-col gap-2">
-                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Kargo Durumu</span>
-                        <select id="editShipping" class="form-select w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-12 px-4 text-base">
-                            <option value="unknown">Bilinmiyor</option>
-                            <option value="free" ${deal.shipping === 'free' ? 'selected' : ''}>Ücretsiz Kargo</option>
-                            <option value="paid" ${deal.shipping === 'paid' ? 'selected' : ''}>Alıcı Ödemeli</option>
-                        </select>
                     </label>
                 </div>
             </div>
@@ -2481,8 +2477,8 @@ async function saveDealChanges() {
             : (currentDeal.subCategory || currentDeal.subcategory || null);
         const status = document.getElementById('editStatus')?.value || (currentDeal.isApproved ? 'active' : 'pending');
         const isHot = document.getElementById('editIsHot')?.checked || false;
+        const store = document.getElementById('editStore')?.value?.trim() || (currentDeal && currentDeal.store) || 'Bilinmeyen';
         const couponCode = document.getElementById('editCouponCode')?.value || '';
-        const shipping = document.getElementById('editShipping')?.value || 'unknown';
         const brand = document.getElementById('editBrand')?.value?.trim() || null;
         const ratingValStr = document.getElementById('editRatingValue')?.value;
         const ratingValue = (ratingValStr !== undefined && ratingValStr !== '') ? parseFloat(ratingValStr) : null;
@@ -2550,8 +2546,7 @@ async function saveDealChanges() {
             isHot: isHot || false,
             isEditorPick: isHot || false, // Hem isHot hem isEditorPick olarak aynı değeri set et
             couponCode: couponCode || '',
-            shipping: shipping || 'unknown',
-            store: (currentDeal && currentDeal.store) || 'Bilinmeyen',
+            store: store,
             postedBy: isNewDeal ? (currentUser ? currentUser.uid : 'admin') : (currentDeal.postedBy || 'admin'),
             hotVotes: isNewDeal ? 0 : (currentDeal.hotVotes || 0),
             coldVotes: isNewDeal ? 0 : (currentDeal.coldVotes || 0),
@@ -2655,7 +2650,6 @@ async function showAddDealModal() {
         isApproved: false,
         isHot: false,
         couponCode: '',
-        shipping: 'unknown',
         hotVotes: 0,
         coldVotes: 0,
         expiredVotes: 0,

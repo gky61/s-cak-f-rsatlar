@@ -2630,7 +2630,6 @@ exports.generateTestData = functions.https.onCall(wrapCall('generateTestData', a
         isExpired: false,
         isUserSubmitted: true,
         isEditorPick: false,
-        shipping: 'free',
         couponCode: `TESTKOD${i}`
       };
 

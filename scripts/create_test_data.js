@@ -193,7 +193,6 @@ async function main() {
                     isExpired: { booleanValue: false },
                     isUserSubmitted: { booleanValue: true },
                     isEditorPick: { booleanValue: false },
-                    shipping: { stringValue: 'free' },
                     couponCode: { stringValue: `CLIKOD${i}` }
                 }
             };

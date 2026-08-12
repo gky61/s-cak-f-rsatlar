@@ -26,6 +26,7 @@ class _KuponlarPageState extends State<KuponlarPage> {
   final Map<String, int> _localColdCounts = {};
   final Set<String> _votingInProgress = {}; // Spam click koruması
   bool _isAdmin = false;
+  bool _hideRadarBanner = false; // Radar bilgi banner'ı kapatma durumu
   late Stream<List<Kupon>> _kuponlarStream;
   String _selectedStoreFilter = 'Tümü';
 
@@ -793,30 +794,152 @@ class _KuponlarPageState extends State<KuponlarPage> {
     );
   }
 
+  Widget _buildRadarInfoBanner(bool isDark) {
+    if (_hideRadarBanner) return const SizedBox.shrink();
+
+    final bannerBg = isDark
+        ? AppTheme.primary.withValues(alpha: 0.12)
+        : const Color(0xFFEFF6FF); // Soft blue tint
+    final borderColor = isDark
+        ? AppTheme.primary.withValues(alpha: 0.3)
+        : const Color(0xFFBFDBFE);
+    final iconColor = isDark ? const Color(0xFF93C5FD) : AppTheme.primary;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bannerBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.radar_rounded,
+              size: 20,
+              color: iconColor,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '📡 Otomatik Radar & Topluluk Doğrulaması',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF1E3A8A),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _hideRadarBanner = true;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(2.0),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 16,
+                          color: isDark ? Colors.grey[400] : Colors.grey[500],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.35,
+                      color: isDark ? Colors.grey[300] : const Color(0xFF1E40AF),
+                    ),
+                    children: const [
+                      TextSpan(
+                        text: 'Bu sekmedeki kuponlar web kaynaklarından otomatik taranarak toplanır. Mağaza koşullarına göre bazı kodlar değişkenlik gösterebilir. Denediğiniz kuponların çalışıp çalışmadığını ',
+                      ),
+                      TextSpan(
+                        text: '🔥 (Çalıştı)',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text: ' veya ',
+                      ),
+                      TextSpan(
+                        text: '❄️ (Çalışmadı)',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text: ' butonlarıyla oylayarak topluluğa rehberlik edebilirsiniz.',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTabContent({
     required List<Kupon> list,
     required bool isDark,
     required dynamic currentUser,
     required String emptyMsg,
+    bool showRadarBanner = false,
   }) {
+    final showBanner = showRadarBanner && !_hideRadarBanner && currentUser != null;
+
     if (list.isEmpty) {
-      return Center(
-        child: Text(
-          emptyMsg,
-          style: TextStyle(
-            color: isDark ? Colors.grey[400] : Colors.grey[600],
-            fontSize: 14,
-          ),
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            if (showBanner) _buildRadarInfoBanner(isDark),
+            Expanded(
+              child: Center(
+                child: Text(
+                  emptyMsg,
+                  style: TextStyle(
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      itemCount: list.length,
+      itemCount: list.length + (showBanner ? 1 : 0),
       itemBuilder: (context, index) {
+        if (showBanner && index == 0) {
+          return _buildRadarInfoBanner(isDark);
+        }
+        final kuponIndex = showBanner ? index - 1 : index;
         return _buildCouponCard(
-          kupon: list[index],
+          kupon: list[kuponIndex],
           isDark: isDark,
           currentUser: currentUser,
         );
@@ -978,6 +1101,7 @@ class _KuponlarPageState extends State<KuponlarPage> {
                         isDark: isDark,
                         currentUser: currentUser,
                         emptyMsg: 'Radar kuponu bulunamadı.',
+                        showRadarBanner: true,
                       ),
                     ],
                   ),

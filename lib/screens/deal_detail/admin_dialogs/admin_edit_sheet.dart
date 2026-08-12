@@ -49,6 +49,8 @@ void showAdminEditSheet({
     text: rCount != null ? rCount.toString() : '',
   );
 
+  final couponCodeController = TextEditingController(text: deal.couponCode ?? '');
+
   String initialCategoryId = Category.normalizeCategoryId(deal.category);
   if (initialCategoryId == 'tumu') {
     initialCategoryId = 'elektronik';
@@ -190,6 +192,7 @@ void showAdminEditSheet({
               'isExpired': isExpired,
               'hidePrice': isHidePrice,
               'isAmazonWarehouse': isAmazonWarehouse,
+              'couponCode': couponCodeController.text.trim().isNotEmpty ? couponCodeController.text.trim().toUpperCase() : null,
             };
 
             final success = await firestoreService.updateDeal(deal.id, updates);
@@ -362,6 +365,13 @@ void showAdminEditSheet({
                               keyboardType: TextInputType.number,
                             ),
                             const SizedBox(height: 4),
+                            _buildStyledTextField(
+                              context: context,
+                              label: 'Kupon Kodu (Opsiyonel)',
+                              controller: couponCodeController,
+                              placeholder: 'Örn: İNDİRİM50',
+                            ),
+                            const SizedBox(height: 8),
                             _buildSwitchTile(
                               isDark: isDark,
                               value: isHidePrice,
