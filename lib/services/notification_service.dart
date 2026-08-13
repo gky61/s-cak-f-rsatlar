@@ -17,6 +17,7 @@ import '../screens/deal_detail_screen.dart';
 import '../screens/admin_notifications_screen.dart';
 import '../screens/admin_screen.dart';
 import '../screens/message_screen.dart';
+import '../widgets/in_app_message_banner.dart';
 
 /// Debug modda log yazdır
 void _log(String message) {
@@ -29,6 +30,7 @@ void _log(String message) {
 
 class NotificationService {
   static final StreamController<String> logStream = StreamController<String>.broadcast();
+  static String? activeChatUserId;
 
   static bool _notificationListenersSetup = false;
 
@@ -95,9 +97,9 @@ class NotificationService {
         if (response.payload != null) {
           final payload = response.payload!;
           
-          // Admin mesaj bildirimi ise admin bildirimler ekranına yönlendir
-          if (payload.startsWith('message:')) {
-            _navigateToAdminNotifications();
+          // Admin mesaj bildirimi ise doğrudan admin sohbet odasına yönlendir
+          if (payload.startsWith('admin_message:') || payload == 'admin_message') {
+            _navigateToAdminChat();
           } 
           // Admin deal bildirimi ise admin ekranına yönlendir
           else if (payload.startsWith('admin_deal:')) {
@@ -114,6 +116,18 @@ class NotificationService {
               _log('⚠️ Yorum cevabı bildirimi formatı hatalı: $payload');
             }
           } 
+          // Kullanıcı mesaj bildirimi
+          else if (payload.startsWith('message:')) {
+            final parts = payload.split(':');
+            final senderId = parts.length > 1 ? parts[1] : '';
+            if (senderId == 'admin') {
+              _navigateToAdminChat();
+            } else if (senderId.isNotEmpty) {
+              _navigateToChat(senderId, 'Kullanıcı');
+            } else {
+              _navigateToAdminChat();
+            }
+          }
           // Deal bildirimi ise deal ekranına yönlendir
           else {
             _navigateToDeal(payload);
@@ -1279,9 +1293,9 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    // Payload: admin_message için messageId, admin_deal için admin_deal:dealId, diğerleri için dealId
+    // Payload: admin_message için admin_message:messageId, admin_deal için admin_deal:dealId, diğerleri için dealId
     final payload = type == 'admin_message' 
-        ? 'message:${messageId}' 
+        ? 'admin_message:$messageId' 
         : type == 'admin_deal'
             ? 'admin_deal:$dealId'
             : dealId;
@@ -1309,8 +1323,8 @@ class NotificationService {
     
     switch (type) {
       case 'admin_message':
-        // Admin mesaj bildirimi - AdminNotificationsScreen'e yönlendir
-        _navigateToAdminNotifications();
+        // Admin mesaj bildirimi - Doğrudan Admin Mesaj kutusuna (MessageScreen) yönlendir
+        _navigateToAdminChat();
         break;
         
       case 'admin_deal':
@@ -1401,6 +1415,26 @@ class NotificationService {
 
 
 
+  // Admin sohbet sayfasına yönlendirme
+  void _navigateToAdminChat() {
+    final navigator = navigatorKey.currentState;
+    if (navigator != null) {
+      _log('🔔 Admin sohbet sayfasına yönlendiriliyor');
+      navigator.push(
+        MaterialPageRoute(
+          builder: (context) => const MessageScreen(
+            otherUserId: 'admin',
+            otherUserName: 'FırsatKolik Yönetim',
+            otherUserImageUrl: 'assets/logo.webp',
+            isAdminMessage: true,
+          ),
+        ),
+      );
+    } else {
+      _log('⚠️ Navigator henüz hazır değil, admin sohbet yönlendirmesi yapılamıyor');
+    }
+  }
+
   // Admin bildirimler ekranına yönlendirme
   void _navigateToAdminNotifications() {
     final navigator = navigatorKey.currentState;
@@ -1444,7 +1478,46 @@ class NotificationService {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _log('📬 Yeni bildirim (ön plan): ${message.notification?.title}');
       _log('📬 Bildirim verisi: ${message.data}');
-      // Local notification göster
+
+      // Mesaj tipi kontrolü: Eğer kullanıcı o kişiyle sohbetteyse bildirim gösterme
+      if (message.data['type'] == 'message') {
+        final senderId = message.data['senderId']?.toString() ?? '';
+        if (activeChatUserId != null && activeChatUserId == senderId) {
+          _log('💬 Kullanıcı zaten bu sohbet odasında, bildirim bastırıldı.');
+          return;
+        }
+
+        // Başka bir ekrandaysa In-App Banner (Toast) göster
+        InAppMessageBanner.show(
+          context: null,
+          senderId: senderId,
+          senderName: message.data['senderName']?.toString() ?? message.notification?.title ?? 'Kullanıcı',
+          senderImageUrl: message.data['senderImageUrl']?.toString() ?? '',
+          messageText: message.data['messageText']?.toString() ?? message.notification?.body ?? '',
+          dealTitle: message.data['dealTitle']?.toString(),
+          dealId: message.data['dealId']?.toString(),
+        );
+        return;
+      }
+
+      if (message.data['type'] == 'admin_message') {
+        if (activeChatUserId != null && (activeChatUserId == 'admin' || activeChatUserId == 'adminToUser')) {
+          _log('💬 Kullanıcı zaten admin sohbet odasında, bildirim bastırıldı.');
+          return;
+        }
+
+        InAppMessageBanner.show(
+          context: null,
+          senderId: 'admin',
+          senderName: 'FırsatKolik Yönetim',
+          senderImageUrl: 'assets/logo.webp',
+          messageText: message.data['notification_body'] ?? message.notification?.body ?? 'Yeni bir yönetici bildiriminiz var.',
+          isAdminMessage: true,
+        );
+        return;
+      }
+
+      // Diğer bildirimler için Local notification göster
       _showLocalNotification(message);
     });
 

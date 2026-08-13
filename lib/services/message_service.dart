@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
@@ -11,16 +12,36 @@ void _log(String message) {
 class MessageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  static String getConversationId(String u1, String u2) {
+    final list = [u1, u2]..sort();
+    return '${list[0]}_${list[1]}';
+  }
+
   Future<String?> sendMessage({
     required String senderId,
     required String receiverId,
     required String text,
+    String? dealId,
+    String? dealTitle,
+    String? dealImageUrl,
+    String? dealPrice,
+    String? dealStore,
+    String? replyToMessageId,
+    String? replyToSenderName,
+    String? replyToText,
   }) async {
     try {
       final senderDoc = await _firestore.collection('users').doc(senderId).get();
       final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
       
       if (!senderDoc.exists || !receiverDoc.exists) return null;
+
+      // Engellenmişlik kontrolü: Alıcı göndereni engellediyse mesaj gitmez
+      final receiverBlockedList = List<String>.from(receiverDoc.data()?['blockedUsers'] ?? []);
+      if (receiverBlockedList.contains(senderId)) {
+        _log('🚫 Alıcı bu kullanıcıyı engellediği için mesaj iletilmedi.');
+        return null;
+      }
 
       final message = Message(
         id: '',
@@ -34,26 +55,17 @@ class MessageService {
         createdAt: DateTime.now(),
         isRead: false,
         isReadByAdmin: false,
+        dealId: dealId,
+        dealTitle: dealTitle,
+        dealImageUrl: dealImageUrl != null ? migrateAssetPath(dealImageUrl) : null,
+        dealPrice: dealPrice,
+        dealStore: dealStore,
+        replyToMessageId: replyToMessageId,
+        replyToSenderName: replyToSenderName,
+        replyToText: replyToText,
       );
 
       final docRef = await _firestore.collection('messages').add(message.toFirestore());
-      
-      // Bildirim gönderme işlemi Cloud Functions veya alıcı tarafındaki dinleyici ile yapılır.
-      // Burada yerel bildirim göstermek gönderen kişi için anlamsızdır.
-      /*
-      try {
-        final notificationService = NotificationService();
-        await notificationService.sendMessageNotification(
-          receiverId: receiverId,
-          senderName: message.senderName,
-          messageText: text,
-          messageId: docRef.id,
-        );
-      } catch (e) {
-        _log('Bildirim hatası: $e');
-      }
-      */
-
       return docRef.id;
     } catch (e) {
       _log('Mesaj gönderme hatası: $e');
@@ -61,87 +73,263 @@ class MessageService {
     }
   }
 
-  Stream<List<Message>> getConversationStream(String userId1, String userId2) {
+  Stream<List<Message>> getConversationStream(String userId1, String userId2, {int limit = 60}) {
     // userId1 = mevcut kullanıcı (giriş yapmış), userId2 = konuştuğu kişi
-    // Security rules: Sadece senderId veya receiverId == userId() olan mesajları okuyabilir
-    // Bu yüzden mevcut kullanıcının gönderdiği ve aldığı mesajları ayrı ayrı çekmeliyiz
-    
-    // Kullanıcının gönderdiği mesajlar (userId1 -> userId2)
-    final sentStream = _firestore
-        .collection('messages')
-        .where('senderId', isEqualTo: userId1)
-        .where('receiverId', isEqualTo: userId2)
-        .snapshots();
-    // İki stream'i birleştir
-    return sentStream.asyncMap((sentSnapshot) async {
-      final receivedSnapshot = await _firestore
-          .collection('messages')
-          .where('senderId', isEqualTo: userId2)
-          .where('receiverId', isEqualTo: userId1)
-          .get();
-      
-      final allMessages = <Message>[];
-      final messageIds = <String>{};
-      
-      // Gönderilen mesajları ekle
-      for (var doc in sentSnapshot.docs) {
-        final message = Message.fromFirestore(doc);
-        if (!messageIds.contains(message.id)) {
-          allMessages.add(message);
-          messageIds.add(message.id);
-        }
-      }
-      
-      // Alınan mesajları ekle
-      for (var doc in receivedSnapshot.docs) {
-        final message = Message.fromFirestore(doc);
-        if (!messageIds.contains(message.id)) {
-          allMessages.add(message);
-          messageIds.add(message.id);
-        }
-      }
-      
-      allMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      return allMessages;
-    });
-  }
+    late StreamController<List<Message>> controller;
+    StreamSubscription? sentSub;
+    StreamSubscription? receivedSub;
 
-  Future<void> markMessageAsRead(String messageId) async {
-    await _firestore.collection('messages').doc(messageId).update({'isRead': true});
-  }
+    controller = StreamController<List<Message>>(
+      onListen: () {
+        List<Message> sentMessages = [];
+        List<Message> receivedMessages = [];
 
-  Stream<List<Message>> getAllMessagesStream() {
-    return _firestore.collection('messages').orderBy('createdAt', descending: true).snapshots().map(
-      (s) => s.docs.map((d) => Message.fromFirestore(d)).toList()
+        void emit() {
+          if (!controller.isClosed) {
+            final Map<String, Message> messageMap = {};
+            for (var m in sentMessages) {
+              // Benden silinmişse dahil etme
+              if (!m.deletedBy.contains(userId1)) {
+                messageMap[m.id] = m;
+              }
+            }
+            for (var m in receivedMessages) {
+              if (!m.deletedBy.contains(userId1)) {
+                messageMap[m.id] = m;
+              }
+            }
+            final all = messageMap.values.toList()
+              ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+            controller.add(all);
+          }
+        }
+
+        // Gönderilen mesajlar (userId1 -> userId2)
+        sentSub = _firestore
+            .collection('messages')
+            .where('senderId', isEqualTo: userId1)
+            .where('receiverId', isEqualTo: userId2)
+            .limit(limit)
+            .snapshots()
+            .listen(
+          (snap) {
+            sentMessages = snap.docs.map((d) => Message.fromFirestore(d)).toList();
+            emit();
+          },
+          onError: (error) {
+            if (!error.toString().contains('permission-denied')) {
+              _log('⚠️ sentConversationStream error: $error');
+            }
+          },
+        );
+
+        // Alınan mesajlar (userId2 -> userId1)
+        receivedSub = _firestore
+            .collection('messages')
+            .where('senderId', isEqualTo: userId2)
+            .where('receiverId', isEqualTo: userId1)
+            .limit(limit)
+            .snapshots()
+            .listen(
+          (snap) {
+            receivedMessages = snap.docs.map((d) => Message.fromFirestore(d)).toList();
+            emit();
+          },
+          onError: (error) {
+            if (!error.toString().contains('permission-denied')) {
+              _log('⚠️ receivedConversationStream error: $error');
+            }
+          },
+        );
+      },
+      onCancel: () {
+        sentSub?.cancel();
+        receivedSub?.cancel();
+      },
     );
+
+    return controller.stream;
   }
 
-  Future<void> markMessageAsReadByAdmin(String messageId) async {
-    await _firestore.collection('messages').doc(messageId).update({'isReadByAdmin': true});
-  }
-
-  Future<int> deleteAllMessages() async {
+  // Okundu işaretleme
+  Future<void> markMessageAsRead(String messageId) async {
     try {
-      final snapshot = await _firestore.collection('messages').get();
-      if (snapshot.docs.isEmpty) return 0;
+      await _firestore.collection('messages').doc(messageId).update({'isRead': true});
+    } catch (e) {
+      _log('markMessageAsRead error: $e');
+    }
+  }
+
+  Future<void> markConversationAsRead(String currentUserId, String otherUserId) async {
+    try {
+      final snap = await _firestore
+          .collection('messages')
+          .where('senderId', isEqualTo: otherUserId)
+          .where('receiverId', isEqualTo: currentUserId)
+          .where('isRead', isEqualTo: false)
+          .get();
+
+      if (snap.docs.isEmpty) return;
 
       final batch = _firestore.batch();
-      int count = 0;
-      for (var doc in snapshot.docs) {
-        batch.delete(doc.reference);
-        count++;
-        if (count % 500 == 0) await batch.commit();
+      for (var doc in snap.docs) {
+        batch.update(doc.reference, {'isRead': true});
       }
-      if (count % 500 != 0) await batch.commit();
-      return count;
+      await batch.commit();
     } catch (e) {
+      _log('markConversationAsRead error: $e');
+    }
+  }
+
+  // Benden Sil (Soft Delete)
+  Future<void> softDeleteMessageForUser(String messageId, String userId) async {
+    try {
+      await _firestore.collection('messages').doc(messageId).update({
+        'deletedBy': FieldValue.arrayUnion([userId])
+      });
+    } catch (e) {
+      _log('softDeleteMessageForUser error: $e');
+    }
+  }
+
+  // Herkesten Sil (15 Dakika kuralı)
+  Future<bool> deleteMessageForEveryone(String messageId, String currentUserId) async {
+    try {
+      final doc = await _firestore.collection('messages').doc(messageId).get();
+      if (!doc.exists) return false;
+      final data = doc.data()!;
+      if (data['senderId'] != currentUserId) return false;
+
+      DateTime createdAt = DateTime.now();
+      final cVal = data['createdAt'];
+      if (cVal is Timestamp) {
+        createdAt = cVal.toDate();
+      } else if (cVal is String) {
+        createdAt = DateTime.tryParse(cVal) ?? DateTime.now();
+      }
+
+      final diffMinutes = DateTime.now().difference(createdAt).inMinutes;
+      if (diffMinutes <= 15) {
+        await _firestore.collection('messages').doc(messageId).delete();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _log('deleteMessageForEveryone error: $e');
+      return false;
+    }
+  }
+
+  // Kullanıcı mesajını kalıcı sil
+  Future<void> deleteUserMessage(String messageId) async {
+    await _firestore.collection('messages').doc(messageId).delete();
+  }
+
+  // Yazıyor... (Typing indicator)
+  Future<void> setTypingStatus({
+    required String currentUserId,
+    required String otherUserId,
+    required bool isTyping,
+  }) async {
+    try {
+      final conversationId = getConversationId(currentUserId, otherUserId);
+      final docRef = _firestore.collection('typingStatus').doc('${conversationId}_$currentUserId');
+      if (isTyping) {
+        await docRef.set({
+          'isTyping': true,
+          'userId': currentUserId,
+          'conversationId': conversationId,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        await docRef.delete();
+      }
+    } catch (e) {
+      // Sessiz hata
+    }
+  }
+
+  Stream<bool> getTypingStream({
+    required String currentUserId,
+    required String otherUserId,
+  }) {
+    final conversationId = getConversationId(currentUserId, otherUserId);
+    final docRef = _firestore.collection('typingStatus').doc('${conversationId}_$otherUserId');
+    return docRef.snapshots().map((snapshot) {
+      if (!snapshot.exists) return false;
+      final data = snapshot.data();
+      if (data == null) return false;
+      final isTyping = data['isTyping'] == true;
+      final updatedAt = data['updatedAt'];
+      if (updatedAt is Timestamp) {
+        final diffSeconds = DateTime.now().difference(updatedAt.toDate()).inSeconds;
+        // 5 saniyeden eskiyse düşür
+        if (diffSeconds > 5) return false;
+      }
+      return isTyping;
+    }).handleError((_) => false);
+  }
+
+  // Kullanıcı Engelleme / Engeli Kaldırma
+  Future<void> blockUser(String currentUserId, String targetUserId) async {
+    try {
+      await _firestore.collection('users').doc(currentUserId).update({
+        'blockedUsers': FieldValue.arrayUnion([targetUserId])
+      });
+    } catch (e) {
+      _log('blockUser error: $e');
       rethrow;
     }
   }
 
-  // EKLENDİ: Kullanıcı mesajını sil
-  Future<void> deleteUserMessage(String messageId) async {
-    await _firestore.collection('messages').doc(messageId).delete();
+  Future<void> unblockUser(String currentUserId, String targetUserId) async {
+    try {
+      await _firestore.collection('users').doc(currentUserId).update({
+        'blockedUsers': FieldValue.arrayRemove([targetUserId])
+      });
+    } catch (e) {
+      _log('unblockUser error: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> isUserBlocked(String currentUserId, String targetUserId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(currentUserId).get();
+      if (!doc.exists) return false;
+      final blocked = List<String>.from(doc.data()?['blockedUsers'] ?? []);
+      return blocked.contains(targetUserId);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Sohbeti Sessize Alma / Açma (Mute)
+  Future<void> toggleMuteConversation(String currentUserId, String otherUserId, bool mute) async {
+    try {
+      if (mute) {
+        await _firestore.collection('users').doc(currentUserId).update({
+          'mutedConversations': FieldValue.arrayUnion([otherUserId])
+        });
+      } else {
+        await _firestore.collection('users').doc(currentUserId).update({
+          'mutedConversations': FieldValue.arrayRemove([otherUserId])
+        });
+      }
+    } catch (e) {
+      _log('toggleMuteConversation error: $e');
+    }
+  }
+
+  Future<bool> isConversationMuted(String currentUserId, String otherUserId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(currentUserId).get();
+      if (!doc.exists) return false;
+      final muted = List<String>.from(doc.data()?['mutedConversations'] ?? []);
+      return muted.contains(otherUserId);
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<int> getUnreadMessageCount(String userId) async {
@@ -149,7 +337,10 @@ class MessageService {
         .where('receiverId', isEqualTo: userId)
         .where('isRead', isEqualTo: false)
         .get();
-    return s.docs.length;
+    return s.docs.where((d) {
+      final deletedBy = List<String>.from(d.data()['deletedBy'] ?? []);
+      return !deletedBy.contains(userId);
+    }).length;
   }
 
   // Admin Bildirimleri (AdminToUserMessage)
@@ -161,12 +352,10 @@ class MessageService {
     });
   }
 
-  // EKLENDİ: Okunmamış admin bildirim sayısı
   Future<int> getUnreadAdminToUserMessageCount(String userId) async {
     try {
       final s = await _firestore.collection('adminToUserMessages')
           .where('userId', isEqualTo: userId)
-          //.where('isRead', isEqualTo: false) // Index hatası vermesin diye client side filtreleme
           .get();
       return s.docs.map((d) => AdminToUserMessage.fromFirestore(d)).where((m) => !m.isRead).length;
     } catch (e) {
@@ -174,14 +363,42 @@ class MessageService {
     }
   }
 
-  // EKLENDİ: Admin bildirimini okundu işaretle
   Future<void> markAdminToUserMessageAsRead(String messageId) async {
     await _firestore.collection('adminToUserMessages').doc(messageId).update({'isRead': true});
   }
 
-  // EKLENDİ: Admin bildirimini sil
   Future<void> deleteAdminToUserMessage(String messageId) async {
     await _firestore.collection('adminToUserMessages').doc(messageId).delete();
+  }
+
+  // Admin Paneli - Tüm Kullanıcı Mesajları
+  Stream<List<Message>> getAllMessagesStream() {
+    return _firestore.collection('messages').orderBy('createdAt', descending: true).snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) => Message.fromFirestore(doc)).toList();
+    });
+  }
+
+  Future<void> markMessageAsReadByAdmin(String messageId) async {
+    try {
+      await _firestore.collection('messages').doc(messageId).update({'isReadByAdmin': true});
+    } catch (e) {
+      _log('markMessageAsReadByAdmin error: $e');
+    }
+  }
+
+  Future<int> deleteAllMessages() async {
+    try {
+      final snapshot = await _firestore.collection('messages').get();
+      final batch = _firestore.batch();
+      for (var doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      return snapshot.docs.length;
+    } catch (e) {
+      _log('deleteAllMessages error: $e');
+      return 0;
+    }
   }
 
   // Moderasyon Mesajı (Admin Paneli İçin)
@@ -198,7 +415,7 @@ class MessageService {
       'type': type,
       'userId': userId,
       'userName': userName,
-      'content': content.length > 200 ? content.substring(0, 200) + '...' : content,
+      'content': content.length > 200 ? '${content.substring(0, 200)}...' : content,
       'dealId': dealId,
       'commentId': commentId,
       'reason': reason,

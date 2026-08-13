@@ -20,6 +20,24 @@ class Message {
   final bool isReadByAdmin;
   final bool isAdminMessage;
 
+  // Fırsat referansı (Deal Context)
+  final String? dealId;
+  final String? dealTitle;
+  final String? dealImageUrl;
+  final String? dealPrice;
+  final String? dealStore;
+
+  // Alıntılama / Yanıtlama (Reply / Quote)
+  final String? replyToMessageId;
+  final String? replyToSenderName;
+  final String? replyToText;
+
+  // Soft deletion ("Benden Sil")
+  final List<String> deletedBy;
+
+  // Optimistic UI ve durum kontrolü ('sending', 'sent', 'failed')
+  final String status;
+
   Message({
     required this.id,
     required this.senderId,
@@ -33,13 +51,23 @@ class Message {
     this.isRead = false,
     this.isReadByAdmin = false,
     this.isAdminMessage = false,
+    this.dealId,
+    this.dealTitle,
+    this.dealImageUrl,
+    this.dealPrice,
+    this.dealStore,
+    this.replyToMessageId,
+    this.replyToSenderName,
+    this.replyToText,
+    this.deletedBy = const [],
+    this.status = 'sent',
   });
 
   // Firestore'dan Message oluşturma
   factory Message.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+    Map<String, dynamic> data = (doc.data() as Map<String, dynamic>?) ?? {};
     
-    // createdAt'i parse et
+    // createdAt parse et
     DateTime createdAt;
     try {
       final createdAtValue = data['createdAt'];
@@ -48,13 +76,22 @@ class Message {
       } else if (createdAtValue is DateTime) {
         createdAt = createdAtValue;
       } else if (createdAtValue is String) {
-        createdAt = DateTime.parse(createdAtValue);
+        createdAt = DateTime.tryParse(createdAtValue) ?? DateTime.now();
       } else {
         createdAt = DateTime.now();
       }
     } catch (e) {
       _log('⚠️ Message createdAt parse hatası: $e');
       createdAt = DateTime.now();
+    }
+
+    // deletedBy listesini güvenli parse et
+    List<String> deletedBy = [];
+    if (data['deletedBy'] is List) {
+      deletedBy = (data['deletedBy'] as List)
+          .map((e) => e.toString())
+          .where((s) => s.isNotEmpty)
+          .toList();
     }
     
     return Message(
@@ -70,12 +107,22 @@ class Message {
       isRead: data['isRead'] ?? false,
       isReadByAdmin: data['isReadByAdmin'] ?? false,
       isAdminMessage: data['isAdminMessage'] ?? false,
+      dealId: data['dealId'] as String?,
+      dealTitle: data['dealTitle'] as String?,
+      dealImageUrl: data['dealImageUrl'] != null ? migrateAssetPath(data['dealImageUrl']) : null,
+      dealPrice: data['dealPrice'] as String?,
+      dealStore: data['dealStore'] as String?,
+      replyToMessageId: data['replyToMessageId'] as String?,
+      replyToSenderName: data['replyToSenderName'] as String?,
+      replyToText: data['replyToText'] as String?,
+      deletedBy: deletedBy,
+      status: 'sent',
     );
   }
 
   // adminToUserMessages koleksiyonundan Message dönüştürme
   factory Message.fromAdminFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+    Map<String, dynamic> data = (doc.data() as Map<String, dynamic>?) ?? {};
 
     DateTime createdAt;
     try {
@@ -85,7 +132,7 @@ class Message {
       } else if (createdAtValue is DateTime) {
         createdAt = createdAtValue;
       } else if (createdAtValue is String) {
-        createdAt = DateTime.parse(createdAtValue);
+        createdAt = DateTime.tryParse(createdAtValue) ?? DateTime.now();
       } else {
         createdAt = DateTime.now();
       }
@@ -102,7 +149,7 @@ class Message {
       id: doc.id,
       senderId: data['adminId'] ?? 'admin',
       senderName: adminName,
-      senderImageUrl: 'assets/images/app_icon.png',
+      senderImageUrl: 'assets/logo.webp',
       receiverId: data['userId'] ?? '',
       receiverName: '',
       receiverImageUrl: '',
@@ -111,6 +158,7 @@ class Message {
       isRead: data['isRead'] ?? false,
       isReadByAdmin: true,
       isAdminMessage: true,
+      status: 'sent',
     );
   }
 
@@ -127,6 +175,15 @@ class Message {
       'createdAt': Timestamp.fromDate(createdAt),
       'isRead': isRead,
       'isReadByAdmin': isReadByAdmin,
+      if (dealId != null) 'dealId': dealId,
+      if (dealTitle != null) 'dealTitle': dealTitle,
+      if (dealImageUrl != null) 'dealImageUrl': dealImageUrl,
+      if (dealPrice != null) 'dealPrice': dealPrice,
+      if (dealStore != null) 'dealStore': dealStore,
+      if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      if (replyToSenderName != null) 'replyToSenderName': replyToSenderName,
+      if (replyToText != null) 'replyToText': replyToText,
+      if (deletedBy.isNotEmpty) 'deletedBy': deletedBy,
     };
   }
 
@@ -143,6 +200,16 @@ class Message {
     bool? isRead,
     bool? isReadByAdmin,
     bool? isAdminMessage,
+    String? dealId,
+    String? dealTitle,
+    String? dealImageUrl,
+    String? dealPrice,
+    String? dealStore,
+    String? replyToMessageId,
+    String? replyToSenderName,
+    String? replyToText,
+    List<String>? deletedBy,
+    String? status,
   }) {
     return Message(
       id: id ?? this.id,
@@ -157,12 +224,16 @@ class Message {
       isRead: isRead ?? this.isRead,
       isReadByAdmin: isReadByAdmin ?? this.isReadByAdmin,
       isAdminMessage: isAdminMessage ?? this.isAdminMessage,
+      dealId: dealId ?? this.dealId,
+      dealTitle: dealTitle ?? this.dealTitle,
+      dealImageUrl: dealImageUrl ?? this.dealImageUrl,
+      dealPrice: dealPrice ?? this.dealPrice,
+      dealStore: dealStore ?? this.dealStore,
+      replyToMessageId: replyToMessageId ?? this.replyToMessageId,
+      replyToSenderName: replyToSenderName ?? this.replyToSenderName,
+      replyToText: replyToText ?? this.replyToText,
+      deletedBy: deletedBy ?? this.deletedBy,
+      status: status ?? this.status,
     );
   }
 }
-
-
-
-
-
-

@@ -846,7 +846,10 @@ exports.onCommentCreated = functions.firestore
   }));
 
 /**
- * 4. ADMIN MESAJI GÖNDERİLDİĞİNDE - Kullanıcıya Push Notification Gönder
+ * 4. ADMIN MESAJI GÖNDERİLDİĞİNDE
+ * adminToUserMessages koleksiyonuna doküman yazıldığında tetiklenir.
+ * Sadece users/{uid}/notifications/ altına bildirim dokümanı oluşturur.
+ * FCM push gönderimi onNotificationCreated birleşik motoruna bırakılır (Tek Sorumluluk).
  */
 exports.onAdminMessageCreated = functions.firestore
   .document('adminToUserMessages/{messageId}')
@@ -856,7 +859,7 @@ exports.onAdminMessageCreated = functions.firestore
     const userId = message.userId;
     const title = message.title || 'Yeni Bildirim';
     const content = message.content || '';
-    const adminName = message.adminName || 'Admin';
+    const adminName = message.adminName || 'FırsatKolik Yönetim';
 
     functions.logger.info('📨 Yeni admin mesajı oluşturuldu:', {
       messageId,
@@ -872,7 +875,7 @@ exports.onAdminMessageCreated = functions.firestore
 
     try {
       // Alıcının notifications koleksiyonuna doküman yaz
-      // (Doküman eklendiğinde onNotificationCreated otomatik olarak tek bir Push Bildirimi atar)
+      // Bu doküman onNotificationCreated trigger'ını tetikleyecek ve FCM push oradan gönderilecek
       const notifRef = admin.firestore()
         .collection('users')
         .doc(userId)
@@ -884,14 +887,18 @@ exports.onAdminMessageCreated = functions.firestore
         type: 'admin_message',
         title: title,
         body: content,
+        // FCM push için gerekli ek alanlar (onNotificationCreated tarafından kullanılacak)
+        senderId: 'admin',
+        senderName: adminName,
+        messageId: messageId,
         read: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
 
-      functions.logger.info(`✅ Admin mesaj bildirimi kullanıcıya yazıldı (Push onNotificationCreated tarafından atılacak): ${userId}`);
+      functions.logger.info(`✅ Admin mesaj bildirimi dokümanı oluşturuldu (push onNotificationCreated tarafından gönderilecek): ${userId}`);
       return null;
     } catch (error) {
-      functions.logger.error('❌ Admin mesaj bildirimi hatası:', {
+      functions.logger.error('❌ Admin mesaj bildirimi dokümanı oluşturulamadı:', {
         messageId,
         userId,
         error: error.message,
@@ -947,6 +954,7 @@ exports.onUserMessageCreated = functions.firestore
             type: 'message',
             messageId: messageId,
             senderId: senderId,
+            senderName: senderName,
             receiverId: receiverId,
             notification_title: `💬 ${senderName}`,
             notification_body: notificationBody,
@@ -1018,9 +1026,10 @@ exports.onNotificationCreated = functions.firestore
 
     functions.logger.info('🔔 onNotificationCreated tetiklendi:', { userId, notificationId, type: notification.type });
 
-    // 00. For type == 'submission_status' (NOTIF-05 & NOTIF-06), do not send push notifications, only keep in Notification Center
+    // 00. submission_status bildirimleri için push gönderilmez (sadece bildirim merkezinde saklanır)
+    // NOT: admin_message artık bu motordan geçerek push gönderilir (Tek Sorumluluk Prensibi)
     if (notification.type === 'submission_status') {
-      functions.logger.info(`🚫 Onay/Red bildirimi (submission_status) için push gönderimi yapılmaz. Sadece uygulama içi Bildirim Kutusunda saklanır.`);
+      functions.logger.info(`🚫 ${notification.type} için push gönderilmez (sadece bildirim merkezinde saklanır).`);
       await snap.ref.update({
         pushEligible: false,
         pushStatus: 'disabled_permanently_for_submission_status',
@@ -1080,6 +1089,7 @@ exports.onNotificationCreated = functions.firestore
     const isCategoryNotif = (notification.reason === 'category');
     const type = notification.type || '';
 
+    // Admin mesajları sessiz saatlere tabi değildir (resmi/acil bildirimler)
     if (prefs.quietHoursEnabled && (type === 'deal' || type === 'keyword' || type === 'marketing')) {
       const userTime = new Date().toLocaleTimeString('tr-TR', { timeZone: prefs.timezone, hour12: false });
       const currentHm = userTime.substring(0, 5); // "HH:MM"
@@ -1272,6 +1282,10 @@ exports.onNotificationCreated = functions.firestore
       } else if (type === 'marketing') {
         groupName = 'marketing';
         groupEnabled = isMarketingPrefEnabled;
+      } else if (type === 'admin_message') {
+        // Admin mesajları her zaman push gönderilir (grup tercihi kontrolüne tabi değil)
+        groupName = 'admin_message';
+        groupEnabled = true;
       }
     }
 
@@ -1308,7 +1322,12 @@ exports.onNotificationCreated = functions.firestore
     let sound = 'default';
     let color = '#FF6B35';
 
-    if (type === 'keyword') {
+    // Admin mesajları için başlığa 🛡️ emoji ekle ve özel kanal kullan
+    if (type === 'admin_message') {
+      channelId = 'admin_messages_channel_v3';
+      color = '#FF5722';
+      title = `🛡️ ${title}`;
+    } else if (type === 'keyword') {
       channelId = 'keyword_alerts_channel';
       color = '#FF9800';
     } else if (type === 'comment_reply') {
@@ -1340,6 +1359,22 @@ exports.onNotificationCreated = functions.firestore
         notification_body: String(body || '')
       };
 
+      // Admin mesajları için Flutter tarafının doğru yönlendirme yapabilmesi için ek alanlar
+      if (type === 'admin_message') {
+        safeData.messageId = String(notification.messageId || notificationId || '');
+        safeData.senderId = String(notification.senderId || 'admin');
+        safeData.senderName = String(notification.senderName || 'FırsatKolik Yönetim');
+      }
+
+      // Android notification tag: admin mesajları için messageId bazlı, diğerleri için type_dealId
+      const androidTag = type === 'admin_message'
+        ? `admin_msg_${notification.messageId || notificationId}`
+        : `${type}_${dealId}`;
+
+      // APNs kategori: admin mesajları için ADMIN_MESSAGE, diğerleri için yok
+      const apnsCategory = type === 'admin_message' ? 'ADMIN_MESSAGE' : undefined;
+      const apnsInterruptionLevel = type === 'admin_message' ? 'time-sensitive' : undefined;
+
       const payload = {
         token: device.token,
         notification: { title, body },
@@ -1351,17 +1386,25 @@ exports.onNotificationCreated = functions.firestore
             sound,
             color,
             icon: '@mipmap/ic_launcher',
-            tag: `${type}_${dealId}`,
+            tag: androidTag,
             defaultSound: true,
             defaultVibrateTimings: true,
           }
         },
         apns: {
+          ...(type === 'admin_message' ? {
+            headers: {
+              'apns-priority': '10',
+              'apns-expiration': String(Math.floor(Date.now() / 1000) + 86400),
+            }
+          } : {}),
           payload: {
             aps: {
               sound,
               badge: 1,
               'content-available': 1,
+              ...(apnsInterruptionLevel ? { 'interruption-level': apnsInterruptionLevel } : {}),
+              ...(apnsCategory ? { category: apnsCategory } : {}),
             }
           }
         }

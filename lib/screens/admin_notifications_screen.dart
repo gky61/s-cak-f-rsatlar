@@ -6,7 +6,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'deal_detail_screen.dart';
-import '../main.dart';
+import 'message_screen.dart';
 
 class AdminNotificationsScreen extends StatefulWidget {
   const AdminNotificationsScreen({super.key});
@@ -62,8 +62,22 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           ),
         );
       }
+    } else if (type == 'admin_message') {
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const MessageScreen(
+              otherUserId: 'admin',
+              otherUserName: 'FırsatKolik Yönetim',
+              otherUserImageUrl: 'assets/logo.webp',
+              isAdminMessage: true,
+            ),
+          ),
+        );
+      }
     } else {
-      // Admin mesajları veya diğer durumlar için dialog göster
+      // Genel duyuru / marketing / manual_notification için dialog göster
       if (!mounted) return;
       await showDialog<void>(
         context: context,

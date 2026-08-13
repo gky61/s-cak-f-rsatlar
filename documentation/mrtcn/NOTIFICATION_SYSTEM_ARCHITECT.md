@@ -12,16 +12,19 @@ Bildirim sistemi, kullanıcıyı gereksiz bildirimlerle rahatsız etmeden en do�
 graph TD
     A[Yeni Fırsat Paylaşımı / İşlem] --> B(Firestore: deals / comments)
     B --> C[Cloud Functions: index.js]
-    C -->|Eşleşme & Tekil Kural Filtresi| D[Firestore: users/{uid}/notifications/{id}]
+    C -->|Eşleşme & Tekil Kural Filtresi| D[Firestore: users/uid/notifications/id]
     D -->|Firestore Trigger: onNotificationCreated| E{Kriter Kontrolleri}
     E -->|1. Tercih Kontrolü| F[Sistem ve Kullanıcı İzinleri]
     E -->|2. Kategori Limiti Kontrolü| G[Saatlik/Günlük Sayaçlar]
-    E -->|3. Sessiz Saatler| H[ quietHours ]
+    E -->|3. Sessiz Saatler| H[quietHours]
     F -->|Geçerli| I[FCM Cihaz Gönderimi]
     G -->|Limiti Aşan| J[pushStatus: failed]
     H -->|Sessiz Saat| J
     I -->|Başarılı| K[pushStatus: success]
     I -->|Token Geçersiz ise| L[userDevices: active=false]
+
+    M[Web Admin: adminToUserMessages] -->|onAdminMessageCreated| D
+    N[Kullanıcı Mesajı: messages] -->|onUserMessageCreated| I
 ```
 
 ---
@@ -133,18 +136,34 @@ Bildirim üretilir (Bildirim Merkezinde görünür) ancak push gönderimi iptal 
 
 Tüm bildirim motoru `functions/index.js` içerisinde çalışır. Kritik fonksiyonlar şunlardır:
 
-### 4.1 `onNotificationCreated` (Firestore Trigger)
-`users/{uid}/notifications/{id}` belgesi oluşturulduğunda tetiklenir:
-1. Kullanıcı izinlerini ve Sessiz Saat durumunu kontrol eder.
-2. Bildirim `category` ise hız limitlerini sorgular.
-3. Kullanıcının aktif cihazlarını (`active == true`) çeker.
-4. **FCM V1 API Uyumlu String Dönüşümü**: FCM V1 protokolü gereği, `data` parametresi içerisindeki tüm alt verilerin (örneğin boolean, timestamp, sayı) **String** tipinde olması zorunludur. Fonksiyon bunu otomatik olarak dönüştürür.
-5. Bildirimleri gönderir. Geçersiz/eski token hatası alınırsa (`messaging/registration-token-not-registered`), o cihaz kaydını Firestore'da `active: false` durumuna getirir.
+### 4.1 `onNotificationCreated` (Birleşik Bildirim Motoru — Firestore Trigger)
+`users/{uid}/notifications/{id}` belgesi oluşturulduğunda tetiklenir. **Tüm** bildirim türleri (fırsat, kategori, keyword, yorum cevabı, admin mesajı) için tek ve merkezi FCM push gönderim noktasıdır:
+1. `submission_status` tipindeki bildirimler için push gönderilmez (sadece Bildirim Merkezi'nde saklanır).
+2. Sistem master switch'i (`systemConfig/notifications.enabled`) kontrol edilir.
+3. Kullanıcı izinlerini (`pushMasterEnabled`) ve Sessiz Saat durumunu kontrol eder.
+4. Bildirim `category` ise saatlik/günlük hız limitlerini sorgular.
+5. Kullanıcının aktif cihazlarını (`active == true`) çeker.
+6. Bildirim tipine göre kanal, renk ve başlık formatı belirlenir:
+   * `admin_message` → `admin_messages_channel_v3` kanalı, `🛡️` emoji ön eki, `#FF5722` rengi
+   * `keyword` → `keyword_alerts_channel` kanalı, `#FF9800` rengi
+   * `comment_reply` → `comment_replies_channel` kanalı, `#2196F3` rengi
+   * Diğer → `sicak_firsatlar_general_v2` kanalı
+7. **FCM V1 API Uyumlu String Dönüşümü**: `data` parametresi içerisindeki tüm alt verilerin String tipinde olması zorunludur. Fonksiyon bunu otomatik olarak dönüştürür.
+8. Bildirimleri gönderir. Geçersiz/eski token hatası alınırsa (`messaging/registration-token-not-registered`), o cihaz kaydını `active: false` durumuna getirir.
 
-### 4.2 `cleanupInvalidTokens` (Zamanlanmış Görev)
+> [!IMPORTANT]
+> Admin mesajları (`admin_message`) sessiz saatlere ve grup tercihlerine tabi **değildir**, ancak `pushMasterEnabled` master şalterine **tabidir**. Bu, admin mesajlarının acil/resmi nitelikli olduğu için gece bile iletilmesini garanti eder, ancak kullanıcı tüm bildirimleri tamamen kapatmışsa bu karara saygı gösterilir.
+
+### 4.2 `onAdminMessageCreated` (Admin Mesaj Tetikleyicisi — Firestore Trigger)
+`adminToUserMessages/{messageId}` belgesi oluşturulduğunda tetiklenir:
+1. Hedef kullanıcının `users/{uid}/notifications/admin_msg_{messageId}` belgesine bildirim dokümanı yazar.
+2. Doküman içerisine `senderId: 'admin'`, `senderName`, `messageId` gibi FCM push için gerekli ek alanları ekler.
+3. **FCM push gönderimi yapmaz** — bu iş `onNotificationCreated` birleşik motoruna bırakılır (Tek Sorumluluk Prensibi).
+
+### 4.3 `cleanupInvalidTokens` (Zamanlanmış Görev)
 Belli aralıklarla çalışarak veritabanındaki geçersiz veya süresi geçmiş FCM token'larını temizler. Yönetici panelinden manuel olarak da tetiklenebilir.
 
-### 4.3 `sendManualNotification` (HTTPS Callable)
+### 4.4 `sendManualNotification` (HTTPS Callable)
 Yöneticilerin admin panelinden belirli bir UID'ye, cihaza veya tüm kullanıcılara manuel bildirim göndermesini sağlar.
 
 ---

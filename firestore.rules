@@ -134,9 +134,11 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
                     resource.data.receiverId == userId();
       
-      // Gönderen veya admin silebilir
+      // Gönderen, alıcı veya admin silebilir (kullanıcının kendi sohbetini temizleyebilmesi için)
       allow delete: if isAuthenticated() && 
-                    (resource.data.senderId == userId() || isAdmin());
+                    (resource.data.senderId == userId() || 
+                     resource.data.receiverId == userId() || 
+                     isAdmin());
     }
     
     // ========================================

@@ -416,8 +416,32 @@ class FirestoreService {
   // MESAJLAŞMA İŞLEMLERİ (MessageService üzerinden)
   // ===========================================================================
 
-  Future<String?> sendMessage({required String senderId, required String receiverId, required String text}) =>
-      _messageService.sendMessage(senderId: senderId, receiverId: receiverId, text: text);
+  Future<String?> sendMessage({
+    required String senderId,
+    required String receiverId,
+    required String text,
+    String? dealId,
+    String? dealTitle,
+    String? dealImageUrl,
+    String? dealPrice,
+    String? dealStore,
+    String? replyToMessageId,
+    String? replyToSenderName,
+    String? replyToText,
+  }) =>
+      _messageService.sendMessage(
+        senderId: senderId,
+        receiverId: receiverId,
+        text: text,
+        dealId: dealId,
+        dealTitle: dealTitle,
+        dealImageUrl: dealImageUrl,
+        dealPrice: dealPrice,
+        dealStore: dealStore,
+        replyToMessageId: replyToMessageId,
+        replyToSenderName: replyToSenderName,
+        replyToText: replyToText,
+      );
       
   Stream<List<Message>> getUserMessagesStream(String userId) {
     late StreamController<List<Message>> controller;
@@ -430,7 +454,10 @@ class FirestoreService {
         List<Message> s = [], r = [], a = [];
         void emit() {
           if (!controller.isClosed) {
-            final all = [...s, ...r, ...a]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            final all = [...s, ...r, ...a]
+                .where((m) => !m.deletedBy.contains(userId))
+                .toList()
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
             controller.add(all);
           }
         }
@@ -493,13 +520,29 @@ class FirestoreService {
     return controller.stream;
   }
   
-  Stream<List<Message>> getConversationStream(String u1, String u2) => _messageService.getConversationStream(u1, u2);
+  Stream<List<Message>> getConversationStream(String u1, String u2, {int limit = 60}) =>
+      _messageService.getConversationStream(u1, u2, limit: limit);
   Future<void> markMessageAsRead(String id) => _messageService.markMessageAsRead(id);
+  Future<void> markConversationAsRead(String u1, String u2) => _messageService.markConversationAsRead(u1, u2);
+  Future<void> softDeleteMessageForUser(String messageId, String userId) => _messageService.softDeleteMessageForUser(messageId, userId);
+  Future<bool> deleteMessageForEveryone(String messageId, String currentUserId) => _messageService.deleteMessageForEveryone(messageId, currentUserId);
+  Future<void> deleteUserMessage(String id) => _messageService.deleteUserMessage(id);
+  Future<int> getUnreadMessageCount(String uid) => _messageService.getUnreadMessageCount(uid);
   Stream<List<Message>> getAllMessagesStream() => _messageService.getAllMessagesStream();
   Future<void> markMessageAsReadByAdmin(String id) => _messageService.markMessageAsReadByAdmin(id);
   Future<int> deleteAllMessages() => _messageService.deleteAllMessages();
-  Future<void> deleteUserMessage(String id) => _messageService.deleteUserMessage(id);
-  Future<int> getUnreadMessageCount(String uid) => _messageService.getUnreadMessageCount(uid);
+
+  Future<void> setTypingStatus({required String currentUserId, required String otherUserId, required bool isTyping}) =>
+      _messageService.setTypingStatus(currentUserId: currentUserId, otherUserId: otherUserId, isTyping: isTyping);
+  Stream<bool> getTypingStream({required String currentUserId, required String otherUserId}) =>
+      _messageService.getTypingStream(currentUserId: currentUserId, otherUserId: otherUserId);
+
+  Future<void> blockUserForChat(String currentUserId, String targetUserId) => _messageService.blockUser(currentUserId, targetUserId);
+  Future<void> unblockUserForChat(String currentUserId, String targetUserId) => _messageService.unblockUser(currentUserId, targetUserId);
+  Future<bool> isUserBlockedForChat(String currentUserId, String targetUserId) => _messageService.isUserBlocked(currentUserId, targetUserId);
+
+  Future<void> toggleMuteConversation(String currentUserId, String otherUserId, bool mute) => _messageService.toggleMuteConversation(currentUserId, otherUserId, mute);
+  Future<bool> isConversationMuted(String currentUserId, String otherUserId) => _messageService.isConversationMuted(currentUserId, otherUserId);
   
   Stream<List<AdminToUserMessage>> getAdminToUserMessagesStream(String uid, {int limit = 200}) => 
       _messageService.getAdminToUserMessagesStream(uid, limit: limit);
@@ -509,7 +552,9 @@ class FirestoreService {
   Future<int> deleteAllAdminToUserMessages(String userId) async {
     final batch = firestore.batch();
     final snap = await firestore.collection('adminToUserMessages').where('userId', isEqualTo: userId).get();
-    for (var doc in snap.docs) batch.delete(doc.reference);
+    for (var doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
     await batch.commit();
     return snap.docs.length;
   }
