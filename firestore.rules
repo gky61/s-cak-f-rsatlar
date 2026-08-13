@@ -18,8 +18,11 @@ service cloud.firestore {
     
     // Kullanıcı admin mi?
     function isAdmin() {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      return isAuthenticated() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isadmin == true ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == 'true'
+      );
     }
     
     // Kullanıcı engellenmiş mi?
@@ -121,24 +124,32 @@ service cloud.firestore {
     // MESSAGES COLLECTION (User-to-User)
     // ========================================
     match /messages/{messageId} {
-      // Sadece gönderen veya alıcı okuyabilir
+      // Sadece gönderen, alıcı veya admin okuyabilir
       allow read: if isAuthenticated() && 
-                  (resource.data.senderId == userId() || 
+                  (resource == null ||
+                   resource.data.senderId == userId() || 
                    resource.data.receiverId == userId() ||
                    isAdmin());
       
-      // Giriş yapmış kullanıcılar mesaj gönderebilir
-      allow create: if canWrite() && request.resource.data.senderId == userId();
+      // Giriş yapmış kullanıcılar mesaj gönderilebilir; admin herhangi bir gönderen adına simüle edebilir
+      allow create: if canWrite() && (request.resource.data.senderId == userId() || isAdmin());
       
-      // Alıcı mesajı okundu işaretleyebilir
+      // Alıcı veya admin güncelleyebilir
       allow update: if isAuthenticated() && 
-                    resource.data.receiverId == userId();
+                    (resource.data.receiverId == userId() || isAdmin());
       
-      // Gönderen, alıcı veya admin silebilir (kullanıcının kendi sohbetini temizleyebilmesi için)
+      // Gönderen, alıcı veya admin silebilir
       allow delete: if isAuthenticated() && 
                     (resource.data.senderId == userId() || 
                      resource.data.receiverId == userId() || 
                      isAdmin());
+    }
+
+    // ========================================
+    // TYPING STATUS COLLECTION
+    // ========================================
+    match /typingStatus/{statusId} {
+      allow read, write: if isAuthenticated();
     }
     
     // ========================================

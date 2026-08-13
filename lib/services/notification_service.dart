@@ -17,6 +17,7 @@ import '../screens/deal_detail_screen.dart';
 import '../screens/admin_notifications_screen.dart';
 import '../screens/admin_screen.dart';
 import '../screens/message_screen.dart';
+import '../screens/messages_list_screen.dart';
 import '../widgets/in_app_message_banner.dart';
 
 /// Debug modda log yazdır
@@ -94,47 +95,26 @@ class NotificationService {
     await _localNotifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        if (response.payload != null) {
-          final payload = response.payload!;
-          
-          // Admin mesaj bildirimi ise doğrudan admin sohbet odasına yönlendir
-          if (payload.startsWith('admin_message:') || payload == 'admin_message') {
-            _navigateToAdminChat();
-          } 
-          // Admin deal bildirimi ise admin ekranına yönlendir
-          else if (payload.startsWith('admin_deal:')) {
-            _navigateToAdminScreen();
-          }
-          // Yorum cevabı bildirimi ise deal ekranına yönlendir ve yoruma scroll et
-          else if (payload.startsWith('comment_reply:')) {
-            final parts = payload.split(':');
-            if (parts.length >= 3) {
-              final dealId = parts[1];
-              final commentId = parts[2];
-              _navigateToDeal(dealId, commentId: commentId);
-            } else {
-              _log('⚠️ Yorum cevabı bildirimi formatı hatalı: $payload');
-            }
-          } 
-          // Kullanıcı mesaj bildirimi
-          else if (payload.startsWith('message:')) {
-            final parts = payload.split(':');
-            final senderId = parts.length > 1 ? parts[1] : '';
-            if (senderId == 'admin') {
-              _navigateToAdminChat();
-            } else if (senderId.isNotEmpty) {
-              _navigateToChat(senderId, 'Kullanıcı');
-            } else {
-              _navigateToAdminChat();
-            }
-          }
-          // Deal bildirimi ise deal ekranına yönlendir
-          else {
-            _navigateToDeal(payload);
-          }
+        if (response.payload != null && response.payload!.isNotEmpty) {
+          _log('🔔 Local notification response payload: ${response.payload}');
+          _handlePayloadString(response.payload!);
         }
       },
     );
+
+    // Uygulama tamamen kapalıyken (cold start) tıklanan yerel bildirimi yakala
+    try {
+      final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
+      if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
+        final payload = launchDetails.notificationResponse?.payload;
+        if (payload != null && payload.isNotEmpty) {
+          _log('🚀 Uygulama kapalıyken tıklanan yerel bildirim (cold start): $payload');
+          _handlePayloadString(payload);
+        }
+      }
+    } catch (e) {
+      _log('⚠️ Cold start yerel bildirim kontrol hatası: $e');
+    }
 
     // Android notification channel oluştur (genel bildirimler)
     const androidChannel = AndroidNotificationChannel(
@@ -620,10 +600,6 @@ class NotificationService {
       // Keyword listener'ı durdur
       _stopKeywordListener();
       
-      // Mesaj listener'ı durdur
-      _messageListener?.cancel();
-      _messageListener = null;
-      
       // Admin fırsat listener'ı durdur
       _adminDealsListener?.cancel();
       _adminDealsListener = null;
@@ -677,9 +653,6 @@ class NotificationService {
       // Yorum cevabı bildirimlerini dinle
       _setupCommentReplyListener();
 
-      // Mesaj bildirimlerini dinle
-      _setupMessageListener();
-
       // Bildirim dinleyicilerini başlat (ön plan, arka plan, kapalı durumlar için)
       // Bunu sadece bir kez başlatmak yeterli olabilir ama idempotent (tekrarlanabilir) olmalı
       setupNotificationListeners();
@@ -688,117 +661,6 @@ class NotificationService {
     } catch (e) {
       _log('❌ Bildirim servisi başlatılırken hata oluştu: $e');
       // Kritik bir hata ise, belki daha sonra tekrar denenebilir
-    }
-  }
-
-  // Mesaj bildirimlerini dinle (Firestore üzerinden)
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _messageListener;
-
-  void _setupMessageListener() {
-    final userId = _auth.currentUser?.uid;
-    if (userId == null) {
-      _log('⚠️ Mesaj listener başlatılamadı: userId null');
-      return;
-    }
-
-    _messageListener?.cancel();
-    
-    _log('🔔 Mesaj bildirim listener\'ı başlatılıyor: userId=$userId');
-    
-    bool isFirst = true;
-    
-    // Son 1 dakikadaki mesajları dinle (eski mesajlar için bildirim gönderme)
-    // Not: createdAt ile filtreleme index gerektirebilir, bu yüzden sadece isRead kontrolü yapıp
-    // client-side'da zaman kontrolü yapacağız.
-    _messageListener = _firestore
-        .collection('messages')
-        .where('receiverId', isEqualTo: userId)
-        // .where('isRead', isEqualTo: false) // Debug için kapattık: Client-side filtreleyeceğiz
-        .snapshots()
-        .listen(
-      (snapshot) {
-        _log('📬 Mesaj listener tetiklendi: ${snapshot.docs.length} (Toplam) / ${snapshot.docChanges.length} (Değişiklik) (isFirst: $isFirst)');
-        
-        if (isFirst) {
-          isFirst = false;
-          _log('ℹ️ Mesaj ilk snapshot es geçildi, bildirim tetiklenmeyecek.');
-          return;
-        }
-        
-        for (final doc in snapshot.docChanges) {
-          if (doc.type == DocumentChangeType.added) {
-            final data = doc.doc.data();
-            if (data == null) continue;
-            
-            // Client-side isRead kontrolü
-            final isRead = data['isRead'] == true;
-            if (isRead) {
-               _log('ℹ️ Mesaj okundu olduğu için atlandı: ${doc.doc.id}');
-               continue;
-            }
-
-            // Mesajın ne zaman oluşturulduğunu kontrol et
-            final createdAt = data['createdAt'] as Timestamp?;
-            if (createdAt == null) continue;
-            
-            // Server timestamp gecikmesi olabilir, bu yüzden 5 dk tolerans veriyoruz.
-            final createdDate = createdAt.toDate();
-            final now = DateTime.now();
-            final difference = now.difference(createdDate).inMinutes;
-            
-            _log('📨 Yeni Mesaj Adayı: ${doc.doc.id} (Fark: $difference dk)');
-            
-            if (difference > 5) {
-               _log('⏳ Çok eski mesaj, bildirim yok.');
-               continue; // 5 dakikadan eski
-            }
-
-            // 5 dakikadan yeni mesajlar için bildirim göster
-            // SharedPreferences ile son kontrol zamanı tutulabilirdi ama şimdilik 
-            // sadece çok yeni mesajları alalım.
-            if (difference <= 5) {
-               // Karmaşık _showLocalNotification yerine doğrudan basit metod
-               final sender = data['senderName'] as String? ?? 'Biri';
-               final msg = data['text'] as String? ?? 'Mesaj';
-               showDirectMessageNotification(sender, msg);
-            }
-          }
-        }
-      },
-      onError: (error) {
-        // Çıkış sırasında PERMISSION_DENIED beklenen bir durumdur, sessizce geç
-        if (error.toString().contains('permission-denied')) {
-          _log('ℹ️ Mesaj listener çıkış sırasında kapandı (beklenen)');
-        } else {
-          _log('❌ Mesaj bildirim listener hatası: $error');
-        }
-      },
-    );
-  }
-
-  // EN BASİT BİLDİRİM GÖSTERME METODU
-  Future<void> showDirectMessageNotification(String title, String body) async {
-    try {
-      final id = DateTime.now().millisecondsSinceEpoch % 100000;
-      
-      const androidDetails = AndroidNotificationDetails(
-        'messages_channel_v3', // TEST EDİLMİŞ VE ÇALIŞAN KANAL
-        'Mesaj Bildirimleri',
-        importance: Importance.max,
-        priority: Priority.max,
-        playSound: true,
-        enableVibration: true,
-      );
-
-      await _localNotifications.show(
-        id,
-        '💬 $title',
-        body,
-        const NotificationDetails(android: androidDetails),
-      );
-      _log('✅ BASİT BİLDİRİM GÖSTERİLDİ: $title - $body');
-    } catch (e) {
-      _log('❌ BASİT BİLDİRİM HATASI: $e');
     }
   }
 
@@ -1174,184 +1036,138 @@ class NotificationService {
     }
   }
 
-  // Ön planda bildirim göster
-  Future<void> _showLocalNotification(RemoteMessage message) async {
-    // Web'de local notifications desteklenmiyor
-    if (kIsWeb) {
-      _log('📬 Web: Bildirim alındı: ${message.notification?.title}');
-      return;
-    }
-    
-    final notification = message.notification;
-    final data = message.data;
-    final dealId = data['dealId'] ?? '';
-    final messageId = data['messageId'] ?? '';
-    final type = data['type'] ?? 'deal';
 
-    // ⚠️ DUPLİKE ÖNLEYİCİ: FCM notification payload varsa, sistem zaten bildirim gösteriyor
-    // Bu durumda biz tekrar local notification göstermemeliyiz (çift bildirim önleme)
-    // Sadece data-only mesajlarında (notification == null) local bildirim göster
-    if (notification != null) {
-      _log('📬 FCM sistem bildirimi var, local bildirim atlanıyor: ${notification.title}');
-      return;
-    }
 
-    // Ön planda FCM bazen sadece data gönderir (notification null). Yine de bildirim göster.
-    String title;
-    String body;
-    
-    // data'dan veya varsayılan metinlerden oluştur
-    if (type == 'admin_deal') {
-      title = data['notification_title'] as String? ?? '👮‍♂️ Yeni Onay Bekleyen Fırsat';
-      body = data['notification_body'] as String? ?? 'Onay için bekleyen bir fırsat var. Dokunun.';
-    } else if (type == 'admin_message') {
-      title = data['notification_title'] as String? ?? '📩 Yeni Admin Mesajı';
-      body = data['notification_body'] as String? ?? 'Bir mesajınız var. Dokunun.';
-    } else if (type == 'comment_reply') {
-      title = data['notification_title'] as String? ?? '💬 Yorumunuza cevap var';
-      body = data['notification_body'] as String? ?? 'Birisi yorumunuza cevap verdi.';
-    } else if (type == 'message') {
-      title = data['notification_title'] as String? ?? '💬 Yeni Mesaj';
-      body = data['notification_body'] as String? ?? 'Yeni bir mesajınız var.';
+
+
+  static Map<String, dynamic>? _pendingNotificationTapData;
+  static Timer? _pendingTimer;
+  static DateTime? _lastHandledTapTime;
+  static String? _lastHandledTapKey;
+
+  void _startPendingNotificationCheck(Map<String, dynamic> data) {
+    _pendingNotificationTapData = data;
+    _pendingTimer?.cancel();
+    int attempts = 0;
+    _pendingTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) {
+      attempts++;
+      final navigator = navigatorKey.currentState;
+      final currentUser = _auth.currentUser;
+      if (navigator != null && currentUser != null) {
+        timer.cancel();
+        if (_pendingNotificationTapData != null) {
+          final pendingData = _pendingNotificationTapData!;
+          _pendingNotificationTapData = null;
+          _log('🚀 Navigator ve Oturum aktifleşti, bekleyen bildirim açılıyor: $pendingData');
+          _handleNotificationTap(pendingData);
+        }
+      } else if (attempts > 30) {
+        timer.cancel();
+        _pendingNotificationTapData = null;
+      }
+    });
+  }
+
+  void _handlePayloadString(String payload) {
+    if (payload.startsWith('admin_message:') || payload == 'admin_message') {
+      _handleNotificationTap({'type': 'admin_message'});
+    } else if (payload.startsWith('admin_deal:')) {
+      final dealId = payload.substring('admin_deal:'.length);
+      _handleNotificationTap({'type': 'admin_deal', 'dealId': dealId});
+    } else if (payload.startsWith('comment_reply:')) {
+      final parts = payload.split(':');
+      final dealId = parts.length > 1 ? parts[1] : '';
+      final commentId = parts.length > 2 ? parts[2] : '';
+      _handleNotificationTap({'type': 'comment_reply', 'dealId': dealId, 'commentId': commentId});
+    } else if (payload.startsWith('message:')) {
+      final parts = payload.split(':');
+      final senderId = parts.length > 1 ? parts[1] : '';
+      final senderName = parts.length > 2 ? parts.sublist(2).join(':') : 'Kullanıcı';
+      _handleNotificationTap({'type': 'message', 'senderId': senderId, 'senderName': senderName});
     } else {
-      title = data['notification_title'] as String? ?? data['title'] as String? ?? 'Yeni Fırsat';
-      body = data['notification_body'] as String? ?? data['body'] as String? ?? 'Bir fırsat paylaşıldı.';
+      _handleNotificationTap({'type': 'deal', 'dealId': payload});
     }
-    if (title.isEmpty && body.isEmpty) return;
+  }
 
-    // Bildirim tipine göre channel seç
-    String channelId;
-    String channelName;
-    String channelDescription;
-    Importance importance;
-    
-    switch (type) {
-      case 'admin_deal':
-        channelId = 'admin_channel';
-        channelName = 'Admin Bildirimleri';
-        channelDescription = 'Onay bekleyen fırsatlar için admin bildirimleri';
-        importance = Importance.max; // En yüksek önem seviyesi
-        break;
-      case 'keyword':
-        channelId = 'keyword_alerts_channel';
-        channelName = 'Özel Fırsat Bildirimleri';
-        channelDescription = 'İlginizi çeken kelimeler için özel ve vurgulu bildirimler';
-        importance = Importance.max;
-        break;
-      case 'follow':
-        channelId = 'follow_channel';
-        channelName = 'Takip Bildirimleri';
-        channelDescription = 'Takip ettiğiniz kullanıcıların paylaşımları için bildirimler';
-        importance = Importance.high;
-        break;
-      case 'message':
-        channelId = 'messages_channel_v3'; // v3: Force update & Category
-        channelName = 'Mesaj Bildirimleri';
-        channelDescription = 'Kullanıcılar arası mesajlaşma bildirimleri';
-        importance = Importance.max;
-        break;
-      case 'admin_message':
-        channelId = 'admin_messages_channel_v3';
-        channelName = 'Admin Mesaj Bildirimleri';
-        channelDescription = 'Admin tarafından gönderilen mesaj bildirimleri';
-        importance = Importance.max;
-        break;
-      default:
-        channelId = 'sicak_firsatlar_general_v2';
-        channelName = 'Sıcak Fırsatlar Bildirimleri';
-        channelDescription = 'Yeni fırsat bildirimleri için kanal';
-        importance = Importance.max;
-    }
-
-    final androidDetails = AndroidNotificationDetails(
-      channelId,
-      channelName,
-      channelDescription: channelDescription,
-      importance: importance,
-      priority: Priority.max,
-      category: AndroidNotificationCategory.message, // Kategori eklendi
-      showWhen: true,
-      playSound: true,
-      enableVibration: true,
-      enableLights: true,
-      color: type == 'admin_deal' ? const Color(0xFF2196F3) : null,
-      ledOnMs: 1000,
-      ledOffMs: 500,
-      ticker: title,
-      visibility: NotificationVisibility.public,
-      fullScreenIntent: true, // Test için: Ekranı uyandırmayı dene
-    );
-
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-
-    final details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    // Payload: admin_message için admin_message:messageId, admin_deal için admin_deal:dealId, diğerleri için dealId
-    final payload = type == 'admin_message' 
-        ? 'admin_message:$messageId' 
-        : type == 'admin_deal'
-            ? 'admin_deal:$dealId'
-            : dealId;
-    
-    // Notification ID: benzersiz olmalı
-    final notificationId = type == 'admin_message' 
-        ? messageId.hashCode 
-        : dealId.hashCode;
-
-    await _localNotifications.show(
-      notificationId,
-      title,
-      body,
-      details,
-      payload: payload,
-    );
-
-    _log('📬 Local bildirim gösterildi: $title (channel: $channelId, type: $type)');
+  void handleNotificationTapPublic(Map<String, dynamic> data) {
+    _handleNotificationTap(data);
   }
 
   // Bildirime tıklandığında yönlendirme yap
   void _handleNotificationTap(Map<String, dynamic> data) {
-    final type = data['type'] ?? 'deal';
+    final type = (data['type'] ?? 'deal').toString();
     _log('🔔 Bildirim tipi: $type, data: $data');
     
-    switch (type) {
-      case 'admin_message':
-        // Admin mesaj bildirimi - Doğrudan Admin Mesaj kutusuna (MessageScreen) yönlendir
+    final senderId = (
+      data['senderId'] ??
+      data['sender_id'] ??
+      data['senderUid'] ??
+      data['sender_uid'] ??
+      data['fromUserId'] ??
+      data['from_user_id'] ??
+      data['userId'] ??
+      data['user_id'] ??
+      ''
+    ).toString().trim();
+
+    final tapKey = '$type:$senderId';
+    final now = DateTime.now();
+
+    // 2.5 saniye içinde aynı bildirim tıklaması geldiyse es geç (Çift açılış ve geri gitme saçmalamasını engeller)
+    if (_lastHandledTapKey == tapKey && _lastHandledTapTime != null) {
+      if (now.difference(_lastHandledTapTime!).inMilliseconds < 2500) {
+        _log('⚠️ Mükerrer bildirim tıklaması engellendi: $tapKey');
+        return;
+      }
+    }
+
+    _lastHandledTapKey = tapKey;
+    _lastHandledTapTime = now;
+
+    final senderName = (
+      data['senderName'] ??
+      data['sender_name'] ??
+      data['notification_title'] ??
+      'Kullanıcı'
+    ).toString().replaceAll('💬 ', '').trim();
+
+    final senderImageUrl = (
+      data['senderImageUrl'] ??
+      data['sender_image_url'] ??
+      ''
+    ).toString().trim();
+
+    final navigator = navigatorKey.currentState;
+    final currentUser = _auth.currentUser;
+    if (navigator == null || currentUser == null) {
+      _log('⏳ Navigator veya Oturum henüz hazır değil, bildirim tıklaması sıraya alındı: $data');
+      _startPendingNotificationCheck(data);
+      return;
+    }
+
+    _pendingNotificationTapData = null;
+
+    if (type == 'message' || type == 'user_message' || type == 'admin_message' || (senderId.isNotEmpty && type != 'deal' && type != 'comment_reply' && type != 'admin_deal')) {
+      if (senderId == 'admin' || type == 'admin_message') {
         _navigateToAdminChat();
-        break;
-        
+      } else if (senderId.isNotEmpty) {
+        _navigateToChat(senderId, senderName, userImageUrl: senderImageUrl);
+      } else {
+        _navigateToMessagesList();
+      }
+      return;
+    }
+
+    switch (type) {
       case 'admin_deal':
-        // Admin deal bildirimi - AdminScreen'e yönlendir
         _navigateToAdminScreen();
         break;
         
-      case 'message':
-        // Kullanıcı mesajı - Mesaj sayfasına yönlendir
-        final senderId = data['senderId'] ?? '';
-        final senderName = data['senderName'] ?? '';
-        if (senderId.isNotEmpty) {
-          _navigateToChat(senderId, senderName);
-        } else {
-          _log('⚠️ Mesaj bildiriminde senderId bulunamadı');
-          // Ana sayfaya git
-        }
-        break;
-        
       case 'comment_reply':
-        // Yorum cevabı - Fırsat detayına ve yoruma yönlendir
-        final dealId = data['dealId'] ?? '';
-        final commentId = data['commentId'] ?? '';
+        final dealId = (data['dealId'] ?? '').toString();
+        final commentId = (data['commentId'] ?? '').toString();
         if (dealId.isNotEmpty) {
           _navigateToDeal(dealId, commentId: commentId.isNotEmpty ? commentId : null);
-        } else {
-          _log('⚠️ Yorum cevabı bildiriminde dealId bulunamadı');
         }
         break;
         
@@ -1359,34 +1175,49 @@ class NotificationService {
       case 'follow':
       case 'deal':
       default:
-        // Fırsat bildirimi - Deal detay sayfasına yönlendir
-        final dealId = data['dealId'] ?? '';
+        final dealId = (data['dealId'] ?? '').toString();
         if (dealId.isNotEmpty) {
           _navigateToDeal(dealId);
-        } else {
-          _log('⚠️ Bildirimde dealId bulunamadı, data: $data');
         }
         break;
     }
   }
 
+  // Mesajlar listesi (Gelen Kutusu) sayfasına yönlendirme
+  void _navigateToMessagesList() {
+    final navigator = navigatorKey.currentState;
+    if (navigator != null) {
+      _log('🔔 Mesajlar listesi ekranına yönlendiriliyor');
+      navigator.push(
+        MaterialPageRoute(
+          builder: (context) => const MessagesListScreen(),
+        ),
+      );
+    }
+  }
+
   // Sohbet sayfasına yönlendirme
-  void _navigateToChat(String userId, String userName) {
+  void _navigateToChat(String userId, String userName, {String? userImageUrl}) {
     final navigator = navigatorKey.currentState;
     if (navigator != null) {
       _log('🔔 Sohbet sayfasına yönlendiriliyor: $userId ($userName)');
-      // MessageScreen'e yönlendir
       navigator.push(
         MaterialPageRoute(
           builder: (context) => MessageScreen(
             otherUserId: userId,
             otherUserName: userName.isNotEmpty ? userName : 'Kullanıcı',
-            otherUserImageUrl: '', // Bildirimde resim URL yok, boş bırak
+            otherUserImageUrl: userImageUrl ?? '',
           ),
         ),
       );
     } else {
-      _log('⚠️ Navigator henüz hazır değil, sohbet yönlendirmesi yapılamıyor');
+      _log('⚠️ Navigator henüz hazır değil, sohbet yönlendirmesi yapılamıyor. Sıraya alınıyor...');
+      _startPendingNotificationCheck({
+        'type': 'message',
+        'senderId': userId,
+        'senderName': userName,
+        'senderImageUrl': userImageUrl,
+      });
     }
   }
 
@@ -1412,8 +1243,6 @@ class NotificationService {
       _log('⚠️ Navigator henüz hazır değil, yönlendirme yapılamıyor');
     }
   }
-
-
 
   // Admin sohbet sayfasına yönlendirme
   void _navigateToAdminChat() {
@@ -1474,34 +1303,62 @@ class NotificationService {
     _notificationListenersSetup = true;
     _log('📬 Bildirim dinleyicileri kaydediliyor...');
 
+    // Ön planda iken işletim sisteminin sistem push bildirimi göstermesini kapat
+    // (Böylece uygulama açıkken sistem push notif düşmez, SADECE InAppMessageBanner gösterilir)
+    _messaging.setForegroundNotificationPresentationOptions(
+      alert: false,
+      badge: false,
+      sound: false,
+    );
+
     // Uygulama ön planda iken gelen bildirimler
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _log('📬 Yeni bildirim (ön plan): ${message.notification?.title}');
       _log('📬 Bildirim verisi: ${message.data}');
 
-      // Mesaj tipi kontrolü: Eğer kullanıcı o kişiyle sohbetteyse bildirim gösterme
-      if (message.data['type'] == 'message') {
-        final senderId = message.data['senderId']?.toString() ?? '';
-        if (activeChatUserId != null && activeChatUserId == senderId) {
-          _log('💬 Kullanıcı zaten bu sohbet odasında, bildirim bastırıldı.');
-          return;
+      final type = (message.data['type'] ?? 'deal').toString();
+      final senderId = (
+        message.data['senderId'] ??
+        message.data['sender_id'] ??
+        message.data['senderUid'] ??
+        message.data['sender_uid'] ??
+        message.data['fromUserId'] ??
+        message.data['from_user_id'] ??
+        message.data['userId'] ??
+        message.data['user_id'] ??
+        ''
+      ).toString().trim();
+      final currentActiveChat = activeChatUserId?.trim();
+
+      // Mesaj bildirimi kontrolü: Eğer kullanıcı herhangi bir sohbet odasındaysa BİLDİRİMİ TAMAMEN BASTIR
+      final isMessageNotification = type == 'message' || type == 'user_message' || type == 'chat' || (senderId.isNotEmpty && type != 'deal' && type != 'comment_reply' && type != 'admin_deal');
+
+      if (isMessageNotification) {
+        _log('💬 Mesaj bildirimi (ön plan): senderId="$senderId", activeChatUserId="$currentActiveChat"');
+        if (currentActiveChat != null && currentActiveChat.isNotEmpty) {
+          final isSameUser = senderId.isEmpty || currentActiveChat.toLowerCase() == senderId.toLowerCase();
+          final isAdminChat = (currentActiveChat == 'admin' || currentActiveChat == 'adminToUser') && (senderId == 'admin' || type == 'admin_message');
+          if (isSameUser || isAdminChat) {
+            _log('💬 Kullanıcı zaten aynı sohbet odasında ($currentActiveChat), ön plan mesaj bildirimi BASTIRILDI.');
+            return;
+          }
         }
 
-        // Başka bir ekrandaysa In-App Banner (Toast) göster
+        // Kullanıcı sohbet odasında değilse (örneğin anasayfada geziniyorsa) SADECE In-App Banner göster
         InAppMessageBanner.show(
           context: null,
           senderId: senderId,
-          senderName: message.data['senderName']?.toString() ?? message.notification?.title ?? 'Kullanıcı',
-          senderImageUrl: message.data['senderImageUrl']?.toString() ?? '',
-          messageText: message.data['messageText']?.toString() ?? message.notification?.body ?? '',
+          senderName: message.data['senderName']?.toString() ?? message.data['sender_name']?.toString() ?? message.notification?.title ?? 'Kullanıcı',
+          senderImageUrl: message.data['senderImageUrl']?.toString() ?? message.data['sender_image_url']?.toString() ?? '',
+          messageText: message.data['messageText']?.toString() ?? message.data['notification_body']?.toString() ?? message.notification?.body ?? '',
           dealTitle: message.data['dealTitle']?.toString(),
           dealId: message.data['dealId']?.toString(),
         );
         return;
       }
 
-      if (message.data['type'] == 'admin_message') {
-        if (activeChatUserId != null && (activeChatUserId == 'admin' || activeChatUserId == 'adminToUser')) {
+      if (type == 'admin_message') {
+        if (currentActiveChat != null && (currentActiveChat == 'admin' || currentActiveChat == 'adminToUser')) {
           _log('💬 Kullanıcı zaten admin sohbet odasında, bildirim bastırıldı.');
           return;
         }
@@ -1523,7 +1380,7 @@ class NotificationService {
 
     // Bildirime tıklayınca (uygulama arka planda veya kapalı)
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      _log('🔔 Bildirim açıldı: ${message.data}');
+      _log('🔔 Bildirim açıldı (onMessageOpenedApp): ${message.data}');
       _handleNotificationTap(message.data);
     });
     
@@ -1531,12 +1388,75 @@ class NotificationService {
     FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
         _log('🔔 Uygulama kapalıyken bildirim açıldı: ${message.data}');
-        // Uygulama henüz tam yüklenmemiş olabilir, biraz bekle
-        Future.delayed(const Duration(milliseconds: 800), () {
-          _handleNotificationTap(message.data);
-        });
+        void attemptNavigation(int retries) {
+          if (navigatorKey.currentState != null) {
+            _handleNotificationTap(message.data);
+          } else if (retries > 0) {
+            Future.delayed(const Duration(milliseconds: 500), () => attemptNavigation(retries - 1));
+          }
+        }
+        // Splash animasyonu (~1.7s) tamamlandıktan sonra sohbet sayfasına yönlendir
+        Future.delayed(const Duration(milliseconds: 2000), () => attemptNavigation(5));
       }
     });
+  }
+
+  // Yerel bildirim gösterme yardımcısı
+  Future<void> _showLocalNotification(RemoteMessage message) async {
+    try {
+      final data = message.data;
+      final type = (data['type'] ?? 'deal').toString();
+      final senderId = (
+        data['senderId'] ??
+        data['sender_id'] ??
+        data['senderUid'] ??
+        data['sender_uid'] ??
+        data['fromUserId'] ??
+        data['from_user_id'] ??
+        data['userId'] ??
+        data['user_id'] ??
+        ''
+      ).toString().trim();
+
+      final senderName = (
+        data['senderName'] ??
+        data['sender_name'] ??
+        data['notification_title'] ??
+        'Kullanıcı'
+      ).toString().replaceAll('💬 ', '').trim();
+
+      final title = data['notification_title'] ?? message.notification?.title ?? '💬 $senderName';
+      final body = data['notification_body'] ?? data['messageText'] ?? message.notification?.body ?? 'Yeni mesaj';
+
+      String payload = '';
+      if (type == 'message' || type == 'user_message' || type == 'chat' || senderId.isNotEmpty) {
+        payload = 'message:$senderId:$senderName';
+      } else if (type == 'admin_message') {
+        payload = 'admin_message';
+      } else {
+        payload = data['dealId']?.toString() ?? '';
+      }
+
+      const androidDetails = AndroidNotificationDetails(
+        'messages_channel_v3',
+        'Mesaj Bildirimleri',
+        channelDescription: 'Kullanıcılar arası mesajlaşma bildirimleri',
+        importance: Importance.max,
+        priority: Priority.max,
+        playSound: true,
+        enableVibration: true,
+      );
+
+      await _localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch % 100000,
+        title,
+        body,
+        const NotificationDetails(android: androidDetails),
+        payload: payload,
+      );
+    } catch (e) {
+      _log('❌ Yerel bildirim gösterme hatası: $e');
+    }
   }
 
   // --- Notification Preferences ---
@@ -1778,6 +1698,7 @@ class NotificationService {
   // Mesaj bildirimi gönder
   Future<void> sendMessageNotification({
     required String receiverId,
+    String senderId = '',
     required String senderName,
     required String messageText,
     required String messageId,
@@ -1834,7 +1755,7 @@ class NotificationService {
         title,
         body,
         notificationDetails,
-        payload: 'message:$messageId',
+        payload: 'message:$senderId:$senderName',
       );
 
       _log('✅ Mesaj bildirimi gösterildi: $receiverId');

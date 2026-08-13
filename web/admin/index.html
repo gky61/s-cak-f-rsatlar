@@ -790,45 +790,305 @@
                 </div>
 
                 <!-- Users View -->
-                <!-- Messages View -->
+                <!-- Messages View (Mesajlaşma Yönetimi & Test Simülatörü) -->
                 <div id="messagesView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
                     <!-- Page Heading -->
                     <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
                         <div class="flex flex-col gap-1">
-                            <h2 class="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Moderasyon Mesajları</h2>
-                            <p class="text-slate-500 dark:text-slate-400 text-base">Uygunsuz içerik tespit edilen kullanıcılar ve içerikler</p>
+                            <div class="flex items-center gap-3">
+                                <h2 class="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Mesajlaşma & Test Merkezi</h2>
+                                <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-500 border border-blue-500/20">CANLI SİMÜLATÖR</span>
+                            </div>
+                            <p class="text-slate-500 dark:text-slate-400 text-base">Kullanıcılar arası mesajlaşmayı gerçek zamanlı simüle edin, push ve in-app bildirimleri test edin.</p>
                         </div>
-                        <button id="deleteAllMessagesBtn" onclick="window.deleteAllMessages()" class="px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium flex items-center gap-2">
-                            <span class="material-symbols-outlined text-[18px]">delete_sweep</span>
-                            Tümünü Sil
+                    </div>
+
+                    <!-- Navigation Tabs -->
+                    <div class="flex border-b border-slate-200 dark:border-slate-800 gap-2">
+                        <button id="msgTabSimBtn" onclick="window.switchMessagesTab('simulator')" class="px-5 py-3 font-bold text-sm border-b-2 border-primary text-primary flex items-center gap-2 transition-colors">
+                            <span class="material-symbols-outlined text-[20px]">science</span>
+                            <span>🧪 Mesaj Simülatörü & Canlı Chat</span>
+                        </button>
+                        <button id="msgTabModBtn" onclick="window.switchMessagesTab('moderation')" class="px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors">
+                            <span class="material-symbols-outlined text-[20px]">shield</span>
+                            <span>📋 Tüm Mesajlar & Moderasyon</span>
                         </button>
                     </div>
-                    
-                    <!-- Messages List -->
-                    <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                        <div id="messagesList" class="overflow-x-auto">
-                            <table class="w-full">
-                                <thead class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
-                                    <tr>
-                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tarih</th>
-                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kullanıcı</th>
-                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tip</th>
-                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">İçerik</th>
-                                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Durum</th>
-                                        <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">İşlemler</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="messagesTableBody" class="divide-y divide-slate-200 dark:divide-slate-800">
-                                    <tr>
-                                        <td colspan="6" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
-                                            <div class="flex flex-col items-center gap-2">
-                                                <span class="material-symbols-outlined text-4xl opacity-50">hourglass_empty</span>
-                                                <p>Mesajlar yükleniyor...</p>
+
+                    <!-- TAB 1: MESSAGING SIMULATOR & LIVE CHAT -->
+                    <div id="msgSimContainer" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <!-- LEFT COLUMN: SIMULATOR CONTROLS (5 cols) -->
+                        <div class="lg:col-span-5 flex flex-col gap-5">
+                            
+                            <!-- TARGET RECEIVER USER CARD -->
+                            <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/60">
+                                    <div class="flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-emerald-500 text-xl">person_pin</span>
+                                        <h3 class="text-base font-bold text-slate-900 dark:text-white">Alıcı Kullanıcı (Hedef / Receiver)</h3>
+                                    </div>
+                                    <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">HEDEF CİHAZ</span>
+                                </div>
+
+                                <!-- Receiver Selection Mode -->
+                                <div class="flex flex-col gap-3">
+                                    <div class="flex flex-col gap-1">
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-xs font-bold text-slate-700 dark:text-slate-300">Kullanıcı Seç veya Arayın</label>
+                                            <button onclick="window.reloadSimulatorUsers()" class="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer">
+                                                <span class="material-symbols-outlined text-[14px]">refresh</span> Listeyi Yenile
+                                            </button>
+                                        </div>
+                                        <select id="simReceiverSelect" onchange="window.handleSimReceiverSelectChange()" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                                            <option value="">-- Listeden Kullanıcı Seçin --</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="flex items-center gap-2 my-1">
+                                        <div class="h-px bg-slate-200 dark:bg-slate-800 flex-1"></div>
+                                        <span class="text-[11px] text-slate-400 font-semibold uppercase">veya UID Girin</span>
+                                        <div class="h-px bg-slate-200 dark:bg-slate-800 flex-1"></div>
+                                    </div>
+
+                                    <div class="flex gap-2">
+                                        <input type="text" id="simReceiverUidInput" placeholder="Kullanıcı UID yapıştırın..." class="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary">
+                                        <button onclick="window.fetchSimUserByUid('receiver')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors">
+                                            <span class="material-symbols-outlined text-[16px]">search</span>
+                                            <span>Getir</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Receiver Selected Preview -->
+                                <div id="simReceiverPreviewCard" class="p-3 bg-slate-50 dark:bg-surface-darker rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center font-bold text-lg overflow-hidden shrink-0">
+                                        <span id="simReceiverAvatarPlaceholder">?</span>
+                                        <img id="simReceiverAvatarImg" src="" class="w-full h-full object-cover hidden">
+                                    </div>
+                                    <div class="flex flex-col min-w-0 flex-1">
+                                        <div class="flex items-center gap-2">
+                                            <span id="simReceiverName" class="font-bold text-sm text-slate-900 dark:text-white truncate">Alıcı Seçilmedi</span>
+                                            <span id="simReceiverRoleBadge" class="hidden text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.2 rounded font-semibold">Admin</span>
+                                        </div>
+                                        <span id="simReceiverUid" class="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">UID: -</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SENDER USER CARD -->
+                            <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/60">
+                                    <div class="flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-blue-500 text-xl">send</span>
+                                        <h3 class="text-base font-bold text-slate-900 dark:text-white">Gönderen Kullanıcı (Sender)</h3>
+                                    </div>
+                                    <span class="text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">SİMÜLE EDİLEN</span>
+                                </div>
+
+                                <!-- Quick Preset Senders -->
+                                <div class="flex flex-col gap-2">
+                                    <label class="text-xs font-bold text-slate-700 dark:text-slate-300">Gönderen Profili Seçin</label>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <button onclick="window.setSimSenderPreset('user1')" class="p-2.5 bg-slate-50 dark:bg-surface-darker hover:bg-blue-500/10 border border-slate-200 dark:border-slate-800 hover:border-blue-500/30 rounded-lg text-left flex items-center gap-2 transition-all">
+                                            <div class="w-7 h-7 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center font-bold text-xs">A</div>
+                                            <div class="flex flex-col min-w-0">
+                                                <span class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">Ahmet (Test)</span>
+                                                <span class="text-[10px] text-slate-400">Test Kullanıcı 1</span>
                                             </div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                                        </button>
+                                        <button onclick="window.setSimSenderPreset('user2')" class="p-2.5 bg-slate-50 dark:bg-surface-darker hover:bg-purple-500/10 border border-slate-200 dark:border-slate-800 hover:border-purple-500/30 rounded-lg text-left flex items-center gap-2 transition-all">
+                                            <div class="w-7 h-7 rounded-full bg-purple-500/20 text-purple-500 flex items-center justify-center font-bold text-xs">Z</div>
+                                            <div class="flex flex-col min-w-0">
+                                                <span class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">Zeynep (Test)</span>
+                                                <span class="text-[10px] text-slate-400">Test Kullanıcı 2</span>
+                                            </div>
+                                        </button>
+                                        <button onclick="window.setSimSenderPreset('admin')" class="p-2.5 bg-slate-50 dark:bg-surface-darker hover:bg-amber-500/10 border border-slate-200 dark:border-slate-800 hover:border-amber-500/30 rounded-lg text-left flex items-center gap-2 transition-all">
+                                            <div class="w-7 h-7 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold text-xs">👮</div>
+                                            <div class="flex flex-col min-w-0">
+                                                <span class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">FırsatKolik Dstk</span>
+                                                <span class="text-[10px] text-slate-400">Resmi Yönetim</span>
+                                            </div>
+                                        </button>
+                                        <button onclick="window.setSimSenderPreset('custom')" class="p-2.5 bg-slate-50 dark:bg-surface-darker hover:bg-emerald-500/10 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/30 rounded-lg text-left flex items-center gap-2 transition-all">
+                                            <div class="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center font-bold text-xs">👤</div>
+                                            <div class="flex flex-col min-w-0">
+                                                <span class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">Gerçek Üye Seç</span>
+                                                <span class="text-[10px] text-slate-400">Listeden Üye</span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Sender Dropdown for Custom Member -->
+                                <div id="simSenderDropdownContainer" class="hidden flex flex-col gap-1 mt-1">
+                                    <select id="simSenderSelect" onchange="window.handleSimSenderSelectChange()" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                                        <option value="">-- Gönderen Kullanıcı Seçin --</option>
+                                    </select>
+                                </div>
+
+                                <!-- Sender Selected Preview -->
+                                <div id="simSenderPreviewCard" class="p-3 bg-slate-50 dark:bg-surface-darker rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center font-bold text-lg overflow-hidden shrink-0">
+                                        <span id="simSenderAvatarPlaceholder">A</span>
+                                        <img id="simSenderAvatarImg" src="" class="w-full h-full object-cover hidden">
+                                    </div>
+                                    <div class="flex flex-col min-w-0 flex-1">
+                                        <div class="flex items-center gap-2">
+                                            <span id="simSenderName" class="font-bold text-sm text-slate-900 dark:text-white truncate">Ahmet Yılmaz (Test)</span>
+                                            <span id="simSenderRoleBadge" class="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.2 rounded font-semibold">Test</span>
+                                        </div>
+                                        <span id="simSenderUid" class="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">UID: test_user_ahmet</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- MESSAGE DETAILS & OPTIONAL ATTACHMENT CARD -->
+                            <div class="bg-white dark:bg-surface-dark p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/60">
+                                    <div class="flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-purple-500 text-xl">edit_note</span>
+                                        <h3 class="text-base font-bold text-slate-900 dark:text-white">Mesaj İçeriği & Şablonlar</h3>
+                                    </div>
+                                </div>
+
+                                <!-- Quick Template Chips -->
+                                <div class="flex flex-col gap-1.5">
+                                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Hızlı Şablonlar:</span>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button onclick="window.insertSimTemplate('Merhaba! Fırsat hakkındaki paylaşımınız harika, teşekkürler! 👋')" class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-primary/20 hover:text-primary rounded text-xs transition-colors">👋 Selamlaşma</button>
+                                        <button onclick="window.insertSimTemplate('Bu ürünün stoğu hala devam ediyor mu? Kargo seçeneği var mı? 📦')" class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-primary/20 hover:text-primary rounded text-xs transition-colors">📦 Stok/Kargo Sorusu</button>
+                                        <button onclick="window.insertSimTemplate('Tebrikler! Özel kampanya indirim kuponunuz hesabınıza tanımlandı. 🎉')" class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-primary/20 hover:text-primary rounded text-xs transition-colors">🎉 Kupon/Tebrik</button>
+                                        <button onclick="window.insertSimTemplate('Fırsat linkinde bir sorun var gibi görünüyor, tekrar güncelleyebilir misiniz? ⚠️')" class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-primary/20 hover:text-primary rounded text-xs transition-colors">⚠️ Link Uyarısı</button>
+                                    </div>
+                                </div>
+
+                                <!-- Message Content Input -->
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="text-xs font-bold text-slate-700 dark:text-slate-300">Mesaj Metni</label>
+                                    <textarea id="simMessageText" rows="3" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" placeholder="Simüle edilecek mesajı yazın..."></textarea>
+                                </div>
+
+                                <!-- Optional Deal Reference Attachment -->
+                                <div class="flex flex-col gap-2">
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-xs font-bold text-slate-700 dark:text-slate-300">Fırsat Referansı Ekle (Opsiyonel)</label>
+                                        <button onclick="window.toggleSimDealAttachment()" class="text-xs text-primary font-semibold hover:underline">
+                                            <span id="simDealAttachToggleText">+ Fırsat Bağla</span>
+                                        </button>
+                                    </div>
+
+                                    <div id="simDealAttachContainer" class="hidden flex flex-col gap-2 p-3 bg-slate-50 dark:bg-surface-darker rounded-lg border border-slate-200 dark:border-slate-800">
+                                        <select id="simDealSelect" onchange="window.handleSimDealSelectChange()" class="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs">
+                                            <option value="">-- Fırsat Seçin --</option>
+                                        </select>
+                                        <div id="simDealPreview" class="hidden flex items-center gap-3 p-2 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-800 text-xs">
+                                            <img id="simDealPreviewImg" src="" class="w-10 h-10 object-cover rounded bg-slate-800 shrink-0">
+                                            <div class="flex flex-col min-w-0 flex-1">
+                                                <span id="simDealPreviewTitle" class="font-bold text-slate-900 dark:text-white truncate"></span>
+                                                <span id="simDealPreviewPrice" class="text-primary font-extrabold"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Primary Send Action Button -->
+                                <button onclick="window.sendSimulatedMessage()" id="simSendBtn" class="mt-2 flex items-center justify-center gap-2 rounded-lg h-12 w-full bg-primary hover:bg-primary/90 text-white text-base font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-[0.99]">
+                                    <span class="material-symbols-outlined text-[22px]">rocket_launch</span>
+                                    <span>Mesajı Gönder (Simülasyonu Başlat)</span>
+                                </button>
+                                <p class="text-[11px] text-slate-400 text-center">
+                                    💡 Bu buton Firestore <code class="text-blue-400">messages</code> koleksiyonuna doküman ekler. Cloud Function ve FCM push bildirimi anında tetiklenir!
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT COLUMN: LIVE CHAT WINDOW & STREAM (7 cols) -->
+                        <div class="lg:col-span-7 flex flex-col h-[780px] bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                            <!-- Chat Window Header -->
+                            <div class="p-4 bg-slate-50 dark:bg-surface-darker border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div class="w-10 h-10 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold overflow-hidden shrink-0">
+                                        <span id="chatHeaderAvatarPlaceholder">💬</span>
+                                        <img id="chatHeaderAvatarImg" src="" class="w-full h-full object-cover hidden">
+                                    </div>
+                                    <div class="flex flex-col min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <h3 id="chatHeaderTitle" class="font-bold text-sm text-slate-900 dark:text-white truncate">Canlı Sohbet Odası</h3>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mr-1"></span>
+                                                CANLI AKIŞ
+                                            </span>
+                                        </div>
+                                        <span id="chatHeaderSubtitle" class="text-xs text-slate-500 dark:text-slate-400 truncate">Lütfen sol taraftan Alıcı ve Gönderen seçin.</span>
+                                    </div>
+                                </div>
+
+                                <button onclick="window.reloadLiveChatStream()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors" title="Sohbeti Yenile">
+                                    <span class="material-symbols-outlined text-[20px]">refresh</span>
+                                </button>
+                            </div>
+
+                            <!-- Chat Stream Messages Scroll Area -->
+                            <div id="simChatStreamContainer" class="flex-1 p-4 overflow-y-auto flex flex-col gap-3 bg-slate-100/50 dark:bg-[#121824]">
+                                <!-- Empty state when no user is selected -->
+                                <div id="simChatEmptyState" class="m-auto flex flex-col items-center justify-center text-center p-8 max-w-sm">
+                                    <div class="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-3">
+                                        <span class="material-symbols-outlined text-3xl">chat_bubble</span>
+                                    </div>
+                                    <h4 class="font-bold text-base text-slate-900 dark:text-white mb-1">Canlı Sohbet Simülatörü</h4>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                                        Sol panellerden **Alıcı** kullanıcıyı seçtiğinizde, ikisi arasındaki canlı sohbet akışı burada anlık olarak akacaktır.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Quick Chat Input Bar at Bottom of Chat Window -->
+                            <div class="p-3 bg-slate-50 dark:bg-surface-darker border-t border-slate-200 dark:border-slate-800 flex items-center gap-2 shrink-0">
+                                <input type="text" id="simQuickInput" onkeypress="if(event.key==='Enter') window.sendQuickSimMessage()" placeholder="Gönderen olarak anlık mesaj yazın ve Enter'a basın..." class="flex-1 px-4 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                                <button onclick="window.sendQuickSimMessage()" class="h-10 px-4 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm flex items-center justify-center gap-1 transition-colors shrink-0">
+                                    <span class="material-symbols-outlined text-[18px]">send</span>
+                                    <span class="hidden sm:inline">Gönder</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: MODERATION / ALL MESSAGES TABLE -->
+                    <div id="msgModContainer" class="hidden flex-col gap-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white">Veritabanındaki Tüm Mesajlaşma Kayıtları</h3>
+                            <button id="deleteAllMessagesBtn" onclick="window.deleteAllMessages()" class="px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium flex items-center gap-2 text-sm">
+                                <span class="material-symbols-outlined text-[18px]">delete_sweep</span>
+                                Tümünü Sil
+                            </button>
+                        </div>
+                        
+                        <!-- Messages List -->
+                        <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                            <div id="messagesList" class="overflow-x-auto">
+                                <table class="w-full">
+                                    <thead class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+                                        <tr>
+                                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tarih</th>
+                                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Gönderen / Alıcı</th>
+                                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">İçerik / Detay</th>
+                                            <th class="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Durum</th>
+                                            <th class="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">İşlemler</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="messagesTableBody" class="divide-y divide-slate-200 dark:divide-slate-800">
+                                        <tr>
+                                            <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                                                <div class="flex flex-col items-center gap-2">
+                                                    <span class="material-symbols-outlined text-4xl opacity-50">hourglass_empty</span>
+                                                    <p>Mesajlar yükleniyor...</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>

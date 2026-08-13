@@ -57,10 +57,10 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
             FormattedPriceText(
               value: deal.price,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 17,
                 fontWeight: FontWeight.w900,
                 color: isExpired ? Colors.red[700] : AppTheme.primary,
-                letterSpacing: -0.5,
+                letterSpacing: -0.6,
                 height: 1.0,
               ),
             ),
@@ -182,7 +182,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
               });
             },
             child: Padding(
-              padding: const EdgeInsets.all(10), // p-2.5
+              padding: const EdgeInsets.all(12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -385,7 +385,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                   // Sağ tarafta içerik
                   Expanded(
                     child: SizedBox(
-                      height: 140, // Height matched with the 140x140 image container
+                      height: 140,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -558,35 +558,39 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 4),
-                              // Başlık
-                              Stack(
-                                children: [
-                                  Text(
-                                    deal.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.w700,
-                                      height: 1.2,
-                                      color: (isExpired || deal.expiredVotes >= 15)
-                                          ? Colors.red[700] 
-                                          : (isDark ? Colors.white : AppTheme.textPrimary),
-                                    ),
-                                  ),
-                                  // Kırmızı çizgi (expiredVotes >= 15 veya isExpired ise)
-                                  if (isExpired || deal.expiredVotes >= 15)
-                                    Positioned.fill(
-                                      child: CustomPaint(
-                                        painter: const StrikeThroughPainter(),
+                               const SizedBox(height: 5),
+                               // Başlık
+                               Padding(
+                                padding: const EdgeInsets.only(top: 1, bottom: 2),
+                                child: Stack(
+                                  children: [
+                                    Text(
+                                      deal.title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.25,
+                                        letterSpacing: -0.2,
+                                        color: (isExpired || deal.expiredVotes >= 15)
+                                            ? Colors.red[700] 
+                                            : (isDark ? Colors.white : AppTheme.textPrimary),
                                       ),
                                     ),
-                                ],
+                                    // Kırmızı çizgi (expiredVotes >= 15 veya isExpired ise)
+                                    if (isExpired || deal.expiredVotes >= 15)
+                                      Positioned.fill(
+                                        child: CustomPaint(
+                                          painter: const StrikeThroughPainter(),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
                               // Rating (Başlık altında)
                               if (deal.ratingValue != null || deal.ratingCount != null) ...[
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 5),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [

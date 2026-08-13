@@ -189,7 +189,7 @@ const findMatchedKeyword = (text, keywords) => {
   return '';
 };
 
-// Kullanıcının aktif tüm cihaz token'larını döndürür
+// Kullanıcının aktif tüm cihaz token'larını döndürür (Tekil FCM token de-duplication ile)
 async function getUserDeviceTokens(userId) {
   const devicesSnap = await admin.firestore()
     .collection('userDevices')
@@ -198,9 +198,12 @@ async function getUserDeviceTokens(userId) {
     .get();
   
   const tokens = [];
+  const seenTokens = new Set();
+
   devicesSnap.forEach(doc => {
     const data = doc.data();
-    if (data.fcmToken) {
+    if (data.fcmToken && !seenTokens.has(data.fcmToken)) {
+      seenTokens.add(data.fcmToken);
       tokens.push({
         id: doc.id,
         token: data.fcmToken
@@ -929,6 +932,17 @@ exports.onUserMessageCreated = functions.firestore
 
     functions.logger.info('📨 Yeni kullanıcı mesajı:', { messageId, senderId, receiverId });
 
+    // Gönderenin profil resmini al
+    let senderImageUrl = '';
+    try {
+      const senderDoc = await admin.firestore().collection('users').doc(senderId).get();
+      if (senderDoc.exists) {
+        senderImageUrl = senderDoc.data().profileImageUrl || senderDoc.data().photoURL || '';
+      }
+    } catch (imgErr) {
+      functions.logger.warn('⚠️ Gönderen profil resmi alınamadı:', imgErr);
+    }
+
     try {
       // Alıcının tüm aktif cihaz token'larını al
       const devices = await getUserDeviceTokens(receiverId);
@@ -955,6 +969,8 @@ exports.onUserMessageCreated = functions.firestore
             messageId: messageId,
             senderId: senderId,
             senderName: senderName,
+            senderImageUrl: senderImageUrl,
+            messageText: notificationBody,
             receiverId: receiverId,
             notification_title: `💬 ${senderName}`,
             notification_body: notificationBody,

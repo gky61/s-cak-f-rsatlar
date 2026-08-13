@@ -299,6 +299,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                   !message.isAdminMessage) {
                                 isDeleted = true;
                                 displayName = 'Silinmiş Kullanıcı';
+                                profileImageUrl = '';
                               }
 
                               return _buildSwipeableConversationCard(

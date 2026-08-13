@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../utils/asset_path_migration.dart';
 import '../screens/message_screen.dart';
+import '../services/notification_service.dart';
 import '../main.dart'; // navigatorKey
 
 class InAppMessageBanner {
@@ -19,13 +21,21 @@ class InAppMessageBanner {
     String? dealTitle,
     String? dealId,
   }) {
-    final navContext = context ?? navigatorKey.currentContext;
-    if (navContext == null) return;
+    OverlayState? overlayState;
+    if (context != null) {
+      overlayState = Overlay.maybeOf(context);
+    }
+    overlayState ??= navigatorKey.currentState?.overlay;
+
+    if (overlayState == null) {
+      if (kDebugMode) {
+        print('⚠️ InAppMessageBanner: OverlayState bulunamadı!');
+      }
+      return;
+    }
 
     _currentEntry?.remove();
     _currentEntry = null;
-
-    final overlayState = Overlay.of(navContext);
 
     HapticFeedback.lightImpact();
 
@@ -171,19 +181,38 @@ class _InAppBannerWidgetState extends State<_InAppBannerWidget>
                 ),
                 child: InkWell(
                   onTap: () {
-                    _dismiss();
-                    navigatorKey.currentState?.push(
-                      MaterialPageRoute(
-                        builder: (_) => MessageScreen(
-                          otherUserId: widget.senderId,
-                          otherUserName: widget.senderName,
-                          otherUserImageUrl: widget.senderImageUrl,
-                          isAdminMessage: widget.isAdminMessage,
-                          initialDealTitle: widget.dealTitle,
-                          initialDealId: widget.dealId,
-                        ),
-                      ),
-                    );
+                    widget.onDismiss();
+                    final nav = navigatorKey.currentState;
+                    if (nav != null) {
+                      if (widget.isAdminMessage || widget.senderId == 'admin') {
+                        nav.push(
+                          MaterialPageRoute(
+                            builder: (_) => const MessageScreen(
+                              otherUserId: 'admin',
+                              otherUserName: 'FırsatKolik Yönetim',
+                              otherUserImageUrl: 'assets/logo.webp',
+                              isAdminMessage: true,
+                            ),
+                          ),
+                        );
+                      } else if (widget.senderId.isNotEmpty) {
+                        nav.push(
+                          MaterialPageRoute(
+                            builder: (_) => MessageScreen(
+                              otherUserId: widget.senderId,
+                              otherUserName: widget.senderName.isNotEmpty ? widget.senderName : 'Kullanıcı',
+                              otherUserImageUrl: widget.senderImageUrl,
+                              initialDealTitle: widget.dealTitle,
+                              initialDealId: widget.dealId,
+                            ),
+                          ),
+                        );
+                      } else {
+                        NotificationService().handleNotificationTapPublic({
+                          'type': 'message',
+                        });
+                      }
+                    }
                   },
                   borderRadius: BorderRadius.circular(20),
                   child: Padding(

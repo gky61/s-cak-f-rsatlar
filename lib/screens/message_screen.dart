@@ -220,12 +220,13 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       NotificationService.activeChatUserId = null;
     }
     final currentUserId = _authService.currentUser?.uid;
-    if (currentUserId != null && !widget.isAdminMessage) {
+    if (currentUserId != null && !widget.isAdminMessage && widget.otherUserId.isNotEmpty) {
       _firestoreService.setTypingStatus(
         currentUserId: currentUserId,
         otherUserId: widget.otherUserId,
         isTyping: false,
       );
+      _firestoreService.markConversationAsRead(currentUserId, widget.otherUserId);
     }
     _typingTimer?.cancel();
     _messageController.dispose();
@@ -237,6 +238,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   Future<void> _markMessagesAsRead(List<Message> messages) async {
     final currentUserId = _authService.currentUser?.uid;
     if (currentUserId == null) return;
+
+    if (!widget.isAdminMessage && widget.otherUserId.isNotEmpty) {
+      _firestoreService.markConversationAsRead(currentUserId, widget.otherUserId);
+    }
 
     for (final message in messages) {
       if (!message.isRead && !_markedAsRead.contains(message.id)) {
@@ -662,6 +667,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                   (!otherUserSnapshot.hasData || !otherUserSnapshot.data!.exists)) {
                 isUserDeleted = true;
                 otherUserName = 'Silinmiş Kullanıcı';
+                otherUserImageUrl = '';
               }
             }
 
@@ -1644,7 +1650,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   }
 
   Widget _buildAvatar(String imageUrl, double size, {bool isDeleted = false}) {
-    if (isDeleted || imageUrl.isEmpty) {
+    if (isDeleted || imageUrl.isEmpty || imageUrl == 'assets/kullanıcı pp.jpg') {
       return Container(
         color: Colors.grey[300],
         child: Icon(Icons.person, size: size * 0.6, color: Colors.grey[600]),

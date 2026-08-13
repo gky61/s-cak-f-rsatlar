@@ -65,12 +65,14 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } else if (type == 'admin_message') {
     title = data['notification_title'] ?? data['title'] ?? '📩 Yeni Admin Mesajı';
     body = data['notification_body'] ?? 'Bir mesajınız var. Dokunun.';
-    payload = 'message:${data['messageId']}';
+    payload = 'message:${data['senderId'] ?? 'admin'}:${data['senderName'] ?? 'FırsatKolik Yönetim'}';
     channelId = 'admin_messages_channel_v3';
   } else if (type == 'message') {
-    title = data['notification_title'] ?? '💬 ${data['senderName'] ?? 'Biri'}';
+    final senderId = data['senderId']?.toString() ?? '';
+    final senderName = data['senderName']?.toString() ?? 'Kullanıcı';
+    title = data['notification_title'] ?? '💬 $senderName';
     body = data['notification_body'] ?? data['messageText'] ?? 'Yeni mesaj';
-    payload = 'message:${data['messageId']}';
+    payload = 'message:$senderId:$senderName';
     channelId = 'messages_channel';
   }
 

@@ -2942,12 +2942,764 @@ function showUsersView() {
     }, 100);
 }
 
+// ==========================================
+// MESAJLAŞMA & SİMÜLATÖR SİSTEMİ (TEST CENTER)
+// ==========================================
+
+let simSender = {
+    id: 'test_user_ahmet',
+    name: 'Ahmet Yılmaz (Test)',
+    imageUrl: '',
+    isPreset: true,
+    role: 'Test Kullanıcı 1'
+};
+let simReceiver = null;
+let simSelectedDeal = null;
+let simChatUnsubscribe = null;
+let simCurrentTab = 'simulator';
+
+window.switchMessagesTab = function(tabName) {
+    simCurrentTab = tabName;
+    const simContainer = document.getElementById('msgSimContainer');
+    const modContainer = document.getElementById('msgModContainer');
+    const tabSimBtn = document.getElementById('msgTabSimBtn');
+    const tabModBtn = document.getElementById('msgTabModBtn');
+
+    if (tabName === 'simulator') {
+        if (simContainer) simContainer.classList.remove('hidden');
+        if (modContainer) modContainer.classList.add('hidden');
+        if (tabSimBtn) {
+            tabSimBtn.className = 'px-5 py-3 font-bold text-sm border-b-2 border-primary text-primary flex items-center gap-2 transition-colors';
+        }
+        if (tabModBtn) {
+            tabModBtn.className = 'px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors';
+        }
+    } else {
+        if (simContainer) simContainer.classList.add('hidden');
+        if (modContainer) {
+            modContainer.classList.remove('hidden');
+            modContainer.classList.add('flex');
+        }
+        if (tabSimBtn) {
+            tabSimBtn.className = 'px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors';
+        }
+        if (tabModBtn) {
+            tabModBtn.className = 'px-5 py-3 font-bold text-sm border-b-2 border-primary text-primary flex items-center gap-2 transition-colors';
+        }
+        loadModerationMessages();
+    }
+};
+
 function showMessagesView() {
     currentView = 'messages';
     showView('messagesView');
     updateMenuActiveState('messages');
     loadMessages();
 }
+
+function loadMessages() {
+    initMessagingSimulator();
+    if (simCurrentTab === 'moderation') {
+        loadModerationMessages();
+    }
+}
+
+async function loadUsersForSimulator(forceRefresh = false) {
+    try {
+        if (!forceRefresh && users && users.length > 0) {
+            return users;
+        }
+
+        console.log('📥 Firestore\'dan simülatör için kullanıcılar çekiliyor...');
+        const snapshot = await db.collection('users').limit(200).get();
+        const loadedUsers = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            loadedUsers.push({
+                id: doc.id,
+                uid: doc.id,
+                ...data,
+                profileImageUrl: typeof cleanProfileImageUrl === 'function' ? cleanProfileImageUrl(data.profileImageUrl) : (data.profileImageUrl || '')
+            });
+        });
+        users = loadedUsers;
+        console.log(`✅ Simülatör için ${users.length} adet kullanıcı yüklendi.`);
+        return users;
+    } catch (e) {
+        console.error('❌ Kullanıcıları çekme hatası:', e);
+        return [];
+    }
+}
+
+window.reloadSimulatorUsers = async function() {
+    const receiverSelect = document.getElementById('simReceiverSelect');
+    if (receiverSelect) {
+        receiverSelect.innerHTML = '<option value="">-- Kullanıcılar Yükleniyor... --</option>';
+    }
+    await loadUsersForSimulator(true);
+    populateSimUserDropdowns();
+    showSuccess(`Kullanıcı listesi güncellendi (${users.length} kullanıcı).`);
+};
+
+async function initMessagingSimulator() {
+    console.log('🧪 Mesajlaşma simülatörü başlatılıyor...');
+
+    // Kullanıcıları ve Fırsatları Firestore'dan yükle
+    if (!users || users.length === 0) {
+        await loadUsersForSimulator();
+    }
+
+    if (!deals || deals.length === 0) {
+        try {
+            const dealSnapshot = await db.collection('deals').orderBy('createdAt', 'desc').limit(50).get();
+            const loadedDeals = [];
+            dealSnapshot.forEach(doc => {
+                loadedDeals.push({ id: doc.id, ...doc.data() });
+            });
+            deals = loadedDeals;
+        } catch (e) {
+            console.warn('Deals load error:', e);
+        }
+    }
+
+    populateSimUserDropdowns();
+    populateSimDealDropdown();
+    updateSimSenderPreview();
+    updateSimReceiverPreview();
+}
+
+function populateSimUserDropdowns() {
+    const receiverSelect = document.getElementById('simReceiverSelect');
+    const senderSelect = document.getElementById('simSenderSelect');
+
+    if (!receiverSelect) return;
+
+    if (!users || users.length === 0) {
+        receiverSelect.innerHTML = '<option value="">-- Kullanıcı Bulunamadı --</option>';
+        if (senderSelect) senderSelect.innerHTML = '<option value="">-- Kullanıcı Bulunamadı --</option>';
+        return;
+    }
+
+    let optionsHtml = `<option value="">-- Listeden Kullanıcı Seçin (${users.length} üye) --</option>`;
+    optionsHtml += users.map(u => {
+        const name = escapeHtml(u.username || u.nickname || 'Kullanıcı');
+        const uid = escapeHtml(u.uid || u.id || '');
+        const email = u.email ? ` (${escapeHtml(u.email)})` : '';
+        return `<option value="${uid}">${name}${email} - [${uid.substring(0, 8)}...]</option>`;
+    }).join('');
+
+    receiverSelect.innerHTML = optionsHtml;
+    if (senderSelect) senderSelect.innerHTML = optionsHtml;
+}
+
+function populateSimDealDropdown() {
+    const dealSelect = document.getElementById('simDealSelect');
+    if (!dealSelect) return;
+
+    let optionsHtml = '<option value="">-- Fırsat Seçin --</option>';
+    if (deals && deals.length > 0) {
+        optionsHtml += deals.slice(0, 50).map(d => {
+            const title = escapeHtml(d.title || d.baslik || 'Fırsat');
+            const price = d.price || d.fiyat || 0;
+            return `<option value="${d.id}">${title} - ${price} TL</option>`;
+        }).join('');
+    }
+    dealSelect.innerHTML = optionsHtml;
+}
+
+window.handleSimReceiverSelectChange = function() {
+    const select = document.getElementById('simReceiverSelect');
+    if (!select) return;
+    const uid = select.value;
+    if (!uid) {
+        simReceiver = null;
+        updateSimReceiverPreview();
+        return;
+    }
+
+    const user = users.find(u => (u.uid || u.id) === uid);
+    if (user) {
+        simReceiver = {
+            id: user.uid || user.id,
+            name: user.username || user.nickname || 'Kullanıcı',
+            imageUrl: cleanProfileImageUrl(user.profileImageUrl),
+            email: user.email || '',
+            isAdmin: user.isAdmin === true || user.isadmin === true
+        };
+        updateSimReceiverPreview();
+        startLiveChatStream();
+    } else {
+        window.fetchSimUserByUid('receiver', uid);
+    }
+};
+
+window.handleSimSenderSelectChange = function() {
+    const select = document.getElementById('simSenderSelect');
+    if (!select) return;
+    const uid = select.value;
+    if (!uid) return;
+
+    const user = users.find(u => (u.uid || u.id) === uid);
+    if (user) {
+        simSender = {
+            id: user.uid || user.id,
+            name: user.username || user.nickname || 'Kullanıcı',
+            imageUrl: cleanProfileImageUrl(user.profileImageUrl),
+            isPreset: false,
+            role: 'Gerçek Üye'
+        };
+        updateSimSenderPreview();
+        startLiveChatStream();
+    }
+};
+
+window.fetchSimUserByUid = async function(targetType, inputUid) {
+    const uidInput = document.getElementById(targetType === 'receiver' ? 'simReceiverUidInput' : 'simSenderUidInput');
+    const uid = (inputUid || (uidInput ? uidInput.value : '')).trim();
+
+    if (!uid) {
+        showError('Lütfen geçerli bir UID girin!');
+        return;
+    }
+
+    try {
+        const doc = await db.collection('users').doc(uid).get();
+        if (doc.exists) {
+            const data = doc.data();
+            const userInfo = {
+                id: doc.id,
+                name: data.username || data.nickname || 'Kullanıcı',
+                imageUrl: cleanProfileImageUrl(data.profileImageUrl),
+                email: data.email || '',
+                isAdmin: data.isAdmin === true || data.isadmin === true,
+                role: 'Veritabanı Üyesi'
+            };
+
+            if (targetType === 'receiver') {
+                simReceiver = userInfo;
+                updateSimReceiverPreview();
+                showSuccess(`Alıcı kullanıcı bulundu: ${userInfo.name}`);
+            } else {
+                simSender = userInfo;
+                updateSimSenderPreview();
+                showSuccess(`Gönderen kullanıcı bulundu: ${userInfo.name}`);
+            }
+            startLiveChatStream();
+        } else {
+            showError(`UID "${uid}" veritabanında bulunamadı!`);
+        }
+    } catch (e) {
+        console.error('Fetch user by UID error:', e);
+        showError('Kullanıcı sorgulama hatası: ' + e.message);
+    }
+};
+
+window.setSimSenderPreset = function(presetType) {
+    const dropdownContainer = document.getElementById('simSenderDropdownContainer');
+
+    if (presetType === 'user1') {
+        if (dropdownContainer) dropdownContainer.classList.add('hidden');
+        simSender = {
+            id: 'test_user_ahmet',
+            name: 'Ahmet Yılmaz (Test)',
+            imageUrl: '',
+            isPreset: true,
+            role: 'Test Kullanıcı 1'
+        };
+    } else if (presetType === 'user2') {
+        if (dropdownContainer) dropdownContainer.classList.add('hidden');
+        simSender = {
+            id: 'test_user_zeynep',
+            name: 'Zeynep Kaya (Test)',
+            imageUrl: 'assets/profil.jpg',
+            isPreset: true,
+            role: 'Test Kullanıcı 2'
+        };
+    } else if (presetType === 'admin') {
+        if (dropdownContainer) dropdownContainer.classList.add('hidden');
+        simSender = {
+            id: 'admin',
+            name: 'FırsatKolik Yönetim',
+            imageUrl: 'assets/logo.webp',
+            isPreset: true,
+            role: 'Resmi Yönetim'
+        };
+    } else if (presetType === 'custom') {
+        if (dropdownContainer) dropdownContainer.classList.remove('hidden');
+        populateSimUserDropdowns();
+        return;
+    }
+
+    updateSimSenderPreview();
+    startLiveChatStream();
+};
+
+function updateSimSenderPreview() {
+    const nameEl = document.getElementById('simSenderName');
+    const uidEl = document.getElementById('simSenderUid');
+    const badgeEl = document.getElementById('simSenderRoleBadge');
+    const placeholderEl = document.getElementById('simSenderAvatarPlaceholder');
+    const imgEl = document.getElementById('simSenderAvatarImg');
+
+    if (nameEl) nameEl.textContent = simSender.name;
+    if (uidEl) uidEl.textContent = `UID: ${simSender.id}`;
+    if (badgeEl) badgeEl.textContent = simSender.role || 'Sender';
+
+    if (simSender.imageUrl) {
+        if (imgEl) {
+            imgEl.src = simSender.imageUrl;
+            imgEl.classList.remove('hidden');
+        }
+        if (placeholderEl) placeholderEl.classList.add('hidden');
+    } else {
+        if (imgEl) imgEl.classList.add('hidden');
+        if (placeholderEl) {
+            placeholderEl.textContent = (simSender.name || 'S').charAt(0).toUpperCase();
+            placeholderEl.classList.remove('hidden');
+        }
+    }
+}
+
+function updateSimReceiverPreview() {
+    const nameEl = document.getElementById('simReceiverName');
+    const uidEl = document.getElementById('simReceiverUid');
+    const badgeEl = document.getElementById('simReceiverRoleBadge');
+    const placeholderEl = document.getElementById('simReceiverAvatarPlaceholder');
+    const imgEl = document.getElementById('simReceiverAvatarImg');
+
+    if (!simReceiver) {
+        if (nameEl) nameEl.textContent = 'Alıcı Seçilmedi';
+        if (uidEl) uidEl.textContent = 'UID: -';
+        if (badgeEl) badgeEl.classList.add('hidden');
+        if (imgEl) imgEl.classList.add('hidden');
+        if (placeholderEl) {
+            placeholderEl.textContent = '?';
+            placeholderEl.classList.remove('hidden');
+        }
+        return;
+    }
+
+    if (nameEl) nameEl.textContent = simReceiver.name;
+    if (uidEl) uidEl.textContent = `UID: ${simReceiver.id}`;
+
+    if (simReceiver.isAdmin) {
+        if (badgeEl) {
+            badgeEl.textContent = 'Admin';
+            badgeEl.classList.remove('hidden');
+        }
+    } else {
+        if (badgeEl) badgeEl.classList.add('hidden');
+    }
+
+    if (simReceiver.imageUrl) {
+        if (imgEl) {
+            imgEl.src = simReceiver.imageUrl;
+            imgEl.classList.remove('hidden');
+        }
+        if (placeholderEl) placeholderEl.classList.add('hidden');
+    } else {
+        if (imgEl) imgEl.classList.add('hidden');
+        if (placeholderEl) {
+            placeholderEl.textContent = (simReceiver.name || 'R').charAt(0).toUpperCase();
+            placeholderEl.classList.remove('hidden');
+        }
+    }
+}
+
+window.insertSimTemplate = function(templateText) {
+    const textarea = document.getElementById('simMessageText');
+    if (textarea) {
+        textarea.value = templateText;
+        textarea.focus();
+    }
+};
+
+window.toggleSimDealAttachment = function() {
+    const container = document.getElementById('simDealAttachContainer');
+    const toggleText = document.getElementById('simDealAttachToggleText');
+
+    if (container) {
+        if (container.classList.contains('hidden')) {
+            container.classList.remove('hidden');
+            if (toggleText) toggleText.textContent = '- Fırsat Bağlantısını Kaldır';
+            populateSimDealDropdown();
+        } else {
+            container.classList.add('hidden');
+            if (toggleText) toggleText.textContent = '+ Fırsat Bağla';
+            simSelectedDeal = null;
+            const preview = document.getElementById('simDealPreview');
+            if (preview) preview.classList.add('hidden');
+        }
+    }
+};
+
+window.handleSimDealSelectChange = function() {
+    const select = document.getElementById('simDealSelect');
+    const preview = document.getElementById('simDealPreview');
+    const imgEl = document.getElementById('simDealPreviewImg');
+    const titleEl = document.getElementById('simDealPreviewTitle');
+    const priceEl = document.getElementById('simDealPreviewPrice');
+
+    if (!select || !select.value) {
+        simSelectedDeal = null;
+        if (preview) preview.classList.add('hidden');
+        return;
+    }
+
+    const deal = deals.find(d => d.id === select.value);
+    if (deal) {
+        simSelectedDeal = deal;
+        if (preview) preview.classList.remove('hidden');
+        if (imgEl) imgEl.src = deal.imageUrl || deal.gorselUrl || '';
+        if (titleEl) titleEl.textContent = deal.title || deal.baslik || '';
+        if (priceEl) priceEl.textContent = `${deal.price || deal.fiyat || 0} TL`;
+    }
+};
+
+window.sendSimulatedMessage = async function() {
+    if (!simReceiver) {
+        showError('Lütfen mesaj gönderilecek bir Alıcı Kullanıcı (Receiver) seçin!');
+        return;
+    }
+
+    const textarea = document.getElementById('simMessageText');
+    const text = (textarea ? textarea.value : '').trim();
+
+    if (!text) {
+        showError('Lütfen gönderilecek mesaj metnini yazın!');
+        return;
+    }
+
+    const btn = document.getElementById('simSendBtn');
+    const originalHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[20px]">sync</span><span>Gönderiliyor...</span>';
+    }
+
+    try {
+        console.log(`🚀 Simüle mesaj gönderiliyor: ${simSender.name} -> ${simReceiver.name} (${simReceiver.id})`);
+
+        const messageData = {
+            senderId: simSender.id,
+            senderName: simSender.name,
+            senderImageUrl: simSender.imageUrl || '',
+            receiverId: simReceiver.id,
+            receiverName: simReceiver.name || 'Kullanıcı',
+            receiverImageUrl: simReceiver.imageUrl || '',
+            text: text,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            isRead: false,
+            isReadByAdmin: false,
+            deletedBy: []
+        };
+
+        if (simSelectedDeal) {
+            messageData.dealId = simSelectedDeal.id;
+            messageData.dealTitle = simSelectedDeal.title || simSelectedDeal.baslik || '';
+            messageData.dealImageUrl = simSelectedDeal.imageUrl || simSelectedDeal.gorselUrl || '';
+            messageData.dealPrice = simSelectedDeal.price ? String(simSelectedDeal.price) : '';
+            messageData.dealStore = simSelectedDeal.store || simSelectedDeal.magazaAdi || '';
+        }
+
+        const docRef = await db.collection('messages').add(messageData);
+        console.log('✅ Simüle mesaj yazıldı! Message ID:', docRef.id);
+
+        showSuccess(`✅ Mesaj simüle edildi! FCM bildirimi tetiklendi. (ID: ${docRef.id.substring(0, 8)}...)`);
+
+        if (textarea) textarea.value = '';
+
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+
+        // Restart/refresh chat stream to show message immediately
+        startLiveChatStream();
+    } catch (error) {
+        console.error('❌ Mesaj simülasyon hatası:', error);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+        showError('Mesaj gönderilirken hata oluştu: ' + error.message);
+    }
+};
+
+window.sendQuickSimMessage = function() {
+    const input = document.getElementById('simQuickInput');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    const textarea = document.getElementById('simMessageText');
+    if (textarea) textarea.value = text;
+
+    input.value = '';
+    window.sendSimulatedMessage();
+};
+
+function startLiveChatStream() {
+    if (simChatUnsubscribe) {
+        simChatUnsubscribe();
+        simChatUnsubscribe = null;
+    }
+
+    const container = document.getElementById('simChatStreamContainer');
+    const headerTitle = document.getElementById('chatHeaderTitle');
+    const headerSubtitle = document.getElementById('chatHeaderSubtitle');
+    const headerAvatarImg = document.getElementById('chatHeaderAvatarImg');
+    const headerAvatarPlaceholder = document.getElementById('chatHeaderAvatarPlaceholder');
+
+    if (!simReceiver) {
+        if (headerTitle) headerTitle.textContent = 'Canlı Sohbet Odası';
+        if (headerSubtitle) headerSubtitle.textContent = 'Lütfen sol taraftan Alıcı ve Gönderen seçin.';
+        if (container) {
+            container.innerHTML = `
+                <div id="simChatEmptyState" class="m-auto flex flex-col items-center justify-center text-center p-8 max-w-sm">
+                    <div class="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-3">
+                        <span class="material-symbols-outlined text-3xl">chat_bubble</span>
+                    </div>
+                    <h4 class="font-bold text-base text-slate-900 dark:text-white mb-1">Canlı Sohbet Simülatörü</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Sol panellerden **Alıcı** kullanıcıyı seçtiğinizde, ikisi arasındaki canlı sohbet akışı burada anlık olarak akacaktır.
+                    </p>
+                </div>
+            `;
+        }
+        return;
+    }
+
+    if (headerTitle) headerTitle.textContent = `${simSender.name} ➔ ${simReceiver.name}`;
+    if (headerSubtitle) headerSubtitle.textContent = `Alıcı UID: ${simReceiver.id} • Gönderen UID: ${simSender.id}`;
+
+    if (simReceiver.imageUrl) {
+        if (headerAvatarImg) {
+            headerAvatarImg.src = simReceiver.imageUrl;
+            headerAvatarImg.classList.remove('hidden');
+        }
+        if (headerAvatarPlaceholder) headerAvatarPlaceholder.classList.add('hidden');
+    } else {
+        if (headerAvatarImg) headerAvatarImg.classList.add('hidden');
+        if (headerAvatarPlaceholder) {
+            headerAvatarPlaceholder.textContent = (simReceiver.name || 'R').charAt(0).toUpperCase();
+            headerAvatarPlaceholder.classList.remove('hidden');
+        }
+    }
+
+    console.log(`📡 Canlı sohbet akışı başlatılıyor: ${simSender.id} <-> ${simReceiver.id}`);
+
+    simChatUnsubscribe = db.collection('messages')
+        .where('senderId', 'in', [simSender.id, simReceiver.id])
+        .onSnapshot((snapshot) => {
+            const messagesList = [];
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                if ((d.senderId === simSender.id && d.receiverId === simReceiver.id) ||
+                    (d.senderId === simReceiver.id && d.receiverId === simSender.id)) {
+                    messagesList.push({
+                        id: doc.id,
+                        ...d,
+                        createdAtDate: d.createdAt ? (d.createdAt.toDate ? d.createdAt.toDate() : new Date(d.createdAt)) : new Date()
+                    });
+                }
+            });
+
+            messagesList.sort((a, b) => a.createdAtDate - b.createdAtDate);
+            renderLiveChatMessages(messagesList);
+        }, (err) => {
+            console.warn('Chat stream query fallback triggered:', err);
+            db.collection('messages').get().then(snapshot => {
+                const messagesList = [];
+                snapshot.forEach(doc => {
+                    const d = doc.data();
+                    if ((d.senderId === simSender.id && d.receiverId === simReceiver.id) ||
+                        (d.senderId === simReceiver.id && d.receiverId === simSender.id)) {
+                        messagesList.push({
+                            id: doc.id,
+                            ...d,
+                            createdAtDate: d.createdAt ? (d.createdAt.toDate ? d.createdAt.toDate() : new Date(d.createdAt)) : new Date()
+                        });
+                    }
+                });
+                messagesList.sort((a, b) => a.createdAtDate - b.createdAtDate);
+                renderLiveChatMessages(messagesList);
+            });
+        });
+}
+
+function renderLiveChatMessages(messagesList) {
+    const container = document.getElementById('simChatStreamContainer');
+    if (!container) return;
+
+    if (messagesList.length === 0) {
+        container.innerHTML = `
+            <div class="m-auto flex flex-col items-center justify-center text-center p-6 bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm max-w-sm">
+                <span class="material-symbols-outlined text-4xl text-slate-400 mb-2">mark_chat_unread</span>
+                <p class="font-bold text-sm text-slate-800 dark:text-slate-200">Henüz sohbet mesajı yok</p>
+                <p class="text-xs text-slate-400 mt-1">Aşağıdaki mesaj kutusundan ilk test mesajını gönderin!</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = messagesList.map(msg => {
+        const isMe = msg.senderId === simSender.id;
+        const timeStr = msg.createdAtDate ? msg.createdAtDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '';
+        const isReadBadge = msg.isRead
+            ? '<span class="text-blue-400 font-bold" title="Okundu">✓✓</span>'
+            : '<span class="text-slate-400" title="İletildi">✓</span>';
+
+        let dealBadgeHtml = '';
+        if (msg.dealTitle) {
+            dealBadgeHtml = `
+                <div class="mb-2 p-2 bg-slate-900/30 rounded border border-white/10 flex items-center gap-2 text-xs">
+                    ${msg.dealImageUrl ? `<img src="${msg.dealImageUrl}" class="w-8 h-8 object-cover rounded bg-slate-800">` : ''}
+                    <div class="flex flex-col min-w-0 flex-1">
+                        <span class="font-bold truncate">${escapeHtml(msg.dealTitle)}</span>
+                        ${msg.dealPrice ? `<span class="text-amber-400 font-semibold">${escapeHtml(msg.dealPrice)} TL</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (isMe) {
+            return `
+                <div class="flex flex-col items-end max-w-[85%] self-end">
+                    <div class="p-3.5 bg-primary text-white rounded-2xl rounded-tr-xs shadow-sm flex flex-col gap-1">
+                        <span class="text-[10px] font-bold text-blue-200">${escapeHtml(msg.senderName || simSender.name)}</span>
+                        ${dealBadgeHtml}
+                        <p class="text-sm font-medium leading-relaxed whitespace-pre-wrap">${escapeHtml(msg.text)}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-1 px-1 text-[10px] text-slate-400 font-medium">
+                        <span>${timeStr}</span>
+                        ${isReadBadge}
+                    </div>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="flex items-start gap-2.5 max-w-[85%] self-start">
+                    <div class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-500 font-bold flex items-center justify-center text-xs overflow-hidden shrink-0 mt-1">
+                        ${msg.senderImageUrl ? `<img src="${msg.senderImageUrl}" class="w-full h-full object-cover">` : (msg.senderName || 'R').charAt(0).toUpperCase()}
+                    </div>
+                    <div class="flex flex-col items-start">
+                        <div class="p-3.5 bg-white dark:bg-surface-dark text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 rounded-2xl rounded-tl-xs shadow-sm flex flex-col gap-1">
+                            <span class="text-[10px] font-bold text-emerald-500">${escapeHtml(msg.senderName || simReceiver.name)}</span>
+                            ${dealBadgeHtml}
+                            <p class="text-sm font-medium leading-relaxed whitespace-pre-wrap">${escapeHtml(msg.text)}</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 mt-1 px-1 text-[10px] text-slate-400 font-medium">
+                            <span>${timeStr}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    }).join('');
+
+    setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+    }, 50);
+}
+
+window.reloadLiveChatStream = function() {
+    startLiveChatStream();
+};
+
+async function loadModerationMessages() {
+    const tableBody = document.getElementById('messagesTableBody');
+    if (!tableBody) return;
+
+    try {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="material-symbols-outlined text-4xl opacity-50 animate-spin">sync</span>
+                        <p>Tüm mesajlar yükleniyor...</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+
+        const snapshot = await db.collection('messages').orderBy('createdAt', 'desc').limit(100).get();
+        if (snapshot.empty) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                        Henüz hiç mesaj bulunmuyor.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tableBody.innerHTML = snapshot.docs.map(doc => {
+            const m = doc.data();
+            const date = m.createdAt ? (m.createdAt.toDate ? m.createdAt.toDate() : new Date(m.createdAt)) : new Date();
+            const dateStr = date.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            
+            return `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors text-sm">
+                    <td class="px-6 py-4 text-xs text-slate-400 whitespace-nowrap">${dateStr}</td>
+                    <td class="px-6 py-4">
+                        <div class="flex flex-col">
+                            <span class="font-bold text-slate-900 dark:text-white">${escapeHtml(m.senderName || 'Kullanıcı')} ➔ ${escapeHtml(m.receiverName || 'Kullanıcı')}</span>
+                            <span class="text-[10px] font-mono text-slate-400">${escapeHtml((m.senderId || '').substring(0,8))}... ➔ ${escapeHtml((m.receiverId || '').substring(0,8))}...</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 max-w-md">
+                        <p class="truncate font-medium text-slate-800 dark:text-slate-200" title="${escapeHtml(m.text || '')}">${escapeHtml(m.text || '-')}</p>
+                        ${m.dealTitle ? `<span class="text-[11px] text-primary font-semibold truncate block">🏷️ Fırsat: ${escapeHtml(m.dealTitle)}</span>` : ''}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        ${m.isRead ? '<span class="px-2 py-0.5 bg-blue-500/10 text-blue-500 rounded text-xs font-semibold">Okundu</span>' : '<span class="px-2 py-0.5 bg-amber-500/10 text-amber-500 rounded text-xs font-semibold">Okunmadı</span>'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right">
+                        <button onclick="window.deleteSingleMessage('${doc.id}')" class="p-1.5 text-red-500 hover:text-red-700 transition-colors" title="Mesajı Sil">
+                            <span class="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error('Moderation messages error:', e);
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="5" class="px-6 py-8 text-center text-red-500 text-sm">
+                    Mesajlar yüklenirken hata oluştu: ${e.message}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+window.deleteSingleMessage = async function(messageId) {
+    if (!confirm('Bu mesajı silmek istediğinize emin misiniz?')) return;
+    try {
+        await db.collection('messages').doc(messageId).delete();
+        showSuccess('Mesaj silindi.');
+        loadModerationMessages();
+    } catch (e) {
+        showError('Silme hatası: ' + e.message);
+    }
+};
+
+window.deleteAllMessages = async function() {
+    if (!confirm('TÜM MESAJLARI veritabanından kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) return;
+    try {
+        const snapshot = await db.collection('messages').get();
+        const batch = db.batch();
+        snapshot.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        showSuccess('Tüm mesajlar başarıyla silindi!');
+        loadMessages();
+    } catch (e) {
+        showError('Toplu silme hatası: ' + e.message);
+    }
+};
 
 function updateMenuActiveState(activeView) {
     const menuItems = document.querySelectorAll('nav a');

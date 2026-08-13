@@ -88,7 +88,6 @@ class MessageService {
           if (!controller.isClosed) {
             final Map<String, Message> messageMap = {};
             for (var m in sentMessages) {
-              // Benden silinmişse dahil etme
               if (!m.deletedBy.contains(userId1)) {
                 messageMap[m.id] = m;
               }
@@ -100,16 +99,18 @@ class MessageService {
             }
             final all = messageMap.values.toList()
               ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-            controller.add(all);
+
+            // En yeni `limit` kadar mesajı al
+            final result = all.length > limit ? all.sublist(all.length - limit) : all;
+            controller.add(result);
           }
         }
 
-        // Gönderilen mesajlar (userId1 -> userId2)
+        // Gönderilen mesajlar (userId1 -> userId2) - İndeks hatası vermeyen saf equality sorgusu
         sentSub = _firestore
             .collection('messages')
             .where('senderId', isEqualTo: userId1)
             .where('receiverId', isEqualTo: userId2)
-            .limit(limit)
             .snapshots()
             .listen(
           (snap) {
@@ -123,12 +124,11 @@ class MessageService {
           },
         );
 
-        // Alınan mesajlar (userId2 -> userId1)
+        // Alınan mesajlar (userId2 -> userId1) - İndeks hatası vermeyen saf equality sorgusu
         receivedSub = _firestore
             .collection('messages')
             .where('senderId', isEqualTo: userId2)
             .where('receiverId', isEqualTo: userId1)
-            .limit(limit)
             .snapshots()
             .listen(
           (snap) {
