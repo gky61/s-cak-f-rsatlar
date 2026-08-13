@@ -816,11 +816,21 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     }
 
                     // Optimistic mesajları server mesajları ile birleştir
+                    // Dedup: 'sending' durumundaki optimistic mesajı, aynı içerikte server mesajı zaten varsa ekleme
+                    // (Firestore stream, sendMessage'ın docId dönüşünden önce yayınlayabilir → anlık çift görünme önlemi)
                     final Map<String, Message> mergedMap = {};
                     for (var m in serverMessages) {
                       mergedMap[m.id] = m;
                     }
                     for (var m in _optimisticMessages) {
+                      if (m.status == 'sending') {
+                        final hasDuplicate = serverMessages.any((sm) =>
+                          sm.senderId == m.senderId &&
+                          sm.text == m.text &&
+                          sm.createdAt.difference(m.createdAt).inSeconds.abs() < 30
+                        );
+                        if (hasDuplicate) continue; // Server zaten bu mesajı yayınladı, optimistic kopyayı atla
+                      }
                       mergedMap[m.id] = m;
                     }
                     // reverse: true için YENİDEN ESKİYE (Descending) sıralama

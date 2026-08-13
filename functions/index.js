@@ -944,12 +944,12 @@ exports.onUserMessageCreated = functions.firestore
       functions.logger.info(`📤 Mesaj bildirimi ${devices.length} cihaza gönderiliyor...`);
 
       const promises = devices.map(async (device) => {
+        // DATA-ONLY payload: notification alanı YOK
+        // Böylece Flutter onMessage handler'ı activeChatUserId kontrolü yapabilir
+        // ve kullanıcı zaten o sohbetteyse bildirimi bastırabilir.
+        // Eğer notification alanı olsaydı, Android OS ön planda bile otomatik bildirim gösterirdi.
         const payload = {
           token: device.token,
-          notification: {
-            title: `💬 ${senderName}`,
-            body: notificationBody,
-          },
           data: {
             type: 'message',
             messageId: messageId,
@@ -963,15 +963,6 @@ exports.onUserMessageCreated = functions.firestore
           android: {
             priority: 'high',
             ttl: 86400000, // 24 saat
-            notification: {
-              channelId: 'messages_channel_v3',
-              sound: 'default',
-              color: '#4CAF50',
-              tag: `msg_${senderId}_${receiverId}`,
-              icon: '@mipmap/ic_launcher',
-              defaultSound: true,
-              defaultVibrateTimings: true,
-            },
           },
           apns: {
             headers: {
@@ -982,6 +973,7 @@ exports.onUserMessageCreated = functions.firestore
               aps: {
                 sound: 'default',
                 badge: 1,
+                'content-available': 1,
                 'interruption-level': 'active',
                 category: 'USER_MESSAGE',
               },
