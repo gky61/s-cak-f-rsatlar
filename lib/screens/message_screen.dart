@@ -74,6 +74,11 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   int _newIncomingCount = 0;
   int _lastKnownMessageCount = 0;
 
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _otherUserStream;
+  Stream<List<Message>>? _messagesStream;
+  Stream<bool>? _typingStream;
+  Stream<DocumentSnapshot>? _stickyDealStream;
+
   @override
   void initState() {
     super.initState();
@@ -84,9 +89,60 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     }
 
     _checkBlockAndMuteStatus();
+    _initStreams();
 
     _scrollController.addListener(_handleScroll);
     _messageController.addListener(_onTextChanged);
+  }
+
+  void _initStreams() {
+    final currentUserId = _authService.currentUser?.uid;
+
+    if (!widget.isAdminMessage && widget.otherUserId.isNotEmpty) {
+      _otherUserStream = FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.otherUserId)
+          .snapshots();
+
+      if (currentUserId != null) {
+        _typingStream = _firestoreService.getTypingStream(
+          currentUserId: currentUserId,
+          otherUserId: widget.otherUserId,
+        );
+      }
+    }
+
+    _updateMessagesStream();
+
+    if (widget.initialDealId != null) {
+      _stickyDealStream = FirebaseFirestore.instance
+          .collection('deals')
+          .doc(widget.initialDealId)
+          .snapshots();
+    }
+  }
+
+  void _updateMessagesStream() {
+    final currentUserId = _authService.currentUser?.uid;
+    if (widget.isAdminMessage) {
+      _messagesStream = FirebaseFirestore.instance
+          .collection('adminToUserMessages')
+          .where('userId', isEqualTo: currentUserId)
+          .snapshots()
+          .map((snap) {
+        final list = snap.docs.map((d) => Message.fromAdminFirestore(d)).toList();
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return list;
+      });
+    } else if (currentUserId != null) {
+      _messagesStream = _firestoreService.getConversationStream(
+        currentUserId,
+        widget.otherUserId,
+        limit: _messageLimit,
+      );
+    } else {
+      _messagesStream = Stream.value([]);
+    }
   }
 
   Future<void> _checkBlockAndMuteStatus() async {
@@ -121,10 +177,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     if (currentOffset > _scrollController.position.maxScrollExtent - 250 &&
         !_isLoadingMore &&
         _lastKnownMessageCount >= _messageLimit) {
-      setState(() {
-        _isLoadingMore = true;
-        _messageLimit += 40;
-      });
+      _isLoadingMore = true;
+      _messageLimit += 40;
+      _updateMessagesStream();
+      setState(() {});
       Future.delayed(const Duration(milliseconds: 600), () {
         if (mounted) setState(() => _isLoadingMore = false);
       });
@@ -583,11 +639,15 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     final textSub = isDark ? Colors.grey[400] : AppTheme.textSecondary;
     final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
 
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('users').doc(currentUserId).snapshots(),
-      builder: (context, currentUserSnapshot) {
-        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).snapshots(),
+    return Scaffold(
+      backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF6F8FA),
+      appBar: AppBar(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        foregroundColor: textMain,
+        elevation: 0,
+        titleSpacing: 0,
+        title: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: _otherUserStream,
           builder: (context, otherUserSnapshot) {
             String otherUserImageUrl = widget.otherUserImageUrl;
             String otherUserName = widget.otherUserName;
@@ -605,265 +665,239 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
               }
             }
 
-            return Scaffold(
-              backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF6F8FA),
-              appBar: AppBar(
-                backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-                foregroundColor: textMain,
-                elevation: 0,
-                titleSpacing: 0,
-                title: InkWell(
-                  onTap: widget.isAdminMessage || isUserDeleted
-                      ? null
-                      : () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => ProfileScreen(userId: widget.otherUserId)),
-                          );
-                        },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
-                              width: 1,
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: widget.isAdminMessage
-                                ? Container(
-                                    color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
-                                    child: Icon(Icons.shield_outlined, color: primaryColor, size: 22),
-                                  )
-                                : _buildAvatar(otherUserImageUrl, 40, isDeleted: isUserDeleted),
-                          ),
+            return InkWell(
+              onTap: widget.isAdminMessage || isUserDeleted
+                  ? null
+                  : () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ProfileScreen(userId: widget.otherUserId)),
+                      );
+                    },
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+                          width: 1,
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      ),
+                      child: ClipOval(
+                        child: widget.isAdminMessage
+                            ? Container(
+                                color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                                child: Icon(Icons.shield_outlined, color: primaryColor, size: 22),
+                              )
+                            : _buildAvatar(otherUserImageUrl, 40, isDeleted: isUserDeleted),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      widget.isAdminMessage ? 'FırsatKolik Yönetim' : otherUserName,
-                                      style: TextStyle(
-                                        fontSize: 15.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: textMain,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                              Flexible(
+                                child: Text(
+                                  widget.isAdminMessage ? 'FırsatKolik Yönetim' : otherUserName,
+                                  style: TextStyle(
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: textMain,
                                   ),
-                                  if (widget.isAdminMessage) ...[
-                                    const SizedBox(width: 5),
-                                    Icon(Icons.verified_user_rounded, color: primaryColor, size: 15),
-                                  ],
-                                  if (_isMuted) ...[
-                                    const SizedBox(width: 5),
-                                    Icon(Icons.notifications_off_outlined, size: 14, color: textSub),
-                                  ],
-                                ],
-                              ),
-                              // Typing veya Durum
-                              if (!widget.isAdminMessage && currentUserId != null)
-                                StreamBuilder<bool>(
-                                  stream: _firestoreService.getTypingStream(
-                                    currentUserId: currentUserId,
-                                    otherUserId: widget.otherUserId,
-                                  ),
-                                  builder: (context, typingSnap) {
-                                    final isTyping = typingSnap.data == true;
-                                    if (isTyping) {
-                                      return Row(
-                                        children: [
-                                          Text(
-                                            'yazıyor',
-                                            style: TextStyle(
-                                              fontSize: 11.5,
-                                              color: primaryColor,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          _buildAnimatedTypingDots(primaryColor),
-                                        ],
-                                      );
-                                    }
-
-                                    return Row(
-                                      children: [
-                                        Container(
-                                          width: 6,
-                                          height: 6,
-                                          decoration: BoxDecoration(
-                                            color: isUserDeleted ? Colors.grey : Colors.green,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 5),
-                                        Text(
-                                          isUserDeleted ? 'Hesap Silindi' : 'Çevrimiçi',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: textSub,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
+                                  overflow: TextOverflow.ellipsis,
                                 ),
+                              ),
+                              if (widget.isAdminMessage) ...[
+                                const SizedBox(width: 5),
+                                Icon(Icons.verified_user_rounded, color: primaryColor, size: 15),
+                              ],
+                              if (_isMuted) ...[
+                                const SizedBox(width: 5),
+                                Icon(Icons.notifications_off_outlined, size: 14, color: textSub),
+                              ],
                             ],
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                actions: [
-                  if (!widget.isAdminMessage)
-                    IconButton(
-                      icon: const Icon(Icons.more_vert_rounded),
-                      onPressed: _showAppBarOverflowMenu,
-                    ),
-                ],
-              ),
-              body: Stack(
-                children: [
-                  Column(
-                    children: [
-                      // Sticky Fırsat Bilgi Kartı
-                      if (widget.initialDealId != null) _buildStickyDealCard(isDark, primaryColor, surfaceColor, textMain, textSub),
-
-                      // Mesaj Akışı (REVERSE: TRUE - SIFIR TAKILMA VE DOĞAL AŞAĞIDAN BAŞLAMA)
-                      Expanded(
-                        child: StreamBuilder<List<Message>>(
-                          stream: widget.isAdminMessage
-                              ? FirebaseFirestore.instance
-                                  .collection('adminToUserMessages')
-                                  .where('userId', isEqualTo: currentUserId)
-                                  .snapshots()
-                                  .map((snap) {
-                                  final list = snap.docs.map((d) => Message.fromAdminFirestore(d)).toList();
-                                  list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-                                  return list;
-                                })
-                              : (currentUserId != null
-                                  ? _firestoreService.getConversationStream(
-                                      currentUserId,
-                                      widget.otherUserId,
-                                      limit: _messageLimit,
-                                    )
-                                  : Stream.value([])),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting && _lastKnownMessageCount == 0) {
-                              return const Center(child: CircularProgressIndicator());
-                            }
-
-                            final serverMessages = snapshot.data ?? [];
-                            _lastKnownMessageCount = serverMessages.length;
-
-                            // Okundu olarak işaretle
-                            if (serverMessages.isNotEmpty) {
-                              _markMessagesAsRead(serverMessages);
-                            }
-
-                            // Optimistic mesajları server mesajları ile birleştir
-                            final Map<String, Message> mergedMap = {};
-                            for (var m in serverMessages) {
-                              mergedMap[m.id] = m;
-                            }
-                            for (var m in _optimisticMessages) {
-                              mergedMap[m.id] = m;
-                            }
-                            // reverse: true için YENİDEN ESKİYE (Descending) sıralama
-                            final allMessages = mergedMap.values.toList()
-                              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-                            if (allMessages.isEmpty) {
-                              return _buildEmptyState(otherUserName, otherUserImageUrl, isDark, primaryColor, textMain, textSub);
-                            }
-
-                            return ListView.builder(
-                              controller: _scrollController,
-                              reverse: true, // EN ÖNEMLİ UX GELİŞTİRMESİ: Doğal olarak en son mesajdan başlar
-                              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              itemCount: allMessages.length + (_isLoadingMore ? 1 : 0),
-                              itemBuilder: (context, index) {
-                                // Eski mesajları yukarı kaydırınca en üstte (reverse: true olduğu için listenin sonunda) loading döner
-                                if (_isLoadingMore && index == allMessages.length) {
-                                  return const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(12.0),
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
+                          // Typing veya Durum
+                          if (!widget.isAdminMessage && currentUserId != null)
+                            StreamBuilder<bool>(
+                              stream: _typingStream,
+                              builder: (context, typingSnap) {
+                                final isTyping = typingSnap.data == true;
+                                if (isTyping) {
+                                  return Row(
+                                    children: [
+                                      Text(
+                                        'yazıyor',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: primaryColor,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
-                                    ),
+                                      const SizedBox(width: 4),
+                                      _buildAnimatedTypingDots(primaryColor),
+                                    ],
                                   );
                                 }
 
-                                final message = allMessages[index];
-                                final isMe = !message.isAdminMessage && message.senderId == currentUserId;
-
-                                // Tarih ayracı kontrolü (reverse: true için bir önceki gün kontrolü)
-                                final bool showDate = index == allMessages.length - 1 ||
-                                    allMessages[index].createdAt.day != allMessages[index + 1].createdAt.day ||
-                                    allMessages[index].createdAt.month != allMessages[index + 1].createdAt.month ||
-                                    allMessages[index].createdAt.year != allMessages[index + 1].createdAt.year;
-
-                                return Column(
+                                return Row(
                                   children: [
-                                    if (showDate) _buildDateBadge(message.createdAt, isDark),
-                                    _buildMessageRow(message, isMe, isDark, primaryColor, surfaceColor, textMain, textSub),
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: isUserDeleted ? Colors.grey : Colors.green,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      isUserDeleted ? 'Hesap Silindi' : 'Çevrimiçi',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: textSub,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
                                   ],
                                 );
                               },
-                            );
-                          },
-                        ),
-                      ),
-
-                      // Alt Giriş Alanı / Kilitli Durum
-                      _buildBottomBar(isDark, primaryColor, surfaceColor, textMain, textSub),
-                    ],
-                  ),
-
-                  // "1 Yeni Mesaj ↓" Floating Butonu (reverse: true ile 0.0'a iner)
-                  if (_showScrollToBottomBtn)
-                    Positioned(
-                      right: 16,
-                      bottom: 84,
-                      child: FloatingActionButton.extended(
-                        onPressed: () => _scrollToBottom(animated: true),
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
-                        elevation: 6,
-                        icon: const Icon(Icons.arrow_downward_rounded, size: 18),
-                        label: Text(
-                          _newIncomingCount > 0 ? '$_newIncomingCount Yeni Mesaj' : 'En Sona İn',
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-                        ),
+                            ),
+                        ],
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
             );
           },
-        );
-      },
+        ),
+        actions: [
+          if (!widget.isAdminMessage)
+            IconButton(
+              icon: const Icon(Icons.more_vert_rounded),
+              onPressed: _showAppBarOverflowMenu,
+            ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              // Sticky Fırsat Bilgi Kartı
+              if (widget.initialDealId != null) _buildStickyDealCard(isDark, primaryColor, surfaceColor, textMain, textSub),
+
+              // Mesaj Akışı (REVERSE: TRUE - SIFIR TAKILMA VE DOĞAL AŞAĞIDAN BAŞLAMA)
+              Expanded(
+                child: StreamBuilder<List<Message>>(
+                  stream: _messagesStream,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting && _lastKnownMessageCount == 0) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final serverMessages = snapshot.data ?? [];
+                    _lastKnownMessageCount = serverMessages.length;
+
+                    // Okundu olarak işaretle (Post Frame Callback ile güvenli)
+                    if (serverMessages.isNotEmpty) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _markMessagesAsRead(serverMessages);
+                      });
+                    }
+
+                    // Optimistic mesajları server mesajları ile birleştir
+                    final Map<String, Message> mergedMap = {};
+                    for (var m in serverMessages) {
+                      mergedMap[m.id] = m;
+                    }
+                    for (var m in _optimisticMessages) {
+                      mergedMap[m.id] = m;
+                    }
+                    // reverse: true için YENİDEN ESKİYE (Descending) sıralama
+                    final allMessages = mergedMap.values.toList()
+                      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+                    if (allMessages.isEmpty) {
+                      return _buildEmptyState(widget.otherUserName, widget.otherUserImageUrl, isDark, primaryColor, textMain, textSub);
+                    }
+
+                    return ListView.builder(
+                      controller: _scrollController,
+                      reverse: true, // EN ÖNEMLİ UX GELİŞTİRMESİ: Doğal olarak en son mesajdan başlar
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      itemCount: allMessages.length + (_isLoadingMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        // Eski mesajları yukarı kaydırınca en üstte (reverse: true olduğu için listenin sonunda) loading döner
+                        if (_isLoadingMore && index == allMessages.length) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(12.0),
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          );
+                        }
+
+                        final message = allMessages[index];
+                        final isMe = !message.isAdminMessage && message.senderId == currentUserId;
+
+                        // Tarih ayracı kontrolü (reverse: true için bir önceki gün kontrolü)
+                        final bool showDate = index == allMessages.length - 1 ||
+                            allMessages[index].createdAt.day != allMessages[index + 1].createdAt.day ||
+                            allMessages[index].createdAt.month != allMessages[index + 1].createdAt.month ||
+                            allMessages[index].createdAt.year != allMessages[index + 1].createdAt.year;
+
+                        return Column(
+                          children: [
+                            if (showDate) _buildDateBadge(message.createdAt, isDark),
+                            _buildMessageRow(message, isMe, isDark, primaryColor, surfaceColor, textMain, textSub),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+
+              // Alt Giriş Alanı / Kilitli Durum
+              _buildBottomBar(isDark, primaryColor, surfaceColor, textMain, textSub),
+            ],
+          ),
+
+          // "1 Yeni Mesaj ↓" Floating Butonu (reverse: true ile 0.0'a iner)
+          if (_showScrollToBottomBtn)
+            Positioned(
+              right: 16,
+              bottom: 84,
+              child: FloatingActionButton.extended(
+                onPressed: () => _scrollToBottom(animated: true),
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+                elevation: 6,
+                icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                label: Text(
+                  _newIncomingCount > 0 ? '$_newIncomingCount Yeni Mesaj' : 'En Sona İn',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -877,7 +911,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     Color? textSub,
   ) {
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('deals').doc(widget.initialDealId).snapshots(),
+      stream: _stickyDealStream,
       builder: (context, snap) {
         bool isDealActive = true;
         String title = widget.initialDealTitle ?? 'Fırsat';
