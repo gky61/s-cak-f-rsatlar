@@ -205,6 +205,8 @@ Bir kullanıcıya bildirim gitmiyorsa sırasıyla şu adımları kontrol edin:
    * `users/{uid}/notifications` altındaki en son bildirim belgesini inceleyin. `pushStatus` alanı `"failed"` ise `error` parametresinde nedeni yazar (Örn: `hourly_limit_exceeded`, `quiet_hours_active`).
 5. **FCM V1 Tipi Hatası var mı?**
    * Cloud Functions loglarını (Google Cloud Console) inceleyin. Eğer `Firebase giriş hatası: type 'List<Object?>' is not a subtype of type...` tarzı bir cast hatası varsa, FCM payload veri tipinin tamamı string olarak dönüştürülmemiş demektir.
+6. **Aktif Sohbette Bildirim Bastırma (Data-Only Payload):**
+   * `onUserMessageCreated` tetikleyicisi FCM payload'ını `notification` alanı olmadan, **data-only** olarak gönderir. Bu sayede Android OS bildirim tepsisinde otomatik bildirim oluşturmaz; Flutter tarafındaki `activeChatUserId` kontrolü aktif sohbet odasındayken bildirimi sessizce bastırır, sohbet odasında değilse lokal bildirim/banner olarak gösterir.
 
 ---
 
