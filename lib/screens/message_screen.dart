@@ -755,27 +755,30 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                                   );
                                 }
 
-                                return Row(
-                                  children: [
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color: isUserDeleted ? Colors.grey : Colors.green,
-                                        shape: BoxShape.circle,
+                                if (isUserDeleted) {
+                                  return Row(
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: const BoxDecoration(
+                                          color: Colors.grey,
+                                          shape: BoxShape.circle,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      isUserDeleted ? 'Hesap Silindi' : 'Çevrimiçi',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: textSub,
-                                        fontWeight: FontWeight.w500,
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        'Hesap Silindi',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: textSub,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                );
+                                    ],
+                                  );
+                                }
+                                return const SizedBox.shrink();
                               },
                             ),
                         ],
