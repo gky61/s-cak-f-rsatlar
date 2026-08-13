@@ -400,147 +400,159 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                 children: [
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
-                                      Text(
-                                        getCategoryDisplayName(deal.category),
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w500,
-                                          color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                      Expanded(
+                                        flex: 5,
+                                        child: Text(
+                                          getCategoryDisplayName(deal.category),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          buildStoreLogo(deal.store, size: 14, borderRadius: 3),
-                                          const SizedBox(width: 4),
-                                          Flexible(
-                                            child: Text(
-                                              deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: isDark ? Colors.grey[300] : AppTheme.textPrimary,
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        flex: 6,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            buildStoreLogo(deal.store, size: 14, borderRadius: 3),
+                                            const SizedBox(width: 4),
+                                            Flexible(
+                                              child: Text(
+                                                deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark ? Colors.grey[300] : AppTheme.textPrimary,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                                maxLines: 1,
                                               ),
-                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                          ),
-                                          if (deal.isAmazonWarehouse) ...[
-                                            const SizedBox(width: 3),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFD97706).withValues(alpha: 0.15),
-                                                borderRadius: BorderRadius.circular(3),
-                                                border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.4), width: 0.5),
-                                              ),
-                                              child: const Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    Icons.inventory_2_rounded,
-                                                    size: 9,
-                                                    color: Color(0xFFD97706),
-                                                  ),
-                                                  SizedBox(width: 2),
-                                                  Text(
-                                                    'Depo',
-                                                    style: TextStyle(
-                                                      fontSize: 8,
-                                                      fontWeight: FontWeight.w800,
+                                            if (deal.isAmazonWarehouse) ...[
+                                              const SizedBox(width: 3),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(3),
+                                                  border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.4), width: 0.5),
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.inventory_2_rounded,
+                                                      size: 9,
                                                       color: Color(0xFFD97706),
                                                     ),
-                                                  ),
-                                                ],
+                                                    SizedBox(width: 2),
+                                                    Text(
+                                                      'Depo',
+                                                      style: TextStyle(
+                                                        fontSize: 8,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: Color(0xFFD97706),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
-                                            ),
-                                          ],
-                                          // Sadece Profil Resmi (sadece kullanıcı paylaşımı ise, sağda)
-                                          if (deal.isUserSubmitted && deal.postedBy.isNotEmpty) ...[
-                                            const SizedBox(width: 6),
-                                            StreamBuilder<DocumentSnapshot>(
-                                              stream: FirebaseFirestore.instance
-                                                  .collection('users')
-                                                  .doc(deal.postedBy)
-                                                  .snapshots(includeMetadataChanges: false),
-                                              builder: (context, snapshot) {
-                                                if (snapshot.connectionState == ConnectionState.waiting) {
-                                                  return const SizedBox.shrink();
-                                                }
-                                                
-                                                if (!snapshot.hasData || !snapshot.data!.exists) {
-                                                  return const SizedBox.shrink();
-                                                }
-                                                
-                                                try {
-                                                  final userData = snapshot.data!.data() as Map<String, dynamic>?;
-                                                  if (userData == null) {
+                                            ],
+                                            // Sadece Profil Resmi (sadece kullanıcı paylaşımı ise, sağda)
+                                            if (deal.isUserSubmitted && deal.postedBy.isNotEmpty) ...[
+                                              const SizedBox(width: 6),
+                                              StreamBuilder<DocumentSnapshot>(
+                                                stream: FirebaseFirestore.instance
+                                                    .collection('users')
+                                                    .doc(deal.postedBy)
+                                                    .snapshots(includeMetadataChanges: false),
+                                                builder: (context, snapshot) {
+                                                  if (snapshot.connectionState == ConnectionState.waiting) {
                                                     return const SizedBox.shrink();
                                                   }
                                                   
-                                                  final user = AppUser.fromFirestore(snapshot.data!);
-                                                  final displayName = userData['username']?.toString() ?? 'Kullanıcı';
-                                                  final snapshotHash2 = snapshot.data?.data().toString().hashCode ?? 0;
+                                                  if (!snapshot.hasData || !snapshot.data!.exists) {
+                                                    return const SizedBox.shrink();
+                                                  }
                                                   
-                                                  final primaryColor = Theme.of(context).colorScheme.primary;
-                                                  return InkWell(
-                                                    key: ValueKey('user_avatar_list_widget_${deal.postedBy}_${displayName}_$snapshotHash2'),
-                                                    onTap: () {
-                                                      Navigator.push(
-                                                        context,
-                                                        MaterialPageRoute(
-                                                          builder: (_) => ProfileScreen(userId: user.uid),
-                                                        ),
-                                                      );
-                                                    },
-                                                    child: ClipOval(
-                                                      child: user.profileImageUrl.isNotEmpty
-                                                          ? (user.profileImageUrl.startsWith('assets/')
-                                                              ? Image.asset(
-                                                                  user.profileImageUrl,
-                                                                  width: 14,
-                                                                  height: 14,
-                                                                  fit: BoxFit.cover,
-                                                                )
-                                                              : CachedNetworkImage(
-                                                                  imageUrl: user.profileImageUrl,
-                                                                  width: 14,
-                                                                  height: 14,
-                                                                  fit: BoxFit.cover,
-                                                                  memCacheWidth: 28,
-                                                                  memCacheHeight: 28,
-                                                                  fadeInDuration: const Duration(milliseconds: 200),
-                                                                  placeholder: (context, url) => Container(
+                                                  try {
+                                                    final userData = snapshot.data!.data() as Map<String, dynamic>?;
+                                                    if (userData == null) {
+                                                      return const SizedBox.shrink();
+                                                    }
+                                                    
+                                                    final user = AppUser.fromFirestore(snapshot.data!);
+                                                    final displayName = userData['username']?.toString() ?? 'Kullanıcı';
+                                                    final snapshotHash2 = snapshot.data?.data().toString().hashCode ?? 0;
+                                                    
+                                                    final primaryColor = Theme.of(context).colorScheme.primary;
+                                                    return InkWell(
+                                                      key: ValueKey('user_avatar_list_widget_${deal.postedBy}_${displayName}_$snapshotHash2'),
+                                                      onTap: () {
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (_) => ProfileScreen(userId: user.uid),
+                                                          ),
+                                                        );
+                                                      },
+                                                      child: ClipOval(
+                                                        child: user.profileImageUrl.isNotEmpty
+                                                            ? (user.profileImageUrl.startsWith('assets/')
+                                                                ? Image.asset(
+                                                                    user.profileImageUrl,
                                                                     width: 14,
                                                                     height: 14,
-                                                                    color: primaryColor.withValues(alpha: 0.1),
-                                                                    child: Icon(Icons.person, size: 9, color: primaryColor),
-                                                                  ),
-                                                                  errorWidget: (context, url, error) => Container(
+                                                                    fit: BoxFit.cover,
+                                                                  )
+                                                                : CachedNetworkImage(
+                                                                    imageUrl: user.profileImageUrl,
                                                                     width: 14,
                                                                     height: 14,
-                                                                    color: primaryColor.withValues(alpha: 0.1),
-                                                                    child: Icon(Icons.person, size: 9, color: primaryColor),
-                                                                  ),
-                                                                ))
-                                                          : Container(
-                                                              width: 14,
-                                                              height: 14,
-                                                              decoration: BoxDecoration(
-                                                                color: primaryColor.withValues(alpha: 0.1),
-                                                                shape: BoxShape.circle,
+                                                                    fit: BoxFit.cover,
+                                                                    memCacheWidth: 28,
+                                                                    memCacheHeight: 28,
+                                                                    fadeInDuration: const Duration(milliseconds: 200),
+                                                                    placeholder: (context, url) => Container(
+                                                                      width: 14,
+                                                                      height: 14,
+                                                                      color: primaryColor.withValues(alpha: 0.1),
+                                                                      child: Icon(Icons.person, size: 9, color: primaryColor),
+                                                                    ),
+                                                                    errorWidget: (context, url, error) => Container(
+                                                                      width: 14,
+                                                                      height: 14,
+                                                                      color: primaryColor.withValues(alpha: 0.1),
+                                                                      child: Icon(Icons.person, size: 9, color: primaryColor),
+                                                                    ),
+                                                                  ))
+                                                            : Container(
+                                                                width: 14,
+                                                                height: 14,
+                                                                decoration: BoxDecoration(
+                                                                  color: primaryColor.withValues(alpha: 0.1),
+                                                                  shape: BoxShape.circle,
+                                                                ),
+                                                                child: Icon(Icons.person, size: 9, color: primaryColor),
                                                               ),
-                                                              child: Icon(Icons.person, size: 9, color: primaryColor),
-                                                            ),
-                                                    ),
-                                                  );
-                                                } catch (e) {
-                                                  return const SizedBox.shrink();
-                                                }
-                                              },
-                                            ),
+                                                      ),
+                                                    );
+                                                  } catch (e) {
+                                                    return const SizedBox.shrink();
+                                                  }
+                                                },
+                                              ),
+                                            ],
                                           ],
-                                        ],
+                                        ),
                                       ),
                                     ],
                                   ),
