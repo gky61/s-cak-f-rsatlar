@@ -1993,7 +1993,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
         return Container(
           height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             color: pillBgColor,
             borderRadius: BorderRadius.circular(10),
@@ -2061,7 +2061,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   ],
                 ),
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 7),
               // Kullanıcı Adı & Profil Linki
               InkWell(
                 onTap: () {
@@ -2074,7 +2074,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 75),
+                      constraints: const BoxConstraints(maxWidth: 85),
                       child: Text(
                         username,
                         style: TextStyle(
@@ -2086,7 +2086,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 3),
                     Icon(
                       Icons.verified_rounded,
                       size: 11,
@@ -2095,7 +2095,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   ],
                 ),
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 8),
               // Mesaj Gönder Butonu (veya Sizin Paylaşımınız)
               if (!isOwnDeal)
                 Material(
@@ -2129,33 +2129,38 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                     },
                     borderRadius: BorderRadius.circular(6),
                     child: Ink(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: primaryColor,
+                        color: isDark ? primaryColor.withValues(alpha: 0.18) : primaryColor,
                         borderRadius: BorderRadius.circular(6),
-                        boxShadow: [
-                          BoxShadow(
-                            color: primaryColor.withValues(alpha: isDark ? 0.35 : 0.25),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
+                        border: isDark 
+                            ? Border.all(color: primaryColor.withValues(alpha: 0.4), width: 0.8) 
+                            : null,
+                        boxShadow: isDark
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: primaryColor.withValues(alpha: 0.25),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1.5),
+                                ),
+                              ],
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.chat_bubble_outline_rounded,
                             size: 10,
-                            color: Colors.white,
+                            color: isDark ? primaryColor : Colors.white,
                           ),
-                          SizedBox(width: 3.5),
+                          const SizedBox(width: 3.5),
                           Text(
                             'Mesaj',
                             style: TextStyle(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                              color: isDark ? primaryColor : Colors.white,
                               letterSpacing: 0.1,
                             ),
                           ),
