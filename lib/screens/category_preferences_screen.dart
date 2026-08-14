@@ -85,11 +85,11 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(
+            content: const Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                const SizedBox(width: 10),
-                const Text('Tüm kategoriler için bildirimler açıldı', style: TextStyle(fontWeight: FontWeight.w600)),
+                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Text('Tüm kategoriler takip listenize eklendi', style: TextStyle(fontWeight: FontWeight.w600)),
               ],
             ),
             backgroundColor: const Color(0xFF2E7D32),
@@ -128,7 +128,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
               children: [
                 Icon(Icons.remove_circle_outline_rounded, color: Colors.white, size: 20),
                 SizedBox(width: 10),
-                Text('Tüm kategori seçimleri temizlendi', style: TextStyle(fontWeight: FontWeight.w600)),
+                Text('Tüm kategori takipleri temizlendi', style: TextStyle(fontWeight: FontWeight.w600)),
               ],
             ),
             backgroundColor: const Color(0xFFC62828),
@@ -256,20 +256,20 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF121212) : const Color(0xFFF8F9FA);
-    final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final secondaryTextColor = isDark ? Colors.grey[400] : const Color(0xFF6C757D);
+    final backgroundColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8F9FA);
+    final cardColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final textColor = isDark ? Colors.white : AppTheme.textPrimary;
+    final secondaryTextColor = isDark ? Colors.grey[400] : AppTheme.textSecondary;
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
         title: const Text(
-          'Favori Kategoriler',
+          'Takip Edilen Kategorilerim',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
-        backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
         foregroundColor: textColor,
         elevation: 0,
         scrolledUnderElevation: 0.5,
@@ -280,28 +280,22 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
           : ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               children: [
-                // 1. Üst Modern Gradient Banner & Sayaç
+                // 1. Üst Modern Bilgi Banner'ı & Sayaç
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    gradient: LinearGradient(
-                      colors: isDark
-                          ? [const Color(0xFF2C2216), const Color(0xFF1E1E1E)]
-                          : [const Color(0xFFFFF4E5), const Color(0xFFFFFDF9)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: primaryColor.withValues(alpha: isDark ? 0.3 : 0.2),
+                      color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1),
                       width: 1,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: primaryColor.withValues(alpha: isDark ? 0.1 : 0.05),
-                        blurRadius: 15,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
                       ),
                     ],
                   ),
@@ -309,15 +303,16 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: primaryColor.withValues(alpha: 0.15),
+                              color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.12),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              Icons.notifications_active_rounded,
+                              Icons.interests_rounded,
                               color: primaryColor,
                               size: 22,
                             ),
@@ -327,40 +322,45 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Kategori Bildirimleri',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: textColor,
-                                  ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Kategorileri Kişiselleştir',
+                                        style: TextStyle(
+                                          fontSize: 15.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: textColor,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: primaryColor,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Text(
+                                        '$_activeCategoryCount / ${_filteredCategories.length} Seçili',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 11.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 2),
+                                const SizedBox(height: 6),
                                 Text(
-                                  'Seçtiğin kategorilerdeki fırsatlardan anında haberdar ol. ',
+                                  'Kategorileri takip ederek size uygun fırsatları kolayca keşfedebilirsiniz. Bildirimleriniz açık ise bu kategorilerden anlık bildirim alırsınız.',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 12.5,
+                                    height: 1.4,
                                     color: secondaryTextColor,
                                   ),
                                 ),
                               ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Sayaç Rozeti
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: primaryColor,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              '$_activeCategoryCount / ${_filteredCategories.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12,
-                              ),
                             ),
                           ),
                         ],
@@ -513,16 +513,16 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color: isExpanded
-                            ? categoryColor.withValues(alpha: isDark ? 0.4 : 0.25)
-                            : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04)),
+                            ? categoryColor.withValues(alpha: isDark ? 0.45 : 0.35)
+                            : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1)),
                         width: isExpanded ? 1.5 : 1,
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: isExpanded
                               ? categoryColor.withValues(alpha: isDark ? 0.15 : 0.06)
-                              : Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-                          blurRadius: 12,
+                              : Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                          blurRadius: 10,
                           offset: const Offset(0, 3),
                         ),
                       ],
@@ -595,7 +595,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                           Divider(
                             height: 1,
                             thickness: 0.8,
-                            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200],
+                            color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(14),
@@ -615,13 +615,18 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                   ),
                                   selected: isSelected,
                                   onSelected: (value) => _toggleSubCategory(category.id, subCat, value),
-                                  backgroundColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF1F3F5),
+                                  backgroundColor: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
                                   selectedColor: categoryColor,
                                   checkmarkColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  side: BorderSide.none,
+                                  side: BorderSide(
+                                    color: isSelected
+                                        ? Colors.transparent
+                                        : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1)),
+                                    width: 0.8,
+                                  ),
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 );
                               }).toList(),

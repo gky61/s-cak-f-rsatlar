@@ -535,9 +535,9 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
 
                   // Katman 3: Detay Tercih Satırları (Chevron >)
                   _buildDetailTile(
-                    icon: Icons.category,
-                    title: 'Kategoriler',
-                    subtitle: 'Tercih ettiğiniz fırsat kategorilerini seçin',
+                    icon: Icons.interests_rounded,
+                    title: 'Takip Edilen Kategoriler',
+                    subtitle: 'Takip listenizdeki fırsat kategorilerini ve alt başlıkları düzenleyin',
                     channelEnabled: _preferences.categoryNotificationsEnabled,
                     channelName: 'Kategori Bildirimleri',
                     onTap: () {

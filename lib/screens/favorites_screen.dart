@@ -11,7 +11,6 @@ import '../widgets/deal_card_skeleton.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import 'category_preferences_screen.dart';
 import 'deal_detail_screen.dart';
-import 'auth_screen.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
