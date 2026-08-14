@@ -20,30 +20,34 @@ class DealDetailHelpers {
     bool isSelected = false,
     bool isLoading = false,
   }) {
+    final bgColor = isSelected
+        ? color.withValues(alpha: isDark ? 0.22 : 0.12)
+        : (isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9));
+    final borderColor = isSelected
+        ? color.withValues(alpha: 0.75)
+        : (isDark ? Colors.white.withValues(alpha: 0.09) : const Color(0xFFCBD5E1));
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
           height: 48,
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 6),
           decoration: BoxDecoration(
-            color: isSelected
-                ? color.withValues(alpha: isDark ? 0.18 : 0.10)
-                : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey[100]),
-            borderRadius: BorderRadius.circular(10),
+            color: bgColor,
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected
-                  ? color.withValues(alpha: 0.6)
-                  : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[300]!),
-              width: isSelected ? 1.2 : 0.8,
+              color: borderColor,
+              width: isSelected ? 1.3 : 0.9,
             ),
             boxShadow: isSelected
                 ? [
                     BoxShadow(
                       color: color.withValues(alpha: 0.18),
-                      blurRadius: 6,
+                      blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
                   ]
@@ -59,8 +63,8 @@ class DealDetailHelpers {
                 children: [
                   if (isLoading)
                     SizedBox(
-                      width: 13,
-                      height: 13,
+                      width: 14,
+                      height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 1.8,
                         valueColor: AlwaysStoppedAnimation<Color>(color),
@@ -69,16 +73,16 @@ class DealDetailHelpers {
                   else
                     Icon(
                       icon,
-                      size: 15,
+                      size: 16,
                       color: isSelected ? color : (isDark ? Colors.grey[300] : AppTheme.textPrimary),
                     ),
                   if (count >= 0) ...[
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 5),
                     Text(
                       count.toString(),
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
                         color: isSelected ? color : (isDark ? Colors.white : AppTheme.textPrimary),
                         height: 1.1,
                       ),
@@ -86,13 +90,13 @@ class DealDetailHelpers {
                   ],
                 ],
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               // Bottom Row: Label
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                   color: isSelected ? color : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
                   letterSpacing: 0.1,
                   height: 1.1,

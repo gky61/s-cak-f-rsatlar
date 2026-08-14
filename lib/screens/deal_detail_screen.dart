@@ -1032,24 +1032,25 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               SelectableText(
                                 deal.title,
                                 style: TextStyle(
-                                  fontSize: 18,
+                                  fontSize: 18.5,
                                   fontWeight: FontWeight.w800,
                                   color: isDark ? Colors.white : AppTheme.textPrimary,
-                                  height: 1.3,
+                                  height: 1.35,
+                                  letterSpacing: -0.2,
                                 ),
                               ),
 
                               if (deal.ratingValue != null || deal.ratingCount != null) ...[
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 10),
                                 Row(
                                   children: [
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                       decoration: BoxDecoration(
                                         color: isDark ? const Color(0xFF2C2517) : const Color(0xFFFFF8E1),
-                                        borderRadius: BorderRadius.circular(6),
+                                        borderRadius: BorderRadius.circular(8),
                                         border: Border.all(
-                                          color: const Color(0xFFFFD54F).withValues(alpha: 0.5),
+                                          color: const Color(0xFFFFD54F).withValues(alpha: 0.6),
                                           width: 0.8,
                                         ),
                                       ),
@@ -1083,7 +1084,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             ),
                                           ],
                                           if (MoneyBadge.isMoneyDeal(deal)) ...[
-                                            const SizedBox(width: 4),
+                                            const SizedBox(width: 6),
                                             const MoneyBadge(
                                               fontSize: 11,
                                               iconSize: 13,
@@ -1100,51 +1101,48 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               const SizedBox(height: 20),
 
                               // 3 Stat Cards Grid (Kaydet, Yorum, Fırsat Bitti)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: _buildStatButton(
-                                        icon: _isFavorite ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                                        count: -1,
-                                        label: _isFavorite ? 'Kaydedildi' : 'Kaydet',
-                                        color: _isFavorite ? Colors.amber[700]! : Colors.grey,
-                                        onTap: _toggleFavorite,
-                                        isSelected: _isFavorite,
-                                        isDark: isDark,
-                                      ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatButton(
+                                      icon: _isFavorite ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                                      count: -1,
+                                      label: _isFavorite ? 'Kaydedildi' : 'Kaydet',
+                                      color: _isFavorite ? Colors.amber[700]! : Colors.grey,
+                                      onTap: _toggleFavorite,
+                                      isSelected: _isFavorite,
+                                      isDark: isDark,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: _buildStatButton(
-                                        icon: Icons.chat_bubble_outline_rounded,
-                                        count: deal.commentCount,
-                                        label: 'Yorum',
-                                        color: Colors.blue,
-                                        onTap: () => _showCommentsBottomSheet(
-                                          context, 
-                                          deal,
-                                          scrollToCommentId: widget.scrollToCommentId,
-                                        ),
-                                        isDark: isDark,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildStatButton(
+                                      icon: Icons.chat_bubble_outline_rounded,
+                                      count: deal.commentCount,
+                                      label: 'Yorum',
+                                      color: Colors.blue,
+                                      onTap: () => _showCommentsBottomSheet(
+                                        context, 
+                                        deal,
+                                        scrollToCommentId: widget.scrollToCommentId,
                                       ),
+                                      isDark: isDark,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: _buildStatButton(
-                                        icon: Icons.cancel_outlined,
-                                        count: _expiredVotes,
-                                        label: 'Fırsat Bitti',
-                                        color: Colors.grey,
-                                        onTap: _handleExpiredVote,
-                                        isSelected: _hasVotedExpired,
-                                        isDark: isDark,
-                                        isLoading: _isExpiredVoting,
-                                      ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildStatButton(
+                                      icon: Icons.cancel_outlined,
+                                      count: _expiredVotes,
+                                      label: 'Fırsat Bitti',
+                                      color: Colors.grey,
+                                      onTap: _handleExpiredVote,
+                                      isSelected: _hasVotedExpired,
+                                      isDark: isDark,
+                                      isLoading: _isExpiredVoting,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
 
                               const SizedBox(height: 20),
@@ -1159,7 +1157,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 onVote: _handleVote,
                               ),
 
-                              const SizedBox(height: 28),
+                              const SizedBox(height: 26),
 
                               // Description Header & Sharing Date
                               Row(
@@ -1172,29 +1170,29 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       borderRadius: BorderRadius.circular(2),
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
                                   Text(
                                     'ÜRÜN DETAYLARI',
                                     style: TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 12.5,
                                       fontWeight: FontWeight.w800,
                                       color: isDark ? Colors.white : AppTheme.textPrimary,
-                                      letterSpacing: 1.5,
+                                      letterSpacing: 1.2,
                                     ),
                                   ),
                                   const Spacer(),
-                                  // Şık & Modern Paylaşım Tarihi (örn: 30 Temmuz - 16:55)
+                                  // Şık & Modern Paylaşım Tarihi
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: isDark 
                                           ? Colors.white.withValues(alpha: 0.05) 
-                                          : Colors.grey[100],
-                                      borderRadius: BorderRadius.circular(6),
+                                          : const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                         color: isDark 
-                                            ? Colors.white.withValues(alpha: 0.08) 
-                                            : Colors.grey[300]!.withValues(alpha: 0.5),
+                                            ? Colors.white.withValues(alpha: 0.09) 
+                                            : const Color(0xFFCBD5E1),
                                         width: 0.8,
                                       ),
                                     ),
@@ -1204,7 +1202,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                         Icon(
                                           Icons.access_time_rounded,
                                           size: 12,
-                                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                          color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
@@ -1212,7 +1210,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
-                                            color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                            color: isDark ? Colors.grey[300] : AppTheme.textPrimary,
                                           ),
                                         ),
                                       ],
@@ -1220,7 +1218,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 12),
 
                               // Amazon Depo Bilgilendirme Kartı (Ürün Detayları Alanı)
                               if (deal.isAmazonWarehouse) ...[
@@ -1278,7 +1276,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     ],
                                   ),
                                 ),
-                                const SizedBox(height: 14),
+                                const SizedBox(height: 12),
                               ],
 
                               // Description Content Card
@@ -1291,12 +1289,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     decoration: BoxDecoration(
                                       color: isDark 
                                           ? Colors.white.withValues(alpha: 0.04) 
-                                          : Colors.grey[50],
+                                          : const Color(0xFFF1F5F9), // Slate 100
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(
                                         color: isDark 
                                             ? Colors.white.withValues(alpha: 0.08) 
-                                            : Colors.grey[200]!,
+                                            : const Color(0xFFCBD5E1), // Slate 300
                                         width: 1,
                                       ),
                                     ),
@@ -1886,10 +1884,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     }
 
     final baseStyle = TextStyle(
-      fontSize: 14,
+      fontSize: 14.5,
       fontWeight: FontWeight.w500,
-      color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+      color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
       height: 1.6,
+      letterSpacing: 0.1,
     );
 
     // Eğer Migros fırsatıysa ve ilk satır bilinen bir CRM etiketi ise sadece ilk satırı biçimlendir

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/deal.dart';
+import '../theme/app_theme.dart';
 
 class DealThermometer extends StatefulWidget {
   final Deal deal;
@@ -79,16 +80,12 @@ class _DealThermometerState extends State<DealThermometer> with SingleTickerProv
         final pulseVal = _pulseController.value;
 
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark 
-                  ? [Colors.grey[900]!, Colors.grey[850]!]
-                  : [Colors.grey[50]!, Colors.white],
-            ),
-            borderRadius: BorderRadius.circular(12),
+            color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1),
               width: 1,
             ),
           ),
@@ -98,9 +95,10 @@ class _DealThermometerState extends State<DealThermometer> with SingleTickerProv
               Text(
                 getMessage(),
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : Colors.black87,
+                  color: isDark ? Colors.white : AppTheme.textPrimary,
+                  letterSpacing: 0.1,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -117,13 +115,13 @@ class _DealThermometerState extends State<DealThermometer> with SingleTickerProv
                       decoration: BoxDecoration(
                         color: widget.hasVotedCold 
                             ? Colors.cyan[700]!.withValues(alpha: 0.85 + 0.1 * pulseVal) 
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(8),
+                            : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: widget.hasVotedCold 
                               ? Color.lerp(Colors.cyanAccent, Colors.white, pulseVal)!
-                              : (isDark ? Colors.grey[800]! : Colors.grey[300]!),
-                          width: 1.5,
+                              : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1)),
+                          width: widget.hasVotedCold ? 1.5 : 1,
                         ),
                         boxShadow: widget.hasVotedCold
                             ? [
@@ -259,13 +257,13 @@ class _DealThermometerState extends State<DealThermometer> with SingleTickerProv
                       decoration: BoxDecoration(
                         color: widget.hasVotedHot 
                             ? Colors.deepOrange[600]!.withValues(alpha: 0.85 + 0.1 * pulseVal) 
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(8),
+                            : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: widget.hasVotedHot 
                               ? Color.lerp(Colors.orangeAccent, Colors.white, pulseVal)!
-                              : (isDark ? Colors.grey[800]! : Colors.grey[300]!),
-                          width: 1.5,
+                              : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1)),
+                          width: widget.hasVotedHot ? 1.5 : 1,
                         ),
                         boxShadow: widget.hasVotedHot
                             ? [
