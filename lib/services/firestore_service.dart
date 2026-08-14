@@ -527,6 +527,8 @@ class FirestoreService {
   Future<void> softDeleteMessageForUser(String messageId, String userId) => _messageService.softDeleteMessageForUser(messageId, userId);
   Future<bool> deleteMessageForEveryone(String messageId, String currentUserId) => _messageService.deleteMessageForEveryone(messageId, currentUserId);
   Future<void> deleteUserMessage(String id) => _messageService.deleteUserMessage(id);
+  Future<void> deleteConversationPermanently(String u1, String u2) =>
+      _messageService.deleteConversationPermanently(u1, u2);
   Future<int> getUnreadMessageCount(String uid) => _messageService.getUnreadMessageCount(uid);
   Stream<List<Message>> getAllMessagesStream() => _messageService.getAllMessagesStream();
   Future<void> markMessageAsReadByAdmin(String id) => _messageService.markMessageAsReadByAdmin(id);

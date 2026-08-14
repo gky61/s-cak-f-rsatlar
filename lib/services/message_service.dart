@@ -222,7 +222,53 @@ class MessageService {
 
   // Kullanıcı mesajını kalıcı sil
   Future<void> deleteUserMessage(String messageId) async {
-    await _firestore.collection('messages').doc(messageId).delete();
+    try {
+      await _firestore.collection('messages').doc(messageId).delete();
+    } catch (e) {
+      _log('deleteUserMessage error: $e');
+    }
+  }
+
+  /// İki kullanıcı arasındaki tüm sohbeti ve mesajları Firestore'dan kalıcı olarak siler.
+  Future<void> deleteConversationPermanently(String currentUserId, String otherUserId) async {
+    try {
+      // 1. currentUserId -> otherUserId mesajları
+      final sentSnap = await _firestore
+          .collection('messages')
+          .where('senderId', isEqualTo: currentUserId)
+          .where('receiverId', isEqualTo: otherUserId)
+          .get();
+
+      // 2. otherUserId -> currentUserId mesajları
+      final receivedSnap = await _firestore
+          .collection('messages')
+          .where('senderId', isEqualTo: otherUserId)
+          .where('receiverId', isEqualTo: currentUserId)
+          .get();
+
+      final allDocs = [...sentSnap.docs, ...receivedSnap.docs];
+
+      if (allDocs.isNotEmpty) {
+        for (var i = 0; i < allDocs.length; i += 500) {
+          final batch = _firestore.batch();
+          final chunk = allDocs.sublist(i, (i + 500 > allDocs.length) ? allDocs.length : i + 500);
+          for (var doc in chunk) {
+            batch.delete(doc.reference);
+          }
+          await batch.commit();
+        }
+      }
+
+      // 3. Yazıyor (typingStatus) kayıtlarını temizle
+      final conversationId = getConversationId(currentUserId, otherUserId);
+      try {
+        await _firestore.collection('typingStatus').doc('${conversationId}_$currentUserId').delete();
+        await _firestore.collection('typingStatus').doc('${conversationId}_$otherUserId').delete();
+      } catch (_) {}
+    } catch (e) {
+      _log('deleteConversationPermanently error: $e');
+      rethrow;
+    }
   }
 
   // Yazıyor... (Typing indicator)

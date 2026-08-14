@@ -539,17 +539,15 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     _focusNode.requestFocus();
                   },
                 ),
-                // 3. Benden Sil (Soft Delete)
+                // 3. Mesajı Sil
                 ListTile(
-                  leading: const Icon(Icons.delete_outline_rounded, color: Colors.orange),
-                  title: const Text('Benden Sil', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Sadece sizin sohbet geçmişinizden silinir', style: TextStyle(fontSize: 11)),
+                  leading: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                  title: const Text('Mesajı Sil', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Mesaj kalıcı olarak silinir', style: TextStyle(fontSize: 11)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   onTap: () async {
                     Navigator.pop(ctx);
-                    if (currentUserId != null) {
-                      await _firestoreService.softDeleteMessageForUser(message.id, currentUserId);
-                    }
+                    await _firestoreService.deleteUserMessage(message.id);
                   },
                 ),
                 // 4. Herkesten Sil (15 Dakika kuralı)
@@ -675,6 +673,50 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     reportedId: widget.otherUserId,
                     type: 'user',
                   );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_forever_rounded, color: Colors.red),
+                title: const Text('Sohbeti Sil', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final isDark = Theme.of(context).brightness == Brightness.dark;
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+                      title: const Row(
+                        children: [
+                          Icon(Icons.delete_outline_rounded, color: Color(0xFFEF5350)),
+                          SizedBox(width: 10),
+                          Text('Sohbeti Sil', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      content: Text(
+                        '${widget.otherUserName} ile olan tüm sohbeti kalıcı olarak silmek istediğinize emin misiniz?',
+                        style: const TextStyle(fontSize: 13.5),
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFEF5350),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () => Navigator.pop(c, true),
+                          child: const Text('Sil'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true && mounted && context.mounted) {
+                    await _firestoreService.deleteConversationPermanently(currentUserId, widget.otherUserId);
+                    if (mounted) {
+                      Navigator.pop(context); // MessageScreen'den çıkış yapıp mesaj listesine dön
+                    }
+                  }
                 },
               ),
             ],

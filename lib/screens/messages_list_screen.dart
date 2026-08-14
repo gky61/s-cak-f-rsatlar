@@ -699,25 +699,16 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
           await _firestoreService.deleteAdminToUserMessage(message.id);
         } else {
           final currentUserId = _authService.currentUser!.uid;
-          final messages = await _firestoreService.getUserMessagesStream(currentUserId).first;
           final otherUserId = message.senderId == currentUserId
               ? message.receiverId
               : message.senderId;
 
-          final conversationMessages = messages.where((m) =>
-            !m.isAdminMessage &&
-            ((m.senderId == currentUserId && m.receiverId == otherUserId) ||
-            (m.receiverId == currentUserId && m.senderId == otherUserId))
-          ).toList();
-
-          for (var msg in conversationMessages) {
-            await _firestoreService.softDeleteMessageForUser(msg.id, currentUserId);
-          }
+          await _firestoreService.deleteConversationPermanently(currentUserId, otherUserId);
         }
 
         messenger.showSnackBar(
           SnackBar(
-            content: Text('🗑️ $userName ile olan sohbet silindi'),
+            content: Text('🗑️ $userName ile olan sohbet kalıcı olarak silindi'),
             backgroundColor: Colors.orange[800],
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
