@@ -975,25 +975,49 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     Color primaryColor,
   ) {
     final cardBg = isMe
-        ? (isDark ? Colors.black.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.18))
-        : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF1F3F5));
+        ? (isDark ? Colors.black.withValues(alpha: 0.28) : Colors.black.withValues(alpha: 0.18))
+        : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white);
     final borderColor = isMe
-        ? Colors.white.withValues(alpha: 0.15)
-        : (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06));
-    final titleColor = isMe ? Colors.white : (isDark ? Colors.white : AppTheme.textPrimary);
-    final badgeTextColor = isMe ? Colors.white : primaryColor;
-    final priceColor = isMe ? const Color(0xFFFFD166) : primaryColor;
+        ? Colors.white.withValues(alpha: 0.22)
+        : (isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFCBD5E1));
+    final titleColor = isMe
+        ? Colors.white
+        : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A));
+    final badgeBg = isMe
+        ? Colors.white.withValues(alpha: 0.2)
+        : (isDark ? primaryColor.withValues(alpha: 0.25) : primaryColor.withValues(alpha: 0.12));
+    final badgeTextColor = isMe
+        ? Colors.white
+        : (isDark ? const Color(0xFFFF8A65) : primaryColor);
+    final priceColor = isMe
+        ? const Color(0xFFFFE082)
+        : (isDark ? const Color(0xFFFF8A65) : primaryColor);
+    final storeColor = isMe
+        ? Colors.white.withValues(alpha: 0.88)
+        : (isDark ? Colors.grey[400] : const Color(0xFF64748B));
+    final ctaColor = isMe
+        ? Colors.white
+        : (isDark ? const Color(0xFFFF8A65) : primaryColor);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor, width: 1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 0.9),
+        boxShadow: !isMe && !isDark
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ]
+            : [],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: () {
             HapticFeedback.lightImpact();
@@ -1004,7 +1028,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
               ),
             );
           },
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(8),
             child: Row(
@@ -1012,17 +1036,17 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
               children: [
                 // Fırsat Görseli
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    width: 52,
-                    height: 52,
-                    color: isDark ? Colors.grey[850] : Colors.grey[200],
+                    width: 50,
+                    height: 50,
+                    color: isDark ? Colors.grey[850] : const Color(0xFFF1F5F9),
                     child: message.dealImageUrl != null && message.dealImageUrl!.isNotEmpty
                         ? CachedNetworkImage(
                             imageUrl: message.dealImageUrl!,
                             fit: BoxFit.cover,
                             placeholder: (_, __) => Container(
-                              color: isDark ? Colors.grey[800] : Colors.grey[300],
+                              color: isDark ? Colors.grey[800] : const Color(0xFFE2E8F0),
                               child: const Center(
                                 child: SizedBox(
                                   width: 14,
@@ -1031,9 +1055,9 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                                 ),
                               ),
                             ),
-                            errorWidget: (_, __, ___) => Icon(Icons.local_offer_outlined, color: primaryColor, size: 22),
+                            errorWidget: (_, __, ___) => Icon(Icons.local_offer_outlined, color: primaryColor, size: 20),
                           )
-                        : Icon(Icons.local_offer_outlined, color: primaryColor, size: 22),
+                        : Icon(Icons.local_offer_outlined, color: primaryColor, size: 20),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1048,9 +1072,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: isMe
-                                  ? Colors.white.withValues(alpha: 0.15)
-                                  : primaryColor.withValues(alpha: isDark ? 0.25 : 0.12),
+                              color: badgeBg,
                               borderRadius: BorderRadius.circular(5),
                             ),
                             child: Row(
@@ -1079,9 +1101,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w500,
-                                  color: isMe
-                                      ? Colors.white.withValues(alpha: 0.8)
-                                      : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                  color: storeColor,
                                 ),
                               ),
                             ),
@@ -1107,8 +1127,8 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                             Text(
                               '${message.dealPrice} TL',
                               style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w900,
                                 color: priceColor,
                               ),
                             )
@@ -1122,14 +1142,14 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w700,
-                                  color: isMe ? Colors.white.withValues(alpha: 0.9) : primaryColor,
+                                  color: ctaColor,
                                 ),
                               ),
                               const SizedBox(width: 2),
                               Icon(
                                 Icons.arrow_forward_ios_rounded,
                                 size: 9,
-                                color: isMe ? Colors.white.withValues(alpha: 0.9) : primaryColor,
+                                color: ctaColor,
                               ),
                             ],
                           ),
@@ -1259,15 +1279,19 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         margin: const EdgeInsets.symmetric(vertical: 12),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
         decoration: BoxDecoration(
-          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200],
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1),
+            width: 0.8,
+          ),
         ),
         child: Text(
           _formatDate(date),
           style: TextStyle(
             fontSize: 11.5,
             fontWeight: FontWeight.w600,
-            color: isDark ? Colors.grey[300] : Colors.grey[700],
+            color: isDark ? Colors.grey[300] : const Color(0xFF475569),
           ),
         ),
       ),
@@ -1283,11 +1307,12 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     Color textMain,
     Color? textSub,
   ) {
-    // Gönderilen mesajlar için uygulamanın koyu kahvemsi/antrasit rengi (AppTheme.accent 0xFF2D3436)
-    final myBubbleColor = isDark ? const Color(0xFF2D3436) : AppTheme.accent;
-    final otherBubbleColor = isDark ? const Color(0xFF1E242B) : Colors.white;
+    // Gönderilen mesajlar: Enerjik & marka uyumlu Primary Turuncu
+    // Alınan mesajlar: Açık modda Slate 100 (#F1F5F9), Koyu modda DarkSurface (#1E242B)
+    final myBubbleColor = primaryColor;
+    final otherBubbleColor = isDark ? const Color(0xFF1E242B) : const Color(0xFFF1F5F9);
     const myTextColor = Colors.white;
-    final otherTextColor = isDark ? const Color(0xFFF8FAFC) : AppTheme.textPrimary;
+    final otherTextColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1334,18 +1359,20 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     bottomLeft: Radius.circular(isMe ? 18 : 4),
                     bottomRight: Radius.circular(isMe ? 4 : 18),
                   ),
-                  border: Border.all(
-                    color: isMe
-                        ? (isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.08))
-                        : (isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.black.withValues(alpha: 0.06)),
-                    width: 1,
-                  ),
+                  border: isMe
+                      ? null
+                      : Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : const Color(0xFFCBD5E1),
+                          width: 0.8,
+                        ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-                      blurRadius: 6,
+                      color: isMe
+                          ? primaryColor.withValues(alpha: isDark ? 0.35 : 0.22)
+                          : Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+                      blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
                   ],
@@ -1366,9 +1393,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                       message.text,
                       style: TextStyle(
                         fontSize: 14.5,
-                        height: 1.35,
+                        height: 1.38,
                         fontWeight: FontWeight.w500,
                         color: isMe ? myTextColor : otherTextColor,
+                        letterSpacing: 0.1,
                       ),
                     ),
 
@@ -1386,7 +1414,9 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w500,
-                            color: isMe ? Colors.white.withValues(alpha: 0.82) : (isDark ? Colors.grey[400] : textSub),
+                            color: isMe
+                                ? Colors.white.withValues(alpha: 0.88)
+                                : (isDark ? Colors.grey[400] : const Color(0xFF64748B)),
                           ),
                         ),
                         if (isMe) ...[
@@ -1418,12 +1448,14 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: isMe
-            ? Colors.black.withValues(alpha: 0.22)
-            : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+            ? Colors.black.withValues(alpha: 0.2)
+            : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white),
         borderRadius: BorderRadius.circular(10),
         border: Border(
           left: BorderSide(
-            color: isMe ? Colors.white.withValues(alpha: 0.85) : (isDark ? const Color(0xFFFF8A65) : primaryColor),
+            color: isMe
+                ? Colors.white.withValues(alpha: 0.9)
+                : (isDark ? const Color(0xFFFF8A65) : primaryColor),
             width: 3,
           ),
         ),
@@ -1447,7 +1479,9 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
             style: TextStyle(
               fontSize: 11.5,
               fontStyle: FontStyle.italic,
-              color: isMe ? Colors.white.withValues(alpha: 0.9) : (isDark ? Colors.grey[300] : Colors.grey[700]),
+              color: isMe
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155)),
             ),
           ),
         ],
@@ -1475,8 +1509,16 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     return Container(
       margin: const EdgeInsets.only(top: 6),
       decoration: BoxDecoration(
-        color: isMe ? Colors.black.withValues(alpha: 0.25) : (isDark ? Colors.black.withValues(alpha: 0.3) : Colors.grey[100]),
+        color: isMe
+            ? Colors.black.withValues(alpha: 0.2)
+            : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white),
         borderRadius: BorderRadius.circular(12),
+        border: !isMe
+            ? Border.all(
+                color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFCBD5E1),
+                width: 0.8,
+              )
+            : null,
       ),
       child: Material(
         color: Colors.transparent,
@@ -1514,7 +1556,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: isMe ? Colors.white : (isDark ? Colors.white : AppTheme.textPrimary),
+                          color: isMe ? Colors.white : (isDark ? Colors.white : const Color(0xFF0F172A)),
                         ),
                       ),
                       if (preview.provider != null) ...[
@@ -1523,7 +1565,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                           preview.provider!,
                           style: TextStyle(
                             fontSize: 10,
-                            color: isMe ? Colors.white.withValues(alpha: 0.75) : Colors.grey[400],
+                            color: isMe ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF64748B),
                           ),
                         ),
                       ],
@@ -1641,6 +1683,12 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: BoxDecoration(
         color: surfaceColor,
+        border: Border(
+          top: BorderSide(
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
@@ -1659,7 +1707,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.grey[100],
+                  color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(12),
                   border: Border(left: BorderSide(color: primaryColor, width: 3.5)),
                 ),
@@ -1680,7 +1728,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                             _replyingToMessage!.text,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 11.5, color: textSub),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: isDark ? Colors.grey[300] : const Color(0xFF334155),
+                            ),
                           ),
                         ],
                       ),
@@ -1703,10 +1754,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.07) : primaryColor.withValues(alpha: 0.06),
+                  color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: primaryColor.withValues(alpha: isDark ? 0.3 : 0.25),
+                    color: isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFCBD5E1),
                     width: 1,
                   ),
                 ),
@@ -1717,7 +1768,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                       child: Container(
                         width: 40,
                         height: 40,
-                        color: isDark ? Colors.grey[800] : Colors.grey[200],
+                        color: isDark ? Colors.grey[800] : const Color(0xFFE2E8F0),
                         child: _attachedDeal!.imageUrl != null && _attachedDeal!.imageUrl!.isNotEmpty
                             ? CachedNetworkImage(
                                 imageUrl: _attachedDeal!.imageUrl!,
@@ -1746,7 +1797,11 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                                 const SizedBox(width: 4),
                                 Text(
                                   '• ${_attachedDeal!.store}',
-                                  style: TextStyle(fontSize: 10.5, color: textSub, fontWeight: FontWeight.w500),
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: isDark ? Colors.grey[400] : const Color(0xFF64748B),
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ],
                             ],
@@ -1759,7 +1814,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: textMain,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
                             ),
                           ),
                         ],
@@ -1784,10 +1839,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F3F5),
+                      color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey[300]!,
+                        color: isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFCBD5E1),
                         width: 1,
                       ),
                     ),
@@ -1797,10 +1852,17 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                       maxLines: 5,
                       minLines: 1,
                       textCapitalization: TextCapitalization.sentences,
-                      style: TextStyle(color: textMain, fontSize: 14),
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                       decoration: InputDecoration(
                         hintText: 'Bir mesaj yazın...',
-                        hintStyle: TextStyle(color: textSub?.withValues(alpha: 0.7), fontSize: 13.5),
+                        hintStyle: TextStyle(
+                          color: isDark ? Colors.grey[500] : const Color(0xFF94A3B8),
+                          fontSize: 13.5,
+                        ),
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
@@ -1815,8 +1877,19 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: primaryColor,
+                      gradient: LinearGradient(
+                        colors: [primaryColor, const Color(0xFFFF7E39)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryColor.withValues(alpha: 0.35),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: _isSending
                         ? const SizedBox(
