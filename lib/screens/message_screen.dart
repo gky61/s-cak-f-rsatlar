@@ -16,6 +16,7 @@ import '../theme/app_theme.dart';
 import '../widgets/report_dialog.dart';
 import 'profile_screen.dart';
 import 'deal_detail_screen.dart';
+import 'botkolik_profile_screen.dart';
 
 class AttachedDealInfo {
   final String id;
@@ -106,8 +107,14 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     super.initState();
     NotificationService.activeChatUserId = widget.otherUserId;
 
-    _liveOtherUserImageUrl = widget.otherUserImageUrl;
-    _liveOtherUserName = widget.otherUserName;
+    if (widget.otherUserId == 'botkolik') {
+      _liveOtherUserImageUrl = 'assets/botkolik.webp';
+      _liveOtherUserName = 'Botkolik';
+      _liveIsUserDeleted = false;
+    } else {
+      _liveOtherUserImageUrl = widget.otherUserImageUrl;
+      _liveOtherUserName = widget.otherUserName;
+    }
 
     if (widget.initialDealId != null && widget.initialDealId!.isNotEmpty) {
       _attachedDeal = AttachedDealInfo(
@@ -133,7 +140,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   void _initStreams() {
     final currentUserId = _authService.currentUser?.uid;
 
-    if (!widget.isAdminMessage && widget.otherUserId.isNotEmpty) {
+    if (!widget.isAdminMessage && widget.otherUserId.isNotEmpty && widget.otherUserId != 'botkolik') {
       _otherUserStream = FirebaseFirestore.instance
           .collection('users')
           .doc(widget.otherUserId)
@@ -762,14 +769,27 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
               }
             }
 
+            if (widget.otherUserId == 'botkolik') {
+              otherUserName = 'Botkolik';
+              otherUserImageUrl = 'assets/botkolik.webp';
+              isUserDeleted = false;
+            }
+
             return InkWell(
               onTap: widget.isAdminMessage || isUserDeleted
                   ? null
                   : () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => ProfileScreen(userId: widget.otherUserId)),
-                      );
+                      if (widget.otherUserId == 'botkolik') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
+                        );
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => ProfileScreen(userId: widget.otherUserId)),
+                        );
+                      }
                     },
               borderRadius: BorderRadius.circular(20),
               child: Padding(
@@ -817,6 +837,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                                 const SizedBox(width: 5),
                                 Icon(Icons.verified_user_rounded, color: primaryColor, size: 15),
                               ],
+                              if (widget.otherUserId == 'botkolik') ...[
+                                const SizedBox(width: 5),
+                                Icon(Icons.smart_toy_rounded, color: primaryColor, size: 15),
+                              ],
                               if (_isMuted) ...[
                                 const SizedBox(width: 5),
                                 Icon(Icons.notifications_off_outlined, size: 14, color: textSub),
@@ -824,7 +848,16 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                             ],
                           ),
                           // Typing veya Durum
-                          if (!widget.isAdminMessage && currentUserId != null)
+                          if (widget.otherUserId == 'botkolik')
+                            Text(
+                              '⚡ Otonom AI & Topluluk İletişimi',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: primaryColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          else if (!widget.isAdminMessage && currentUserId != null)
                             StreamBuilder<bool>(
                               stream: _typingStream,
                               builder: (context, typingSnap) {
@@ -1263,35 +1296,77 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                   width: 1,
                 ),
               ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.waving_hand_rounded, size: 16, color: primaryColor),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Sohbete Başla',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                          color: textMain,
+              child: widget.otherUserId == 'botkolik'
+                  ? Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.smart_toy_rounded, size: 18, color: primaryColor),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Botkolik İletişim & Geri Bildirim',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: textMain,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Bu kullanıcıyla henüz bir mesajlaşmanız bulunmuyor.\nAşağıdaki kutudan mesajınızı yazarak sohbeti başlatabilirsiniz.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: textSub,
-                      height: 1.4,
+                        const SizedBox(height: 8),
+                        Text(
+                          'Fırsatlarla, mağazalarla, hatalı fiyatlarla ilgili yaşadığınız sorunları veya geliştirme önerilerinizi bana iletebilirsiniz. Mesajlarınız doğrudan yöneticilere ulaştırılır.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: textSub,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            _buildSuggestionChip('💡 Geliştirme Önerisi', isDark, primaryColor),
+                            _buildSuggestionChip('⚠️ Hatalı Fiyat Bildirimi', isDark, primaryColor),
+                            _buildSuggestionChip('🏪 Mağaza / Link Sorunu', isDark, primaryColor),
+                            _buildSuggestionChip('💬 Soru & Görüş', isDark, primaryColor),
+                          ],
+                        ),
+                      ],
+                    )
+                  : Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.waving_hand_rounded, size: 16, color: primaryColor),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Sohbete Başla',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: textMain,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Bu kullanıcıyla henüz bir mesajlaşmanız bulunmuyor.\nAşağıdaki kutudan mesajınızı yazarak sohbeti başlatabilirsiniz.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: textSub,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
             const SizedBox(height: 14),
             Row(
@@ -1310,6 +1385,44 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuggestionChip(String label, bool isDark, Color primaryColor) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          setState(() {
+            _messageController.text = '$label: ';
+            _messageController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _messageController.text.length),
+            );
+          });
+          _focusNode.requestFocus();
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: primaryColor.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: primaryColor,
+            ),
+          ),
         ),
       ),
     );
@@ -1373,17 +1486,19 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                         color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
                         child: Icon(Icons.shield_outlined, color: primaryColor, size: 18),
                       )
-                    : _buildAvatar(
-                        _liveIsUserDeleted
-                            ? ''
-                            : (_liveOtherUserImageUrl.isNotEmpty
-                                ? _liveOtherUserImageUrl
-                                : (message.senderImageUrl.isNotEmpty
-                                    ? message.senderImageUrl
-                                    : widget.otherUserImageUrl)),
-                        32,
-                        isDeleted: _liveIsUserDeleted,
-                      ),
+                    : (widget.otherUserId == 'botkolik' || message.senderId == 'botkolik'
+                        ? Image.asset('assets/botkolik.webp', width: 32, height: 32, fit: BoxFit.cover)
+                        : _buildAvatar(
+                            _liveIsUserDeleted
+                                ? ''
+                                : (_liveOtherUserImageUrl.isNotEmpty
+                                    ? _liveOtherUserImageUrl
+                                    : (message.senderImageUrl.isNotEmpty
+                                        ? message.senderImageUrl
+                                        : widget.otherUserImageUrl)),
+                            32,
+                            isDeleted: _liveIsUserDeleted,
+                          )),
               ),
             ),
             const SizedBox(width: 8),

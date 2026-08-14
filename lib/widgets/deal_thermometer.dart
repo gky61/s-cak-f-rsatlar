@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/deal.dart';
-import '../theme/app_theme.dart';
 
 class DealThermometer extends StatefulWidget {
   final Deal deal;
@@ -79,99 +78,115 @@ class _DealThermometerState extends State<DealThermometer> with SingleTickerProv
       builder: (context, child) {
         final pulseVal = _pulseController.value;
 
+        // Cold (GEÇ) styling
+        final isColdActive = widget.hasVotedCold;
+        final coldBg = isColdActive
+            ? (isDark
+                ? const Color(0xFF0891B2).withValues(alpha: 0.25 + 0.08 * pulseVal)
+                : const Color(0xFFE0F7FA).withValues(alpha: 0.95))
+            : (isDark ? Colors.white.withValues(alpha: 0.035) : Colors.white);
+        final coldBorder = isColdActive
+            ? const Color(0xFF06B6D4).withValues(alpha: 0.7 + 0.3 * pulseVal)
+            : (isDark ? Colors.white.withValues(alpha: 0.09) : const Color(0xFFE2E8F0));
+        final coldTextColor = isColdActive
+            ? const Color(0xFF0284C7)
+            : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B));
+
+        // Hot (AL!) styling
+        final isHotActive = widget.hasVotedHot;
+        final hotBg = isHotActive
+            ? (isDark
+                ? const Color(0xFFEA580C).withValues(alpha: 0.25 + 0.08 * pulseVal)
+                : const Color(0xFFFFF1EB).withValues(alpha: 0.95))
+            : (isDark ? Colors.white.withValues(alpha: 0.035) : Colors.white);
+        final hotBorder = isHotActive
+            ? const Color(0xFFFF5722).withValues(alpha: 0.7 + 0.3 * pulseVal)
+            : (isDark ? Colors.white.withValues(alpha: 0.09) : const Color(0xFFE2E8F0));
+        final hotTextColor = isHotActive
+            ? const Color(0xFFEA580C)
+            : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B));
+
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
-            color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+            color: isDark ? Colors.white.withValues(alpha: 0.035) : const Color(0xFFF8FAFC),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1),
-              width: 1,
+              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+              width: 0.85,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(
             children: [
-              // Eğlenceli mesaj
+              // Topluluk Mesajı
               Text(
                 getMessage(),
                 style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : AppTheme.textPrimary,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
                   letterSpacing: 0.1,
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
               
-              // Termometre bar'ı
+              // Termometre Oylama Satırı
               Row(
                 children: [
                   // Soğuk taraf (Geç)
-                  GestureDetector(
-                    onTap: () => _onVoteTap(false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: widget.hasVotedCold 
-                            ? Colors.cyan[700]!.withValues(alpha: 0.85 + 0.1 * pulseVal) 
-                            : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: widget.hasVotedCold 
-                              ? Color.lerp(Colors.cyanAccent, Colors.white, pulseVal)!
-                              : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1)),
-                          width: widget.hasVotedCold ? 1.5 : 1,
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _onVoteTap(false),
+                      borderRadius: BorderRadius.circular(12),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        width: 52,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                          color: coldBg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: coldBorder,
+                            width: isColdActive ? 1.2 : 0.85,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isColdActive
+                                  ? const Color(0xFF06B6D4).withValues(alpha: 0.25 + 0.1 * pulseVal)
+                                  : Colors.black.withValues(alpha: isDark ? 0.1 : 0.02),
+                              blurRadius: isColdActive ? 6 : 3,
+                              offset: const Offset(0, 1.5),
+                            ),
+                          ],
                         ),
-                        boxShadow: widget.hasVotedCold
-                            ? [
-                                BoxShadow(
-                                  color: Colors.cyan.withValues(alpha: 0.45 + 0.25 * pulseVal),
-                                  blurRadius: 6 + 6 * pulseVal,
-                                  spreadRadius: 1 + 1.5 * pulseVal,
-                                ),
-                              ]
-                            : [],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            decoration: widget.hasVotedCold 
-                                ? BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white.withValues(alpha: 0.25),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.white.withValues(alpha: 0.5),
-                                        blurRadius: 6,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  )
-                                : const BoxDecoration(),
-                            child: Text(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
                               '🥶',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'GEÇ',
                               style: TextStyle(
-                                fontSize: 18,
-                                shadows: widget.hasVotedCold 
-                                    ? [
-                                        const Shadow(color: Colors.white, blurRadius: 8),
-                                      ]
-                                    : [],
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: coldTextColor,
+                                letterSpacing: 0.2,
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'GEÇ',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: widget.hasVotedCold ? Colors.white : (isDark ? Colors.grey[400] : Colors.blue[600]),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -179,54 +194,47 @@ class _DealThermometerState extends State<DealThermometer> with SingleTickerProv
                   // Termometre Orta Bar
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Skor gösterimi
+                          // Sıcaklık Skoru
                           Text(
                             totalVotes > 0 ? '$hotPercentage°' : '—',
                             style: TextStyle(
                               fontSize: 20,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w900,
                               color: getThermometerColor(),
-                              shadows: totalVotes > 0 ? [
-                                Shadow(
-                                  color: getThermometerColor().withValues(alpha: 0.4),
-                                  blurRadius: 6,
-                                ),
-                              ] : [],
+                              letterSpacing: -0.5,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          // Bar
+                          const SizedBox(height: 5),
+                          // İlerleme Çubuğu (Capsule Track)
                           Container(
-                            height: 7,
+                            height: 6.5,
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.blue.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.15),
+                              color: isDark 
+                                  ? Colors.white.withValues(alpha: 0.08) 
+                                  : const Color(0xFFE2E8F0),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: LayoutBuilder(
                               builder: (context, constraints) {
                                 return Stack(
                                   children: [
-                                    // Doluluk
                                     AnimatedContainer(
-                                      duration: const Duration(milliseconds: 500),
+                                      duration: const Duration(milliseconds: 350),
                                       curve: Curves.easeOutCubic,
-                                      width: constraints.maxWidth * (hotPercentage / 100),
+                                      width: totalVotes > 0 
+                                          ? constraints.maxWidth * (hotPercentage / 100).clamp(0.0, 1.0)
+                                          : constraints.maxWidth * 0.5,
                                       decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
-                                          colors: [Colors.amber, Colors.orange, Colors.red],
+                                        gradient: LinearGradient(
+                                          colors: totalVotes > 0
+                                              ? const [Color(0xFF06B6D4), Color(0xFFF59E0B), Color(0xFFEF4444)]
+                                              : [Colors.grey.shade400, Colors.grey.shade400],
                                         ),
                                         borderRadius: BorderRadius.circular(4),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.red.withValues(alpha: 0.4),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
                                       ),
                                     ),
                                   ],
@@ -235,13 +243,13 @@ class _DealThermometerState extends State<DealThermometer> with SingleTickerProv
                             ),
                           ),
                           const SizedBox(height: 4),
-                          // Oy sayısı
+                          // Toplam Oy Sayısı
                           Text(
                             '$totalVotes oy',
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 9.5,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.grey[500] : Colors.grey[600],
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                             ),
                           ),
                         ],
@@ -250,70 +258,51 @@ class _DealThermometerState extends State<DealThermometer> with SingleTickerProv
                   ),
                   
                   // Sıcak taraf (Al!)
-                  GestureDetector(
-                    onTap: () => _onVoteTap(true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: widget.hasVotedHot 
-                            ? Colors.deepOrange[600]!.withValues(alpha: 0.85 + 0.1 * pulseVal) 
-                            : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: widget.hasVotedHot 
-                              ? Color.lerp(Colors.orangeAccent, Colors.white, pulseVal)!
-                              : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1)),
-                          width: widget.hasVotedHot ? 1.5 : 1,
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _onVoteTap(true),
+                      borderRadius: BorderRadius.circular(12),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        width: 52,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                          color: hotBg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: hotBorder,
+                            width: isHotActive ? 1.2 : 0.85,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isHotActive
+                                  ? const Color(0xFFFF5722).withValues(alpha: 0.25 + 0.1 * pulseVal)
+                                  : Colors.black.withValues(alpha: isDark ? 0.1 : 0.02),
+                              blurRadius: isHotActive ? 6 : 3,
+                              offset: const Offset(0, 1.5),
+                            ),
+                          ],
                         ),
-                        boxShadow: widget.hasVotedHot
-                            ? [
-                                BoxShadow(
-                                  color: Colors.deepOrange.withValues(alpha: 0.45 + 0.25 * pulseVal),
-                                  blurRadius: 6 + 6 * pulseVal,
-                                  spreadRadius: 1 + 1.5 * pulseVal,
-                                ),
-                              ]
-                            : [],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            decoration: widget.hasVotedHot 
-                                ? BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white.withValues(alpha: 0.25),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.white.withValues(alpha: 0.5),
-                                        blurRadius: 6,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  )
-                                : const BoxDecoration(),
-                            child: Text(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
                               '🔥',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'AL!',
                               style: TextStyle(
-                                fontSize: 18,
-                                shadows: widget.hasVotedHot 
-                                    ? [
-                                        const Shadow(color: Colors.white, blurRadius: 8),
-                                      ]
-                                    : [],
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: hotTextColor,
+                                letterSpacing: 0.2,
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'AL!',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: widget.hasVotedHot ? Colors.white : Colors.red[400],
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

@@ -2962,31 +2962,47 @@ window.switchMessagesTab = function(tabName) {
     simCurrentTab = tabName;
     const simContainer = document.getElementById('msgSimContainer');
     const modContainer = document.getElementById('msgModContainer');
+    const botContainer = document.getElementById('msgBotContainer');
     const tabSimBtn = document.getElementById('msgTabSimBtn');
     const tabModBtn = document.getElementById('msgTabModBtn');
+    const tabBotBtn = document.getElementById('msgTabBotBtn');
+
+    // Reset all containers
+    if (simContainer) simContainer.classList.add('hidden');
+    if (modContainer) {
+        modContainer.classList.add('hidden');
+        modContainer.classList.remove('flex');
+    }
+    if (botContainer) {
+        botContainer.classList.add('hidden');
+        botContainer.classList.remove('grid');
+    }
+
+    // Reset button styles
+    const defaultBtnClass = 'px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors relative';
+    const activeBtnClass = 'px-5 py-3 font-bold text-sm border-b-2 border-primary text-primary flex items-center gap-2 transition-colors relative';
+
+    if (tabSimBtn) tabSimBtn.className = defaultBtnClass;
+    if (tabModBtn) tabModBtn.className = defaultBtnClass;
+    if (tabBotBtn) tabBotBtn.className = defaultBtnClass;
 
     if (tabName === 'simulator') {
         if (simContainer) simContainer.classList.remove('hidden');
-        if (modContainer) modContainer.classList.add('hidden');
-        if (tabSimBtn) {
-            tabSimBtn.className = 'px-5 py-3 font-bold text-sm border-b-2 border-primary text-primary flex items-center gap-2 transition-colors';
-        }
-        if (tabModBtn) {
-            tabModBtn.className = 'px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors';
-        }
-    } else {
-        if (simContainer) simContainer.classList.add('hidden');
+        if (tabSimBtn) tabSimBtn.className = activeBtnClass;
+    } else if (tabName === 'moderation') {
         if (modContainer) {
             modContainer.classList.remove('hidden');
             modContainer.classList.add('flex');
         }
-        if (tabSimBtn) {
-            tabSimBtn.className = 'px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors';
-        }
-        if (tabModBtn) {
-            tabModBtn.className = 'px-5 py-3 font-bold text-sm border-b-2 border-primary text-primary flex items-center gap-2 transition-colors';
-        }
+        if (tabModBtn) tabModBtn.className = activeBtnClass;
         loadModerationMessages();
+    } else if (tabName === 'botkolik') {
+        if (botContainer) {
+            botContainer.classList.remove('hidden');
+            botContainer.classList.add('grid');
+        }
+        if (tabBotBtn) tabBotBtn.className = activeBtnClass;
+        loadBotkolikMessages();
     }
 };
 
@@ -3001,7 +3017,10 @@ function loadMessages() {
     initMessagingSimulator();
     if (simCurrentTab === 'moderation') {
         loadModerationMessages();
+    } else if (simCurrentTab === 'botkolik') {
+        loadBotkolikMessages();
     }
+    updateBotkolikUnreadBadge();
 }
 
 async function loadUsersForSimulator(forceRefresh = false) {
@@ -3698,6 +3717,577 @@ window.deleteAllMessages = async function() {
         loadMessages();
     } catch (e) {
         showError('Toplu silme hatası: ' + e.message);
+    }
+};
+
+// ============================================================================
+// 🤖 BOTKOLİK MESAJLARI & GERİ BİLDİRİM YÖNETİM MODÜLÜ
+// ============================================================================
+
+let botkolikConversations = [];
+let botkolikActiveUserId = null;
+let botkolikActiveUser = null;
+let botkolikChatUnsubscribe = null;
+let botkolikFilterMode = 'all';
+
+async function updateBotkolikUnreadBadge() {
+    try {
+        const snap = await db.collection('messages')
+            .where('receiverId', '==', 'botkolik')
+            .where('isRead', '==', false)
+            .get();
+        const unreadCount = snap.size;
+        const badge = document.getElementById('botUnreadBadge');
+        if (badge) {
+            if (unreadCount > 0) {
+                badge.innerText = unreadCount > 99 ? '99+' : unreadCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+    } catch (e) {
+        console.warn('Botkolik unread badge check failed:', e);
+    }
+}
+
+function renderUserAvatarHtml(imageUrl, userName, sizeClass = 'w-10 h-10', textClass = 'text-sm') {
+    const displayName = (userName || 'K').trim();
+    const fallbackAvatar = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(displayName) + '&background=135bec&color=fff&size=128';
+
+    let resolvedUrl = '';
+    if (typeof imageUrl === 'string' && imageUrl.trim()) {
+        const trimmed = imageUrl.trim();
+        if (typeof cleanProfileImageUrl === 'function') {
+            resolvedUrl = cleanProfileImageUrl(trimmed);
+        } else if (trimmed.startsWith('assets/')) {
+            resolvedUrl = '/' + trimmed;
+        } else {
+            resolvedUrl = trimmed;
+        }
+    }
+
+    const src = resolvedUrl || fallbackAvatar;
+
+    return `
+        <div class="${sizeClass} rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+            <img src="${src}" alt="${escapeHtml(displayName)}" class="w-full h-full object-cover" onerror="this.onerror=null; this.src='${fallbackAvatar}';">
+        </div>
+    `;
+}
+
+function renderBotkolikAvatarHtml(sizeClass = 'w-8 h-8') {
+    return `
+        <div class="${sizeClass} rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center overflow-hidden shrink-0 mt-1 shadow-sm">
+            <span class="material-symbols-outlined text-[18px] text-primary">smart_toy</span>
+        </div>
+    `;
+}
+
+window.loadBotkolikMessages = async function() {
+    const listContainer = document.getElementById('botConversationsList');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = `
+        <div class="p-8 text-center text-slate-400 text-xs flex flex-col items-center gap-2 m-auto">
+            <span class="material-symbols-outlined text-3xl opacity-40 animate-spin text-primary">sync</span>
+            <span>Botkolik mesajları taranıyor...</span>
+        </div>
+    `;
+
+    try {
+        // 1. Get messages where receiver is botkolik
+        const snapReceived = await db.collection('messages')
+            .where('receiverId', '==', 'botkolik')
+            .get();
+
+        // 2. Get messages where sender is botkolik
+        const snapSent = await db.collection('messages')
+            .where('senderId', '==', 'botkolik')
+            .get();
+
+        const convMap = new Map();
+
+        // Process incoming messages to Botkolik
+        snapReceived.forEach(doc => {
+            const data = doc.data();
+            const userId = data.senderId;
+            if (!userId || userId === 'botkolik') return;
+
+            const date = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : new Date();
+
+            if (!convMap.has(userId)) {
+                convMap.set(userId, {
+                    userId: userId,
+                    userName: data.senderName || 'Kullanıcı',
+                    userImageUrl: data.senderImageUrl || '',
+                    lastMessage: data.text || '',
+                    lastDate: date,
+                    unreadCount: 0,
+                    totalMessages: 0,
+                    lastSenderId: data.senderId,
+                    lastDealTitle: data.dealTitle || null
+                });
+            }
+
+            const conv = convMap.get(userId);
+            conv.totalMessages++;
+            if (!data.isRead) {
+                conv.unreadCount++;
+            }
+            if (date >= conv.lastDate) {
+                conv.lastDate = date;
+                conv.lastMessage = data.text || '';
+                conv.lastSenderId = data.senderId;
+                conv.lastDealTitle = data.dealTitle || null;
+            }
+            if (data.senderName && (!conv.userName || conv.userName === 'Kullanıcı')) {
+                conv.userName = data.senderName;
+            }
+            if (data.senderImageUrl && !conv.userImageUrl) {
+                conv.userImageUrl = data.senderImageUrl;
+            }
+        });
+
+        // Process outgoing messages from Botkolik
+        snapSent.forEach(doc => {
+            const data = doc.data();
+            const userId = data.receiverId;
+            if (!userId || userId === 'botkolik') return;
+
+            const date = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : new Date();
+
+            if (!convMap.has(userId)) {
+                convMap.set(userId, {
+                    userId: userId,
+                    userName: data.receiverName || 'Kullanıcı',
+                    userImageUrl: data.receiverImageUrl || '',
+                    lastMessage: data.text || '',
+                    lastDate: date,
+                    unreadCount: 0,
+                    totalMessages: 0,
+                    lastSenderId: data.senderId,
+                    lastDealTitle: data.dealTitle || null
+                });
+            }
+
+            const conv = convMap.get(userId);
+            conv.totalMessages++;
+            if (date >= conv.lastDate) {
+                conv.lastDate = date;
+                conv.lastMessage = data.text || '';
+                conv.lastSenderId = data.senderId;
+                conv.lastDealTitle = data.dealTitle || null;
+            }
+            if (data.receiverName && (!conv.userName || conv.userName === 'Kullanıcı')) {
+                conv.userName = data.receiverName;
+            }
+            if (data.receiverImageUrl && !conv.userImageUrl) {
+                conv.userImageUrl = data.receiverImageUrl;
+            }
+        });
+
+        // Fetch user profiles from 'users' collection to ensure live avatars and names
+        const userIds = Array.from(convMap.keys());
+        if (userIds.length > 0) {
+            try {
+                const userDocs = await Promise.all(
+                    userIds.map(uid => db.collection('users').doc(uid).get().catch(() => null))
+                );
+                userDocs.forEach((docSnap, index) => {
+                    if (docSnap && docSnap.exists) {
+                        const uData = docSnap.data();
+                        const uid = userIds[index];
+                        const conv = convMap.get(uid);
+                        if (conv && uData) {
+                            if (uData.username || uData.displayName) {
+                                conv.userName = uData.username || uData.displayName;
+                            }
+                            const pImg = uData.profileImageUrl || uData.photoURL || uData.avatarUrl;
+                            if (pImg) {
+                                conv.userImageUrl = pImg;
+                            }
+                        }
+                    }
+                });
+            } catch (uErr) {
+                console.warn('Could not batch fetch user profiles:', uErr);
+            }
+        }
+
+        // Convert Map to array and sort by most recent message
+        botkolikConversations = Array.from(convMap.values()).sort((a, b) => b.lastDate - a.lastDate);
+
+        // Update counts
+        const countLabel = document.getElementById('botTotalConversationsCount');
+        if (countLabel) {
+            countLabel.innerText = `${botkolikConversations.length} Kullanıcı`;
+        }
+
+        updateBotkolikUnreadBadge();
+        window.renderBotkolikConversations();
+
+        // If previously selected user is still in the list, auto-select them
+        if (botkolikActiveUserId && botkolikConversations.some(c => c.userId === botkolikActiveUserId)) {
+            window.selectBotkolikConversation(botkolikActiveUserId);
+        }
+    } catch (e) {
+        console.error('Error loading Botkolik conversations:', e);
+        listContainer.innerHTML = `
+            <div class="p-8 text-center text-red-500 text-xs">
+                Botkolik mesajları yüklenirken hata oluştu: ${e.message}
+            </div>
+        `;
+    }
+};
+
+window.setBotkolikFilter = function(filterMode) {
+    botkolikFilterMode = filterMode;
+    const allBtn = document.getElementById('botFilterAllBtn');
+    const unreadBtn = document.getElementById('botFilterUnreadBtn');
+    const repliedBtn = document.getElementById('botFilterRepliedBtn');
+
+    const activeClass = 'px-2.5 py-1 text-[11px] font-bold rounded-lg bg-primary text-white transition-colors cursor-pointer';
+    const inactiveClass = 'px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white transition-colors cursor-pointer';
+
+    if (allBtn) allBtn.className = filterMode === 'all' ? activeClass : inactiveClass;
+    if (unreadBtn) unreadBtn.className = filterMode === 'unread' ? activeClass : inactiveClass;
+    if (repliedBtn) repliedBtn.className = filterMode === 'replied' ? activeClass : inactiveClass;
+
+    window.renderBotkolikConversations();
+};
+
+window.filterBotkolikConversations = function() {
+    window.renderBotkolikConversations();
+};
+
+window.renderBotkolikConversations = function() {
+    const listContainer = document.getElementById('botConversationsList');
+    if (!listContainer) return;
+
+    const searchTerm = (document.getElementById('botConvSearchInput')?.value || '').trim().toLowerCase();
+
+    let filtered = botkolikConversations.filter(c => {
+        if (botkolikFilterMode === 'unread' && c.unreadCount === 0) return false;
+        if (botkolikFilterMode === 'replied' && (c.unreadCount > 0 || c.lastSenderId !== 'botkolik')) return false;
+
+        if (searchTerm) {
+            const matchesUser = (c.userName || '').toLowerCase().includes(searchTerm);
+            const matchesMsg = (c.lastMessage || '').toLowerCase().includes(searchTerm);
+            const matchesUid = (c.userId || '').toLowerCase().includes(searchTerm);
+            return matchesUser || matchesMsg || matchesUid;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        listContainer.innerHTML = `
+            <div class="p-8 text-center text-slate-400 text-xs flex flex-col items-center gap-2 m-auto">
+                <span class="material-symbols-outlined text-3xl opacity-30">inbox</span>
+                <span>Filtreye uygun mesaj bulunamadı.</span>
+            </div>
+        `;
+        return;
+    }
+
+    listContainer.innerHTML = filtered.map(c => {
+        const isSelected = c.userId === botkolikActiveUserId;
+        const timeStr = typeof formatTimeAgo === 'function' ? formatTimeAgo(c.lastDate) : c.lastDate.toLocaleDateString('tr-TR');
+        const isUnread = c.unreadCount > 0;
+        const isLastMe = c.lastSenderId === 'botkolik';
+
+        return `
+            <div onclick="window.selectBotkolikConversation('${c.userId}')" class="p-3.5 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${isSelected ? 'bg-primary/10 border-l-4 border-primary' : ''}">
+                ${renderUserAvatarHtml(c.userImageUrl, c.userName, 'w-10 h-10', 'text-sm')}
+                <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-900 dark:text-white text-xs truncate ${isUnread ? 'text-primary' : ''}">${escapeHtml(c.userName)}</span>
+                        <span class="text-[10px] text-slate-400 shrink-0">${timeStr}</span>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 truncate ${isUnread ? 'font-bold text-slate-800 dark:text-slate-200' : ''}">
+                        ${isLastMe ? '<span class="text-primary font-semibold">Bot: </span>' : ''}${escapeHtml(c.lastMessage || 'Fırsat Eki')}
+                    </p>
+                    ${c.lastDealTitle ? `<span class="text-[10px] text-amber-500 font-semibold truncate">🏷️ ${escapeHtml(c.lastDealTitle)}</span>` : ''}
+                </div>
+                ${isUnread ? `
+                    <span class="px-1.5 py-0.5 text-[10px] font-bold bg-primary text-white rounded-full shrink-0">
+                        ${c.unreadCount}
+                    </span>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+};
+
+window.selectBotkolikConversation = async function(userId) {
+    botkolikActiveUserId = userId;
+    let conv = botkolikConversations.find(c => c.userId === userId);
+    botkolikActiveUser = conv || { userId: userId, userName: 'Kullanıcı', userImageUrl: '' };
+
+    // Fetch fresh user doc if needed
+    try {
+        const uDoc = await db.collection('users').doc(userId).get();
+        if (uDoc.exists) {
+            const uData = uDoc.data();
+            if (uData.username || uData.displayName) {
+                botkolikActiveUser.userName = uData.username || uData.displayName;
+            }
+            const pImg = uData.profileImageUrl || uData.photoURL || uData.avatarUrl;
+            if (pImg) {
+                botkolikActiveUser.userImageUrl = pImg;
+            }
+        }
+    } catch (_) {}
+
+    // Update Header
+    const nameEl = document.getElementById('botActiveUserName');
+    const uidEl = document.getElementById('botActiveUserUid');
+    const avatarEl = document.getElementById('botActiveUserAvatar');
+    const profBtn = document.getElementById('botUserProfileBtn');
+    const roleBadge = document.getElementById('botActiveUserRole');
+    const templatesBar = document.getElementById('botQuickTemplatesBar');
+    const composerArea = document.getElementById('botReplyComposerArea');
+
+    if (nameEl) nameEl.innerText = botkolikActiveUser.userName || 'Kullanıcı';
+    if (uidEl) uidEl.innerText = `UID: ${userId}`;
+    if (profBtn) profBtn.classList.remove('hidden');
+    if (roleBadge) roleBadge.classList.remove('hidden');
+    if (templatesBar) templatesBar.classList.remove('hidden');
+    if (composerArea) composerArea.classList.remove('hidden');
+
+    if (avatarEl) {
+        avatarEl.innerHTML = renderUserAvatarHtml(botkolikActiveUser.userImageUrl, botkolikActiveUser.userName, 'w-10 h-10', 'text-sm');
+    }
+
+    // Re-render conversation list items to show active border
+    window.renderBotkolikConversations();
+
+    // Start Live Messages Stream for this conversation
+    startBotkolikChatStream(userId);
+};
+
+function startBotkolikChatStream(userId) {
+    if (botkolikChatUnsubscribe) {
+        botkolikChatUnsubscribe();
+        botkolikChatUnsubscribe = null;
+    }
+
+    const messagesArea = document.getElementById('botChatMessagesArea');
+    if (!messagesArea) return;
+
+    messagesArea.innerHTML = `
+        <div class="m-auto text-center text-slate-400 text-xs flex flex-col items-center gap-2 py-12">
+            <span class="material-symbols-outlined text-3xl opacity-40 animate-spin text-primary">sync</span>
+            <p>Sohbet geçmişi yükleniyor...</p>
+        </div>
+    `;
+
+    // Listen to messages in real time
+    botkolikChatUnsubscribe = db.collection('messages')
+        .onSnapshot(async (snapshot) => {
+            if (botkolikActiveUserId !== userId) return;
+
+            const relevantDocs = [];
+            const unreadDocIds = [];
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if ((data.senderId === userId && data.receiverId === 'botkolik') ||
+                    (data.senderId === 'botkolik' && data.receiverId === userId)) {
+                    relevantDocs.push({
+                        id: doc.id,
+                        ...data
+                    });
+                    if (data.receiverId === 'botkolik' && !data.isRead) {
+                        unreadDocIds.push(doc.id);
+                    }
+                }
+            });
+
+            // Mark unread messages as read in batch
+            if (unreadDocIds.length > 0) {
+                const batch = db.batch();
+                unreadDocIds.forEach(id => {
+                    batch.update(db.collection('messages').doc(id), { isRead: true, isReadByAdmin: true });
+                });
+                batch.commit().catch(e => console.warn('Mark read error:', e));
+
+                // Update local model
+                const currentConv = botkolikConversations.find(c => c.userId === userId);
+                if (currentConv) {
+                    currentConv.unreadCount = 0;
+                    window.renderBotkolikConversations();
+                    updateBotkolikUnreadBadge();
+                }
+            }
+
+            // Sort chronological
+            relevantDocs.sort((a, b) => {
+                const dateA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
+                const dateB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
+                return dateA - dateB;
+            });
+
+            if (relevantDocs.length === 0) {
+                messagesArea.innerHTML = `
+                    <div class="m-auto text-center text-slate-400 text-xs flex flex-col items-center gap-2 py-12">
+                        <span class="material-symbols-outlined text-4xl opacity-30 text-primary">chat_bubble_outline</span>
+                        <p class="font-semibold text-slate-600 dark:text-slate-300">Bu kullanıcıyla henüz mesaj bulunmuyor.</p>
+                        <p class="text-[11px] text-slate-400">Aşağıdaki alandan Botkolik adına bir mesaj göndererek sohbeti başlatabilirsiniz.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            messagesArea.innerHTML = relevantDocs.map(m => {
+                const isBot = m.senderId === 'botkolik';
+                const date = m.createdAt ? (m.createdAt.toDate ? m.createdAt.toDate() : new Date(m.createdAt)) : new Date();
+                const timeStr = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+                let dealBadgeHtml = '';
+                if (m.dealTitle) {
+                    dealBadgeHtml = `
+                        <div class="mb-2 p-2 bg-slate-900/30 rounded-lg border border-white/10 flex items-center gap-2 text-xs">
+                            ${m.dealImageUrl ? `<img src="${m.dealImageUrl}" class="w-8 h-8 object-cover rounded bg-slate-800 shrink-0">` : ''}
+                            <div class="flex flex-col min-w-0 flex-1">
+                                <span class="font-bold truncate text-slate-100">${escapeHtml(m.dealTitle)}</span>
+                                ${m.dealPrice ? `<span class="text-amber-400 font-semibold">${escapeHtml(m.dealPrice)} TL</span>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (isBot) {
+                    // Botkolik (Admin) Message - Right side Bubble
+                    return `
+                        <div class="flex items-start justify-end gap-2.5 max-w-[85%] self-end">
+                            <div class="flex flex-col items-end min-w-0">
+                                <div class="p-3.5 bg-primary text-white rounded-2xl rounded-tr-xs shadow-sm flex flex-col gap-1">
+                                    <div class="flex items-center justify-between gap-2 pb-1 border-b border-white/15">
+                                        <span class="text-[11px] font-bold flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-[14px]">smart_toy</span> Botkolik (Yönetim)
+                                        </span>
+                                    </div>
+                                    ${dealBadgeHtml}
+                                    <p class="text-sm font-medium leading-relaxed whitespace-pre-wrap">${escapeHtml(m.text || '')}</p>
+                                </div>
+                                <div class="flex items-center gap-1.5 mt-1 px-1 text-[10px] text-slate-400 font-medium">
+                                    <span>${timeStr}</span>
+                                    ${m.isRead ? '<span class="text-blue-400 font-bold" title="Kullanıcı Okudu">✓✓</span>' : '<span class="text-slate-400" title="İletildi">✓</span>'}
+                                </div>
+                            </div>
+                            ${renderBotkolikAvatarHtml('w-8 h-8')}
+                        </div>
+                    `;
+                } else {
+                    // User Message - Left side Bubble
+                    return `
+                        <div class="flex items-start gap-2.5 max-w-[85%] self-start">
+                            ${renderUserAvatarHtml(botkolikActiveUser.userImageUrl, botkolikActiveUser.userName, 'w-8 h-8', 'text-xs')}
+                            <div class="flex flex-col items-start min-w-0">
+                                <div class="p-3.5 bg-white dark:bg-surface-dark text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 rounded-2xl rounded-tl-xs shadow-sm flex flex-col gap-1">
+                                    <div class="flex items-center justify-between gap-2 pb-1 border-b border-slate-100 dark:border-slate-800">
+                                        <span class="text-[11px] font-bold text-primary truncate">${escapeHtml(botkolikActiveUser.userName)}</span>
+                                    </div>
+                                    ${dealBadgeHtml}
+                                    <p class="text-sm font-medium leading-relaxed whitespace-pre-wrap text-slate-800 dark:text-slate-200">${escapeHtml(m.text || '')}</p>
+                                </div>
+                                <div class="flex items-center gap-1.5 mt-1 px-1 text-[10px] text-slate-400 font-medium">
+                                    <span>${timeStr}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }).join('');
+
+            setTimeout(() => {
+                messagesArea.scrollTop = messagesArea.scrollHeight;
+            }, 50);
+        });
+}
+
+window.sendBotkolikReply = async function() {
+    if (!botkolikActiveUserId) {
+        showError('Lütfen önce bir kullanıcı seçin.');
+        return;
+    }
+
+    const input = document.getElementById('botReplyTextInput');
+    if (!input) return;
+
+    const text = input.value.trim();
+    if (!text) {
+        showError('Lütfen bir yanıt mesajı yazın.');
+        return;
+    }
+
+    const sendBtn = document.getElementById('botSendReplyBtn');
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">sync</span><span>...</span>';
+    }
+
+    try {
+        await db.collection('messages').add({
+            senderId: 'botkolik',
+            senderName: 'Botkolik',
+            senderImageUrl: 'assets/botkolik.webp',
+            receiverId: botkolikActiveUserId,
+            receiverName: botkolikActiveUser?.userName || 'Kullanıcı',
+            receiverImageUrl: botkolikActiveUser?.userImageUrl || '',
+            text: text,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            isRead: false,
+            isReadByAdmin: true,
+            dealId: null,
+            dealTitle: null
+        });
+
+        input.value = '';
+        input.focus();
+        showSuccess('Botkolik yanıtı başarıyla iletildi!');
+    } catch (e) {
+        console.error('Botkolik reply error:', e);
+        showError('Mesaj gönderilemedi: ' + e.message);
+    } finally {
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">send</span><span>Yanıtla</span>';
+        }
+    }
+};
+
+window.applyBotTemplate = function(templateKey) {
+    const input = document.getElementById('botReplyTextInput');
+    if (!input) return;
+
+    const templates = {
+        'feedback_thanks': 'Geri bildiriminiz ve öneriniz için teşekkürler! Ekibimizle birlikte incelemeye aldık. 🚀',
+        'price_fixed': 'Bildirdiğiniz fiyat anomalisini inceledik ve sisteme yansıttık. Dikkatiniz ve desteğiniz için teşekkürler! ⚡',
+        'roadmap_added': 'Harika bir fikir! Önerinizi FırsatKolik geliştirme yol haritamıza ekledik. İlginiz ve desteğiniz için teşekkürler! ✨',
+        'store_issue': 'Mağaza bağlantısındaki sorunu inceliyoruz, en kısa sürede düzeltilecektir. Bilgilendirme için teşekkürler! 🛠️'
+    };
+
+    if (templates[templateKey]) {
+        input.value = templates[templateKey];
+        input.focus();
+    }
+};
+
+window.handleBotReplyKeyDown = function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        window.sendBotkolikReply();
+    }
+};
+
+window.viewSelectedBotUserProf = function() {
+    if (!botkolikActiveUserId) return;
+    if (typeof window.viewUserProfile === 'function') {
+        window.viewUserProfile(botkolikActiveUserId);
+    } else {
+        alert('Kullanıcı UID: ' + botkolikActiveUserId);
     }
 };
 

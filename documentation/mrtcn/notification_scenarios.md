@@ -1,176 +1,94 @@
-# 🔔 FırsatKolik — Bildirim ve Push Bildirim Senaryoları Rehberi (vProduction - Nihai)
+# 🔔 FırsatKolik — Bildirim ve Push Bildirim Senaryoları Rehberi (vProduction - Kapsamlı & Güncel)
 
-Bu doküman, FırsatKolik platformundaki iki temel bildirim alanının ("Profilim -> Bildirimler" menüsü ve "Profilim -> Ayarlar -> Bildirim Ayarları" menüsü) işleyişini, tetikleme kurallarını, kademeli pasifleştirme (parent-child) mantığını, veri akışlarını ve tüm olası senaryoları detaylandırır.
+Bu doküman, FırsatKolik platformundaki iki temel bildirim alanının (**"Profilim -> Bildirimler"** menüsü ve **"Profilim -> Bildirim Ayarları"** menüsü) işleyişini, tetikleme kurallarını, kademeli pasifleştirme (parent-child) mantığını, veri akışlarını, önceliklendirme ve tekilleştirme mekanizmalarını ve tüm olası senaryoları detaylandırır.
 
 ---
 
-## 🗺️ 1. Genel Bakış ve Temel Farklar
+## 🗺️ 1. Genel Bakış ve Temel Mimari
 
-Uygulama içerisinde bildirimlerle ilgili iki farklı kavram bulunur:
+Uygulama içerisinde bildirimlerle ilgili iki temel kavram bulunur:
 
 1. **"Bildirimler" Menüsü (Uygulama İçi Bildirim Kutusu / Notification Center):**
-   * Kullanıcının geçmişe dönük aldığı tüm bildirimleri (Fırsat eşleşmeleri, yorum yanıtları, paylaşım durumları vb.) listelediği arayüzdür.
+   * Kullanıcının geçmişe dönük aldığı tüm bildirimleri (Fırsat eşleşmeleri, yorum yanıtları, paylaşım onay/red durumları, yönetici duyuruları vb.) listelediği arayüzdür.
    * Firestore'da `users/{userId}/notifications` koleksiyonunda saklanır.
-   * **Kritik Kural:** Bir bildirim tetiklendiğinde, kullanıcının push ayarları veya sessiz saatleri ne olursa olsun, bu doküman veritabanında **HER ZAMAN** oluşturulur. Yani push bildirimi gitmese bile bildirim kutusunda bu bildirim listelenmeye devam eder.
+   * **Kritik Kural:** Bir bildirim tetiklendiğinde, kullanıcının push ayarları veya sessiz saatleri ne olursa olsun, bu doküman veritabanında **HER ZAMAN** oluşturulur. Push bildirimi gitmese bile bildirim kutusunda bu bildirim listelenmeye devam eder.
 
 2. **"Bildirim Ayarları" Menüsü (Anlık Push Bildirimleri / FCM Push Notifications):**
    * Kullanıcının telefonuna gelen anlık uyarıların (Push) kanallarını, sessiz saatlerini ve genel izin durumunu yönettiği arayüzdür.
    * Firestore'da `users/{userId}/notificationPreferences/main` belgesinde saklanır.
-   * Cloud Functions `onNotificationCreated` tetikleyicisi, bildirim kutusuna yeni bir doküman eklendiğinde devreye girer. Bu tercihlere, sistem limitlerine ve sessiz saatlere bakarak push bildirimini hedefler veya göndermeyi atlar (buna rağmen bildirim kutusında kalır).
+   * Cloud Functions `onNotificationCreated` tetikleyicisi, bildirim kutusuna yeni bir doküman eklendiğinde devreye girer. Bu tercihlere, sistem limitlerine ve sessiz saatlere bakarak push bildirimini hedefler veya göndermeyi atlar.
 
 ---
 
-## 📁 2. "Bildirimler" Menüsü (Uygulama İçi Bildirim Kutusu) Senaryoları
+## 📁 2. Tüm Bildirim Türleri ve Tetiklenme Senaryoları (Tam Matris)
 
-Bu arayüz, `users/{userId}/notifications` koleksiyonunu `createdAt` alanına göre azalan sırada canlı dinler.
-
-### Olası Bildirim Türleri ve Tetiklenme Senaryoları:
-
-| Senaryo ID | Bildirim Türü (`type`) | Tetikleyici Olay | Başlık (`title`) / İçerik (`body`) Şablonu | Koşul / Öncelik |
-| :--- | :--- | :--- | :--- | :--- |
-| **NOTIF-01** | `deal` (Kategori) | Abone olunan bir kategoriye ait fırsatın onaylanması | **🎯 Yeni Fırsat!**<br>Ürün Adı ve Fiyatı | Kategori aboneliği açık olmalı. Diğer nedenler yoksa en düşük öncelikle tetiklenir. |
-| **NOTIF-02** | `deal` (Yazar) | Bildirim zili açılan bir yazarın (avcının) paylaştığı fırsatın onaylanması | **👤 Takip Ettiğiniz Kişi!**<br>Takip ettiğiniz yazar yeni fırsat paylaştı: [Fırsat Başlığı] | Yazar takibi açık olmalı. Orta önceliklidir. |
-| **NOTIF-03** | `deal` (Anahtar Kelime)| Abone olunan kelimeyi (Örn: "xiaomi") içeren fırsatın onaylanması | **🎯 İlginizi Çeken Kelime!**<br>"[Kelime]" içeren yeni fırsat: [Fırsat Başlığı] | Kelime aboneliği açık olmalı. En yüksek önceliklidir (Deduplication). |
-| **NOTIF-04** | `comment_reply` | Bir kullanıcının yazdığı yoruma başka bir kullanıcının cevap yazması | **[Kullanıcı Adı] yorumunuza cevap verdi**<br>Yorum içeriği (ilk 100 karakter) | Kendine yanıt verilmemiş olmalı. |
-| **NOTIF-05** | `submission_status` (Onay) | Kullanıcının paylaştığı fırsatın admin tarafından onaylanması | **🎉 Fırsatınız Onaylandı!**<br>Paylaştığınız "[Fırsat Başlığı]" onaylandı ve yayına alındı. | Fırsat `isUserSubmitted: true` olmalı ve admin tarafından onaylanmalı. **[SESSİZ BİLDİRİM]** Push gönderilmez, sadece Bildirim Merkezinde (uygulama içi bildirim kutusunda) listelenir. |
-| **NOTIF-06** | `submission_status` (Red) | Kullanıcının paylaştığı fırsatın admin tarafından reddedilmesi | **❌ Fırsatınız Reddedildi**<br>Paylaştığınız "[Fırsat Başlığı]" kurallarımıza uymadığı için reddedildi. | Fırsat `isUserSubmitted: true` olmalı ve admin tarafından reddedilmeli (`isRejected: true`). **[SESSİZ BİLDİRİM]** Push gönderilmez, sadece Bildirim Merkezinde (uygulama içi bildirim kutusunda) listelenir. |
-| **NOTIF-07** | `admin_message` | Admin panelinden kullanıcıya manuel bildirim tetiklenmesi | **[Admin Başlığı]**<br>[Admin Mesajı] | Admin tarafından hedeflenen kullanıcıya özel oluşturulur. |
-
-### Uygulama İçi Etkileşimler:
-* **Okundu İşaretleme:** Kullanıcı bildirime tıkladığında `read` alanı `true` yapılır ve kalın/vurgulu stil kaldırılır.
-* **Tekil Silme:** Bildirim satırındaki silme butonu dokümanı koleksiyondan siler.
-* **Tümünü Silme:** Bildirimler ekranındaki çöp kutusu butonu kullanıcının tüm bildirim belgelerini siler.
+| Senaryo ID | Bildirim Türü (`type`) | Tetikleyici Olay | Kanal ID & Renk | Başlık (`title`) / İçerik (`body`) Şablonu | Koşul, Öncelik & Davranış |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **NOTIF-01** | `deal` (Kategori) | Abone olunan bir kategori veya alt kategoriye ait yeni fırsatın onaylanması / yayınlanması | `sicak_firsatlar_general_v2`<br>(#FF6B35) | **🎯 Yeni Fırsat!**<br>[Fırsat Başlığı]<br>💰 [Fiyat] TL | Kategori aboneliği açık olmalı. En düşük önceliklidir (3. seviye). Saatlik/günlük kategori hız limitlerine ve sessiz saatlere tabidir. |
+| **NOTIF-02** | `deal` (Yazar) | Bildirim zili açılan bir avcının (yazarın) paylaştığı fırsatın onaylanması | `sicak_firsatlar_general_v2`<br>(#FF6B35) | **👤 Takip Ettiğiniz Kişi!**<br>Takip ettiğiniz yazar yeni fırsat paylaştı: [Fırsat Başlığı] | Yazar takibi açık olmalı. Orta önceliklidir (2. seviye). Kategori hız limitlerine tabi değildir; sessiz saatlere tabidir. |
+| **NOTIF-03** | `deal` (Anahtar Kelime)| Abone olunan anahtar kelimeyi (Örn: "iphone 15", "dyson") içeren fırsatın onaylanması | `keyword_alerts_channel`<br>(#FF9800) | **🎯 İlginizi Çeken Kelime!**<br>"[Kelime]" içeren yeni fırsat: [Fırsat Başlığı] | Kelime aboneliği açık olmalı. En yüksek önceliklidir (Deduplication). Eğer kullanıcı kelime bildirimlerini kapatmış ama kategori açık ise otomatik olarak kategori başlığına dinamik dönüşüm yapılır. |
+| **NOTIF-04** | `comment_reply` | Bir kullanıcının yazdığı yoruma başka bir kullanıcının cevap yazması | `comment_replies_channel`<br>(#2196F3) | **[Kullanıcı Adı] yorumunuza cevap verdi**<br>[Cevap Metni (ilk 100 karakter)] | Kendine yanıt verilmemiş olmalı. **Sessiz saatlerden muaftır** (24 saat anlık iletilir). |
+| **NOTIF-05** | `submission_status` (Onay) | Kullanıcının paylaştığı fırsatın admin tarafından onaylanması | N/A (Push Yok) | **🎉 Fırsatınız Onaylandı!**<br>Paylaştığınız "[Fırsat Başlığı]" onaylandı ve yayına alındı. | **[SESSİZ BİLDİRİM]** Telefona push gitmez (`disabled_permanently_for_submission_status`), sadece Bildirim Merkezi'nde saklanır. |
+| **NOTIF-06** | `submission_status` (Red) | Kullanıcının paylaştığı fırsatın admin tarafından reddedilmesi | N/A (Push Yok) | **❌ Fırsatınız Reddedildi**<br>Paylaştığınız "[Fırsat Başlığı]" kurallarımıza uymadığı için reddedildi. | **[SESSİZ BİLDİRİM]** Telefona push gitmez (`disabled_permanently_for_submission_status`), sadece Bildirim Merkezi'nde saklanır. |
+| **NOTIF-07** | `admin_message` | Admin panelinden veya sistemden kullanıcıya resmi bildirim gönderilmesi | `admin_messages_channel_v3`<br>(#FF5722) | **🛡️ [Admin Başlığı]**<br>[Admin Mesajı] | **Sessiz saatlerden ve grup tercihlerinden muaftır.** Yalnızca Master Switch kapalıysa engellenir. Ön planda `InAppMessageBanner` ile gösterilir. |
+| **NOTIF-08** | `message` (Sohbet) | Kullanıcılar arası birebir mesajlaşmada yeni mesaj gelmesi | `messages_channel_v3`<br>(#2196F3) | **💬 [Gönderen Adı]**<br>[Mesaj Metni] | **Data-only payload.** Alıcı o an o kullanıcıyla aktif sohbet odasındaysa bildirim bastırılır. Uygulama içinde başka yerdeyse `InAppMessageBanner`, arka plandaysa sistem bildirimi gösterilir. |
+| **NOTIF-09** | `admin_deal` | Onay bekleyen yeni bir fırsat (kullanıcı veya bot) paylaşıldığında adminlere giden bildirim | `admin_channel`<br>(#2196F3) | **👮‍♂️ Yeni Onay Bekleyen Fırsat ([Kaynak])**<br>[Fırsat Başlığı]<br>💰 [Fiyat] TL | `admin_deals` FCM konusuna (topic) gönderilir. Sadece admin yetkisi olan kullanıcılara iletilir. Deterministik `tag: 'admin_deal_${dealId}'` ile mükerrerlik önlenir. |
+| **NOTIF-10** | `marketing` | Özel kampanyalar, hediye çekleri ve pazarlama duyuruları | `sicak_firsatlar_general_v2`<br>(#FF6B35) | **[Kampanya Başlığı]**<br>[Kampanya Detayı] | Kampanya switch'i açık olmalı. Sessiz saatlere ve master switch'e tabidir. |
 
 ---
 
-## ⚙️ 3. "Bildirim Ayarları" Menüsü (Push Bildirimleri) Kusursuz UX & Mimari Şartnamesi (vProduction - Nihai)
-
-Push bildirimlerinin telefona ulaşma karar ağacı Cloud Functions `onNotificationCreated` tetikleyicisi ve mobil uygulama tarafındaki 3 katmanlı parent-child mimarisi tarafından yönetilir.
-
-### 📐 Kademeli Pasifleştirme ve Hiyerarşi Şeması:
+## ⚙️ 3. "Bildirim Ayarları" 3 Katmanlı UX & Karar Mimarisi
 
 ```text
 [ Katman 1: Master Switch - TELEFON BİLDİRİMLERİ ]
 │
-├── AÇIK ──► Katman 2 (Kanal Switch'leri) Aktif & Canlı Renklerde
-│                 │
-│                 ├── "Kategori Bildirimleri" AÇIK  ──► Katman 3 ("Kategori Tercihleri >") Tıklanabilir
-│                 └── "Kategori Bildirimleri" KAPALI ──► Katman 3 ("Kategori Tercihleri >") GRİ & KİLİTLİ
+├── AÇIK (true) ──► Katman 2 (Kanal Switch'leri) Aktif & Canlı Renklerde
+│                        │
+│                        ├── "Kategori Bildirimleri" AÇIK  ──► Katman 3 ("Kategoriler >") Tıklanabilir
+│                        ├── "Kategori Bildirimleri" KAPALI ──► Katman 3 ("Kategoriler >") GRİ & KİLİTLİ
+│                        ├── "Kelime Bildirimleri" AÇIK    ──► Katman 3 ("Anahtar Kelimeler >") Tıklanabilir
+│                        └── "Kelime Bildirimleri" KAPALI   ──► Katman 3 ("Anahtar Kelimeler >") GRİ & KİLİTLİ
 │
-└── KAPALI ─► TÜM ALT KANALLAR VE DETAY SATIRLARI GRİ & KİLİTLİ (%50 Opaklık / Tıklanamaz)
+└── KAPALI (false) ─► TÜM ALT KANALLAR VE DETAY SATIRLARI GRİ & KİLİTLİ (%50 Opaklık / Tıklanamaz)
 ```
 
----
+### Tercih Kuralları:
 
-### Tercihler ve Eşleşen Karar Senaryoları:
+1. **Master Switch (`pushMasterEnabled`):**
+   - **KAPALI:** Altındaki tüm kanal switch'leri ve detay kartları %50 opaklık ile grileşir ve kilitlenir. Tıklandığında dinamik Snackbar uyarısı gösterilir: *"Bu ayarı değiştirmek için önce yukarıdan Telefon Bildirimleri'ni açmalısınız."*. Alt kanalların veritabanındaki değerleri **korunur (State Preservation)**. Cloud Functions tüm push'ları `disabled_by_user_master_switch` ile durdurur.
+   - **AÇIK:** Tüm alt kanallar eski durumları korunmuş şekilde canlı renklerine döner ve etkileşime açılır.
 
-#### A. Telefon Bildirimleri (Master Switch - `pushMasterEnabled`)
-* **Görevi:** Telefona anlık Push Bildirim gönderilip gönderilmeyeceğini belirleyen ana vanadır.
-* **Senaryo PUSH-MASTER-OFF:** `pushMasterEnabled: false` yapıldığında:
-  * Altındaki tüm Katman 2 (Kanal Switch'leri) ve Katman 3 (Detay Yönlendirme Kartları) elemanları **%50 Opaklaşır (%50 Opacity / Gri)** ve tıklamalara kilitlenir.
-  * **Durum Koruma (State Preservation):** Alt kanalların veritabanındaki `true/false` tercih değerleri **KESİNLİKLE EZİLMEZ VEYA SİLİNMEZ**.
-  * **Cloud Functions Karar Mekanizması:** Cloud Functions push meşruiyetini kontrol ederken `pushMasterEnabled === false` tespit ettiği an, alt tercihler ne olursa olsun bildirimi `pushEligible: false`, `pushStatus: 'disabled_by_user_master_switch'` statüsü ile engeller.
-* **Senaryo PUSH-MASTER-ON:** `pushMasterEnabled: true` yapıldığında:
-  * Tüm alt elemanlar canlı renklerine döner ve etkileşime açılır.
-  * Kullanıcının daha önce seçtiği özel tercihler (`State Preservation`) aynen geri yüklenir.
+2. **Kanal Bazlı Switch'ler:**
+   - `dealNotificationsEnabled`: Yazar bildirimlerini kontrol eder (`disabled_by_user_group_deal`).
+   - `communityNotificationsEnabled`: Yorum yanıt bildirimlerini kontrol eder (`disabled_by_user_group_comment_reply`).
+   - `marketingNotificationsEnabled`: Kampanya bildirimlerini kontrol eder (`disabled_by_user_group_marketing`).
+   - `categoryNotificationsEnabled`: Kategori bildirimlerini kontrol eder (`disabled_by_user_group_category`).
+   - `keywordNotificationsEnabled`: Anahtar kelime bildirimlerini kontrol eder (`disabled_by_user_group_keyword`).
 
----
+3. **Detay Tercih Kartları (Chevron `>`):**
+   - `Takip Edilen Kategoriler >`: Master Switch AÇIK VE `categoryNotificationsEnabled == true` ise açılır. Kapalıysa dinamik uyarı: *"Bu ayarı değiştirmek için önce Kategori Bildirimleri'ni açmalısınız."*.
+   - `Anahtar Kelimeler >`: Master Switch AÇIK VE `keywordNotificationsEnabled == true` ise açılır. Kapalıysa dinamik uyarı: *"Bu ayarı değiştirmek için önce Anahtar Kelime Takibi Bildirimleri'ni açmalısınız."*.
 
-#### B. Kanal Bazlı Filtreler (`groupEnabled` Kontrolleri)
-Master Switch `AÇIK` olduğu sürece kanallar bağımsız olarak açılıp kapatılabilir. Bir bildirim geldiğinde hedeflenen kanala göre kontrol yapılır:
+4. **Sessiz Saatler (`quietHoursEnabled`, `quietHoursStart`, `quietHoursEnd`, `timezone`):**
+   - Belirlenen saat aralığında (Varsayılan: 23:00 - 08:00, `Europe/Istanbul`) `deal`, `keyword` ve `marketing` push'ları `skipped_quiet_hours` ile atlanır.
+   - `comment_reply` ve `admin_message` sessiz saatlerden etkilenmeden iletilir.
 
-* **Takip Edilen Yazar Bildirimleri (`dealNotificationsEnabled`):**
-  * Gelen bildirim nedeni `author` iken ilgili ayar `false` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_author'`).
-* **Topluluk Bildirimleri (`communityNotificationsEnabled`):**
-  * Gelen bildirim tipi `comment_reply` iken ilgili ayar `false` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_comment_reply'`).
-* **Paylaşım Durumu Bildirimleri (`submission_status`):**
-  * Bu bildirim grubu için push gönderimi sistem tarafından kalıcı olarak kapatılmıştır (Sessiz Bildirim kuralı). `pushStatus` değeri her zaman `disabled_permanently_for_submission_status` olarak kalır.
-* **Kampanya Bildirimleri (`marketingNotificationsEnabled`):**
-  * Gelen bildirim tipi `marketing` iken ilgili ayar `false` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_marketing'`).
-* **Kategori Bildirimleri (`categoryNotificationsEnabled`):**
-  * Gelen bildirim nedeni `category` iken ilgili ayar `false` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_category'`).
-* **Anahtar Kelime Bildirimleri (`keywordNotificationsEnabled`):**
-  * Gelen bildirim nedeni `keyword` iken ilgili ayar `false` ise: Push engellenir (`pushStatus: 'disabled_by_user_group_keyword'`).
+5. **Kategori Hız Limitleri (Rate Limiting):**
+   - `reason == 'category'` olan bildirimler için saatte en fazla 3 (`categoryHourlyLimit`), günde en fazla 8 (`categoryDailyLimit`) push gönderilir. Limit aşılırsa `skipped_category_limit` ile push atlanır.
+
+6. **Mükerrer Cihaz ve Token Yönetimi (Multi-Device Deduplication):**
+   - `saveFCMToken` her çağrıldığında kullanıcının aynı hesaba ait eski aktif cihaz kayıtlarını `active: false` yapar.
+   - `getUserDeviceTokens` en güncel cihaz token'ını seçer ve aynı kullanıcıya mükerrer push gönderilmesini engeller.
 
 ---
 
-#### C. Detay Tercih Satırları (`>` Chevron İçeren Kartlar) ve Mikro Kilitlenme
-* **Detay Kartları:** `Kategoriler >` ve `Anahtar Kelimeler >` yönlendirme satırlarıdır.
-* **Mikro Kilitlenme Kuralı:** 
-  * Bir detay kartının tıklanabilir olması için hem **Master Switch** `AÇIK` olmalı HEM DE ilgili **Kanal Switch'i** `AÇIK` olmalıdır.
-  * Kanal switch'i kapalıysa (örn: *"Kategori Bildirimleri = KAPALI"*), ilgili detay kartı (*"Kategoriler >"*) %50 grileşir ve kilitlenir.
+## 🧪 4. Otomatik Test Süitleri ve Doğrulama
 
----
+Tüm bildirim sistemi ve senaryoları 3 ayrı test paketiyle tam kapsamlı (%100) doğrulanmaktadır:
 
-#### D. Gri / Pasif Elemana Tıklanması (Dinamik Snackbar Uyarısı)
-Kullanıcı grileşmiş ve kilitlenmiş bir alt elemana tıkladığında aksiyon gerçekleşmez; ekranın altında kilitlenme nedenine uygun **dinamik bir Snackbar uyarısı** belirir:
-* **Master Switch KAPALI olduğu için kilitlendiyse:** 
-  > *"Bu ayarı değiştirmek için önce yukarıdan Telefon Bildirimleri'ni açmalısınız."*
-* **Kanal Switch'i KAPALI olduğu için detay kartı kilitlendiyse:** 
-  > *"Bu ayarı değiştirmek için önce [İlgili Kanal Adı] Bildirimleri'ni açmalısınız."* *(Örn: "Bu ayarı değiştirmek için önce Kategori Bildirimleri'ni açmalısınız." veya "Bu ayarı değiştirmek için önce Anahtar Kelime Takibi Bildirimleri'ni açmalısınız.")*
-
----
-
-#### E. Geri Bildirim ve Veri Kayıt Standartları (Silent Optimistic UI)
-* **Sessiz Kayıt (Optimistic UI):** Kullanıcı switch'e bastığı an UI anında tepki verir, veri arka planda sessizce kaydedilir. Intrusive "Başarıyla Kaydedildi" popup/toast mesajı bulunmaz.
-* **Hata Durumu:** İnternet kopması veya sunucu hatasında switch eski konumuna geri çekilir ve kırmızı bir uyarı gösterilir: *"Ayarlarınız güncellenemedi, lütfen bağlantınızı kontrol edin."*
-
----
-
-#### F. Zaman ve Saat Kısıtları (Sessiz Saatler - `quietHoursEnabled`)
-* **Quiet Hours Aktif (`true`):** Kullanıcı local saat dilimine (`timezone`, Örn: `Europe/Istanbul`) göre şu anki saati hesaplar. Eğer saat `quietHoursStart` ile `quietHoursEnd` aralığındaysa (Örn: 23:00 - 08:00):
-  * **İstisna:** Sadece `deal`, `keyword` ve `marketing` bildirim tipleri sessiz saatlerde engellenir (`pushStatus: 'skipped_quiet_hours'`).
-  * Yorum yanıtları (`comment_reply`) veya acil mesajlar sessiz saatlerden etkilenmeden push olarak gönderilmeye devam eder.
-* **Quiet Hours Pasif (`false`):** Zaman filtresine takılmadan devam eder.
-
----
-
-#### G. Kategori Limitleri (Hız Sınırları - Rate Limiting)
-* Sadece `reason == 'category'` olan genel indirim bildirimleri için uygulanır.
-* `systemConfig/notifications` içerisindeki `categoryHourlyLimit` (varsayılan: 3) ve `categoryDailyLimit` (varsayılan: 8) limitleri denetlenir.
-* Kullanıcının son 1 saatte veya son 24 saatte aldığı başarılı (`pushStatus == 'sent'`) kategori bildirimleri sayılır.
-* Limit aşılmışsa push engellenir ve dokümanda `pushStatus: 'skipped_category_limit'` yazılır.
-
----
-
-#### H. Cihaz Durumları ve Token Geçerliliği
-* **Cihaz Kontrolü:** Kullanıcının `userDevices` koleksiyonunda `active == true` olan en az bir cihaz kaydı bulunmalıdır. Yoksa `pushStatus: 'no_active_devices'` olarak işaretlenir.
-* **Token Hatası:** FCM gönderimi sırasında API `messaging/registration-token-not-registered` hatası dönerse ilgili cihazın `active` bayrağı `false` yapılır.
-* **Çıkış Yapma (`signOut`):** Kullanıcı uygulamadan çıkış yaptığında, cihaza ait `userDevices` kaydı `active: false` yapılarak eski kullanıcının bildirimlerinin yeni oturumda görünmesi önlenir.
-
----
-
-## 🧪 4. Ekran Elemanları Durum Matrisi
-
-| Arayüz Elemanı | Master AÇIK + Kanal AÇIK | Master AÇIK + Kanal KAPALI | Master KAPALI (Kanal Fark Etmez) |
-| :--- | :--- | :--- | :--- |
-| **Master Switch** | 🟢 Canlı / AÇIK | 🟢 Canlı / AÇIK | 🔴 Canlı / KAPALI |
-| **Kanal Switch'leri** | 🟢 Canlı / Tıklanabilir | 🟢 Canlı / Tıklanabilir | 🔘 **Gri (%50 Opak) / Kilitli** (Seçim Saklanır) |
-| **Detay Kartları (`>`)**| 🟢 Canlı / Sayfaya Gider | 🔘 **Gri (%50 Opak) / Kilitli** | 🔘 **Gri (%50 Opak) / Kilitli** |
-
----
-
-## 🛠️ 5. Test Otomasyonu ve Doğrulama Yapısı
-
-Mimariyi ve tüm senaryoları izole bir şekilde doğrulamak üzere hazırlanan test dosyaları ve koşum yöntemleri aşağıdadır:
-
-### 1. Flutter Unit & State Preservation Testleri (`test/notification_logic_test.dart`)
-* **Komut:** `flutter test test/notification_logic_test.dart`
-* **Test 1:** Varsayılan bildirim tercihlerinin doğru geldiğini doğrular.
-* **Test 2:** Serialization (toMap / fromFirestore) işlemlerinin doğruluğunu kontrol eder.
-* **Test 3 (State Preservation):** Master Switch kapatıldığında alt tercihler ezilmeden saklandığını, Master Switch tekrar açıldığında kullanıcının eski tercihlerinin aynen korunduğunu test eder.
-
-### 2. Push Bildirim Karar Matrisi Testleri (`functions/tests/test_notification_settings.js`)
-* **Komut:** `node functions/tests/test_notification_settings.js`
-* **TEST 1 (Parametrik Karar Matrisi):**
-  * **Master Switch Kapalı Durumları:** Master switch `false` iken alt tercihler açık veya kapalı olsun, tüm bildirimlerin `pushStatus: 'disabled_by_user_master_switch'` ve `pushEligible: false` ile engellendiğini doğrular.
-  * **Master Switch Açık, Alt Switch Kapalı Durumları:** Hedeflenen kanal bazında (`disabled_by_user_group_{groupName}`) engellendiğini doğrular.
-  * **Master Switch Açık, Alt Switch Açık Durumları:** Filtrelerin başarıyla aşıldığını ve FCM push boru hattına ulaştığını doğrular.
-* **TEST 2 (Sessiz Saatler Filtresi):** Sessiz saatlerde standart fırsat push'larının `skipped_quiet_hours` ile engellendiğini doğrular.
-* **TEST 3 (Sessiz Saatlerde Yorum Yanıtı Muafiyeti):** Bireysel yorum yanıtlarının sessiz saatler filtresinden muaf tutulduğunu doğrular.
-* **TEST 4 (Kategori Hız Limitleri):** Saatlik limit aşıldığında bildirimin `skipped_category_limit` ile engellendiğini doğrular.
-* **TEST 5 (Aktif Cihaz Bulunmama):** Aktif cihaz bulunmadığında `no_active_devices` uyarısı ile atlandığını doğrular.
-
-### 3. Uygulama İçi Bildirim Kutusu Testleri (`functions/tests/test_notifications_menu.js`)
-* **Komut:** `node functions/tests/test_notifications_menu.js`
-* Paylaşılan fırsat onay/red durumlarını, deduplication (önceliklendirme: keyword > author > category) ve yorum yanıt bildirimi oluşumlarını test eder.
+| Test Dosyası | Kapsam | Komut |
+| :--- | :--- | :--- |
+| **`test/notification_logic_test.dart`** | Flutter birim testleri, serileştirme (toMap/fromFirestore), Master Switch State Preservation | `flutter test test/notification_logic_test.dart` |
+| **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
+| **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |
+| **`functions/tests/test_all_notification_scenarios.js`** | Çaprazlama Uçtan Uca Bütünleşik Test Süiti: 10 Senaryonun tamamını canlı veritabanı üzerinde çapraz kontrol eder | `node functions/tests/test_all_notification_scenarios.js` |

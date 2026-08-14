@@ -23,6 +23,7 @@ import 'message_screen.dart';
 import 'messages_list_screen.dart';
 import 'following_users_screen.dart';
 import 'user_deals_screen.dart';
+import 'botkolik_profile_screen.dart';
 import '../models/deal.dart';
 import '../widgets/deal_card.dart';
 import 'deal_detail_screen.dart';
@@ -778,6 +779,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.userId == 'botkolik' || (widget.userId != null && widget.userId!.startsWith('telegram_'))) {
+      return const BotkolikProfileScreen();
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
     final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;

@@ -42,14 +42,15 @@ service cloud.firestore {
       // Herkes okuyabilir (profil bilgileri için)
       allow read: if isAuthenticated();
       
-      // Sadece kendi profilini oluşturabilir
-      allow create: if isAuthenticated() && userId() == targetUserId;
+      // Kendi profilini, botkolik sistem profilini veya admin oluşturabilir
+      allow create: if isAuthenticated() && (userId() == targetUserId || targetUserId == 'botkolik' || isAdmin());
       
       // Sadece kendi profilini veya admin güncelleyebilir.
-      // EK OLARAK: Başka bir kullanıcı sadece followersWithNotifications alanını güncelleyebilir (takip/zil için)
+      // EK OLARAK: Başka bir kullanıcı sadece followersWithNotifications alanını güncelleyebilir (takip/zil için) veya botkolik güncellenebilir
       allow update: if isAuthenticated() && (
         userId() == targetUserId || 
         isAdmin() ||
+        targetUserId == 'botkolik' ||
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersWithNotifications']))
       );
       

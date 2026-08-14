@@ -818,7 +818,9 @@ Widget _buildSwitchTile({
         color: value ? activeColor.withValues(alpha: 0.3) : (isDark ? AppTheme.darkBorder : const Color(0xFFE0E0E0)),
       ),
     ),
-    child: SwitchListTile(
+    child: Material(
+      color: Colors.transparent,
+      child: SwitchListTile(
       value: value,
       onChanged: onChanged,
       dense: true,
@@ -850,6 +852,7 @@ Widget _buildSwitchTile({
           ),
         ),
       ),
+    ),
     ),
   );
 }

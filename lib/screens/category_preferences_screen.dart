@@ -569,7 +569,9 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                     child: Column(
                       children: [
                         // Ana Kategori Satırı
-                        ListTile(
+                        Material(
+                          color: Colors.transparent,
+                          child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                           leading: Container(
                             width: 44,
@@ -627,6 +629,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                             onChanged: (value) => _toggleCategory(category.id, value),
                             activeColor: categoryColor,
                           ),
+                        ),
                         ),
 
                         // Alt Kategoriler (Çipler)

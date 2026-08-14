@@ -206,18 +206,21 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
               )
             : null,
       ),
-      child: SwitchListTile(
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
-            color: isHighlighted ? primaryColor : null,
+      child: Material(
+        color: Colors.transparent,
+        child: SwitchListTile(
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
+              color: isHighlighted ? primaryColor : null,
+            ),
           ),
+          subtitle: Text(subtitle),
+          value: value,
+          activeThumbColor: primaryColor,
+          onChanged: isMasterOn ? onChanged : null,
         ),
-        subtitle: Text(subtitle),
-        value: value,
-        activeThumbColor: primaryColor,
-        onChanged: isMasterOn ? onChanged : null,
       ),
     );
 
@@ -261,37 +264,43 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
               : Colors.black.withValues(alpha: 0.05),
         ),
       ),
-      child: ListTile(
-        leading: Icon(icon, color: isFullyActive ? primaryColor : Colors.grey),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(subtitle),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (trailingBadge != null && trailingBadge.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(right: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: isFullyActive ? primaryColor : Colors.grey.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  trailingBadge,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          leading: Icon(icon, color: isFullyActive ? primaryColor : Colors.grey),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(subtitle),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (trailingBadge != null && trailingBadge.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isFullyActive ? primaryColor : Colors.grey.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    trailingBadge,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
+              Icon(
+                Icons.chevron_right,
+                color: isDark ? Colors.grey[600] : Colors.grey[400],
               ),
-            const Icon(Icons.chevron_right),
           ],
         ),
-        onTap: isFullyActive ? onTap : null,
+          onTap: isFullyActive ? onTap : null,
+        ),
       ),
     );
 
@@ -430,25 +439,28 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                             : Colors.black.withValues(alpha: 0.05),
                       ),
                     ),
-                    child: SwitchListTile(
-                      title: Text(
-                        'Telefon Bildirimleri',
-                        style: TextStyle(
-                          color: textMain,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: SwitchListTile(
+                        title: Text(
+                          'Telefon Bildirimleri',
+                          style: TextStyle(
+                            color: textMain,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
+                        subtitle: Text(
+                          'Kapatıldığında telefonunuza hiçbir anlık uyarı gelmez; ancak tüm bildirimleri uygulama içindeki Bildirim Kutusu\'ndan takip edebilirsiniz.',
+                          style: TextStyle(color: textSub, fontSize: 12),
+                        ),
+                        value: _preferences.pushMasterEnabled,
+                        activeColor: primaryColor,
+                        onChanged: (val) {
+                          // STATE PRESERVATION: Only toggle pushMasterEnabled, keep all sub-channel states preserved!
+                          _updatePrefs(_preferences.copyWith(pushMasterEnabled: val));
+                        },
                       ),
-                      subtitle: Text(
-                        'Kapatıldığında telefonunuza hiçbir anlık uyarı gelmez; ancak tüm bildirimleri uygulama içindeki Bildirim Kutusu\'ndan takip edebilirsiniz.',
-                        style: TextStyle(color: textSub, fontSize: 12),
-                      ),
-                      value: _preferences.pushMasterEnabled,
-                      activeColor: primaryColor,
-                      onChanged: (val) {
-                        // STATE PRESERVATION: Only toggle pushMasterEnabled, keep all sub-channel states preserved!
-                        _updatePrefs(_preferences.copyWith(pushMasterEnabled: val));
-                      },
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -560,46 +572,49 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                                   : Colors.black.withValues(alpha: 0.05),
                             ),
                           ),
-                          child: Column(
-                            children: [
-                              SwitchListTile(
-                                title: const Text('Sessiz Saatler'),
-                                subtitle: const Text('Belirlediğiniz saat aralığında telefonunuza anlık sesli uyarı gelmez; bildirimler sessizce Bildirim Kutusu\'na kaydedilir.'),
-                                value: _preferences.quietHoursEnabled,
-                                activeColor: primaryColor,
-                                onChanged: (val) {
-                                  _updatePrefs(_preferences.copyWith(quietHoursEnabled: val));
-                                },
-                              ),
-                              if (_preferences.quietHoursEnabled) ...[
-                                const Divider(height: 1),
-                                ListTile(
-                                  title: const Text('Başlangıç Saati'),
-                                  trailing: Text(
-                                    _preferences.quietHoursStart,
-                                    style: TextStyle(
-                                      color: primaryColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  onTap: () => _selectTime(context, true),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: Column(
+                              children: [
+                                SwitchListTile(
+                                  title: const Text('Sessiz Saatler'),
+                                  subtitle: const Text('Belirlediğiniz saat aralığında telefonunuza anlık sesli uyarı gelmez; bildirimler sessizce Bildirim Kutusu\'na kaydedilir.'),
+                                  value: _preferences.quietHoursEnabled,
+                                  activeColor: primaryColor,
+                                  onChanged: (val) {
+                                    _updatePrefs(_preferences.copyWith(quietHoursEnabled: val));
+                                  },
                                 ),
-                                const Divider(height: 1),
-                                ListTile(
-                                  title: const Text('Bitiş Saati'),
-                                  trailing: Text(
-                                    _preferences.quietHoursEnd,
-                                    style: TextStyle(
-                                      color: primaryColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                                if (_preferences.quietHoursEnabled) ...[
+                                  const Divider(height: 1),
+                                  ListTile(
+                                    title: const Text('Başlangıç Saati'),
+                                    trailing: Text(
+                                      _preferences.quietHoursStart,
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
                                     ),
+                                    onTap: () => _selectTime(context, true),
                                   ),
-                                  onTap: () => _selectTime(context, false),
-                                ),
+                                  const Divider(height: 1),
+                                  ListTile(
+                                    title: const Text('Bitiş Saati'),
+                                    trailing: Text(
+                                      _preferences.quietHoursEnd,
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    onTap: () => _selectTime(context, false),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       ),

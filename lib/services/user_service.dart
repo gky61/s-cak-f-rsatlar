@@ -189,13 +189,31 @@ class UserService {
   Future<void> followUser(String followerId, String followingId) async {
     try {
       final batch = _firestore.batch();
-      batch.update(_firestore.collection('users').doc(followerId), {
+      batch.set(_firestore.collection('users').doc(followerId), {
         'following': FieldValue.arrayUnion([followingId]),
-      });
-      batch.update(_firestore.collection('users').doc(followingId), {
-        'followersWithNotifications': FieldValue.arrayUnion([followerId]),
-      });
+      }, SetOptions(merge: true));
+
+      if (followingId != 'botkolik' && !followingId.startsWith('telegram_')) {
+        batch.set(_firestore.collection('users').doc(followingId), {
+          'followersWithNotifications': FieldValue.arrayUnion([followerId]),
+        }, SetOptions(merge: true));
+      }
       await batch.commit();
+
+      // Takip edilen yazar için anlık bildirim aboneliğini otomatik oluştur
+      final sanitizedKey = followingId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
+      final subId = '${followerId}_author_$sanitizedKey';
+      await _firestore.collection('notificationSubscriptions').doc(subId).set({
+        'uid': followerId,
+        'type': 'author',
+        'key': followingId,
+        'displayValue': followingId == 'botkolik' ? 'Botkolik' : followingId,
+        'normalizedValue': followingId.toLowerCase(),
+        'includeDescendants': true,
+        'enabled': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       _log('Takip hatası: $e');
       rethrow;
@@ -205,12 +223,15 @@ class UserService {
   Future<void> unfollowUser(String followerId, String followingId) async {
     try {
       final batch = _firestore.batch();
-      batch.update(_firestore.collection('users').doc(followerId), {
+      batch.set(_firestore.collection('users').doc(followerId), {
         'following': FieldValue.arrayRemove([followingId]),
-      });
-      batch.update(_firestore.collection('users').doc(followingId), {
-        'followersWithNotifications': FieldValue.arrayRemove([followerId]),
-      });
+      }, SetOptions(merge: true));
+
+      if (followingId != 'botkolik' && !followingId.startsWith('telegram_')) {
+        batch.set(_firestore.collection('users').doc(followingId), {
+          'followersWithNotifications': FieldValue.arrayRemove([followerId]),
+        }, SetOptions(merge: true));
+      }
       await batch.commit();
 
       // Ayrıca yazar bildirim aboneliğini sil

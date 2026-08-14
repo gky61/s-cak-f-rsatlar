@@ -5,6 +5,7 @@ import '../../models/deal.dart';
 import '../../models/user.dart';
 import '../../theme/app_theme.dart';
 import '../../screens/profile_screen.dart';
+import '../../screens/botkolik_profile_screen.dart';
 import '../money_badge.dart';
 import 'deal_card_helpers.dart';
 import 'deal_card_badge.dart';
@@ -472,8 +473,45 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                       ],
                                     ),
                                   ),
-                                  // Sadece Profil Resmi (sadece kullanıcı paylaşımı ise, sağda)
-                                  if (deal.isUserSubmitted && deal.postedBy.isNotEmpty)
+                                   // Profil Resmi (Botkolik veya Kullanıcı paylaşımı)
+                                   if (deal.isBotkolik)
+                                     InkWell(
+                                       onTap: () {
+                                         Navigator.push(
+                                           context,
+                                           MaterialPageRoute(
+                                             builder: (_) => const BotkolikProfileScreen(),
+                                           ),
+                                         );
+                                       },
+                                       borderRadius: BorderRadius.circular(10),
+                                       child: Container(
+                                         width: 17,
+                                         height: 17,
+                                         decoration: BoxDecoration(
+                                           shape: BoxShape.circle,
+                                           border: Border.all(
+                                             color: const Color(0xFF00F0FF).withValues(alpha: 0.8),
+                                             width: 1,
+                                           ),
+                                           boxShadow: [
+                                             BoxShadow(
+                                               color: const Color(0xFF00F0FF).withValues(alpha: 0.25),
+                                               blurRadius: 4,
+                                             ),
+                                           ],
+                                         ),
+                                         child: ClipOval(
+                                           child: Image.asset(
+                                             'assets/botkolik.webp',
+                                             width: 17,
+                                             height: 17,
+                                             fit: BoxFit.cover,
+                                           ),
+                                         ),
+                                       ),
+                                     )
+                                   else if (deal.isUserSubmitted && deal.postedBy.isNotEmpty)
                                     StreamBuilder<DocumentSnapshot>(
                                       stream: FirebaseFirestore.instance
                                           .collection('users')

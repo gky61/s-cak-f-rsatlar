@@ -290,7 +290,11 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                               String profileImageUrl = otherUserImageUrl;
                               bool isDeleted = false;
 
-                              if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                              if (otherUserId == 'botkolik') {
+                                displayName = 'Botkolik';
+                                profileImageUrl = 'assets/botkolik.webp';
+                                isDeleted = false;
+                              } else if (userSnapshot.hasData && userSnapshot.data!.exists) {
                                 final userData = userSnapshot.data!.data();
                                 displayName = userData?['username'] ?? userData?['displayName'] ?? otherUserName;
                                 profileImageUrl = migrateAssetPath(userData?['profileImageUrl'] ?? otherUserImageUrl);

@@ -31,26 +31,44 @@ class MessageService {
     String? replyToText,
   }) async {
     try {
-      final senderDoc = await _firestore.collection('users').doc(senderId).get();
-      final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
-      
-      if (!senderDoc.exists || !receiverDoc.exists) return null;
+      String senderName = 'Kullanıcı';
+      String senderImageUrl = '';
+      if (senderId == 'botkolik') {
+        senderName = 'Botkolik';
+        senderImageUrl = 'assets/botkolik.webp';
+      } else {
+        final senderDoc = await _firestore.collection('users').doc(senderId).get();
+        if (!senderDoc.exists) return null;
+        senderName = senderDoc.data()?['username'] ?? 'Kullanıcı';
+        senderImageUrl = migrateAssetPath(senderDoc.data()?['profileImageUrl'] ?? '');
+      }
 
-      // Engellenmişlik kontrolü: Alıcı göndereni engellediyse mesaj gitmez
-      final receiverBlockedList = List<String>.from(receiverDoc.data()?['blockedUsers'] ?? []);
-      if (receiverBlockedList.contains(senderId)) {
-        _log('🚫 Alıcı bu kullanıcıyı engellediği için mesaj iletilmedi.');
-        return null;
+      String receiverName = 'Kullanıcı';
+      String receiverImageUrl = '';
+      if (receiverId == 'botkolik') {
+        receiverName = 'Botkolik';
+        receiverImageUrl = 'assets/botkolik.webp';
+      } else {
+        final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
+        if (!receiverDoc.exists) return null;
+        // Engellenmişlik kontrolü: Alıcı göndereni engellediyse mesaj gitmez
+        final receiverBlockedList = List<String>.from(receiverDoc.data()?['blockedUsers'] ?? []);
+        if (receiverBlockedList.contains(senderId)) {
+          _log('🚫 Alıcı bu kullanıcıyı engellediği için mesaj iletilmedi.');
+          return null;
+        }
+        receiverName = receiverDoc.data()?['username'] ?? 'Kullanıcı';
+        receiverImageUrl = migrateAssetPath(receiverDoc.data()?['profileImageUrl'] ?? '');
       }
 
       final message = Message(
         id: '',
         senderId: senderId,
-        senderName: senderDoc.data()?['username'] ?? 'Kullanıcı',
-        senderImageUrl: migrateAssetPath(senderDoc.data()?['profileImageUrl'] ?? ''),
+        senderName: senderName,
+        senderImageUrl: senderImageUrl,
         receiverId: receiverId,
-        receiverName: receiverDoc.data()?['username'] ?? 'Kullanıcı',
-        receiverImageUrl: migrateAssetPath(receiverDoc.data()?['profileImageUrl'] ?? ''),
+        receiverName: receiverName,
+        receiverImageUrl: receiverImageUrl,
         text: text.trim(),
         createdAt: DateTime.now(),
         isRead: false,

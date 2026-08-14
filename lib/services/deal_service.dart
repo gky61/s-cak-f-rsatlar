@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import '../models/deal.dart';
 import 'auth_service.dart';
-import 'notification_service.dart';
 import 'content_moderation_service.dart';
 import 'user_service.dart';
 import 'link_preview_service.dart';
@@ -337,17 +336,6 @@ class DealService {
         store: store,
         link: url,
       );
-      
-      // Anahtar kelime kontrolü
-      Future.delayed(Duration.zero, () async {
-        try {
-          final notificationService = NotificationService();
-          await notificationService.checkKeywordsAndNotify(docRef.id, title, description);
-        } catch (e) {
-          _log('❌ Anahtar kelime kontrolü hatası: $e');
-        }
-      });
-      
       return docRef.id;
     } catch (e) {
       _log('Deal oluşturma hatası: $e');

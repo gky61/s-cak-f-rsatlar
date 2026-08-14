@@ -75,6 +75,13 @@ class Deal {
     this.couponCode,
   });
 
+  /// Bir fırsatın Botkolik (otonom bot) tarafından paylaşılıp paylaşılmadığını döner
+  bool get isBotkolik =>
+      !isUserSubmitted ||
+      postedBy == 'botkolik' ||
+      postedBy.startsWith('telegram_') ||
+      postedBy.isEmpty;
+
   /// Bir URL'in Amazon Depo (smid=A215JX4S9CANSO) ürünü olup olmadığını kontrol eder.
   static bool checkIsAmazonWarehouse(String urlStr) {
     if (urlStr.trim().isEmpty) return false;

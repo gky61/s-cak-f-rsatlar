@@ -813,6 +813,11 @@
                             <span class="material-symbols-outlined text-[20px]">shield</span>
                             <span>📋 Tüm Mesajlar & Moderasyon</span>
                         </button>
+                        <button id="msgTabBotBtn" onclick="window.switchMessagesTab('botkolik')" class="px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors relative">
+                            <span class="material-symbols-outlined text-[20px]">smart_toy</span>
+                            <span>🤖 Botkolik Mesajları & Öneriler</span>
+                            <span id="botUnreadBadge" class="hidden px-2 py-0.5 text-[10px] font-bold bg-primary text-white rounded-full">0</span>
+                        </button>
                     </div>
 
                     <!-- TAB 1: MESSAGING SIMULATOR & LIVE CHAT -->
@@ -1088,6 +1093,131 @@
                                         </tr>
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: BOTKOLIK MESSAGES & COMMUNITY FEEDBACK -->
+                    <div id="msgBotContainer" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <!-- LEFT COLUMN: CONVERSATIONS LIST (4 cols) -->
+                        <div class="lg:col-span-4 flex flex-col gap-4">
+                            <!-- Stats & Search Header -->
+                            <div class="bg-white dark:bg-surface-dark p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
+                                            <span class="material-symbols-outlined text-[20px]">mark_email_unread</span>
+                                        </div>
+                                        <div>
+                                            <h4 class="font-bold text-slate-900 dark:text-white text-sm">Gelen Mesajlar</h4>
+                                            <p class="text-[11px] text-slate-500 dark:text-slate-400" id="botTotalConversationsCount">0 Kullanıcı</p>
+                                        </div>
+                                    </div>
+                                    <button onclick="window.loadBotkolikMessages()" class="p-2 text-slate-400 hover:text-primary rounded-lg transition-colors cursor-pointer" title="Listeyi Yenile">
+                                        <span class="material-symbols-outlined text-[18px]">refresh</span>
+                                    </button>
+                                </div>
+                                
+                                <!-- Search Input -->
+                                <div class="relative">
+                                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]">search</span>
+                                    <input type="text" id="botConvSearchInput" oninput="window.filterBotkolikConversations()" placeholder="Kullanıcı veya mesaj ara..." class="w-full pl-9 pr-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-primary">
+                                </div>
+
+                                <!-- Filter Chips (Tümü / Yanıt Bekleyen / Tamamlanan) -->
+                                <div class="flex gap-1.5 pt-1">
+                                    <button id="botFilterAllBtn" onclick="window.setBotkolikFilter('all')" class="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-primary text-white transition-colors cursor-pointer">Tümü</button>
+                                    <button id="botFilterUnreadBtn" onclick="window.setBotkolikFilter('unread')" class="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white transition-colors cursor-pointer">Cevap Bekleyen</button>
+                                    <button id="botFilterRepliedBtn" onclick="window.setBotkolikFilter('replied')" class="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white transition-colors cursor-pointer">Yanıtlananlar</button>
+                                </div>
+                            </div>
+
+                            <!-- Conversation Thread Items List -->
+                            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col min-h-[420px] max-h-[600px]">
+                                <div id="botConversationsList" class="overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60 flex flex-col flex-1">
+                                    <!-- Populated dynamically -->
+                                    <div class="p-8 text-center text-slate-400 text-xs flex flex-col items-center gap-2 m-auto">
+                                        <span class="material-symbols-outlined text-3xl opacity-40 animate-spin">sync</span>
+                                        <span>Botkolik mesajları yükleniyor...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT COLUMN: CHAT THREAD & REPLY COMPOSER (8 cols) -->
+                        <div class="lg:col-span-8 flex flex-col gap-4">
+                            <!-- Selected User Header Card -->
+                            <div id="botChatHeader" class="bg-white dark:bg-surface-dark p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div id="botActiveUserAvatar" class="shrink-0">
+                                        <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-sm text-slate-600 dark:text-slate-300 overflow-hidden">
+                                            <span class="material-symbols-outlined text-xl">person</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-col min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <h4 id="botActiveUserName" class="font-bold text-slate-900 dark:text-white text-sm truncate">Bir kullanıcı seçin</h4>
+                                            <span id="botActiveUserRole" class="hidden px-2 py-0.5 text-[10px] font-bold rounded bg-blue-500/10 text-blue-500 shrink-0">Kullanıcı</span>
+                                        </div>
+                                        <span id="botActiveUserUid" class="text-[11px] font-mono text-slate-400 truncate">-</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button id="botUserProfileBtn" onclick="window.viewSelectedBotUserProf()" class="hidden px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-1 cursor-pointer">
+                                        <span class="material-symbols-outlined text-[16px]">visibility</span>
+                                        <span>Profili Gör</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Messages History Box -->
+                            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col h-[480px] overflow-hidden">
+                                <div id="botChatMessagesArea" class="flex-1 p-5 overflow-y-auto flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-900/30">
+                                    <div class="m-auto text-center text-slate-400 text-xs flex flex-col items-center gap-2 py-12">
+                                        <span class="material-symbols-outlined text-4xl opacity-30 text-primary">forum</span>
+                                        <p class="font-semibold text-slate-600 dark:text-slate-300 text-sm">Detayları ve sohbet geçmişini görmek için soldan bir kullanıcı seçin.</p>
+                                        <p class="text-[11px] text-slate-400 max-w-sm">Kullanıcıların Botkolik'e gönderdiği öneri, hata bildirimi veya mağaza sorunları burada anlık listelenir.</p>
+                                    </div>
+                                </div>
+
+                                <!-- Quick Reply Templates Bar -->
+                                <div id="botQuickTemplatesBar" class="hidden px-4 py-2 bg-slate-100/80 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800/60 overflow-x-auto">
+                                    <div class="flex items-center gap-2 whitespace-nowrap">
+                                        <span class="text-[10px] font-bold text-slate-400 uppercase">⚡ Hızlı Yanıt:</span>
+                                        <button onclick="window.applyBotTemplate('feedback_thanks')" class="px-2.5 py-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-700 hover:border-primary rounded-lg text-[11px] font-medium text-slate-700 dark:text-slate-300 transition-colors cursor-pointer">
+                                            🚀 Öneri Teşekkür
+                                        </button>
+                                        <button onclick="window.applyBotTemplate('price_fixed')" class="px-2.5 py-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-700 hover:border-primary rounded-lg text-[11px] font-medium text-slate-700 dark:text-slate-300 transition-colors cursor-pointer">
+                                            ⚡ Fiyat Düzenlendi
+                                        </button>
+                                        <button onclick="window.applyBotTemplate('roadmap_added')" class="px-2.5 py-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-700 hover:border-primary rounded-lg text-[11px] font-medium text-slate-700 dark:text-slate-300 transition-colors cursor-pointer">
+                                            ✨ Yol Haritasına Eklendi
+                                        </button>
+                                        <button onclick="window.applyBotTemplate('store_issue')" class="px-2.5 py-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-700 hover:border-primary rounded-lg text-[11px] font-medium text-slate-700 dark:text-slate-300 transition-colors cursor-pointer">
+                                            🛠️ Mağaza Linki İnceleniyor
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Reply Input Composer Area -->
+                                <div id="botReplyComposerArea" class="hidden p-3 bg-white dark:bg-surface-dark border-t border-slate-200 dark:border-slate-800">
+                                    <div class="flex flex-col gap-2">
+                                        <div class="flex items-center justify-between text-xs text-slate-500">
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                                <span class="font-bold text-slate-700 dark:text-slate-300">Botkolik Olarak Yanıtla</span>
+                                                <span class="text-[10px] text-slate-400">(Kullanıcının uygulamadaki Botkolik mesaj kutusuna iletilir)</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <textarea id="botReplyTextInput" rows="2" placeholder="Kullanıcıya iletilecek yanıtı yazın (Shift+Enter yeni satır, Enter gönder)..." onkeydown="window.handleBotReplyKeyDown(event)" class="flex-1 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-primary resize-none"></textarea>
+                                            <button id="botSendReplyBtn" onclick="window.sendBotkolikReply()" class="px-4 bg-primary hover:bg-primary/90 text-white rounded-lg font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all shadow-sm cursor-pointer min-w-[75px]">
+                                                <span class="material-symbols-outlined text-[18px]">send</span>
+                                                <span>Yanıtla</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2085,6 +2215,6 @@
             }
         });
     </script>
-    <script src="app.js?v=9.04"></script>
+    <script src="app.js?v=9.05"></script>
 </body>
 </html>

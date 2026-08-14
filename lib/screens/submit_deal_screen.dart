@@ -225,6 +225,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     _checkDealSharingStatus();
 
     if (widget.initialUrl != null) {
+      _isAutoDetecting = true;
+      _isLoadingImage = true;
       _urlController.text = widget.initialUrl!;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _autoFetchProductData(widget.initialUrl!);
@@ -391,6 +393,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     });
   }
 
+  bool _isFetchingActive = false;
+
   Future<void> _onUrlChanged() async {
     final url = _urlController.text.trim();
     
@@ -401,8 +405,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     _lastProcessedUrl = url;
     
     if (url.isEmpty || !url.startsWith('http')) {
-      // URL boşsa veya geçersizse, otomatik doldurulan tüm alanları temizle
+      // URL boşsa veya geçersizse, otomatik doldurulan tüm alanları temizle ve loading'i durdur
+      _urlDebounceTimer?.cancel();
       setState(() {
+        _isAutoDetecting = false;
+        _isLoadingImage = false;
         _titleController.clear();
         _descriptionController.clear();
         _priceController.clear();
@@ -413,38 +420,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _previewImageUrl = null;
         _selectedCategory = 'elektronik';
         _selectedSubCategory = null;
-        _isLoadingImage = false;
         _isCategoryLockedByScraper = false;
         _isAmazonWarehouse = false;
       });
       return;
     }
     
-    // Debounce: Yazma bittikten 600ms sonra verileri otomatik çek
-    _urlDebounceTimer?.cancel();
-    _urlDebounceTimer = Timer(const Duration(milliseconds: 600), () {
-      if (!mounted) return;
-      _autoFetchProductData(url);
-    });
-  }
-  
-  Future<void> _autoFetchProductData(String url) async {
-    if (_isAutoDetecting || _isLoadingImage) return;
-
-    // Domain Allowlist Kontrolü
-    final validationResult = await DomainAllowlistService.validateUrl(url);
-    if (validationResult != UrlValidationResult.valid) {
-      if (mounted) {
-        setState(() {
-          _isAutoDetecting = false;
-          _isLoadingImage = false;
-        });
-        _showUrlValidationErrorDialog(validationResult);
-      }
-      return;
-    }
-
-    // Yeni URL analizine başlamadan önce eski verileri temizle
+    // Link yapıştırıldığı veya yazıldığı an beklemeden ANINDA loading başlat ve alanları hazırla
     setState(() {
       _isAutoDetecting = true;
       _isLoadingImage = true;
@@ -462,233 +444,276 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       _priceLabel = null;
       _isAmazonWarehouse = false;
     });
+    
+    // Debounce: Yazma bittikten 400ms sonra verileri otomatik çek
+    _urlDebounceTimer?.cancel();
+    _urlDebounceTimer = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      _autoFetchProductData(url);
+    });
+  }
+  
+  Future<void> _autoFetchProductData(String url) async {
+    if (_isFetchingActive) return;
+    _isFetchingActive = true;
 
-    _log('🔄 Otomatik ürün bilgisi çekme başlatıldı: $url');
-
-    bool hasImage = false;
-    bool hasTitle = false;
-    bool hasStore = false;
-    bool hasCategory = false;
-    bool hasPrice = false;
-
-    // 1. AMAZON ÖZEL KONTROLÜ
-    String? amazonImage;
-    if (url.contains("amazon") || url.contains("amzn")) {
-      try {
-        amazonImage = await _linkPreviewService.getAmazonImageSmart(url);
-        if (amazonImage != null) {
-          _log('✅ Amazon görsel ASIN yöntemiyle bulundu: $amazonImage');
-          if (mounted) {
-            setState(() {
-              _imageUrlController.text = amazonImage!;
-              _previewImageUrl = amazonImage;
-              _isLoadingImage = false;
-            });
-          }
-          hasImage = true;
-        }
-      } catch (e) {
-        _log('❌ Amazon görsel çekme hatası: $e');
-      }
-    }
-
-    // 2. LİNK PREVIEW (CLIENT-SIDE SCRAPING)
-    LinkPreviewResult? preview;
     try {
-      preview = await _linkPreviewService.fetchMetadata(url)
-          .timeout(const Duration(seconds: 10), onTimeout: () {
-        _log('⏱️ LinkPreview timeout');
-        return null;
-      });
-      
-      if (preview != null && mounted) {
-        // Görseli al
-        final cleanImage = _cleanScrapedString(preview.imageUrl);
-        if (!hasImage && cleanImage != null && _isValidImageUrl(cleanImage)) {
+      // Eğer henüz loading başlamadıysa başlat
+      if (!_isAutoDetecting && mounted) {
+        setState(() {
+          _isAutoDetecting = true;
+          _isLoadingImage = true;
+        });
+      }
+
+      // Domain Allowlist Kontrolü
+      final validationResult = await DomainAllowlistService.validateUrl(url);
+      if (validationResult != UrlValidationResult.valid) {
+        if (mounted) {
           setState(() {
-            _imageUrlController.text = cleanImage;
-            _previewImageUrl = cleanImage;
+            _isAutoDetecting = false;
             _isLoadingImage = false;
           });
-          hasImage = true;
+          _showUrlValidationErrorDialog(validationResult);
         }
-        
-        // Başlığı al (boşsa)
-        final cleanTitle = _cleanScrapedString(preview.title);
-        if (_titleController.text.trim().isEmpty && cleanTitle != null) {
-          _titleController.text = cleanTitle;
-          hasTitle = true;
-        }
+        return;
+      }
 
-        // Mağazayı al (boşsa)
-        final cleanProvider = _cleanScrapedString(preview.provider);
-        if (_storeController.text.trim().isEmpty && cleanProvider != null) {
-          _updateStoreSelection(cleanProvider);
-          hasStore = true;
-        }
+      _log('🔄 Otomatik ürün bilgisi çekme başlatıldı: $url');
 
-        // Fiyatı al (boşsa)
-        if (_priceController.text.trim().isEmpty && preview.price != null && preview.price! > 0) {
-          final doubleVal = preview.price!;
-          if (doubleVal == doubleVal.toInt()) {
-            _priceController.text = doubleVal.toInt().toString();
-          } else {
-            _priceController.text = doubleVal.toString();
+      bool hasImage = false;
+      bool hasTitle = false;
+      bool hasStore = false;
+      bool hasCategory = false;
+      bool hasPrice = false;
+
+      // 1. AMAZON ÖZEL KONTROLÜ
+      String? amazonImage;
+      if (url.contains("amazon") || url.contains("amzn")) {
+        try {
+          amazonImage = await _linkPreviewService.getAmazonImageSmart(url);
+          if (amazonImage != null) {
+            _log('✅ Amazon görsel ASIN yöntemiyle bulundu: $amazonImage');
+            if (mounted) {
+              setState(() {
+                _imageUrlController.text = amazonImage!;
+                _previewImageUrl = amazonImage;
+                _isLoadingImage = false;
+              });
+            }
+            hasImage = true;
           }
-          hasPrice = true;
+        } catch (e) {
+          _log('❌ Amazon görsel çekme hatası: $e');
         }
+      }
 
-
-        // Açıklamayı al (boşsa)
-        final cleanDesc = _cleanScrapedString(preview.description);
-        if (_descriptionController.text.trim().isEmpty && cleanDesc != null) {
-          _descriptionController.text = AdvertisingComplianceService.ensureDisclosure(cleanDesc);
-        }
-
-        // Fiyat Etiketini al (kampanya/CRM)
-        final label = preview.priceLabel;
-        if (label != null && label.isNotEmpty) {
-          setState(() {
-            _priceLabel = label;
-          });
-          _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel');
-        }
-
-        // Rating & Marka & İndirimsiz Fiyat verilerini al
-        if (preview?.ratingValue != null || preview?.ratingCount != null || preview?.brand != null || preview?.originalPrice != null) {
-          setState(() {
-            _scrapedRatingValue = preview?.ratingValue;
-            _scrapedRatingCount = preview?.ratingCount;
-            _scrapedBrand = preview?.brand;
-            _scrapedOriginalPrice = preview?.originalPrice;
-          });
-          _log('⭐ Scraper rating/marka/eskiFiyat tespiti: Rating=$_scrapedRatingValue ($_scrapedRatingCount), Brand=$_scrapedBrand, OriginalPrice=$_scrapedOriginalPrice');
-        }
-
-        // Amazon Depo ürünü tespiti
-        if (preview.isAmazonWarehouse || Deal.checkIsAmazonWarehouse(url)) {
-          setState(() {
-            _isAmazonWarehouse = true;
-          });
-          _log('📦 Amazon Depo ürünü tespit edildi');
-        }
-
-        // Kategori ekmek kırıntılarını (breadcrumbs) ve başlığı birleştirip sınıflandır
-        if (preview.breadcrumbs != null && preview.breadcrumbs!.isNotEmpty) {
-          final joinedBreadcrumbs = preview.breadcrumbs!.join(' ');
-          final cleanTitle = _cleanScrapedString(preview.title) ?? '';
-          final textToClassify = '$joinedBreadcrumbs $cleanTitle';
-          _log('🔍 Scraper kırıntıları ve başlık ile kategori tespiti yapılıyor: $textToClassify');
-          final result = CategoryDetectionService.detectCategory(
-            textToClassify,
-            url: url,
-            store: _selectedStore,
-          );
-          if (result != null) {
+      // 2. LİNK PREVIEW (CLIENT-SIDE SCRAPING)
+      LinkPreviewResult? preview;
+      try {
+        preview = await _linkPreviewService.fetchMetadata(url)
+            .timeout(const Duration(seconds: 10), onTimeout: () {
+          _log('⏱️ LinkPreview timeout');
+          return null;
+        });
+        
+        final cleanPreview = preview;
+        if (cleanPreview != null && mounted) {
+          // Görseli al
+          final cleanImage = _cleanScrapedString(cleanPreview.imageUrl);
+          if (!hasImage && cleanImage != null && _isValidImageUrl(cleanImage)) {
             setState(() {
-              _selectedCategory = result['categoryId']!;
-              _selectedSubCategory = result['subCategory'];
-              _isCategoryLockedByScraper = true;
+              _imageUrlController.text = cleanImage;
+              _previewImageUrl = cleanImage;
+              _isLoadingImage = false;
+            });
+            hasImage = true;
+          }
+          
+          // Başlığı al (boşsa)
+          final cleanTitle = _cleanScrapedString(cleanPreview.title);
+          if (_titleController.text.trim().isEmpty && cleanTitle != null) {
+            _titleController.text = cleanTitle;
+            hasTitle = true;
+          }
+
+          // Mağazayı al (boşsa)
+          final cleanProvider = _cleanScrapedString(cleanPreview.provider);
+          if (_storeController.text.trim().isEmpty && cleanProvider != null) {
+            _updateStoreSelection(cleanProvider);
+            hasStore = true;
+          }
+
+          // Fiyatı al (boşsa)
+          if (_priceController.text.trim().isEmpty && cleanPreview.price != null && cleanPreview.price! > 0) {
+            final doubleVal = cleanPreview.price!;
+            if (doubleVal == doubleVal.toInt()) {
+              _priceController.text = doubleVal.toInt().toString();
+            } else {
+              _priceController.text = doubleVal.toString();
+            }
+            hasPrice = true;
+          }
+
+          // Açıklamayı al (boşsa)
+          final cleanDesc = _cleanScrapedString(cleanPreview.description);
+          if (_descriptionController.text.trim().isEmpty && cleanDesc != null) {
+            _descriptionController.text = AdvertisingComplianceService.ensureDisclosure(cleanDesc);
+          }
+
+          // Fiyat Etiketini al (kampanya/CRM)
+          final label = cleanPreview.priceLabel;
+          if (label != null && label.isNotEmpty) {
+            setState(() {
+              _priceLabel = label;
+            });
+            _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel');
+          }
+
+          // Rating & Marka & İndirimsiz Fiyat verilerini al
+          if (cleanPreview.ratingValue != null || cleanPreview.ratingCount != null || cleanPreview.brand != null || cleanPreview.originalPrice != null) {
+            setState(() {
+              _scrapedRatingValue = cleanPreview.ratingValue;
+              _scrapedRatingCount = cleanPreview.ratingCount;
+              _scrapedBrand = cleanPreview.brand;
+              _scrapedOriginalPrice = cleanPreview.originalPrice;
+            });
+            _log('⭐ Scraper rating/marka/eskiFiyat tespiti: Rating=$_scrapedRatingValue ($_scrapedRatingCount), Brand=$_scrapedBrand, OriginalPrice=$_scrapedOriginalPrice');
+          }
+
+          // Amazon Depo ürünü tespiti
+          if (cleanPreview.isAmazonWarehouse || Deal.checkIsAmazonWarehouse(url)) {
+            setState(() {
+              _isAmazonWarehouse = true;
+            });
+            _log('📦 Amazon Depo ürünü tespit edildi');
+          }
+
+          // Kategori ekmek kırıntılarını (breadcrumbs) ve başlığı birleştirip sınıflandır
+          if (cleanPreview.breadcrumbs != null && cleanPreview.breadcrumbs!.isNotEmpty) {
+            final joinedBreadcrumbs = cleanPreview.breadcrumbs!.join(' ');
+            final cleanTitle = _cleanScrapedString(cleanPreview.title) ?? '';
+            final textToClassify = '$joinedBreadcrumbs $cleanTitle';
+            _log('🔍 Scraper kırıntıları ve başlık ile kategori tespiti yapılıyor: $textToClassify');
+            final result = CategoryDetectionService.detectCategory(
+              textToClassify,
+              url: url,
+              store: _selectedStore,
+            );
+            if (result != null) {
+              setState(() {
+                _selectedCategory = result['categoryId']!;
+                _selectedSubCategory = result['subCategory'];
+                _isCategoryLockedByScraper = true;
+              });
+              hasCategory = true;
+              _log('✅ Scraper kategori tespiti başarılı: $_selectedCategory -> $_selectedSubCategory (Kilitlendi)');
+            }
+          }
+        }
+      } catch (e) {
+        _log('❌ LinkPreview metadata çekme hatası: $e');
+      }
+
+      // Görsel yükleniyor durumunu kapat
+      if (mounted) {
+        setState(() {
+          _isLoadingImage = false;
+        });
+      }
+
+      // 3. GEMINI AI ANALİZİ
+      try {
+        _log('🤖 Gemini AI ürün analizi başlatılıyor...');
+        final aiResult = await AIService.analyzeProduct(
+          url: url,
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+        );
+
+        if (aiResult['success'] == true && mounted) {
+          // AI'dan gelen verileri ata (eğer alanlar boşsa)
+          final aiTitle = _cleanScrapedString(aiResult['title']?.toString());
+          if (_titleController.text.trim().isEmpty && aiTitle != null) {
+            _titleController.text = aiTitle;
+            hasTitle = true;
+          }
+
+          if (_priceController.text.trim().isEmpty && aiResult['price'] != null && aiResult['price'] > 0) {
+            _priceController.text = aiResult['price'].toString();
+            hasPrice = true;
+          }
+
+          final aiStore = _cleanScrapedString(aiResult['store']?.toString());
+          if (_storeController.text.trim().isEmpty && aiStore != null) {
+            _updateStoreSelection(aiStore);
+            hasStore = true;
+          }
+
+          final isGetirOrMigros = url.contains('getir') || url.contains('migros') ||
+              (_selectedStore != null && (_selectedStore! == 'Getir' || _selectedStore! == 'Migros'));
+
+          if (aiResult['category'] != null && !_isCategoryLockedByScraper && !isGetirOrMigros) {
+            setState(() {
+              _selectedCategory = aiResult['category'];
+              _selectedSubCategory = null;
             });
             hasCategory = true;
-            _log('✅ Scraper kategori tespiti başarılı: $_selectedCategory -> $_selectedSubCategory (Kilitlendi)');
           }
-        }
-      }
-    } catch (e) {
-      _log('❌ LinkPreview metadata çekme hatası: $e');
-    }
-
-    // Görsel yükleniyor durumunu kapat
-    if (mounted) {
-      setState(() {
-        _isLoadingImage = false;
-      });
-    }
-
-    // 3. GEMINI AI ANALİZİ
-    try {
-      _log('🤖 Gemini AI ürün analizi başlatılıyor...');
-      final aiResult = await AIService.analyzeProduct(
-        url: url,
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim(),
-      );
-
-      if (aiResult['success'] == true && mounted) {
-        // AI'dan gelen verileri ata (eğer alanlar boşsa)
-        final aiTitle = _cleanScrapedString(aiResult['title']?.toString());
-        if (_titleController.text.trim().isEmpty && aiTitle != null) {
-          _titleController.text = aiTitle;
-          hasTitle = true;
-        }
-
-        if (_priceController.text.trim().isEmpty && aiResult['price'] != null && aiResult['price'] > 0) {
-          _priceController.text = aiResult['price'].toString();
-          hasPrice = true;
-        }
-
-        final aiStore = _cleanScrapedString(aiResult['store']?.toString());
-        if (_storeController.text.trim().isEmpty && aiStore != null) {
-          _updateStoreSelection(aiStore);
-          hasStore = true;
-        }
-
-        final isGetirOrMigros = url.contains('getir') || url.contains('migros') ||
-            (_selectedStore != null && (_selectedStore! == 'Getir' || _selectedStore! == 'Migros'));
-
-        if (aiResult['category'] != null && !_isCategoryLockedByScraper && !isGetirOrMigros) {
-          setState(() {
-            _selectedCategory = aiResult['category'];
-            _selectedSubCategory = null;
-          });
-          hasCategory = true;
-        }
-      } else {
-        _log('⚠️ AI Analiz başarısız veya proxy hatası verdi.');
-      }
-    } catch (e) {
-      _log('❌ AI Analiz sırasında hata oluştu: $e');
-    }
-
-    // İşlem bitti
-    if (mounted) {
-      setState(() {
-        _isAutoDetecting = false;
-      });
-    }
-
-    // 4. KULLANICI BİLGİLENDİRME (SNACKBAR)
-    if (mounted) {
-      final anySuccess = hasImage || hasTitle || hasStore || hasCategory || hasPrice;
-      
-      if (anySuccess) {
-        final List<String> missingFields = [];
-        if (_imageUrlController.text.trim().isEmpty) missingFields.add('Görsel');
-        if (_titleController.text.trim().isEmpty) missingFields.add('Başlık');
-        if (!_hidePrice && _priceController.text.trim().isEmpty) missingFields.add('Fiyat');
-        if (_storeController.text.trim().isEmpty) missingFields.add('Mağaza');
-
-        String msg;
-        if (missingFields.isEmpty) {
-          msg = '✨ Ürün bilgileri otomatik olarak başarıyla çekildi!';
         } else {
-          msg = '✨ Ürün bilgileri kısmen çekildi. Eksik alanları (${missingFields.join(", ")}) lütfen elle tamamlayın.';
+          _log('⚠️ AI Analiz başarısız veya proxy hatası verdi.');
         }
+      } catch (e) {
+        _log('❌ AI Analiz sırasında hata oluştu: $e');
+      }
 
-        _showCustomSnackBar(
-          message: msg,
-          icon: Icons.check_circle_rounded,
-          backgroundColor: const Color(0xFF2E7D32),
-          duration: const Duration(seconds: 3),
-        );
-      } else {
-        _showCustomSnackBar(
-          message: 'Ürün bilgileri otomatik çekilemedi, lütfen elle doldurun.',
-          icon: Icons.info_outline_rounded,
-          backgroundColor: const Color(0xFF546E7A),
-          duration: const Duration(seconds: 3),
-        );
+      // İşlem bitti
+      if (mounted) {
+        setState(() {
+          _isAutoDetecting = false;
+        });
+      }
+
+      // 4. KULLANICI BİLGİLENDİRME (SNACKBAR)
+      if (mounted) {
+        final anySuccess = hasImage || hasTitle || hasStore || hasCategory || hasPrice;
+        
+        if (anySuccess) {
+          final List<String> missingFields = [];
+          if (_imageUrlController.text.trim().isEmpty) missingFields.add('Görsel');
+          if (_titleController.text.trim().isEmpty) missingFields.add('Başlık');
+          if (!_hidePrice && _priceController.text.trim().isEmpty) missingFields.add('Fiyat');
+          if (_storeController.text.trim().isEmpty) missingFields.add('Mağaza');
+
+          String msg;
+          if (missingFields.isEmpty) {
+            msg = '✨ Ürün bilgileri otomatik olarak başarıyla çekildi!';
+          } else {
+            msg = '✨ Ürün bilgileri kısmen çekildi. Eksik alanları (${missingFields.join(", ")}) lütfen elle tamamlayın.';
+          }
+
+          _showCustomSnackBar(
+            message: msg,
+            icon: Icons.check_circle_rounded,
+            backgroundColor: const Color(0xFF2E7D32),
+            duration: const Duration(seconds: 3),
+          );
+        } else {
+          _showCustomSnackBar(
+            message: 'Ürün bilgileri otomatik çekilemedi, lütfen elle doldurun.',
+            icon: Icons.info_outline_rounded,
+            backgroundColor: const Color(0xFF546E7A),
+            duration: const Duration(seconds: 3),
+          );
+        }
+      }
+    } finally {
+      _isFetchingActive = false;
+      if (mounted && _isAutoDetecting) {
+        setState(() {
+          _isAutoDetecting = false;
+          _isLoadingImage = false;
+        });
       }
     }
   }
@@ -785,67 +810,58 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     
     final lowerUrl = url.toLowerCase();
     
-    // Görsel CDN'leri (Bu alan adlarından gelenler kesinlikle görseldir)
-    final imageCdnPatterns = [
+    // 1. URI analizi ile uzantı kontrolü (path .jpg, .png vb. ile bitiyor veya içeriyorsa kesinlikle görseldir)
+    try {
+      final uri = Uri.parse(url);
+      final path = uri.path.toLowerCase();
+      const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.svg', '.avif', '.heic'];
+      if (imageExtensions.any((ext) => path.endsWith(ext) || path.contains('$ext?') || path.contains('$ext&') || path.contains(ext))) {
+        return true;
+      }
+    } catch (_) {}
+
+    // 2. Özel Görsel CDN Alan Adları (Sadece görsel barındıran alt alan adları)
+    const imageCdnPatterns = [
       'assets.mmsrg.com',      // MediaMarkt CDN
       'img.pzrmcdn.com',       // Pazarama CDN
       'cdn.dsmcdn.com',        // Trendyol CDN
       'hepsiburada.net',       // Hepsiburada CDN
       'images-amazon.com',     // Amazon CDN
       'images-na.ssl-images-amazon.com',
+      'media-amazon.com',      // Amazon Media CDN
+      'm.media-amazon.com',    // Amazon Mobile Media CDN
+      'ssl-images-amazon.com',
       'n11scdn.akamaized.net',  // N11 CDN
       'cdn.vatanbilgisayar.com', // Vatan Bilgisayar CDN
-      'idefix.com',             // Idefix CDN
-      'itopya.com',             // Itopya CDN
       'yenieera22.com',          // Itopya Image CDN
-      'teknosa.com',            // Teknosa CDN
       'teknosa-cloud-prod.mncdn.com', // Teknosa Image CDN
       'sky-static.mavi.com',    // Mavi CDN
-      'mavi.com',               // Mavi Domain
       'dfcdn.net',              // DeFacto CDN
-      'defacto.com.tr',         // DeFacto Domain
       'static.zara.net',        // Zara CDN
-      'zara.com',               // Zara Domain
       'st.mango.com',           // Mango CDN
       'st-mango.mncdn.com',     // Mango Alternative CDN
-      'mango.com',              // Mango Domain
       'cdn.beymen.com',         // Beymen CDN
-      'beymen.com',             // Beymen Domain
       'cdn-s3.pttavm.com',      // PttAVM CDN
-      'pttavm.com',             // PttAVM Domain
-      'incehesap.com',          // İncehesap Domain
+      'images.migrosone.com',   // Migros Image CDN
+      'cdn.getir.com',          // Getir CDN
+      'cdn.boyner.com.tr',      // Boyner CDN
+      'cdn03.ciceksepeti.net',  // Çiçeksepeti CDN
       'imgbb.co',
       'imgur.com',
       'i.ibb.co',
       'images.unsplash.com',
       'i.imgur.com',
+      'cloudinary.com',
+      'cloudfront.net',
     ];
     if (imageCdnPatterns.any((pattern) => lowerUrl.contains(pattern))) {
-      return true;
-    }
-    
-    // URI analizi ile uzantı kontrolü (Sorgu parametrelerini ayıklayarak)
-    try {
-      final uri = Uri.parse(url);
-      final path = uri.path.toLowerCase();
-      final imageExtensions = ['.webp', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
-      if (imageExtensions.any((ext) => path.endsWith(ext) || path.contains(ext))) {
+      const htmlPagePatterns = ['/urun/', '-p-', '/item/', '/detail/', '.html', '.htm', '.php'];
+      if (!htmlPagePatterns.any((pattern) => lowerUrl.contains(pattern)) || lowerUrl.contains('.jpg') || lowerUrl.contains('.png') || lowerUrl.contains('.webp')) {
         return true;
       }
-    } catch (_) {}
-    
-    // HTML sayfası pattern'leri
-    final htmlPagePatterns = ['/product/', '/urun/', '/p-', '/item/', '/detail/'];
-    if (htmlPagePatterns.any((pattern) => lowerUrl.contains(pattern))) {
-      return false;
     }
     
-    // Genel uzunluk kontrolü (Daha esnek limit)
-    if (url.length > 250) {
-      return false;
-    }
-    
-    return true;
+    return false;
   }
 
 
@@ -1718,40 +1734,43 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 width: 1,
               ),
             ),
-            child: CheckboxListTile(
-              value: _isAmazonWarehouse,
-              onChanged: (value) {
-                setState(() {
-                  _isAmazonWarehouse = value ?? false;
-                });
-              },
-              title: const Row(
-                children: [
-                  Icon(
-                    Icons.inventory_2_rounded,
-                    size: 18,
-                    color: Color(0xFFD97706),
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Amazon Depo Ürünü',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+            child: Material(
+              color: Colors.transparent,
+              child: CheckboxListTile(
+                value: _isAmazonWarehouse,
+                onChanged: (value) {
+                  setState(() {
+                    _isAmazonWarehouse = value ?? false;
+                  });
+                },
+                title: const Row(
+                  children: [
+                    Icon(
+                      Icons.inventory_2_rounded,
+                      size: 18,
                       color: Color(0xFFD97706),
                     ),
-                  ),
-                ],
+                    SizedBox(width: 8),
+                    Text(
+                      'Amazon Depo Ürünü',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFD97706),
+                      ),
+                    ),
+                  ],
+                ),
+                subtitle: const Text(
+                  'Bu ürün Amazon Depo tarafından satılmaktadır.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
+                ),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                activeColor: const Color(0xFFD97706),
+                checkColor: Colors.white,
+                controlAffinity: ListTileControlAffinity.trailing,
               ),
-              subtitle: const Text(
-                'Bu ürün Amazon Depo tarafından satılmaktadır.',
-                style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
-              ),
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              activeColor: const Color(0xFFD97706),
-              checkColor: Colors.white,
-              controlAffinity: ListTileControlAffinity.trailing,
             ),
           ),
         ],

@@ -467,6 +467,28 @@ class NotificationService {
         final permissionStatus = await checkSystemPermissionStatus();
         final platform = kIsWeb ? 'web' : (defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android');
 
+        // Mükerrer push bildirimlerini önlemek için kullanıcının eski aktif cihaz kayıtlarını pasife çek
+        try {
+          final existingSnap = await _firestore
+              .collection('userDevices')
+              .where('uid', isEqualTo: resolvedUserId)
+              .where('active', isEqualTo: true)
+              .get();
+
+          for (final doc in existingSnap.docs) {
+            if (doc.id != deviceIdDoc) {
+              await doc.reference.update({
+                'active': false,
+                'deactivatedReason': 'new_device_login',
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+              _log('🧹 Eski cihaz kaydı pasife çekildi: ${doc.id}');
+            }
+          }
+        } catch (e) {
+          _log('⚠️ Eski cihaz kayıtları temizlenirken hata (devam ediliyor): $e');
+        }
+
         await _firestore.collection('userDevices').doc(deviceIdDoc).set({
           'uid': resolvedUserId,
           'deviceId': deviceId,
@@ -1417,6 +1439,10 @@ class NotificationService {
     try {
       final data = message.data;
       final type = (data['type'] ?? 'deal').toString();
+      final dealId = (data['dealId'] ?? '').toString();
+      final commentId = (data['commentId'] ?? '').toString();
+      final messageId = (data['messageId'] ?? '').toString();
+
       final senderId = (
         data['senderId'] ??
         data['sender_id'] ??
@@ -1436,33 +1462,73 @@ class NotificationService {
         'Kullanıcı'
       ).toString().replaceAll('💬 ', '').trim();
 
-      final title = data['notification_title'] ?? message.notification?.title ?? '💬 $senderName';
-      final body = data['notification_body'] ?? data['messageText'] ?? message.notification?.body ?? 'Yeni mesaj';
+      String channelId = 'sicak_firsatlar_general_v2';
+      String channelName = 'Sıcak Fırsatlar';
+      String channelDescription = 'Fırsat ve indirim bildirimleri';
+      String tag = 'deal_$dealId';
+      int notifId = (dealId.isNotEmpty ? dealId.hashCode : DateTime.now().millisecondsSinceEpoch) % 100000;
+      String title = data['notification_title'] ?? data['title'] ?? message.notification?.title ?? 'Yeni Bildirim';
+      String body = data['notification_body'] ?? data['body'] ?? data['messageText'] ?? message.notification?.body ?? '';
+      String payload = dealId;
 
-      String payload = '';
-      if (type == 'message' || type == 'user_message' || type == 'chat' || senderId.isNotEmpty) {
-        payload = 'message:$senderId:$senderName';
+      if (type == 'admin_deal') {
+        channelId = 'admin_channel';
+        channelName = 'Admin Bildirimleri';
+        channelDescription = 'Onay bekleyen ve sistem admin bildirimleri';
+        tag = 'admin_deal_$dealId';
+        notifId = ('admin_$dealId').hashCode % 100000;
+        title = data['notification_title'] ?? message.notification?.title ?? '👮‍♂️ Onay Bekleyen Fırsat';
+        payload = 'admin_deal:$dealId';
+      } else if (type == 'keyword') {
+        channelId = 'keyword_alerts_channel';
+        channelName = 'Özel Fırsat Bildirimleri';
+        channelDescription = 'Takip ettiğiniz anahtar kelimelere ait fırsat bildirimleri';
+        tag = 'keyword_$dealId';
+        notifId = ('kw_$dealId').hashCode % 100000;
+        title = data['notification_title'] ?? message.notification?.title ?? '🎯 İlginizi Çeken Kelime!';
+        payload = dealId;
+      } else if (type == 'comment_reply') {
+        channelId = 'comment_replies_channel';
+        channelName = 'Yorum Cevapları';
+        channelDescription = 'Yorumlarınıza gelen cevaplar için bildirimler';
+        tag = 'reply_${commentId.isNotEmpty ? commentId : dealId}';
+        notifId = (commentId.isNotEmpty ? commentId.hashCode : dealId.hashCode) % 100000;
+        title = data['notification_title'] ?? message.notification?.title ?? '$senderName yorumunuza cevap verdi';
+        payload = 'comment_reply:$dealId:$commentId';
       } else if (type == 'admin_message') {
+        channelId = 'admin_messages_channel_v3';
+        channelName = 'Yönetici Bildirimleri';
+        channelDescription = 'FırsatKolik Yönetim bildirimleri';
+        tag = 'admin_msg_${messageId.isNotEmpty ? messageId : dealId}';
+        notifId = (messageId.isNotEmpty ? messageId.hashCode : 9999) % 100000;
+        title = data['notification_title'] ?? message.notification?.title ?? '🛡️ FırsatKolik Yönetim';
         payload = 'admin_message';
-      } else {
-        payload = data['dealId']?.toString() ?? '';
+      } else if (type == 'message' || type == 'user_message' || type == 'chat' || senderId.isNotEmpty) {
+        channelId = 'messages_channel_v3';
+        channelName = 'Mesaj Bildirimleri';
+        channelDescription = 'Kullanıcılar arası mesajlaşma bildirimleri';
+        tag = 'msg_$senderId';
+        notifId = (senderId.isNotEmpty ? senderId.hashCode : 8888) % 100000;
+        title = data['notification_title'] ?? message.notification?.title ?? '💬 $senderName';
+        payload = 'message:$senderId:$senderName';
       }
 
-      const androidDetails = AndroidNotificationDetails(
-        'messages_channel_v3',
-        'Mesaj Bildirimleri',
-        channelDescription: 'Kullanıcılar arası mesajlaşma bildirimleri',
+      final androidDetails = AndroidNotificationDetails(
+        channelId,
+        channelName,
+        channelDescription: channelDescription,
         importance: Importance.max,
         priority: Priority.max,
         playSound: true,
         enableVibration: true,
+        tag: tag,
       );
 
       await _localNotifications.show(
-        DateTime.now().millisecondsSinceEpoch % 100000,
+        notifId,
         title,
         body,
-        const NotificationDetails(android: androidDetails),
+        NotificationDetails(android: androidDetails),
         payload: payload,
       );
     } catch (e) {
@@ -1593,16 +1659,8 @@ class NotificationService {
 
   Future<void> setGeneralNotifications(bool enabled) async {
     final prefs = await getNotificationPreferences();
-    await updateNotificationPreferences(NotificationPreferences(
+    await updateNotificationPreferences(prefs.copyWith(
       pushMasterEnabled: enabled,
-      dealNotificationsEnabled: prefs.dealNotificationsEnabled,
-      communityNotificationsEnabled: prefs.communityNotificationsEnabled,
-      submissionStatusNotificationsEnabled: prefs.submissionStatusNotificationsEnabled,
-      marketingNotificationsEnabled: prefs.marketingNotificationsEnabled,
-      quietHoursEnabled: prefs.quietHoursEnabled,
-      quietHoursStart: prefs.quietHoursStart,
-      quietHoursEnd: prefs.quietHoursEnd,
-      timezone: prefs.timezone,
       updatedAt: DateTime.now(),
     ));
   }
@@ -1619,16 +1677,8 @@ class NotificationService {
 
   Future<void> setCommentReplyNotificationsEnabled(String userId, bool enabled) async {
     final prefs = await getNotificationPreferences();
-    await updateNotificationPreferences(NotificationPreferences(
-      pushMasterEnabled: prefs.pushMasterEnabled,
-      dealNotificationsEnabled: prefs.dealNotificationsEnabled,
+    await updateNotificationPreferences(prefs.copyWith(
       communityNotificationsEnabled: enabled,
-      submissionStatusNotificationsEnabled: prefs.submissionStatusNotificationsEnabled,
-      marketingNotificationsEnabled: prefs.marketingNotificationsEnabled,
-      quietHoursEnabled: prefs.quietHoursEnabled,
-      quietHoursStart: prefs.quietHoursStart,
-      quietHoursEnd: prefs.quietHoursEnd,
-      timezone: prefs.timezone,
       updatedAt: DateTime.now(),
     ));
   }

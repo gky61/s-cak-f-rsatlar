@@ -151,6 +151,25 @@ class FirestoreService {
         });
   }
 
+  /// Botkolik tarafından paylaşılan (otonom kazınan) tüm fırsatların akışı
+  Stream<List<Deal>> getBotkolikDealsStream({int? limit, String? categoryId}) {
+    Query query = firestore.collection('deals')
+        .where('isUserSubmitted', isEqualTo: false);
+
+    if (categoryId != null && categoryId.isNotEmpty && categoryId != 'all') {
+      query = query.where('category', isEqualTo: categoryId);
+    }
+
+    return query.snapshots().map((s) {
+      final list = s.docs.map((d) => Deal.fromFirestore(d)).toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (limit != null) {
+        return list.take(limit).toList();
+      }
+      return list;
+    });
+  }
+
   Stream<List<Deal>> getUserLastDealsStream(String userId, {int limit = 5}) {
     return firestore.collection('users').doc(userId).snapshots().asyncMap((doc) async {
       if (!doc.exists) return [];

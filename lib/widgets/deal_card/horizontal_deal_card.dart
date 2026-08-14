@@ -5,6 +5,7 @@ import '../../models/deal.dart';
 import '../../models/user.dart';
 import '../../theme/app_theme.dart';
 import '../../screens/profile_screen.dart';
+import '../../screens/botkolik_profile_screen.dart';
 import '../money_badge.dart';
 import 'deal_card_helpers.dart';
 import 'deal_card_badge.dart';
@@ -466,10 +467,48 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                                 ),
                                               ),
                                             ],
-                                            // Sadece Profil Resmi (sadece kullanıcı paylaşımı ise, sağda)
-                                            if (deal.isUserSubmitted && deal.postedBy.isNotEmpty) ...[
-                                              const SizedBox(width: 6),
-                                              StreamBuilder<DocumentSnapshot>(
+                                             // Profil Resmi (Botkolik veya Kullanıcı paylaşımı)
+                                             if (deal.isBotkolik) ...[
+                                               const SizedBox(width: 6),
+                                               InkWell(
+                                                 onTap: () {
+                                                   Navigator.push(
+                                                     context,
+                                                     MaterialPageRoute(
+                                                       builder: (_) => const BotkolikProfileScreen(),
+                                                     ),
+                                                   );
+                                                 },
+                                                 borderRadius: BorderRadius.circular(10),
+                                                 child: Container(
+                                                   width: 15,
+                                                   height: 15,
+                                                   decoration: BoxDecoration(
+                                                     shape: BoxShape.circle,
+                                                     border: Border.all(
+                                                       color: const Color(0xFF00F0FF).withValues(alpha: 0.8),
+                                                       width: 1,
+                                                     ),
+                                                     boxShadow: [
+                                                       BoxShadow(
+                                                         color: const Color(0xFF00F0FF).withValues(alpha: 0.25),
+                                                         blurRadius: 3,
+                                                       ),
+                                                     ],
+                                                   ),
+                                                   child: ClipOval(
+                                                     child: Image.asset(
+                                                       'assets/botkolik.webp',
+                                                       width: 15,
+                                                       height: 15,
+                                                       fit: BoxFit.cover,
+                                                     ),
+                                                   ),
+                                                 ),
+                                               ),
+                                             ] else if (deal.isUserSubmitted && deal.postedBy.isNotEmpty) ...[
+                                               const SizedBox(width: 6),
+                                               StreamBuilder<DocumentSnapshot>(
                                                 stream: FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(deal.postedBy)

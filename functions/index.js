@@ -200,7 +200,14 @@ async function getUserDeviceTokens(userId) {
   const tokens = [];
   const seenTokens = new Set();
 
-  devicesSnap.forEach(doc => {
+  const docs = devicesSnap.docs.slice();
+  docs.sort((a, b) => {
+    const timeA = a.data().updatedAt ? a.data().updatedAt.toMillis() : 0;
+    const timeB = b.data().updatedAt ? b.data().updatedAt.toMillis() : 0;
+    return timeB - timeA;
+  });
+
+  for (const doc of docs) {
     const data = doc.data();
     if (data.fcmToken && !seenTokens.has(data.fcmToken)) {
       seenTokens.add(data.fcmToken);
@@ -208,8 +215,15 @@ async function getUserDeviceTokens(userId) {
         id: doc.id,
         token: data.fcmToken
       });
+    } else if (data.fcmToken && seenTokens.has(data.fcmToken)) {
+      // Duplicate token under another deviceId - mark as inactive in background
+      doc.ref.set({
+        active: false,
+        deactivatedReason: 'duplicate_token_cleanup',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true }).catch(() => {});
     }
-  });
+  }
   return tokens;
 }
 
@@ -276,12 +290,13 @@ async function matchAndCreateDealNotifications(deal, dealId) {
   const matchedUsers = new Map(); // userId -> { reason: 'keyword'|'author'|'category', detail: String, reasons: {} }
 
   // A. Takip Edilen Yazarlar (zil açık)
-  if (isUserSubmitted && postedBy) {
+  const authorTarget = (isUserSubmitted && postedBy) ? postedBy : ((!isUserSubmitted || !postedBy || postedBy === 'botkolik') ? 'botkolik' : postedBy);
+  if (authorTarget) {
     try {
       const authorSubsSnap = await admin.firestore()
         .collection('notificationSubscriptions')
         .where('type', '==', 'author')
-        .where('key', '==', postedBy)
+        .where('key', '==', authorTarget)
         .where('enabled', '==', true)
         .get();
       
@@ -290,8 +305,8 @@ async function matchAndCreateDealNotifications(deal, dealId) {
         if (sub.uid !== postedBy) { // Kendi kendine bildirim gitmesin
           matchedUsers.set(sub.uid, {
             reason: 'author',
-            detail: postedBy,
-            reasons: { author: postedBy }
+            detail: authorTarget,
+            reasons: { author: authorTarget }
           });
         }
       });
@@ -430,8 +445,13 @@ async function matchAndCreateDealNotifications(deal, dealId) {
       notifTitle = '🎯 İlginizi Çeken Kelime!';
       notifBody = `"${match.detail}" içeren yeni fırsat: ${deal.title}`;
     } else if (match.reason === 'author') {
-      notifTitle = '👤 Takip Ettiğiniz Kişi!';
-      notifBody = `Takip ettiğiniz yazar yeni fırsat paylaştı: ${deal.title}`;
+      if (match.detail === 'botkolik') {
+        notifTitle = '⚡ Botkolik Radarı!';
+        notifBody = `Botkolik yeni bir fırsat yakaladı: ${deal.title}`;
+      } else {
+        notifTitle = '👤 Takip Ettiğiniz Kişi!';
+        notifBody = `Takip ettiğiniz yazar yeni fırsat paylaştı: ${deal.title}`;
+      }
     }
 
     batch.set(notifRef, {
@@ -1038,11 +1058,11 @@ exports.onNotificationCreated = functions.firestore
     // NOT: admin_message artık bu motordan geçerek push gönderilir (Tek Sorumluluk Prensibi)
     if (notification.type === 'submission_status') {
       functions.logger.info(`🚫 ${notification.type} için push gönderilmez (sadece bildirim merkezinde saklanır).`);
-      await snap.ref.update({
+      await snap.ref.set({
         pushEligible: false,
         pushStatus: 'disabled_permanently_for_submission_status',
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
       return null;
     }
 
@@ -1053,11 +1073,11 @@ exports.onNotificationCreated = functions.firestore
         const sysConfig = sysConfigDoc.data();
         if (sysConfig.enabled === false) {
           functions.logger.info(`🚫 Global master notification switch is disabled. Skipping push for ${notificationId}`);
-          await snap.ref.update({
+          await snap.ref.set({
             pushEligible: false,
             pushStatus: 'disabled_by_system_master_switch',
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
+          }, { merge: true });
           return null;
         }
       }
@@ -1114,11 +1134,11 @@ exports.onNotificationCreated = functions.firestore
 
       if (isQuiet) {
         functions.logger.info(`😴 Sessiz saatlerdeyiz (${currentHm} - ${start}/${end}). Push atlanıyor.`);
-        await snap.ref.update({
+        await snap.ref.set({
           pushEligible: false,
           pushStatus: 'skipped_quiet_hours',
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
         return null;
       }
     }
@@ -1159,11 +1179,11 @@ exports.onNotificationCreated = functions.firestore
 
         if (hourlyCount >= sysConfig.categoryHourlyLimit || dailyCount >= sysConfig.categoryDailyLimit) {
           functions.logger.info(`⏳ Kategori limiti aşıldı (Saatlik: ${hourlyCount}/${sysConfig.categoryHourlyLimit}, Günlük: ${dailyCount}/${sysConfig.categoryDailyLimit}). Push atlanıyor.`);
-          await snap.ref.update({
+          await snap.ref.set({
             pushEligible: false,
             pushStatus: 'skipped_category_limit',
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
+          }, { merge: true });
           return null;
         }
       } catch (limitErr) {
@@ -1174,11 +1194,11 @@ exports.onNotificationCreated = functions.firestore
     // 4. ADIM 2 - FİLTRE C ve D: Alt Kanal ve Ana Şalter (Telefon Bildirimleri) Kontrolleri
     if (prefs.pushMasterEnabled === false) {
       functions.logger.info(`🚫 Kullanıcı ${userId} için Telefon Bildirimleri (Master Switch) kapalı. Status: disabled_by_user_master_switch`);
-      await snap.ref.update({
+      await snap.ref.set({
         pushEligible: false,
         pushStatus: 'disabled_by_user_master_switch',
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
       return null;
     }
 
@@ -1252,13 +1272,13 @@ exports.onNotificationCreated = functions.firestore
           body = newBody;
 
           // Veritabanını güncelle ki bildirim geçmişi de doğru gözüksün
-          await snap.ref.update({
+          await snap.ref.set({
             reason: activeReason,
             reasonDetail: activeDetail,
             title: newTitle,
             body: newBody,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
+          }, { merge: true });
 
           functions.logger.info(`🔄 Bildirim başlığı ve içeriği güncellenen nedene göre dinamik olarak değiştirildi:`, {
             oldReason: originalReason,
@@ -1301,11 +1321,11 @@ exports.onNotificationCreated = functions.firestore
       const status = `disabled_by_user_group_${groupName}`;
 
       functions.logger.info(`🚫 Kullanıcı ${userId} için bu bildirim grubu kapalı: ${groupName} (Status: ${status})`);
-      await snap.ref.update({
+      await snap.ref.set({
         pushEligible: false,
         pushStatus: status,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
       return null;
     }
 
@@ -1314,11 +1334,11 @@ exports.onNotificationCreated = functions.firestore
     const devices = await getUserDeviceTokens(userId);
     if (devices.length === 0) {
       functions.logger.info(`⚠️ Kullanıcı ${userId} için aktif cihaz token'ı bulunamadı.`);
-      await snap.ref.update({
+      await snap.ref.set({
         pushEligible: false,
         pushStatus: 'no_active_devices',
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
       return null;
     }
 
@@ -1335,7 +1355,7 @@ exports.onNotificationCreated = functions.firestore
       channelId = 'admin_messages_channel_v3';
       color = '#FF5722';
       title = `🛡️ ${title}`;
-    } else if (type === 'keyword') {
+    } else if (type === 'keyword' || reason === 'keyword') {
       channelId = 'keyword_alerts_channel';
       color = '#FF9800';
     } else if (type === 'comment_reply') {
@@ -1377,7 +1397,7 @@ exports.onNotificationCreated = functions.firestore
       // Android notification tag: admin mesajları için messageId bazlı, diğerleri için type_dealId
       const androidTag = type === 'admin_message'
         ? `admin_msg_${notification.messageId || notificationId}`
-        : `${type}_${dealId}`;
+        : (reason === 'keyword' ? `keyword_${dealId}` : `${type}_${dealId}`);
 
       // APNs kategori: admin mesajları için ADMIN_MESSAGE, diğerleri için yok
       const apnsCategory = type === 'admin_message' ? 'ADMIN_MESSAGE' : undefined;
@@ -1433,12 +1453,12 @@ exports.onNotificationCreated = functions.firestore
     const results = await Promise.all(promises);
     const successCount = results.filter(r => r.success).length;
 
-    await snap.ref.update({
+    await snap.ref.set({
       pushEligible: true,
       pushStatus: successCount > 0 ? 'sent' : 'failed',
       sentAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true });
 
     functions.logger.info(`✅ Push gönderim süreci tamamlandı. Başarılı cihaz sayısı: ${successCount}/${devices.length}`);
     return null;

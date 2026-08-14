@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -13,6 +14,7 @@ import '../services/auth_service.dart';
 import '../services/link_preview_service.dart';
 import '../theme/app_theme.dart';
 import 'profile_screen.dart';
+import 'botkolik_profile_screen.dart';
 import 'message_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../main.dart'; // navigatorKey için
@@ -711,11 +713,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
                                   colors: [
-                                    Colors.black.withValues(alpha: 0.55),
+                                    Colors.black.withValues(alpha: 0.42),
                                     Colors.transparent,
-                                    Colors.black.withValues(alpha: 0.25),
+                                    Colors.black.withValues(alpha: 0.2),
                                   ],
-                                  stops: const [0.0, 0.4, 1.0],
+                                  stops: const [0.0, 0.35, 1.0],
                                 ),
                               ),
                             ),
@@ -724,24 +726,25 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         // Floating Discount Badge (Bottom Right over Image)
                         if (deal.discountRate != null && deal.discountRate! > 0)
                           Positioned(
-                            bottom: 32,
+                            bottom: 30,
                             right: 16,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [Colors.deepOrange[600]!, Colors.red[700]!],
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFFF5722), Color(0xFFDC2626)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  width: 1.5,
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                  width: 1,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.red.withValues(alpha: 0.4),
+                                    color: const Color(0xFFDC2626).withValues(alpha: 0.4),
                                     blurRadius: 12,
-                                    spreadRadius: 2,
                                     offset: const Offset(0, 4),
                                   ),
                                 ],
@@ -749,15 +752,15 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.local_fire_department, color: Colors.white, size: 18),
+                                  const Icon(Icons.local_fire_department_rounded, color: Colors.white, size: 16),
                                   const SizedBox(width: 4),
                                   Text(
                                     '%${deal.discountRate} İNDİRİM',
                                     style: const TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 12.5,
                                       fontWeight: FontWeight.w900,
                                       color: Colors.white,
-                                      letterSpacing: 0.5,
+                                      letterSpacing: 0.4,
                                     ),
                                   ),
                                 ],
@@ -782,9 +785,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
-                          blurRadius: 30,
-                          offset: const Offset(0, -10),
+                          color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.06),
+                          blurRadius: 24,
+                          offset: const Offset(0, -8),
                         ),
                       ],
                     ),
@@ -794,12 +797,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         // Top Handle Indicator
                         Center(
                           child: Container(
-                            margin: const EdgeInsets.only(top: 12, bottom: 16),
-                            width: 44,
-                            height: 4.5,
+                            margin: const EdgeInsets.only(top: 12, bottom: 18),
+                            width: 40,
+                            height: 4,
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.grey[700] : Colors.grey[300],
-                              borderRadius: BorderRadius.circular(3),
+                              color: isDark ? Colors.grey[700] : const Color(0xFFE2E8F0),
+                              borderRadius: BorderRadius.circular(2),
                             ),
                           ),
                         ),
@@ -824,14 +827,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           padding: const EdgeInsets.symmetric(horizontal: 9),
                                           decoration: BoxDecoration(
                                             color: isDark 
-                                                ? Colors.white.withValues(alpha: 0.05) 
-                                                : const Color(0xFFF1F5F9),
+                                                ? Colors.white.withValues(alpha: 0.04) 
+                                                : const Color(0xFFF8FAFC),
                                             borderRadius: BorderRadius.circular(10),
                                             border: Border.all(
                                               color: isDark 
-                                                  ? Colors.white.withValues(alpha: 0.09) 
-                                                  : const Color(0xFFCBD5E1),
-                                              width: 0.8,
+                                                  ? Colors.white.withValues(alpha: 0.08) 
+                                                  : const Color(0xFFE2E8F0),
+                                              width: 0.85,
                                             ),
                                           ),
                                           child: Row(
@@ -850,7 +853,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.w500,
-                                                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                                 ),
                                               ),
                                               Flexible(
@@ -859,7 +862,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                   style: TextStyle(
                                                     fontSize: 11.5,
                                                     fontWeight: FontWeight.w700,
-                                                    color: isDark ? Colors.white : AppTheme.textPrimary,
+                                                    color: isDark ? Colors.white : const Color(0xFF1E293B),
                                                   ),
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
@@ -893,14 +896,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             padding: const EdgeInsets.symmetric(horizontal: 9),
                                             decoration: BoxDecoration(
                                               color: isDark 
-                                                  ? Colors.white.withValues(alpha: 0.05) 
-                                                  : const Color(0xFFF1F5F9),
+                                                  ? Colors.white.withValues(alpha: 0.04) 
+                                                  : const Color(0xFFF8FAFC),
                                               borderRadius: BorderRadius.circular(10),
                                               border: Border.all(
                                                 color: isDark 
-                                                    ? Colors.white.withValues(alpha: 0.09) 
-                                                    : const Color(0xFFCBD5E1),
-                                                width: 0.8,
+                                                    ? Colors.white.withValues(alpha: 0.08) 
+                                                    : const Color(0xFFE2E8F0),
+                                                width: 0.85,
                                               ),
                                             ),
                                             child: Row(
@@ -913,7 +916,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                   style: TextStyle(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.w500,
-                                                    color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                                   ),
                                                 ),
                                                 Flexible(
@@ -922,7 +925,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                     style: TextStyle(
                                                       fontSize: 11.5,
                                                       fontWeight: FontWeight.w700,
-                                                      color: isDark ? Colors.white : AppTheme.textPrimary,
+                                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
                                                     ),
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
@@ -939,10 +942,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   Column(
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
-                                      // 1. Paylaşan Kullanıcı & Mesaj Kartı (Üstte)
-                                      if (deal.postedBy.isNotEmpty && deal.isUserSubmitted)
+                                      // 1. Paylaşan Botkolik veya Kullanıcı Kartı (Üstte)
+                                      if (deal.isBotkolik)
+                                        _buildCompactBotkolikCard(deal, isDark, primaryColor)
+                                      else if (deal.postedBy.isNotEmpty && deal.isUserSubmitted)
                                         _buildCompactDealAuthorCard(deal, isDark, primaryColor),
-                                      if (deal.postedBy.isNotEmpty && deal.isUserSubmitted)
+                                      if (deal.isBotkolik || (deal.postedBy.isNotEmpty && deal.isUserSubmitted))
                                         const SizedBox(height: 8),
                                       // 2. Category Pill (Altta)
                                       InkWell(
@@ -953,14 +958,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           padding: const EdgeInsets.symmetric(horizontal: 10),
                                           decoration: BoxDecoration(
                                             color: isDark 
-                                                ? Colors.white.withValues(alpha: 0.05) 
-                                                : const Color(0xFFF1F5F9),
+                                                ? Colors.white.withValues(alpha: 0.04) 
+                                                : const Color(0xFFF8FAFC),
                                             borderRadius: BorderRadius.circular(10),
                                             border: Border.all(
                                               color: isDark 
-                                                  ? Colors.white.withValues(alpha: 0.09) 
-                                                  : const Color(0xFFCBD5E1),
-                                              width: 0.8,
+                                                  ? Colors.white.withValues(alpha: 0.08) 
+                                                  : const Color(0xFFE2E8F0),
+                                              width: 0.85,
                                             ),
                                           ),
                                           child: Row(
@@ -971,7 +976,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                 style: TextStyle(
                                                   fontSize: 10.5,
                                                   fontWeight: FontWeight.w800,
-                                                  color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
+                                                  color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
                                                   letterSpacing: 0.5,
                                                 ),
                                               ),
@@ -997,13 +1002,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [Colors.amber[700]!, Colors.orange[600]!],
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
                                       ),
                                       borderRadius: BorderRadius.circular(10),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.amber.withValues(alpha: 0.35),
+                                          color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
                                           blurRadius: 8,
                                           offset: const Offset(0, 3),
                                         ),
@@ -1034,24 +1039,24 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 style: TextStyle(
                                   fontSize: 18.5,
                                   fontWeight: FontWeight.w800,
-                                  color: isDark ? Colors.white : AppTheme.textPrimary,
+                                  color: isDark ? Colors.white : const Color(0xFF1E293B),
                                   height: 1.35,
-                                  letterSpacing: -0.2,
+                                  letterSpacing: -0.3,
                                 ),
                               ),
 
                               if (deal.ratingValue != null || deal.ratingCount != null) ...[
-                                const SizedBox(height: 10),
+                                const SizedBox(height: 12),
                                 Row(
                                   children: [
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                       decoration: BoxDecoration(
-                                        color: isDark ? const Color(0xFF2C2517) : const Color(0xFFFFF8E1),
-                                        borderRadius: BorderRadius.circular(8),
+                                        color: isDark ? const Color(0xFF282008) : const Color(0xFFFFFBEB),
+                                        borderRadius: BorderRadius.circular(9),
                                         border: Border.all(
-                                          color: const Color(0xFFFFD54F).withValues(alpha: 0.6),
-                                          width: 0.8,
+                                          color: const Color(0xFFFDE68A).withValues(alpha: isDark ? 0.35 : 0.85),
+                                          width: 0.85,
                                         ),
                                       ),
                                       child: Row(
@@ -1059,27 +1064,27 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                         children: [
                                           const Icon(
                                             Icons.star_rounded,
-                                            size: 16,
-                                            color: Color(0xFFFFB800),
+                                            size: 16.5,
+                                            color: Color(0xFFF59E0B),
                                           ),
                                           const SizedBox(width: 4),
                                           if (deal.ratingValue != null)
                                             Text(
                                               deal.ratingValue!.toStringAsFixed(1),
                                               style: TextStyle(
-                                                fontSize: 12,
+                                                fontSize: 12.5,
                                                 fontWeight: FontWeight.w800,
-                                                color: isDark ? const Color(0xFFFFD54F) : const Color(0xFFE65100),
+                                                color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
                                               ),
                                             ),
                                           if (deal.ratingCount != null) ...[
-                                            const SizedBox(width: 4),
+                                            const SizedBox(width: 5),
                                             Text(
                                               '(${deal.ratingCount} değerlendirme)',
                                               style: TextStyle(
-                                                fontSize: 11,
+                                                fontSize: 11.5,
                                                 fontWeight: FontWeight.w500,
-                                                color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                               ),
                                             ),
                                           ],
@@ -1108,7 +1113,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       icon: _isFavorite ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
                                       count: -1,
                                       label: _isFavorite ? 'Kaydedildi' : 'Kaydet',
-                                      color: _isFavorite ? Colors.amber[700]! : Colors.grey,
+                                      color: _isFavorite ? const Color(0xFFF59E0B) : const Color(0xFF64748B),
                                       onTap: _toggleFavorite,
                                       isSelected: _isFavorite,
                                       isDark: isDark,
@@ -1120,7 +1125,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       icon: Icons.chat_bubble_outline_rounded,
                                       count: deal.commentCount,
                                       label: 'Yorum',
-                                      color: Colors.blue,
+                                      color: const Color(0xFF3B82F6),
                                       onTap: () => _showCommentsBottomSheet(
                                         context, 
                                         deal,
@@ -1135,7 +1140,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       icon: Icons.cancel_outlined,
                                       count: _expiredVotes,
                                       label: 'Fırsat Bitti',
-                                      color: Colors.grey,
+                                      color: const Color(0xFFEF4444),
                                       onTap: _handleExpiredVote,
                                       isSelected: _hasVotedExpired,
                                       isDark: isDark,
@@ -1163,10 +1168,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               Row(
                                 children: [
                                   Container(
-                                    width: 4,
-                                    height: 18,
+                                    width: 3.5,
+                                    height: 16,
                                     decoration: BoxDecoration(
-                                      color: primaryColor,
+                                      gradient: LinearGradient(
+                                        colors: [primaryColor, const Color(0xFFFF8E53)],
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                      ),
                                       borderRadius: BorderRadius.circular(2),
                                     ),
                                   ),
@@ -1176,24 +1185,24 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     style: TextStyle(
                                       fontSize: 12.5,
                                       fontWeight: FontWeight.w800,
-                                      color: isDark ? Colors.white : AppTheme.textPrimary,
-                                      letterSpacing: 1.2,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                      letterSpacing: 1.1,
                                     ),
                                   ),
                                   const Spacer(),
                                   // Şık & Modern Paylaşım Tarihi
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
                                     decoration: BoxDecoration(
                                       color: isDark 
-                                          ? Colors.white.withValues(alpha: 0.05) 
-                                          : const Color(0xFFF1F5F9),
+                                          ? Colors.white.withValues(alpha: 0.04) 
+                                          : const Color(0xFFF8FAFC),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                         color: isDark 
-                                            ? Colors.white.withValues(alpha: 0.09) 
-                                            : const Color(0xFFCBD5E1),
-                                        width: 0.8,
+                                            ? Colors.white.withValues(alpha: 0.08) 
+                                            : const Color(0xFFE2E8F0),
+                                        width: 0.85,
                                       ),
                                     ),
                                     child: Row(
@@ -1201,16 +1210,16 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       children: [
                                         Icon(
                                           Icons.access_time_rounded,
-                                          size: 12,
-                                          color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                          size: 13,
+                                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                         ),
-                                        const SizedBox(width: 4),
+                                        const SizedBox(width: 5),
                                         Text(
                                           formatExactDateTime(deal.createdAt),
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
-                                            color: isDark ? Colors.grey[300] : AppTheme.textPrimary,
+                                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
                                           ),
                                         ),
                                       ],
@@ -1226,11 +1235,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   width: double.infinity,
                                   padding: const EdgeInsets.all(14),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFD97706).withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(16),
+                                    color: isDark 
+                                        ? const Color(0xFF282008) 
+                                        : const Color(0xFFFFFBEB),
+                                    borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: const Color(0xFFD97706).withValues(alpha: 0.4),
-                                      width: 1,
+                                      color: const Color(0xFFFCD34D).withValues(alpha: isDark ? 0.4 : 0.85),
+                                      width: 0.85,
                                     ),
                                   ),
                                   child: Row(
@@ -1238,13 +1249,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFD97706).withValues(alpha: 0.2),
+                                          color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
                                           shape: BoxShape.circle,
                                         ),
                                         child: const Icon(
                                           Icons.inventory_2_rounded,
                                           color: Color(0xFFD97706),
-                                          size: 20,
+                                          size: 18,
                                         ),
                                       ),
                                       const SizedBox(width: 12),
@@ -1257,16 +1268,16 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w800,
-                                                color: Color(0xFFD97706),
+                                                color: Color(0xFFB45309),
                                               ),
                                             ),
-                                            const SizedBox(height: 3),
+                                            const SizedBox(height: 2),
                                             Text(
                                               'Bu ürün Amazon Depo satıcılıdır. Ürün yenilenmiş veya ikinci el olabilir.',
                                               style: TextStyle(
                                                 fontSize: 11.5,
                                                 fontWeight: FontWeight.w500,
-                                                color: isDark ? Colors.grey[300] : Colors.grey[800],
+                                                color: isDark ? Colors.grey[300] : const Color(0xFF78350F),
                                                 height: 1.35,
                                               ),
                                             ),
@@ -1288,14 +1299,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
                                       color: isDark 
-                                          ? Colors.white.withValues(alpha: 0.04) 
-                                          : const Color(0xFFF1F5F9), // Slate 100
+                                          ? Colors.white.withValues(alpha: 0.035) 
+                                          : const Color(0xFFF8FAFC),
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(
                                         color: isDark 
                                             ? Colors.white.withValues(alpha: 0.08) 
-                                            : const Color(0xFFCBD5E1), // Slate 300
-                                        width: 1,
+                                            : const Color(0xFFE2E8F0),
+                                        width: 0.85,
                                       ),
                                     ),
                                     child: Row(
@@ -1330,235 +1341,244 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
               bottom: 0,
               left: 0,
               right: 0,
-              child: Container(
-                padding: EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 14,
-                  bottom: MediaQuery.of(context).padding.bottom + 14,
-                ),
-                decoration: BoxDecoration(
-                  color: (isDark ? AppTheme.darkSurface : Colors.white).withValues(alpha: 0.95),
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200]!,
-                      width: 1,
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: Container(
+                    padding: EdgeInsets.only(
+                      left: 20,
+                      right: 20,
+                      top: 14,
+                      bottom: MediaQuery.of(context).padding.bottom + 14,
                     ),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.1),
-                      blurRadius: 24,
-                      offset: const Offset(0, -6),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Price Column (Sol: İndirimli Fiyat font 24, Sağ: [İndirim Etiketi üstte, İndirimsiz Fiyat altta])
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Money ile Rozeti (Fiyatın tam üstünde)
-                              if (MoneyBadge.isMoneyDeal(deal)) ...[
-                                const MoneyBadge(
-                                  fontSize: 10,
-                                  iconSize: 13,
-                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                                ),
-                                const SizedBox(height: 5),
-                              ],
-                              if (!deal.hidePrice)
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerLeft,
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // Sol: İndirimli (Fırsat) Fiyatı - Dikeyde Ortalı
-                                      FormattedPriceText(
-                                        value: deal.price,
-                                        style: const TextStyle(
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.w900,
-                                          color: AppTheme.primary,
-                                          height: 1.0,
-                                        ),
-                                      ),
-                                      // Sağ: [İndirim Etiketi üstte, İndirimsiz (eski) Fiyat altta] Sütunu
-                                      if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                                        const SizedBox(width: 8),
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            // İndirim Etiketi (tam indirimsiz fiyatın üstünde)
-                                            if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
-                                              Container(
-                                                margin: const EdgeInsets.only(bottom: 2),
-                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                                decoration: BoxDecoration(
-                                                  color: isDark ? AppTheme.primary : const Color(0xFFE53935),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  '%${deal.effectiveDiscountRate} İndirim',
-                                                  style: TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w900,
-                                                    color: isDark ? Colors.black : Colors.white,
-                                                  ),
-                                                ),
-                                              ),
-                                            // İndirimsiz (Eski) Fiyat (üstü çizili)
-                                            FormattedPriceText(
-                                              value: deal.originalPrice,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
-                                                color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                                                decoration: TextDecoration.lineThrough,
-                                                decorationThickness: 1.5,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFF3E0),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                      color: const Color(0xFFFFB74D).withValues(alpha: 0.5),
-                                      width: 0.5,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    deal.priceLabel!,
-                                    style: const TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFFE65100),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
+                    decoration: BoxDecoration(
+                      color: (isDark ? AppTheme.darkSurface : Colors.white).withValues(alpha: 0.90),
+                      border: Border(
+                        top: BorderSide(
+                          color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                          width: 0.85,
                         ),
-
-                        const SizedBox(width: 8),
-
-                        // Main CTA Button ("Mağazaya Git") - Dolgulu Turuncu/Sarı Marka Rengi ve Büyütülmüş
-                        Container(
-                          height: 46,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            gradient: LinearGradient(
-                              colors: deal.isExpired 
-                                  ? [Colors.grey[700]!, Colors.grey[800]!]
-                                  : [AppTheme.primary, const Color(0xFFFF9800)],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: (deal.isExpired ? Colors.black : AppTheme.primary).withValues(alpha: 0.3),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ElevatedButton.icon(
-                            onPressed: () => _openLink(context, deal.link),
-                            icon: const Icon(Icons.open_in_new_rounded, size: 17, color: Colors.white),
-                            label: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                deal.isExpired ? 'Şansını Dene' : 'Mağazaya Git',
-                                style: const TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  letterSpacing: 0.1,
-                                ),
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: Colors.white,
-                              shadowColor: Colors.transparent,
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                          ),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.06),
+                          blurRadius: 20,
+                          offset: const Offset(0, -6),
                         ),
                       ],
                     ),
-
-                    // Admin approval / rejection controls (for pending deals)
-                    if (_isAdmin && deal.isApproved != true)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 14),
-                        child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            // Price Column
                             Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () => _rejectDeal(deal.id),
-                                icon: const Icon(Icons.close_rounded, size: 18),
-                                label: const Text(
-                                  'Reddet',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.red,
-                                  side: const BorderSide(color: Colors.red, width: 2),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Money ile Rozeti (Fiyatın tam üstünde)
+                                  if (MoneyBadge.isMoneyDeal(deal)) ...[
+                                    const MoneyBadge(
+                                      fontSize: 10,
+                                      iconSize: 13,
+                                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                    ),
+                                    const SizedBox(height: 5),
+                                  ],
+                                  if (!deal.hidePrice)
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // Sol: İndirimli (Fırsat) Fiyatı
+                                          FormattedPriceText(
+                                            value: deal.price,
+                                            style: const TextStyle(
+                                              fontSize: 23,
+                                              fontWeight: FontWeight.w900,
+                                              color: AppTheme.primary,
+                                              height: 1.0,
+                                              letterSpacing: -0.5,
+                                            ),
+                                          ),
+                                          // Sağ: İndirim Etiketi üstte, İndirimsiz Fiyat altta
+                                          if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                                            const SizedBox(width: 8),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                // İndirim Etiketi
+                                                if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
+                                                  Container(
+                                                    margin: const EdgeInsets.only(bottom: 2),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      gradient: const LinearGradient(
+                                                        colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                                                      ),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Text(
+                                                      '%${deal.effectiveDiscountRate} İndirim',
+                                                      style: const TextStyle(
+                                                        fontSize: 9,
+                                                        fontWeight: FontWeight.w900,
+                                                        color: Colors.white,
+                                                        letterSpacing: 0.2,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                // İndirimsiz (Eski) Fiyat
+                                                FormattedPriceText(
+                                                  value: deal.originalPrice,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                                                    decoration: TextDecoration.lineThrough,
+                                                    decorationThickness: 1.5,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFF7ED),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: const Color(0xFFFDBA74).withValues(alpha: 0.6),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        deal.priceLabel!,
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFEA580C),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
+
+                            const SizedBox(width: 10),
+
+                            // Main CTA Button ("Mağazaya Git")
+                            Container(
+                              height: 48,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                gradient: LinearGradient(
+                                  colors: deal.isExpired 
+                                      ? [Colors.grey[700]!, Colors.grey[800]!]
+                                      : [const Color(0xFFFF6B35), const Color(0xFFFF8E53)],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (deal.isExpired ? Colors.black : const Color(0xFFFF6B35)).withValues(alpha: 0.35),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
                               child: ElevatedButton.icon(
-                                onPressed: () => _confirmApproval(deal.id),
-                                icon: const Icon(Icons.check_rounded, size: 18),
-                                label: const Text(
-                                  'Onayla',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                                onPressed: () => _openLink(context, deal.link),
+                                icon: const Icon(Icons.open_in_new_rounded, size: 18, color: Colors.white),
+                                label: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    deal.isExpired ? 'Şansını Dene' : 'Mağazaya Git',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.primary,
+                                  backgroundColor: Colors.transparent,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shadowColor: Colors.transparent,
+                                  padding: const EdgeInsets.symmetric(horizontal: 18),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
                                   ),
-                                  elevation: 0,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                  ],
+
+                        // Admin approval / rejection controls (for pending deals)
+                        if (_isAdmin && deal.isApproved != true)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 14),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _rejectDeal(deal.id),
+                                    icon: const Icon(Icons.close_rounded, size: 18),
+                                    label: const Text(
+                                      'Reddet',
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                      side: const BorderSide(color: Colors.red, width: 1.5),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _confirmApproval(deal.id),
+                                    icon: const Icon(Icons.check_rounded, size: 18),
+                                    label: const Text(
+                                      'Onayla',
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primary,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1589,54 +1609,69 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                       ),
                       const SizedBox(width: 8),
                       // Popup Menu
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            width: 1,
-                          ),
-                        ),
-                        child: PopupMenuButton<String>(
-                          icon: const Icon(
-                            Icons.more_vert_rounded,
-                            size: 20,
-                            color: Colors.white,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          color: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
-                          onSelected: (value) {
-                            if (value == 'report') {
-                              showReportDialog(
-                                context,
-                                reportedId: deal.id,
-                                type: 'deal',
-                              );
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: 'report',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.flag_outlined, color: Colors.red[400], size: 20),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Fırsatı Raporla',
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white : Colors.black87,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(22),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                          child: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.black.withValues(alpha: 0.45)
+                                  : Colors.black.withValues(alpha: 0.28),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.25),
+                                width: 0.85,
                               ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                          ],
+                            child: PopupMenuButton<String>(
+                              icon: const Icon(
+                                Icons.more_vert_rounded,
+                                size: 20,
+                                color: Colors.white,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              color: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
+                              onSelected: (value) {
+                                if (value == 'report') {
+                                  showReportDialog(
+                                    context,
+                                    reportedId: deal.id,
+                                    type: 'deal',
+                                  );
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'report',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.flag_outlined, color: Colors.red[400], size: 20),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Fırsatı Raporla',
+                                        style: TextStyle(
+                                          color: isDark ? Colors.white : Colors.black87,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                       if (_isAdmin) ...[
@@ -1644,7 +1679,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         _buildGlassCircleButton(
                           icon: Icons.edit_rounded,
                           isDark: isDark,
-                          color: primaryColor,
+                          color: const Color(0xFFFF9800),
                           onTap: () => _showAdminEditDialog(deal),
                         ),
                         if (deal.isApproved == true) ...[
@@ -1676,26 +1711,43 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     required VoidCallback onTap,
     Color? color,
   }) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.25),
-          width: 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: Icon(
-            icon,
-            size: 20,
-            color: color ?? Colors.white,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.45)
+                : Colors.black.withValues(alpha: 0.28),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.25),
+              width: 0.85,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: onTap,
+              child: Center(
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: color ?? Colors.white,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -1973,6 +2025,184 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
+  Widget _buildCompactBotkolikCard(Deal deal, bool isDark, Color primaryColor) {
+    final pillBgColor = isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC);
+    final pillBorderColor = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0);
+
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: pillBgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: pillBorderColor,
+          width: 0.85,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Botkolik Avatar & Online Noktası
+          InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
+              );
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              children: [
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: primaryColor.withValues(alpha: 0.35),
+                      width: 1,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/botkolik.webp',
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 5.5,
+                    height: 5.5,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF1E242B) : Colors.white,
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 7),
+          // Botkolik Label (Fırsatkolik gibi: Bot + kolik)
+          InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
+              );
+            },
+            child: RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Bot',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const TextSpan(
+                    text: 'kolik',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.primary,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // "Mesaj" Butonu (Diğer kullanıcılarda olduğu gibi ilgili fırsatı mesaja iliştirerek sohbet başlatır)
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                final currentUid = _authService.currentUser?.uid;
+                if (currentUid == null) {
+                  showGuestLoginBottomSheet(
+                    context,
+                    title: 'Mesaj Gönder',
+                    message: 'Botkolik ile iletişime geçmek ve bu fırsat hakkında bildirim/soru iletmek için Giriş Yap! 🚀',
+                  );
+                  return;
+                }
+                HapticFeedback.lightImpact();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MessageScreen(
+                      otherUserId: 'botkolik',
+                      otherUserName: 'Botkolik',
+                      otherUserImageUrl: 'assets/botkolik.webp',
+                      initialDealTitle: deal.title,
+                      initialDealId: deal.id,
+                      initialDealImageUrl: deal.imageUrl,
+                      initialDealPrice: deal.price.toString(),
+                      initialDealStore: deal.store,
+                    ),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(6),
+              child: Ink(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDark ? primaryColor.withValues(alpha: 0.18) : primaryColor,
+                  borderRadius: BorderRadius.circular(6),
+                  border: isDark 
+                      ? Border.all(color: primaryColor.withValues(alpha: 0.4), width: 0.8) 
+                      : null,
+                  boxShadow: isDark
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: primaryColor.withValues(alpha: 0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1.5),
+                          ),
+                        ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 10,
+                      color: isDark ? primaryColor : Colors.white,
+                    ),
+                    const SizedBox(width: 3.5),
+                    Text(
+                      'Mesaj',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? primaryColor : Colors.white,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCompactDealAuthorCard(Deal deal, bool isDark, Color primaryColor) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(deal.postedBy).snapshots(),
@@ -1987,8 +2217,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         final currentUid = _authService.currentUser?.uid;
         final isOwnDeal = currentUid != null && currentUid == deal.postedBy;
 
-        final pillBgColor = isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9);
-        final pillBorderColor = isDark ? Colors.white.withValues(alpha: 0.09) : const Color(0xFFCBD5E1);
+        final pillBgColor = isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC);
+        final pillBorderColor = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0);
 
         return Container(
           height: 32,
@@ -1998,7 +2228,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: pillBorderColor,
-              width: 0.8,
+              width: 0.85,
             ),
           ),
           child: Row(
