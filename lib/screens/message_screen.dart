@@ -17,6 +17,22 @@ import '../widgets/report_dialog.dart';
 import 'profile_screen.dart';
 import 'deal_detail_screen.dart';
 
+class AttachedDealInfo {
+  final String id;
+  final String title;
+  final String? imageUrl;
+  final String? price;
+  final String? store;
+
+  AttachedDealInfo({
+    required this.id,
+    required this.title,
+    this.imageUrl,
+    this.price,
+    this.store,
+  });
+}
+
 class MessageScreen extends StatefulWidget {
   final String otherUserId;
   final String otherUserName;
@@ -74,15 +90,34 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   int _newIncomingCount = 0;
   int _lastKnownMessageCount = 0;
 
+  AttachedDealInfo? _attachedDeal;
+
+  String _liveOtherUserImageUrl = '';
+  String _liveOtherUserName = '';
+  bool _liveIsUserDeleted = false;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _otherUserSubscription;
+
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _otherUserStream;
   Stream<List<Message>>? _messagesStream;
   Stream<bool>? _typingStream;
-  Stream<DocumentSnapshot>? _stickyDealStream;
 
   @override
   void initState() {
     super.initState();
     NotificationService.activeChatUserId = widget.otherUserId;
+
+    _liveOtherUserImageUrl = widget.otherUserImageUrl;
+    _liveOtherUserName = widget.otherUserName;
+
+    if (widget.initialDealId != null && widget.initialDealId!.isNotEmpty) {
+      _attachedDeal = AttachedDealInfo(
+        id: widget.initialDealId!,
+        title: widget.initialDealTitle ?? 'Fırsat',
+        imageUrl: widget.initialDealImageUrl,
+        price: widget.initialDealPrice,
+        store: widget.initialDealStore,
+      );
+    }
 
     if (widget.initialText != null && widget.initialText!.isNotEmpty) {
       _messageController.text = widget.initialText!;
@@ -104,6 +139,28 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
           .doc(widget.otherUserId)
           .snapshots();
 
+      _otherUserSubscription?.cancel();
+      _otherUserSubscription = _otherUserStream?.listen((snapshot) {
+        if (mounted) {
+          if (snapshot.exists && snapshot.data() != null) {
+            final data = snapshot.data()!;
+            final img = data['profileImageUrl'] ?? '';
+            final name = data['username'] ?? data['displayName'] ?? '';
+            setState(() {
+              _liveOtherUserImageUrl = migrateAssetPath(img.toString());
+              _liveOtherUserName = name.toString();
+              _liveIsUserDeleted = false;
+            });
+          } else {
+            setState(() {
+              _liveIsUserDeleted = true;
+              _liveOtherUserName = 'Silinmiş Kullanıcı';
+              _liveOtherUserImageUrl = '';
+            });
+          }
+        }
+      });
+
       if (currentUserId != null) {
         _typingStream = _firestoreService.getTypingStream(
           currentUserId: currentUserId,
@@ -113,13 +170,6 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     }
 
     _updateMessagesStream();
-
-    if (widget.initialDealId != null) {
-      _stickyDealStream = FirebaseFirestore.instance
-          .collection('deals')
-          .doc(widget.initialDealId)
-          .snapshots();
-    }
   }
 
   void _updateMessagesStream() {
@@ -228,6 +278,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       );
       _firestoreService.markConversationAsRead(currentUserId, widget.otherUserId);
     }
+    _otherUserSubscription?.cancel();
     _typingTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
@@ -288,11 +339,12 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     }
 
     final reply = _replyingToMessage;
-    final dealId = widget.initialDealId;
-    final dealTitle = widget.initialDealTitle;
-    final dealImage = widget.initialDealImageUrl;
-    final dealPrice = widget.initialDealPrice;
-    final dealStore = widget.initialDealStore;
+    final attached = _attachedDeal;
+    final dealId = attached?.id;
+    final dealTitle = attached?.title;
+    final dealImage = attached?.imageUrl;
+    final dealPrice = attached?.price;
+    final dealStore = attached?.store;
 
     // Optimistic Message Oluştur (Anında ekranda göster)
     final tempId = 'optimistic_${DateTime.now().millisecondsSinceEpoch}';
@@ -322,6 +374,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     setState(() {
       _optimisticMessages.insert(0, optimisticMsg);
       _replyingToMessage = null;
+      _attachedDeal = null; // Mesaja iliştirildi, çubuğu temizle
       _isSending = true;
     });
 
@@ -802,9 +855,6 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         children: [
           Column(
             children: [
-              // Sticky Fırsat Bilgi Kartı
-              if (widget.initialDealId != null) _buildStickyDealCard(isDark, primaryColor, surfaceColor, textMain, textSub),
-
               // Mesaj Akışı (REVERSE: TRUE - SIFIR TAKILMA VE DOĞAL AŞAĞIDAN BAŞLAMA)
               Expanded(
                 child: StreamBuilder<List<Message>>(
@@ -922,156 +972,181 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
 
   // --- WIDGET BUILDERS ---
 
-  Widget _buildStickyDealCard(
+  Widget _buildEmbeddedDealCard(
+    Message message,
+    bool isMe,
     bool isDark,
     Color primaryColor,
-    Color surfaceColor,
-    Color textMain,
-    Color? textSub,
   ) {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: _stickyDealStream,
-      builder: (context, snap) {
-        bool isDealActive = true;
-        String title = widget.initialDealTitle ?? 'Fırsat';
-        String? imageUrl = widget.initialDealImageUrl;
-        String? price = widget.initialDealPrice;
-        String? store = widget.initialDealStore;
+    final cardBg = isMe
+        ? (isDark ? Colors.black.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.18))
+        : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF1F3F5));
+    final borderColor = isMe
+        ? Colors.white.withValues(alpha: 0.15)
+        : (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06));
+    final titleColor = isMe ? Colors.white : (isDark ? Colors.white : AppTheme.textPrimary);
+    final badgeTextColor = isMe ? Colors.white : primaryColor;
+    final priceColor = isMe ? const Color(0xFFFFD166) : primaryColor;
 
-        if (snap.hasData && snap.data!.exists) {
-          final data = snap.data!.data() as Map<String, dynamic>;
-          title = data['title'] ?? title;
-          imageUrl = data['imageUrl'] ?? data['image_url'] ?? imageUrl;
-          price = data['price']?.toString() ?? price;
-          store = data['store'] ?? store;
-          if (data['isActive'] == false || data['isExpired'] == true) {
-            isDealActive = false;
-          }
-        } else if (snap.connectionState == ConnectionState.active && (!snap.hasData || !snap.data!.exists)) {
-          isDealActive = false;
-        }
-
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.fromLTRB(14, 8, 14, 4),
-          decoration: BoxDecoration(
-            color: surfaceColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey[300]!,
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DealDetailScreen(dealId: message.dealId!),
               ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.initialDealId != null
-                  ? () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DealDetailScreen(dealId: widget.initialDealId!),
-                        ),
-                      );
-                    }
-                  : null,
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Row(
-                  children: [
-                    // Fırsat Görseli
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        color: Colors.grey[200],
-                        child: imageUrl != null && imageUrl.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: imageUrl,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) => Container(color: Colors.grey[300]),
-                                errorWidget: (_, __, ___) => Icon(Icons.local_offer_outlined, color: primaryColor),
-                              )
-                            : Icon(Icons.local_offer_outlined, color: primaryColor),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Başlık & Fiyat
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isDealActive
-                                      ? primaryColor.withValues(alpha: 0.12)
-                                      : Colors.red.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(6),
+            );
+          },
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Fırsat Görseli
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    color: isDark ? Colors.grey[850] : Colors.grey[200],
+                    child: message.dealImageUrl != null && message.dealImageUrl!.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: message.dealImageUrl!,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              color: isDark ? Colors.grey[800] : Colors.grey[300],
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 1.5),
                                 ),
-                                child: Text(
-                                  isDealActive ? '📌 İlgili Fırsat' : '⚠️ Yayından Kaldırıldı',
+                              ),
+                            ),
+                            errorWidget: (_, __, ___) => Icon(Icons.local_offer_outlined, color: primaryColor, size: 22),
+                          )
+                        : Icon(Icons.local_offer_outlined, color: primaryColor, size: 22),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Bilgiler (Badge, Başlık, Fiyat)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: isMe
+                                  ? Colors.white.withValues(alpha: 0.15)
+                                  : primaryColor.withValues(alpha: isDark ? 0.25 : 0.12),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.local_offer_rounded, size: 10, color: badgeTextColor),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'İlgili Fırsat',
                                   style: TextStyle(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w700,
-                                    color: isDealActive ? primaryColor : Colors.red,
+                                    color: badgeTextColor,
                                   ),
                                 ),
-                              ),
-                              if (store != null && store.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                Text(
-                                  '• $store',
-                                  style: TextStyle(fontSize: 10.5, color: textSub, fontWeight: FontWeight.w500),
-                                ),
                               ],
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            title,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: textMain,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          if (price != null && price.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              '$price TL',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                                color: primaryColor,
+                          if (message.dealStore != null && message.dealStore!.isNotEmpty) ...[
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                '• ${message.dealStore}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: isMe
+                                      ? Colors.white.withValues(alpha: 0.8)
+                                      : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                ),
                               ),
                             ),
                           ],
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(Icons.chevron_right_rounded, size: 20, color: textSub),
-                  ],
+                      const SizedBox(height: 3),
+                      Text(
+                        message.dealTitle ?? 'Fırsat',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: titleColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          if (message.dealPrice != null && message.dealPrice!.isNotEmpty)
+                            Text(
+                              '${message.dealPrice} TL',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: priceColor,
+                              ),
+                            )
+                          else
+                            const SizedBox.shrink(),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Fırsata Git',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: isMe ? Colors.white.withValues(alpha: 0.9) : primaryColor,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 9,
+                                color: isMe ? Colors.white.withValues(alpha: 0.9) : primaryColor,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1083,67 +1158,102 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     Color textMain,
     Color? textSub,
   ) {
+    final displayName = _liveOtherUserName.isNotEmpty ? _liveOtherUserName : otherUserName;
+    final displayImageUrl = _liveIsUserDeleted
+        ? ''
+        : (_liveOtherUserImageUrl.isNotEmpty ? _liveOtherUserImageUrl : otherUserImageUrl);
+
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: 88,
+              height: 88,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: primaryColor.withValues(alpha: 0.3), width: 3),
+                color: primaryColor.withValues(alpha: isDark ? 0.18 : 0.08),
+                border: Border.all(color: primaryColor.withValues(alpha: 0.35), width: 3),
                 boxShadow: [
                   BoxShadow(
-                    color: primaryColor.withValues(alpha: 0.15),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
+                    color: primaryColor.withValues(alpha: isDark ? 0.25 : 0.12),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
               child: ClipOval(
-                child: _buildAvatar(otherUserImageUrl, 80),
+                child: _buildAvatar(displayImageUrl, 88, isDeleted: _liveIsUserDeleted),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              displayName,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textMain),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.waving_hand_rounded, size: 16, color: primaryColor),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Sohbete Başla',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: textMain,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Bu kullanıcıyla henüz bir mesajlaşmanız bulunmuyor.\nAşağıdaki kutudan mesajınızı yazarak sohbeti başlatabilirsiniz.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: textSub,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 14),
-            Text(
-              otherUserName,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textMain),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Henüz mesaj yok. Bir "Selam" yazarak sohbeti başlat! 👋',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13.5, color: textSub, height: 1.35),
-            ),
-            const SizedBox(height: 20),
-            // Hızlı Başlangıç Çipleri
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildQuickChip('Merhaba 👋', primaryColor, isDark),
-                _buildQuickChip('Hâlâ satılık / geçerli mi? 🛍️', primaryColor, isDark),
-                _buildQuickChip('Detay alabilir miyim? 💬', primaryColor, isDark),
-                _buildQuickChip('Son fiyat ne olur? 🏷️', primaryColor, isDark),
+                Icon(Icons.lock_outline_rounded, size: 13, color: textSub?.withValues(alpha: 0.8)),
+                const SizedBox(width: 5),
+                Text(
+                  'Mesajlarınız güvenle iletilir.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: textSub?.withValues(alpha: 0.8),
+                  ),
+                ),
               ],
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildQuickChip(String label, Color primaryColor, bool isDark) {
-    return ActionChip(
-      label: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryColor)),
-      backgroundColor: primaryColor.withValues(alpha: isDark ? 0.18 : 0.08),
-      side: BorderSide(color: primaryColor.withValues(alpha: 0.3)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      onPressed: () => _sendMessage(quickText: label),
     );
   }
 
@@ -1200,7 +1310,17 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                         color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
                         child: Icon(Icons.shield_outlined, color: primaryColor, size: 18),
                       )
-                    : _buildAvatar(widget.otherUserImageUrl, 32),
+                    : _buildAvatar(
+                        _liveIsUserDeleted
+                            ? ''
+                            : (_liveOtherUserImageUrl.isNotEmpty
+                                ? _liveOtherUserImageUrl
+                                : (message.senderImageUrl.isNotEmpty
+                                    ? message.senderImageUrl
+                                    : widget.otherUserImageUrl)),
+                        32,
+                        isDeleted: _liveIsUserDeleted,
+                      ),
               ),
             ),
             const SizedBox(width: 8),
@@ -1240,6 +1360,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     // Alıntı Önizleme Bloğu
                     if (message.replyToSenderName != null && message.replyToText != null)
                       _buildQuotedBlock(message.replyToSenderName!, message.replyToText!, isMe, isDark, primaryColor),
+
+                    // Gömülü Fırsat Kartı (Deal Context)
+                    if (message.dealId != null && message.dealId!.isNotEmpty)
+                      _buildEmbeddedDealCard(message, isMe, isDark, primaryColor),
 
                     // Mesaj Metni (Keskin, net ve yüksek kontrastlı)
                     Text(
@@ -1572,6 +1696,87 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                         padding: const EdgeInsets.all(4),
                         child: Icon(Icons.close_rounded, size: 16, color: textSub),
                       ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Ekli Fırsat Önizleme Barı (Attachment Bar)
+            if (_attachedDeal != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.07) : primaryColor.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: isDark ? 0.3 : 0.25),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        color: isDark ? Colors.grey[800] : Colors.grey[200],
+                        child: _attachedDeal!.imageUrl != null && _attachedDeal!.imageUrl!.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: _attachedDeal!.imageUrl!,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => Icon(Icons.local_offer_outlined, color: primaryColor, size: 18),
+                              )
+                            : Icon(Icons.local_offer_outlined, color: primaryColor, size: 18),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                '📌 İlgili Fırsat Ekli',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: primaryColor,
+                                ),
+                              ),
+                              if (_attachedDeal!.store != null && _attachedDeal!.store!.isNotEmpty) ...[
+                                const SizedBox(width: 4),
+                                Text(
+                                  '• ${_attachedDeal!.store}',
+                                  style: TextStyle(fontSize: 10.5, color: textSub, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _attachedDeal!.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: textMain,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      color: textSub,
+                      splashRadius: 18,
+                      tooltip: 'Fırsatı Kaldır',
+                      onPressed: () {
+                        setState(() => _attachedDeal = null);
+                      },
                     ),
                   ],
                 ),
