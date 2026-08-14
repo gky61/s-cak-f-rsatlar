@@ -12,7 +12,12 @@ void _log(String message) {
 }
 
 class NotificationSettingsScreen extends StatefulWidget {
-  const NotificationSettingsScreen({super.key});
+  final String? highlightChannel;
+
+  const NotificationSettingsScreen({
+    super.key,
+    this.highlightChannel,
+  });
 
   @override
   State<NotificationSettingsScreen> createState() => _NotificationSettingsScreenState();
@@ -27,11 +32,39 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   bool _isLoading = true;
   int _followedCategoryCount = 0;
 
+  final GlobalKey _categoryTileKey = GlobalKey();
+  final ScrollController _scrollController = ScrollController();
+  bool _isCategoryHighlighted = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadAllSettings();
+
+    if (widget.highlightChannel == 'category') {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future.delayed(const Duration(milliseconds: 350));
+        if (!mounted) return;
+        if (_categoryTileKey.currentContext != null) {
+          Scrollable.ensureVisible(
+            _categoryTileKey.currentContext!,
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeInOutCubic,
+            alignment: 0.35,
+          );
+        }
+        setState(() {
+          _isCategoryHighlighted = true;
+        });
+        await Future.delayed(const Duration(milliseconds: 3000));
+        if (mounted) {
+          setState(() {
+            _isCategoryHighlighted = false;
+          });
+        }
+      });
+    }
   }
 
   @override
@@ -150,19 +183,42 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
+    Key? key,
+    bool isHighlighted = false,
   }) {
     final isMasterOn = _preferences.pushMasterEnabled;
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final tile = SwitchListTile(
-      title: Text(
-        title,
-        style: const TextStyle(fontWeight: FontWeight.w500),
+    final tile = AnimatedContainer(
+      key: key,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+      decoration: BoxDecoration(
+        color: isHighlighted
+            ? primaryColor.withValues(alpha: isDark ? 0.25 : 0.12)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: isHighlighted
+            ? Border.all(
+                color: primaryColor.withValues(alpha: isDark ? 0.8 : 0.6),
+                width: 1.5,
+              )
+            : null,
       ),
-      subtitle: Text(subtitle),
-      value: value,
-      activeColor: primaryColor,
-      onChanged: isMasterOn ? onChanged : null,
+      child: SwitchListTile(
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w500,
+            color: isHighlighted ? primaryColor : null,
+          ),
+        ),
+        subtitle: Text(subtitle),
+        value: value,
+        activeThumbColor: primaryColor,
+        onChanged: isMasterOn ? onChanged : null,
+      ),
     );
 
     if (!isMasterOn) {
@@ -290,6 +346,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
+              controller: _scrollController,
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,6 +505,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         ),
                         const Divider(height: 1),
                         _buildChannelTile(
+                          key: _categoryTileKey,
+                          isHighlighted: _isCategoryHighlighted,
                           title: 'Kategori Bildirimleri',
                           subtitle: 'Takip ettiğiniz alışveriş kategorilerine eklenen yeni fırsatlar',
                           value: _preferences.categoryNotificationsEnabled,

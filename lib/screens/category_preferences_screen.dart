@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import '../models/category.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
+import 'notification_settings_screen.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -354,6 +355,48 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     fontSize: 12.5,
                                     height: 1.4,
                                     color: secondaryTextColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                InkWell(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const NotificationSettingsScreen(
+                                          highlightChannel: 'category',
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor.withValues(alpha: isDark ? 0.18 : 0.08),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: primaryColor.withValues(alpha: isDark ? 0.35 : 0.25),
+                                        width: 0.9,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.notifications_active_outlined, size: 14, color: primaryColor),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Bildirim Ayarlarına Git',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: primaryColor,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(Icons.arrow_forward_rounded, size: 13, color: primaryColor),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],

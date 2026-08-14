@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
+import 'home_screen.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -202,49 +203,12 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
       appBar: AppBar(
         title: const Text(
           'Anahtar Kelime Takibi',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19),
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
         foregroundColor: textMain,
         elevation: 0,
-        actions: [
-          if (_watchKeywords.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Center(
-                child: InkWell(
-                  onTap: _clearAllKeywords,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF381B1B) : const Color(0xFFFFEBEE),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFFEF5350).withValues(alpha: 0.6),
-                        width: 1,
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.delete_outline_rounded, size: 14, color: Color(0xFFC62828)),
-                        SizedBox(width: 4),
-                        Text(
-                          'Temizle',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFC62828),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
+        scrolledUnderElevation: 0.5,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -501,28 +465,80 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'TAKİP ETTİĞİNİZ KELİMELER',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
-                          color: primaryColor,
-                          letterSpacing: 0.8,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            'TAKİP EDİLEN KELİMELER',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              color: textSub,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          if (_watchKeywords.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${_watchKeywords.length}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: primaryColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      Text(
-                        '${_watchKeywords.length} kelime',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: textSub,
+                      if (_watchKeywords.isNotEmpty)
+                        InkWell(
+                          onTap: _clearAllKeywords,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 14,
+                                  color: Colors.red[400],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Tümünü Temizle',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.red[400],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
 
-                  if (_watchKeywords.isNotEmpty)
+                  if (_watchKeywords.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '💡 Mevcut fırsatları görmek için kelimeye dokunun.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -548,7 +564,6 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                         runSpacing: 10,
                         children: _watchKeywords.map((keyword) {
                           return Container(
-                            padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
                             decoration: BoxDecoration(
                               color: isDark
                                   ? primaryColor.withValues(alpha: 0.15)
@@ -562,28 +577,52 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  keyword,
-                                  style: TextStyle(
-                                    color: textMain,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
+                                InkWell(
+                                  onTap: () {
+                                    Navigator.pushAndRemoveUntil(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => HomeScreen(initialSearchQuery: keyword),
+                                      ),
+                                      (route) => false,
+                                    );
+                                  },
+                                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.search_rounded, size: 14, color: primaryColor),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          keyword,
+                                          style: TextStyle(
+                                            color: textMain,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                InkWell(
-                                  onTap: () => _removeKeyword(keyword),
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFEF5350).withValues(alpha: 0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.close_rounded,
-                                      size: 14,
-                                      color: Color(0xFFEF5350),
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 6, left: 2),
+                                  child: InkWell(
+                                    onTap: () => _removeKeyword(keyword),
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEF5350).withValues(alpha: 0.2),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close_rounded,
+                                        size: 14,
+                                        color: Color(0xFFEF5350),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -592,7 +631,8 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                           );
                         }).toList(),
                       ),
-                    )
+                    ),
+                  ]
                   else
                     // Boş Durum (Empty State Visual)
                     Container(

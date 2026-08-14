@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'dart:async';
-import 'dart:ui';
 import '../services/firestore_service.dart';
 import '../services/deal_service.dart';
 import '../services/auth_service.dart';
@@ -26,10 +24,10 @@ import 'profile_screen.dart';
 import 'favorites_screen.dart';
 import 'kuponlar_page.dart';
 import 'aktuel_magazalar_page.dart';
-import 'notification_settings_screen.dart';
 import 'admin_notifications_screen.dart';
 import 'popular_deals_screen.dart';
 import 'auth_screen.dart';
+import 'keyword_tracking_screen.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 
 void _log(String message) {
@@ -39,7 +37,12 @@ void _log(String message) {
 // ViewMode artık DealCard içinde CardViewMode olarak tanımlı
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String? initialSearchQuery;
+
+  const HomeScreen({
+    super.key,
+    this.initialSearchQuery,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -57,6 +60,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isCategoryMenuExpanded = false;
   Set<String> _followedCategories = {};
   Set<String> _followedSubCategories = {};
+  Set<String> _followedKeywords = {};
+  bool _isAddingKeywordFromSearch = false;
   bool _isGeneralNotificationsEnabled = true;
   String _searchQuery = '';
   bool _isSearchMode = false;
@@ -104,11 +109,20 @@ class _HomeScreenState extends State<HomeScreen> {
     _notificationService.setupNotificationListeners();
     _cleanupExpiredDeals();
     _loadFollowedCategories();
+    _loadFollowedKeywords();
     _loadUnreadMessageCounts();
+
+    if (widget.initialSearchQuery != null && widget.initialSearchQuery!.trim().isNotEmpty) {
+      _isSearchMode = true;
+      _searchQuery = widget.initialSearchQuery!.trim();
+      _searchController.text = widget.initialSearchQuery!.trim();
+    }
+
     _authSub = _authService.authStateChanges.listen((user) {
       if (mounted) {
         _checkAdminStatus();
         _loadFollowedCategories();
+        _loadFollowedKeywords();
         _loadUnreadMessageCounts();
         setState(() {});
       }
@@ -119,6 +133,21 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController.addListener(_onScroll);
     // Share Intent dinleyici
     _initShareIntentListener();
+  }
+
+  @override
+  void didUpdateWidget(HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery != oldWidget.initialSearchQuery &&
+        widget.initialSearchQuery!.trim().isNotEmpty) {
+      setState(() {
+        _isSearchMode = true;
+        _searchQuery = widget.initialSearchQuery!.trim();
+        _searchController.text = widget.initialSearchQuery!.trim();
+        _displayLimit = 20;
+      });
+    }
   }
   
   @override
@@ -445,6 +474,99 @@ class _HomeScreenState extends State<HomeScreen> {
         _followedSubCategories = subCategories.toSet();
         _isGeneralNotificationsEnabled = generalEnabled;
       });
+    }
+  }
+
+  Future<void> _loadFollowedKeywords() async {
+    try {
+      final keywords = await _notificationService.getNotificationKeywords();
+      if (mounted) {
+        setState(() {
+          _followedKeywords = keywords.map((k) => _notificationService.normalizeKeyword(k)).toSet();
+        });
+      }
+    } catch (e) {
+      _log('Followed keywords load error: $e');
+    }
+  }
+
+  Future<void> _toggleKeywordSubscriptionFromSearch(String keyword) async {
+    final trimmed = keyword.trim();
+    if (trimmed.isEmpty) return;
+
+    final currentUser = _authService.currentUser;
+    if (currentUser == null || currentUser.isAnonymous) {
+      showGuestLoginBottomSheet(
+        context,
+        title: 'Kelime Takibi İçin Giriş Yapın',
+        message: '"$trimmed" aramasını radara alıp yeni fırsat bildirimleri almak için lütfen üye girişi yapın.',
+      );
+      return;
+    }
+
+    final normalized = _notificationService.normalizeKeyword(trimmed);
+    final isFollowed = _followedKeywords.contains(normalized);
+
+    HapticFeedback.mediumImpact();
+    setState(() => _isAddingKeywordFromSearch = true);
+
+    try {
+      if (isFollowed) {
+        await _notificationService.removeKeywordSubscription(trimmed);
+        if (mounted) {
+          setState(() {
+            _followedKeywords.remove(normalized);
+            _isAddingKeywordFromSearch = false;
+          });
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🗑️ "$trimmed" kelime takibinden çıkarıldı'),
+              backgroundColor: const Color(0xFF334155),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+        }
+      } else {
+        await _notificationService.addKeywordSubscription(trimmed);
+        if (mounted) {
+          setState(() {
+            _followedKeywords.add(normalized);
+            _isAddingKeywordFromSearch = false;
+          });
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🔔 "$trimmed" takibe eklendi! Fırsat geldiğinde bildirim alacaksınız.'),
+              backgroundColor: const Color(0xFF16A34A),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              action: SnackBarAction(
+                label: 'Yönet',
+                textColor: Colors.white,
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const KeywordTrackingScreen()),
+                  ).then((_) => _loadFollowedKeywords());
+                },
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      _log('Kelime takibi toggle hatası: $e');
+      if (mounted) {
+        setState(() => _isAddingKeywordFromSearch = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kelime takibi güncellenirken bir hata oluştu'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -1139,6 +1261,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 _hasMore = filteredDeals.length > _displayLimit;
 
                 if (filteredDeals.isEmpty) {
+                  final cleanQuery = _searchQuery.trim();
+                  final normalizedQuery = _notificationService.normalizeKeyword(cleanQuery);
+                  final isFollowed = _followedKeywords.contains(normalizedQuery);
+
                   return Center(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
@@ -1150,50 +1276,139 @@ class _HomeScreenState extends State<HomeScreen> {
                             decoration: BoxDecoration(
                               color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
                               shape: BoxShape.circle,
+                              border: Border.all(
+                                color: primaryColor.withValues(alpha: 0.25),
+                                width: 1.5,
+                              ),
                             ),
                             child: Icon(
-                              _searchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.inbox_rounded,
-                              size: 56,
+                              _searchQuery.isNotEmpty ? Icons.radar_rounded : Icons.inbox_rounded,
+                              size: 54,
                               color: primaryColor,
                             ),
                           ),
                           const SizedBox(height: 18),
                           Text(
                             _searchQuery.isNotEmpty
-                                ? '"${_searchQuery.trim()}" ile ilgili fırsat bulunamadı'
+                                ? 'Aradığın "$cleanQuery" ile ilgili taze fırsat bulamadık'
                                 : 'Henüz fırsat eklenmemiş',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: isDark ? Colors.white : AppTheme.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             _searchQuery.isNotEmpty
-                                ? 'Farklı kelimeler deneyebilir veya aramayı temizleyebilirsiniz.'
+                                ? 'Yeni bir fırsat paylaşıldığında anında bildirim almak ister misin? Radara al, fırsatı ilk sen yakala!'
                                 : 'Daha sonra tekrar kontrol edebilirsiniz.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                              color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
                               fontSize: 13.5,
+                              height: 1.45,
                             ),
                           ),
                           if (_searchQuery.isNotEmpty) ...[
                             const SizedBox(height: 22),
+                            // Primary Radar CTA Button
                             ElevatedButton.icon(
-                              onPressed: _clearSearch,
-                              icon: const Icon(Icons.refresh_rounded, size: 18),
-                              label: const Text('Aramayı Sıfırla'),
+                              onPressed: _isAddingKeywordFromSearch
+                                  ? null
+                                  : () => _toggleKeywordSubscriptionFromSearch(cleanQuery),
+                              icon: _isAddingKeywordFromSearch
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : Icon(
+                                      isFollowed ? Icons.check_circle_rounded : Icons.radar_rounded,
+                                      size: 18,
+                                    ),
+                              label: Text(
+                                isFollowed
+                                    ? '✅ "$cleanQuery" Radarda (Takip Ediliyor)'
+                                    : '🚀 "$cleanQuery" Kelimesini Radara Al',
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                              ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: primaryColor,
+                                backgroundColor: isFollowed ? const Color(0xFF16A34A) : primaryColor,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 elevation: 0,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            // Secondary Flow Link to KeywordTrackingScreen
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  'Takip ettiğin kelimeleri ',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const KeywordTrackingScreen()),
+                                    ).then((_) => _loadFollowedKeywords());
+                                  },
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Kelime Takibi',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: primaryColor,
+                                            decoration: TextDecoration.underline,
+                                            decorationColor: primaryColor,
+                                          ),
+                                        ),
+                                        Icon(Icons.arrow_outward_rounded, size: 12, color: primaryColor),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  ' sayfasından yönetebilirsin.',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            // Reset Search Button
+                            OutlinedButton.icon(
+                              onPressed: _clearSearch,
+                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              label: const Text('Aramayı Sıfırla'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: isDark ? Colors.grey[300] : AppTheme.textPrimary,
+                                side: BorderSide(
+                                  color: isDark ? Colors.white24 : Colors.grey[300]!,
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
                             ),
                           ],
