@@ -25,6 +25,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   
   String _systemPermissionStatus = 'authorized';
   bool _isLoading = true;
+  int _followedCategoryCount = 0;
 
   @override
   void initState() {
@@ -61,10 +62,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       await _checkSystemPermission();
       
       final prefs = await _notificationService.getNotificationPreferences();
+      final followedCats = await _notificationService.getFollowedCategories();
       
       if (mounted) {
         setState(() {
           _preferences = prefs;
+          _followedCategoryCount = followedCats.length;
           _isLoading = false;
         });
       }
@@ -184,6 +187,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     required bool channelEnabled,
     required String channelName,
     required VoidCallback onTap,
+    String? trailingBadge,
   }) {
     final isMasterOn = _preferences.pushMasterEnabled;
     final isFullyActive = isMasterOn && channelEnabled;
@@ -208,7 +212,29 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (trailingBadge != null && trailingBadge.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isFullyActive ? primaryColor : Colors.grey.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  trailingBadge,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
         onTap: isFullyActive ? onTap : null,
       ),
     );
@@ -537,16 +563,23 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   _buildDetailTile(
                     icon: Icons.interests_rounded,
                     title: 'Takip Edilen Kategoriler',
-                    subtitle: 'Takip listenizdeki fırsat kategorilerini ve alt başlıkları düzenleyin',
+                    subtitle: _followedCategoryCount > 0
+                        ? '$_followedCategoryCount kategori takip ediliyor'
+                        : 'Henüz kategori seçilmedi. Düzenlemek için dokunun',
                     channelEnabled: _preferences.categoryNotificationsEnabled,
                     channelName: 'Kategori Bildirimleri',
-                    onTap: () {
-                      Navigator.push(
+                    trailingBadge: _followedCategoryCount > 0 ? '$_followedCategoryCount' : null,
+                    onTap: () async {
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => const CategoryPreferencesScreen(),
                         ),
                       );
+                      final cats = await _notificationService.getFollowedCategories();
+                      if (mounted) {
+                        setState(() => _followedCategoryCount = cats.length);
+                      }
                     },
                   ),
                   const SizedBox(height: 12),

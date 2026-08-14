@@ -39,14 +39,10 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
     try {
       final followedCategories = await _notificationService.getFollowedCategories();
       final followedSubCategories = await _notificationService.getFollowedSubCategories();
-      final hasDoc = await _notificationService.hasCategorySubscriptionsDoc();
 
       setState(() {
-        // Eğer veritabanında daha önce hiç kayıt oluşturulmamışsa varsayılan olarak HEPSİ AÇIK gelsin
-        final shouldDefaultAll = !hasDoc && followedCategories.isEmpty;
-
         for (final category in _filteredCategories) {
-          _categoryStates[category.id] = shouldDefaultAll || followedCategories.contains(category.id);
+          _categoryStates[category.id] = followedCategories.contains(category.id);
           _subCategoryStates[category.id] = {};
         }
 
