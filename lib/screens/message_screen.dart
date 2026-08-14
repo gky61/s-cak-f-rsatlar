@@ -577,12 +577,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     onTap: () {
                       Navigator.pop(ctx);
-                      showDialog(
-                        context: context,
-                        builder: (_) => ReportDialog(
-                          reportedId: message.id,
-                          type: 'message',
-                        ),
+                      showReportDialog(
+                        context,
+                        reportedId: message.id,
+                        type: 'message',
                       );
                     },
                   ),
@@ -672,12 +670,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                 title: const Text('Kullanıcıyı Şikayet Et', style: TextStyle(color: Colors.red)),
                 onTap: () {
                   Navigator.pop(ctx);
-                  showDialog(
-                    context: context,
-                    builder: (_) => ReportDialog(
-                      reportedId: widget.otherUserId,
-                      type: 'user',
-                    ),
+                  showReportDialog(
+                    context,
+                    reportedId: widget.otherUserId,
+                    type: 'user',
                   );
                 },
               ),

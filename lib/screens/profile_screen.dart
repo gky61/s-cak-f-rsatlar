@@ -18,6 +18,7 @@ import 'privacy_policy_screen.dart';
 import 'faq_screen.dart';
 import 'category_preferences_screen.dart';
 import '../widgets/report_dialog.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 import 'message_screen.dart';
 import 'messages_list_screen.dart';
 import 'following_users_screen.dart';
@@ -2009,65 +2010,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             // More Options (Report, Block, Badge for Admin)
             if (!_isOwnProfile && _user != null)
-              PopupMenuButton<String>(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                    shape: BoxShape.circle,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _showProfileOptionsModal(_user!),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.more_horiz_rounded, size: 18, color: textMain),
                   ),
-                  child: Icon(Icons.more_horiz_rounded, size: 18, color: textMain),
                 ),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                color: surfaceColor,
-                onSelected: (value) {
-                  if (value == 'badge') {
-                    _showBadgeDialog(_user!);
-                  } else if (value == 'block') {
-                    _blockUser(_user!);
-                  } else if (value == 'report') {
-                    showReportDialog(
-                      context,
-                      reportedId: _user!.uid,
-                      type: 'user',
-                    );
-                  }
-                },
-                itemBuilder: (context) => [
-                  if (_isAdmin) ...[
-                    const PopupMenuItem(
-                      value: 'badge',
-                      child: Row(
-                        children: [
-                          Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 20),
-                          SizedBox(width: 10),
-                          Text('Rozet Yönet', style: TextStyle(fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'block',
-                      child: Row(
-                        children: [
-                          Icon(Icons.block_rounded, color: Colors.red, size: 20),
-                          SizedBox(width: 10),
-                          Text('Kullanıcıyı Engelle', style: TextStyle(fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(),
-                  ],
-                  const PopupMenuItem(
-                    value: 'report',
-                    child: Row(
-                      children: [
-                        Icon(Icons.flag_outlined, color: Colors.redAccent, size: 20),
-                        SizedBox(width: 10),
-                        Text('Kullanıcıyı Bildir', style: TextStyle(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                ],
               )
             else
               const SizedBox(width: 36),
@@ -2498,42 +2454,141 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _blockUser(AppUser user) async {
-    if (!_isAdmin) return;
-    
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Kullanıcıyı Engelle'),
-        content: Text('${user.username} kullanıcısını engellemek istediğinize emin misiniz?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Engelle'),
-          ),
-        ],
+  void _showFloatingSnackBar(String message, {bool isSuccess = true}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: isSuccess ? AppTheme.accent : const Color(0xFFE53935),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
       ),
     );
+  }
 
-    if (confirmed == true && mounted) {
-      final success = await _firestoreService.blockUser(user.uid);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? 'Kullanıcı engellendi' : 'Kullanıcı engellenirken hata oluştu'),
-            backgroundColor: success ? Colors.orange : Colors.red,
-          ),
-        );
-        if (success) {
-          Navigator.pop(context); // Profil sayfasından çık
-        }
-      }
+  Future<void> _showProfileOptionsModal(AppUser user) async {
+    final currentUserId = _authService.currentUser?.uid;
+    if (currentUserId == null) {
+      showGuestLoginBottomSheet(context, title: 'İşlem Yap', message: 'Kullanıcıyı şikayet etmek veya engellemek için Giriş Yap! 🚀');
+      return;
     }
+
+    final isBlocked = await _firestoreService.isUserBlockedForChat(currentUserId, user.uid);
+    if (!mounted) return;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: surfaceColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(2)),
+              ),
+              if (_isAdmin) ...[
+                ListTile(
+                  leading: const Icon(Icons.workspace_premium_rounded, color: Colors.amber),
+                  title: const Text('Rozet Yönet', style: TextStyle(fontWeight: FontWeight.w600)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showBadgeDialog(user);
+                  },
+                ),
+                const Divider(),
+              ],
+              ListTile(
+                leading: Icon(isBlocked ? Icons.lock_open_rounded : Icons.block_rounded, color: Colors.orange),
+                title: Text(
+                  isBlocked ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle 🚫',
+                  style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
+                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  if (isBlocked) {
+                    await _firestoreService.unblockUserForChat(currentUserId, user.uid);
+                    if (mounted) {
+                      _showFloatingSnackBar('Engelleme kaldırıldı', isSuccess: true);
+                    }
+                  } else {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: const Text('Kullanıcıyı Engelle'),
+                        content: Text('${user.username} kullanıcısını engellemek istediğinize emin misiniz? Engellenen kullanıcılar size mesaj gönderemez.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                            onPressed: () => Navigator.pop(c, true),
+                            child: const Text('Engelle'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true && mounted) {
+                      await _firestoreService.blockUserForChat(currentUserId, user.uid);
+                      if (mounted) {
+                        _showFloatingSnackBar('Kullanıcı engellendi', isSuccess: true);
+                      }
+                    }
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.flag_outlined, color: Colors.red),
+                title: const Text(
+                  'Kullanıcıyı Şikayet Et',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  showReportDialog(
+                    context,
+                    reportedId: user.uid,
+                    type: 'user',
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // Mesaj ekranına yönlendir

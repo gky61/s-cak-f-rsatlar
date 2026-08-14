@@ -1312,7 +1312,7 @@ class NotificationService {
     );
 
     // Uygulama ön planda iken gelen bildirimler
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       _log('📬 Yeni bildirim (ön plan): ${message.notification?.title}');
       _log('📬 Bildirim verisi: ${message.data}');
 
@@ -1340,6 +1340,17 @@ class NotificationService {
           final isAdminChat = (currentActiveChat == 'admin' || currentActiveChat == 'adminToUser') && (senderId == 'admin' || type == 'admin_message');
           if (isSameUser || isAdminChat) {
             _log('💬 Kullanıcı zaten aynı sohbet odasında ($currentActiveChat), ön plan mesaj bildirimi BASTIRILDI.');
+            return;
+          }
+        }
+
+        // Sessize alınmış sohbet kontrolü
+        final myUid = _auth.currentUser?.uid;
+        if (myUid != null && senderId.isNotEmpty) {
+          final userDoc = await _firestore.collection('users').doc(myUid).get();
+          final muted = List<String>.from(userDoc.data()?['mutedConversations'] ?? []);
+          if (muted.contains(senderId)) {
+            _log('🔕 Sohbet kullanıcı tarafından sessize alınmış ($senderId), ön plan bildirim bastırıldı.');
             return;
           }
         }
@@ -1711,6 +1722,17 @@ class NotificationService {
       }
 
       final receiverData = receiverDoc.data();
+      final muted = List<String>.from(receiverData?['mutedConversations'] ?? []);
+      if (senderId.isNotEmpty && muted.contains(senderId)) {
+        _log('🔕 Alıcı bu sohbeti sessize almış ($senderId), bildirim gönderilmedi.');
+        return;
+      }
+      final blocked = List<String>.from(receiverData?['blockedUsers'] ?? []);
+      if (senderId.isNotEmpty && blocked.contains(senderId)) {
+        _log('🚫 Alıcı bu kullanıcıyı engellemiş ($senderId), bildirim gönderilmedi.');
+        return;
+      }
+
       final fcmToken = receiverData?['fcmToken'] as String?;
       
       if (fcmToken == null || fcmToken.isEmpty) {
@@ -1718,8 +1740,8 @@ class NotificationService {
         return;
       }
 
-      final title = '💬 Yeni Mesaj';
-      final body = '$senderName: ${messageText.length > 50 ? messageText.substring(0, 50) + "..." : messageText}';
+      const title = '💬 Yeni Mesaj';
+      final body = '$senderName: ${messageText.length > 50 ? "${messageText.substring(0, 50)}..." : messageText}';
 
       const androidDetails = AndroidNotificationDetails(
         'messages_channel',
@@ -1743,7 +1765,7 @@ class NotificationService {
         interruptionLevel: InterruptionLevel.active,
       );
 
-      final notificationDetails = NotificationDetails(
+      const notificationDetails = NotificationDetails(
         android: androidDetails,
         iOS: iosDetails,
       );
