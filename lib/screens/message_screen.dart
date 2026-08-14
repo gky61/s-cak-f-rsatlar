@@ -985,19 +985,19 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A));
     final badgeBg = isMe
         ? Colors.white.withValues(alpha: 0.2)
-        : (isDark ? primaryColor.withValues(alpha: 0.25) : primaryColor.withValues(alpha: 0.12));
+        : (isDark ? const Color(0xFF1E3A5F).withValues(alpha: 0.4) : primaryColor.withValues(alpha: 0.12));
     final badgeTextColor = isMe
         ? Colors.white
-        : (isDark ? const Color(0xFFFF8A65) : primaryColor);
+        : (isDark ? const Color(0xFF60A5FA) : primaryColor);
     final priceColor = isMe
-        ? const Color(0xFFFFE082)
-        : (isDark ? const Color(0xFFFF8A65) : primaryColor);
+        ? const Color(0xFFFFD166)
+        : (isDark ? const Color(0xFFFFB74D) : primaryColor);
     final storeColor = isMe
         ? Colors.white.withValues(alpha: 0.88)
         : (isDark ? Colors.grey[400] : const Color(0xFF64748B));
     final ctaColor = isMe
         ? Colors.white
-        : (isDark ? const Color(0xFFFF8A65) : primaryColor);
+        : (isDark ? const Color(0xFF60A5FA) : primaryColor);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1307,9 +1307,9 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     Color textMain,
     Color? textSub,
   ) {
-    // Gönderilen mesajlar: Enerjik & marka uyumlu Primary Turuncu
+    // Gönderilen mesajlar: Açık modda Primary Turuncu (#FF6B35), Koyu modda zarif Gece Mavisi / Midnight Indigo (#1E3A5F)
     // Alınan mesajlar: Açık modda Slate 100 (#F1F5F9), Koyu modda DarkSurface (#1E242B)
-    final myBubbleColor = primaryColor;
+    final myBubbleColor = isDark ? const Color(0xFF1E3A5F) : primaryColor;
     final otherBubbleColor = isDark ? const Color(0xFF1E242B) : const Color(0xFFF1F5F9);
     const myTextColor = Colors.white;
     final otherTextColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
@@ -1360,7 +1360,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     bottomRight: Radius.circular(isMe ? 4 : 18),
                   ),
                   border: isMe
-                      ? null
+                      ? (isDark ? Border.all(color: Colors.white.withValues(alpha: 0.12), width: 0.8) : null)
                       : Border.all(
                           color: isDark
                               ? Colors.white.withValues(alpha: 0.08)
@@ -1370,7 +1370,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                   boxShadow: [
                     BoxShadow(
                       color: isMe
-                          ? primaryColor.withValues(alpha: isDark ? 0.35 : 0.22)
+                          ? (isDark ? const Color(0xFF1E3A5F).withValues(alpha: 0.4) : primaryColor.withValues(alpha: 0.22))
                           : Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
@@ -1455,7 +1455,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
           left: BorderSide(
             color: isMe
                 ? Colors.white.withValues(alpha: 0.9)
-                : (isDark ? const Color(0xFFFF8A65) : primaryColor),
+                : (isDark ? const Color(0xFF60A5FA) : primaryColor),
             width: 3,
           ),
         ),
@@ -1468,7 +1468,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: isMe ? Colors.white : (isDark ? const Color(0xFFFF8A65) : primaryColor),
+              color: isMe ? Colors.white : (isDark ? const Color(0xFF60A5FA) : primaryColor),
             ),
           ),
           const SizedBox(height: 1),
@@ -1575,7 +1575,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                 Icon(
                   Icons.open_in_new_rounded,
                   size: 14,
-                  color: isMe ? Colors.white.withValues(alpha: 0.9) : (isDark ? const Color(0xFFFF8A65) : primaryColor),
+                  color: isMe ? Colors.white.withValues(alpha: 0.9) : (isDark ? const Color(0xFF60A5FA) : primaryColor),
                 ),
               ],
             ),
