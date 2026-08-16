@@ -1644,26 +1644,90 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               ),
                               color: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
                               onSelected: (value) {
-                                if (value == 'report') {
+                                if (value == 'forward_message') {
+                                  DealShareSheet.showForwardSheet(context, deal);
+                                } else if (value == 'copy_deal_link' || value == 'copy_link') {
+                                  DealShareSheet.copyDealLink(context, deal);
+                                } else if (value == 'copy_store_link') {
+                                  DealShareSheet.copyStoreLink(context, deal);
+                                } else if (value == 'report') {
                                   showReportDialog(
                                     context,
                                     reportedId: deal.id,
                                     type: 'deal',
+                                    targetContent: deal.title,
+                                    targetAuthor: deal.postedBy,
+                                    targetAuthorId: deal.postedBy,
                                   );
                                 }
                               },
                               itemBuilder: (context) => [
                                 PopupMenuItem(
+                                  value: 'forward_message',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.send_rounded, color: primaryColor, size: 18),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'Fırsatı Mesajla Gönder',
+                                        style: TextStyle(
+                                          color: isDark ? Colors.white : Colors.black87,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'copy_deal_link',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.link_rounded, color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7), size: 18),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        'FırsatKolik Bağlantısını Kopyala',
+                                        style: TextStyle(
+                                          color: isDark ? Colors.white : Colors.black87,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'copy_store_link',
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.storefront_rounded, color: Color(0xFF10B981), size: 18),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        deal.store.isNotEmpty
+                                            ? '${deal.store} Linkini Kopyala'
+                                            : 'Mağaza Linkini Kopyala',
+                                        style: TextStyle(
+                                          color: isDark ? Colors.white : Colors.black87,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                                PopupMenuItem(
                                   value: 'report',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.flag_outlined, color: Colors.red[400], size: 20),
+                                      Icon(Icons.flag_outlined, color: Colors.red[400], size: 18),
                                       const SizedBox(width: 12),
                                       Text(
                                         'Fırsatı Raporla',
                                         style: TextStyle(
-                                          color: isDark ? Colors.white : Colors.black87,
+                                          color: Colors.red[400],
                                           fontWeight: FontWeight.w600,
+                                          fontSize: 13,
                                         ),
                                       ),
                                     ],
@@ -2029,177 +2093,186 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     final pillBgColor = isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC);
     final pillBorderColor = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0);
 
-    return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: pillBgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: pillBorderColor,
-          width: 0.85,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Botkolik Avatar & Online Noktası
-          InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
-              );
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Stack(
-              children: [
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: primaryColor.withValues(alpha: 0.35),
-                      width: 1,
-                    ),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      'assets/botkolik.webp',
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 5.5,
-                    height: 5.5,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isDark ? const Color(0xFF1E242B) : Colors.white,
-                        width: 1,
+    return StreamBuilder<bool>(
+      stream: _firestoreService.botkolikChatEnabledStream(),
+      builder: (context, snapshot) {
+        final isChatEnabled = snapshot.data ?? true;
+
+        return Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: pillBgColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: pillBorderColor,
+              width: 0.85,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Botkolik Avatar & Online Noktası
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
+                  );
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: primaryColor.withValues(alpha: 0.35),
+                          width: 1,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/botkolik.webp',
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 7),
-          // Botkolik Label (Fırsatkolik gibi: Bot + kolik)
-          InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
-              );
-            },
-            child: RichText(
-              text: TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Bot',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const TextSpan(
-                    text: 'kolik',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.primary,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // "Mesaj" Butonu (Diğer kullanıcılarda olduğu gibi ilgili fırsatı mesaja iliştirerek sohbet başlatır)
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                final currentUid = _authService.currentUser?.uid;
-                if (currentUid == null) {
-                  showGuestLoginBottomSheet(
-                    context,
-                    title: 'Mesaj Gönder',
-                    message: 'Botkolik ile iletişime geçmek ve bu fırsat hakkında bildirim/soru iletmek için Giriş Yap! 🚀',
-                  );
-                  return;
-                }
-                HapticFeedback.lightImpact();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => MessageScreen(
-                      otherUserId: 'botkolik',
-                      otherUserName: 'Botkolik',
-                      otherUserImageUrl: 'assets/botkolik.webp',
-                      initialDealTitle: deal.title,
-                      initialDealId: deal.id,
-                      initialDealImageUrl: deal.imageUrl,
-                      initialDealPrice: deal.price.toString(),
-                      initialDealStore: deal.store,
-                    ),
-                  ),
-                );
-              },
-              borderRadius: BorderRadius.circular(6),
-              child: Ink(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark ? primaryColor.withValues(alpha: 0.18) : primaryColor,
-                  borderRadius: BorderRadius.circular(6),
-                  border: isDark 
-                      ? Border.all(color: primaryColor.withValues(alpha: 0.4), width: 0.8) 
-                      : null,
-                  boxShadow: isDark
-                      ? null
-                      : [
-                          BoxShadow(
-                            color: primaryColor.withValues(alpha: 0.25),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1.5),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 5.5,
+                        height: 5.5,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF1E242B) : Colors.white,
+                            width: 1,
                           ),
-                        ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      size: 10,
-                      color: isDark ? primaryColor : Colors.white,
-                    ),
-                    const SizedBox(width: 3.5),
-                    Text(
-                      'Mesaj',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? primaryColor : Colors.white,
-                        letterSpacing: 0.1,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
+              const SizedBox(width: 7),
+              // Botkolik Label (Fırsatkolik gibi: Bot + kolik)
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
+                  );
+                },
+                child: RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: 'Bot',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: 'kolik',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primary,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (isChatEnabled) ...[
+                const SizedBox(width: 8),
+                // "Mesaj" Butonu (Diğer kullanıcılarda olduğu gibi ilgili fırsatı mesaja iliştirerek sohbet başlatır)
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      final currentUid = _authService.currentUser?.uid;
+                      if (currentUid == null) {
+                        showGuestLoginBottomSheet(
+                          context,
+                          title: 'Mesaj Gönder',
+                          message: 'Botkolik ile iletişime geçmek ve bu fırsat hakkında bildirim/soru iletmek için Giriş Yap! 🚀',
+                        );
+                        return;
+                      }
+                      HapticFeedback.lightImpact();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MessageScreen(
+                            otherUserId: 'botkolik',
+                            otherUserName: 'Botkolik',
+                            otherUserImageUrl: 'assets/botkolik.webp',
+                            initialDealTitle: deal.title,
+                            initialDealId: deal.id,
+                            initialDealImageUrl: deal.imageUrl,
+                            initialDealPrice: deal.price.toString(),
+                            initialDealStore: deal.store,
+                          ),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Ink(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isDark ? primaryColor.withValues(alpha: 0.18) : primaryColor,
+                        borderRadius: BorderRadius.circular(6),
+                        border: isDark 
+                            ? Border.all(color: primaryColor.withValues(alpha: 0.4), width: 0.8) 
+                            : null,
+                        boxShadow: isDark
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: primaryColor.withValues(alpha: 0.25),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1.5),
+                                ),
+                              ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 10,
+                            color: isDark ? primaryColor : Colors.white,
+                          ),
+                          const SizedBox(width: 3.5),
+                          Text(
+                            'Mesaj',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? primaryColor : Colors.white,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

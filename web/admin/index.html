@@ -1819,6 +1819,18 @@
                                     <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
                                 </label>
                             </div>
+
+                            <!-- Botkolik Chat / Messaging Toggle -->
+                            <div class="flex items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <div class="flex flex-col gap-1">
+                                    <h4 class="text-sm font-bold text-slate-900 dark:text-white">Botkolik ile Mesajlaşma</h4>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">Kapatıldığında, mobil uygulamada fırsat detayındaki ve Botkolik profilindeki tüm mesajlaşma alanları gizlenir.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                    <input id="settingsToggleBotkolikChatBtn" class="sr-only peer" type="checkbox" checked/>
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                </label>
+                            </div>
                         </div>
 
                         <!-- Bot & App Config Card -->
@@ -2199,6 +2211,105 @@
         </div>
     </div>
 
+    <!-- Report Detail Modal -->
+    <div id="reportDetailModal" class="modal hidden fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-surface-dark rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-8 flex flex-col max-h-[90vh]">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                <div class="flex items-center gap-3">
+                    <div id="reportDetailTypeIcon" class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-[22px]">report</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 id="reportDetailModalTitle" class="text-xl font-bold text-slate-900 dark:text-white">Şikayet İnceleme</h2>
+                            <span id="reportDetailStatusBadge"></span>
+                        </div>
+                        <p id="reportDetailModalSubtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Raporlanan içerik ve kullanıcı şikayet detayları</p>
+                    </div>
+                </div>
+                <button onclick="closeReportDetailModal()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                    <span class="material-symbols-outlined text-[20px]">close</span>
+                </button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div id="reportDetailModalBody" class="p-6 overflow-y-auto space-y-5 flex-1">
+                <!-- Injected content -->
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-between p-4 px-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                <button onclick="closeReportDetailModal()" class="px-4 py-2 text-sm font-semibold border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    Kapat
+                </button>
+                <div class="flex items-center gap-2">
+                    <button id="reportDetailDismissBtn" class="px-4 py-2 text-sm font-semibold border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px]">close</span>
+                        Yoksay
+                    </button>
+                    <button id="reportDetailActionBtn" class="px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors shadow-sm shadow-red-500/20 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px]">bolt</span>
+                        İşlem Yap
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Action Modal -->
+    <div id="reportActionModal" class="modal hidden fixed inset-0 z-[60] overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-surface-dark rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-800 overflow-hidden my-8 flex flex-col max-h-[90vh]">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800 bg-red-500/5 dark:bg-red-500/10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-red-500/10 text-red-600 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-[22px]">gavel</span>
+                    </div>
+                    <div>
+                        <h2 id="reportActionModalTitle" class="text-xl font-bold text-slate-900 dark:text-white">Şikayet İçin İşlem Seçin</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Uygulanacak moderasyon aksiyonunu belirleyin</p>
+                    </div>
+                </div>
+                <button onclick="closeReportActionModal()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                    <span class="material-symbols-outlined text-[20px]">close</span>
+                </button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="p-6 overflow-y-auto space-y-4 flex-1">
+                <!-- Target Summary Banner -->
+                <div id="reportActionSummary" class="p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs flex items-center gap-3">
+                </div>
+
+                <!-- Action Options Container -->
+                <div class="space-y-2">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Aksiyon Seçenekleri</label>
+                    <div id="reportActionOptionsList" class="space-y-2.5">
+                        <!-- Radio action cards injected via JS -->
+                    </div>
+                </div>
+
+                <!-- Optional Admin Note -->
+                <div class="pt-2">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Admin Notu / Açıklama (İsteğe Bağlı)</label>
+                    <input type="text" id="reportActionNote" placeholder="Aksiyon gerekçesi veya işlem notu..." class="w-full px-3.5 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary">
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-end gap-3 p-4 px-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                <button onclick="closeReportActionModal()" class="px-4 py-2 text-sm font-semibold border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    Vazgeç
+                </button>
+                <button id="reportActionConfirmBtn" onclick="executeSelectedReportAction()" class="px-5 py-2 text-sm font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors shadow-sm shadow-red-500/20 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">check</span>
+                    İşlemi Uygula
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="config.js?v=3.1"></script>
     <script>
         // Version check - Force cache refresh
@@ -2215,6 +2326,6 @@
             }
         });
     </script>
-    <script src="app.js?v=9.05"></script>
+    <script src="app.js?v=9.06"></script>
 </body>
 </html>

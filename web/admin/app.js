@@ -732,6 +732,14 @@ function initEventListeners() {
         });
     }
 
+    // Toggle Botkolik Chat switch (Settings View)
+    const settingsToggleBotkolikChatBtn = document.getElementById('settingsToggleBotkolikChatBtn');
+    if (settingsToggleBotkolikChatBtn) {
+        settingsToggleBotkolikChatBtn.addEventListener('change', async () => {
+            await toggleBotkolikChat();
+        });
+    }
+
 
 
     // Save Bot & App Config Button (Settings View)
@@ -6301,9 +6309,14 @@ async function loadDealSharingStatus() {
             ? (settingsDoc.data().couponsEnabled !== false)
             : true;
 
+        const botkolikChatEnabled = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().botkolikChatEnabled !== false)
+            : true;
+
         console.log('📊 Deal sharing enabled:', dealSharingEnabled);
         console.log('📊 Deal approval required:', dealApprovalRequired);
         console.log('📊 Coupons enabled:', couponsEnabled);
+        console.log('📊 Botkolik chat enabled:', botkolikChatEnabled);
         updateDealSharingButton(dealSharingEnabled);
         
         const approvalToggle = document.getElementById('settingsToggleDealApprovalBtn');
@@ -6314,6 +6327,11 @@ async function loadDealSharingStatus() {
         const couponsToggle = document.getElementById('settingsToggleCouponsBtn');
         if (couponsToggle) {
             couponsToggle.checked = couponsEnabled;
+        }
+
+        const botkolikChatToggle = document.getElementById('settingsToggleBotkolikChatBtn');
+        if (botkolikChatToggle) {
+            botkolikChatToggle.checked = botkolikChatEnabled;
         }
     } catch (error) {
         console.error('❌ Error loading deal sharing status:', error);
@@ -6525,6 +6543,48 @@ async function toggleCouponsEnabled() {
     }
 }
 
+// Botkolik Chat durumunu toggle et
+async function toggleBotkolikChat() {
+    try {
+        console.log('🔄 toggleBotkolikChat başladı...');
+        const settingsRef = db.collection('settings').doc('app');
+        const settingsDoc = await settingsRef.get();
+
+        const currentStatus = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().botkolikChatEnabled !== false)
+            : true;
+
+        const newStatus = !currentStatus;
+        console.log('📊 New Botkolik chat status:', newStatus);
+
+        await settingsRef.set({
+            botkolikChatEnabled: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        const toggle = document.getElementById('settingsToggleBotkolikChatBtn');
+        if (toggle) {
+            toggle.checked = newStatus;
+        }
+
+        const message = newStatus
+            ? '✅ Botkolik ile mesajlaşma aktifleştirildi!'
+            : '🚫 Botkolik ile mesajlaşma durduruldu (mobil arayüzde gizlendi)!';
+        showSuccess(message);
+
+        console.log(`✅ Botkolik chat enabled status set to ${newStatus}`);
+    } catch (error) {
+        console.error('❌ Error toggling Botkolik chat status:', error);
+        showError('Botkolik mesajlaşma durumu değiştirilirken hata oluştu: ' + error.message);
+        
+        // Reset toggle switch state on error
+        const toggle = document.getElementById('settingsToggleBotkolikChatBtn');
+        if (toggle) {
+            toggle.checked = !toggle.checked;
+        }
+    }
+}
+
 // Comment Sharing durumunu yükle ve butonu güncelle
 async function loadCommentSharingStatus() {
     try {
@@ -6644,6 +6704,8 @@ window.unbanUserDeals = unbanUserDeals;
 // Reports and Settings View Extensions
 let reports = [];
 let reportsUnsubscribe = null;
+let currentReportUnderAction = null;
+let currentReportActionOptions = [];
 
 function showReportsView() {
     currentView = 'reports';
@@ -6696,7 +6758,13 @@ function loadReports() {
                     type: data.type || 'unknown',
                     reason: data.reason || 'Sebep belirtilmemiş',
                     description: data.description || '',
+                    targetDealId: data.targetDealId || null,
+                    targetContent: data.targetContent || null,
+                    targetAuthor: data.targetAuthor || null,
+                    targetAuthorId: data.targetAuthorId || null,
                     status: data.status || 'pending',
+                    actionType: data.actionType || null,
+                    actionNote: data.actionNote || null,
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || Date.now())
                 });
             });
@@ -6760,46 +6828,59 @@ function renderReports() {
             typeLabel = 'Kullanıcı';
             typeColor = 'text-purple-600 dark:text-purple-400';
             typeIcon = 'person';
+        } else if (report.type === 'message') {
+            typeLabel = 'Mesaj';
+            typeColor = 'text-emerald-600 dark:text-emerald-400';
+            typeIcon = 'chat_bubble';
         }
 
         let statusBadge = '';
         if (report.status === 'pending') {
-            statusBadge = '<span class="px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs font-medium">Bekliyor</span>';
+            statusBadge = '<span class="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs font-semibold">Bekliyor</span>';
         } else if (report.status === 'dismissed') {
-            statusBadge = '<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full text-xs font-medium">Yoksayıldı</span>';
+            statusBadge = '<span class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full text-xs font-semibold">Yoksayıldı</span>';
         } else if (report.status === 'action_taken') {
-            statusBadge = '<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-medium">İşlem Yapıldı</span>';
+            statusBadge = '<span class="px-2.5 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-semibold">İşlem Yapıldı</span>';
         } else {
-            statusBadge = `<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full text-xs font-medium">${report.status}</span>`;
+            statusBadge = `<span class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full text-xs font-semibold">${escapeHtml(report.status)}</span>`;
         }
 
         const isPending = report.status === 'pending';
         const actionsHtml = isPending ? `
-            <div class="flex items-center justify-end gap-2">
-                <button onclick="window.inspectReportedContent('${report.id}', '${report.type}', '${report.reportedId}')" class="p-1 text-slate-500 hover:text-primary transition-colors flex items-center" title="Görüntüle/İncele">
-                    <span class="material-symbols-outlined text-[18px]">visibility</span>
+            <div class="flex items-center justify-end gap-1.5">
+                <button onclick="window.inspectReportedContent('${report.id}', '${report.type}', '${report.reportedId}')" class="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 transition-colors flex items-center gap-1 text-xs font-semibold" title="İncele">
+                    <span class="material-symbols-outlined text-[16px]">visibility</span>
+                    İncele
                 </button>
-                <button onclick="window.dismissReport('${report.id}')" class="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center" title="Yoksay">
+                <button onclick="window.takeActionOnReport('${report.id}', '${report.type}', '${report.reportedId}')" class="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 transition-colors flex items-center gap-1 text-xs font-semibold" title="İşlem Yap">
+                    <span class="material-symbols-outlined text-[16px]">bolt</span>
+                    İşlem Yap
+                </button>
+                <button onclick="window.dismissReport('${report.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors" title="Yoksay">
                     <span class="material-symbols-outlined text-[18px]">close</span>
                 </button>
-                <button onclick="window.takeActionOnReport('${report.id}', '${report.type}', '${report.reportedId}')" class="p-1 text-red-500 hover:text-red-700 transition-colors flex items-center" title="İşlem Yap">
-                    <span class="material-symbols-outlined text-[18px]">check_circle</span>
-                </button>
             </div>
-        ` : `<span class="text-xs text-slate-400 italic">İşlem yapıldı</span>`;
+        ` : `
+            <div class="flex items-center justify-end gap-2">
+                <button onclick="window.inspectReportedContent('${report.id}', '${report.type}', '${report.reportedId}')" class="p-1 text-slate-400 hover:text-primary transition-colors" title="İncele">
+                    <span class="material-symbols-outlined text-[18px]">visibility</span>
+                </button>
+                <span class="text-xs text-slate-400 font-medium italic">Kapalı</span>
+            </div>
+        `;
 
         return `
             <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/20 transition-colors">
-                <td class="px-6 py-4 whitespace-nowrap text-slate-500 dark:text-slate-400">${formattedDate}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-slate-500 dark:text-slate-400 text-xs">${formattedDate}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                     <span class="flex items-center gap-1.5 ${typeColor} font-bold text-xs">
-                        <span class="material-symbols-outlined text-[14px]">${typeIcon}</span>
+                        <span class="material-symbols-outlined text-[15px]">${typeIcon}</span>
                         ${typeLabel}
                     </span>
                 </td>
                 <td class="px-6 py-4 text-slate-900 dark:text-white font-mono text-xs">#${escapeHtml(report.reportedId.substring(0, 8))}...</td>
-                <td class="px-6 py-4 text-slate-900 dark:text-white font-medium">${escapeHtml(report.reason)}</td>
-                <td class="px-6 py-4 text-slate-500 dark:text-slate-400 max-w-xs truncate" title="${escapeHtml(report.description)}">${escapeHtml(report.description || '-')}</td>
+                <td class="px-6 py-4 text-slate-900 dark:text-white font-semibold text-xs">${escapeHtml(report.reason)}</td>
+                <td class="px-6 py-4 text-slate-500 dark:text-slate-400 max-w-xs truncate text-xs" title="${escapeHtml(report.description)}">${escapeHtml(report.description || '-')}</td>
                 <td class="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono text-xs">#${escapeHtml(report.reportedBy.substring(0, 6))}...</td>
                 <td class="px-6 py-4 whitespace-nowrap">${statusBadge}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-right">${actionsHtml}</td>
@@ -6808,77 +6889,350 @@ function renderReports() {
     }).join('');
 }
 
-async function findCommentAndParent(commentId) {
+async function findCommentAndParent(commentId, targetDealId) {
     try {
-        console.log('🔍 Searching comments collection group for ID:', commentId);
+        if (targetDealId) {
+            const doc = await db.collection('deals').doc(targetDealId).collection('comments').doc(commentId).get();
+            if (doc.exists) {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    content: data.text || data.content || '',
+                    userId: data.userId || '',
+                    userName: data.userName || 'Bilinmeyen Kullanıcı',
+                    dealId: targetDealId,
+                    ref: doc.ref,
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || Date.now())
+                };
+            }
+        }
+
+        if (typeof deals !== 'undefined' && Array.isArray(deals)) {
+            for (let i = 0; i < deals.length; i++) {
+                const dId = deals[i].id;
+                try {
+                    const doc = await db.collection('deals').doc(dId).collection('comments').doc(commentId).get();
+                    if (doc.exists) {
+                        const data = doc.data();
+                        return {
+                            id: doc.id,
+                            content: data.text || data.content || '',
+                            userId: data.userId || '',
+                            userName: data.userName || 'Bilinmeyen Kullanıcı',
+                            dealId: dId,
+                            ref: doc.ref,
+                            createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || Date.now())
+                        };
+                    }
+                } catch (_) {}
+            }
+        }
+
         const snapshot = await db.collectionGroup('comments').get();
-        let commentDoc = null;
+        let found = null;
         snapshot.forEach(doc => {
             if (doc.id === commentId) {
-                commentDoc = doc;
+                const data = doc.data();
+                const parentDealId = doc.ref.parent && doc.ref.parent.parent ? doc.ref.parent.parent.id : '';
+                found = {
+                    id: doc.id,
+                    content: data.text || data.content || '',
+                    userId: data.userId || '',
+                    userName: data.userName || 'Bilinmeyen Kullanıcı',
+                    dealId: parentDealId,
+                    ref: doc.ref,
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || Date.now())
+                };
             }
         });
-
-        if (commentDoc) {
-            const data = commentDoc.data();
-            const dealId = commentDoc.ref.parent.parent.id;
-            return {
-                id: commentDoc.id,
-                content: data.text || data.content || '',
-                userId: data.userId || '',
-                userName: data.userName || 'Bilinmeyen Kullanıcı',
-                dealId: dealId,
-                ref: commentDoc.ref
-            };
-        }
-        return null;
+        return found;
     } catch (e) {
         console.error('❌ Error finding comment:', e);
         return null;
     }
 }
 
+window.closeReportDetailModal = function () {
+    const modal = document.getElementById('reportDetailModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.closeReportActionModal = function () {
+    const modal = document.getElementById('reportActionModal');
+    if (modal) modal.classList.add('hidden');
+    currentReportUnderAction = null;
+    currentReportActionOptions = [];
+};
+
 window.inspectReportedContent = async function (reportId, type, reportedId) {
     try {
-        showLoadingIndicator(true);
+        const report = reports.find(r => r.id === reportId) || { id: reportId, type, reportedId, status: 'pending' };
+        const modal = document.getElementById('reportDetailModal');
+        const modalTitle = document.getElementById('reportDetailModalTitle');
+        const modalSubtitle = document.getElementById('reportDetailModalSubtitle');
+        const modalBody = document.getElementById('reportDetailModalBody');
+        const typeIconContainer = document.getElementById('reportDetailTypeIcon');
+        const statusBadgeContainer = document.getElementById('reportDetailStatusBadge');
+        const dismissBtn = document.getElementById('reportDetailDismissBtn');
+        const actionBtn = document.getElementById('reportDetailActionBtn');
+
+        if (!modal || !modalBody) {
+            console.error('❌ Report detail modal not found');
+            return;
+        }
+
+        let typeLabel = 'İçerik';
+        let typeIcon = 'report';
+        let iconBgClass = 'bg-slate-500/10 text-slate-600';
         if (type === 'deal') {
+            typeLabel = 'Fırsat';
+            typeIcon = 'local_offer';
+            iconBgClass = 'bg-amber-500/10 text-amber-600';
+        } else if (type === 'comment') {
+            typeLabel = 'Yorum';
+            typeIcon = 'comment';
+            iconBgClass = 'bg-blue-500/10 text-blue-600';
+        } else if (type === 'message') {
+            typeLabel = 'Mesaj';
+            typeIcon = 'chat_bubble';
+            iconBgClass = 'bg-emerald-500/10 text-emerald-600';
+        } else if (type === 'user') {
+            typeLabel = 'Kullanıcı';
+            typeIcon = 'person';
+            iconBgClass = 'bg-purple-500/10 text-purple-600';
+        }
+
+        if (typeIconContainer) {
+            typeIconContainer.className = `w-10 h-10 rounded-xl ${iconBgClass} flex items-center justify-center`;
+            typeIconContainer.innerHTML = `<span class="material-symbols-outlined text-[22px]">${typeIcon}</span>`;
+        }
+
+        if (modalTitle) modalTitle.textContent = `${typeLabel} Şikayeti İnceleme`;
+        if (modalSubtitle) modalSubtitle.textContent = `Şikayet ID: #${report.id.substring(0, 12)}...`;
+
+        if (statusBadgeContainer) {
+            if (report.status === 'pending') {
+                statusBadgeContainer.innerHTML = '<span class="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs font-semibold">Bekliyor</span>';
+            } else if (report.status === 'action_taken') {
+                statusBadgeContainer.innerHTML = '<span class="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-semibold">İşlem Yapıldı</span>';
+            } else {
+                statusBadgeContainer.innerHTML = '<span class="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full text-xs font-semibold">Yoksayıldı</span>';
+            }
+        }
+
+        // Action button bindings
+        if (dismissBtn) {
+            dismissBtn.onclick = () => {
+                closeReportDetailModal();
+                dismissReport(reportId);
+            };
+            dismissBtn.style.display = report.status === 'pending' ? 'flex' : 'none';
+        }
+        if (actionBtn) {
+            actionBtn.onclick = () => {
+                closeReportDetailModal();
+                takeActionOnReport(reportId, type, reportedId);
+            };
+            actionBtn.style.display = report.status === 'pending' ? 'flex' : 'none';
+        }
+
+        modalBody.innerHTML = `
+            <div class="flex items-center justify-center py-12">
+                <span class="material-symbols-outlined text-3xl animate-spin text-primary">sync</span>
+                <span class="ml-3 text-slate-500 text-sm font-medium">Şikayet ve içerik detayları yükleniyor...</span>
+            </div>
+        `;
+        modal.classList.remove('hidden');
+
+        // Fetch reported item
+        let contentHtml = '';
+
+        if (type === 'comment') {
+            const comment = await findCommentAndParent(reportedId, report.targetDealId);
+            let dealInfo = null;
+            if (comment && comment.dealId) {
+                const dealDoc = await db.collection('deals').doc(comment.dealId).get();
+                if (dealDoc.exists) dealInfo = { id: dealDoc.id, ...dealDoc.data() };
+            }
+
+            const commentText = comment ? comment.content : (report.targetContent || 'İçerik veritabanında bulunamadı (silinmiş olabilir).');
+            const authorName = comment ? comment.userName : (report.targetAuthor || 'Bilinmeyen Kullanıcı');
+            const authorId = comment ? comment.userId : (report.targetAuthorId || '-');
+
+            contentHtml = `
+                <div class="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200/60 dark:border-blue-800/40 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xs">
+                                ${escapeHtml(authorName.charAt(0).toUpperCase())}
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-900 dark:text-white text-sm">${escapeHtml(authorName)}</h4>
+                                <p class="text-[11px] text-slate-500 font-mono">UID: ${escapeHtml(authorId)}</p>
+                            </div>
+                        </div>
+                        <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-semibold">Yorum</span>
+                    </div>
+                    <div class="bg-white dark:bg-surface-darker p-3.5 rounded-lg border border-slate-200/60 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-sm italic">
+                        "${escapeHtml(commentText)}"
+                    </div>
+                    ${dealInfo ? `
+                        <div class="mt-3 pt-3 border-t border-blue-200/40 dark:border-blue-800/30 flex items-center justify-between">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <img src="${dealInfo.imageUrl || ''}" class="w-9 h-9 rounded-lg object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.src='https://placehold.co/100?text=Firsat'">
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(dealInfo.title || 'Fırsat')}</p>
+                                    <p class="text-[11px] text-slate-500">${escapeHtml(dealInfo.store || '')} • ${dealInfo.price ? dealInfo.price + ' TL' : ''}</p>
+                                </div>
+                            </div>
+                            <button onclick="showDealDetail('${dealInfo.id}')" class="px-3 py-1.5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-700 hover:border-primary text-xs font-bold text-slate-700 dark:text-slate-300 rounded-lg transition-colors flex-shrink-0">
+                                Fırsatı Aç
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        } else if (type === 'message') {
+            const doc = await db.collection('messages').doc(reportedId).get();
+            let msgData = doc.exists ? doc.data() : null;
+            const messageText = msgData ? (msgData.text || '') : (report.targetContent || 'Mesaj veritabanında bulunamadı.');
+            const senderName = msgData ? (msgData.senderName || msgData.senderId) : (report.targetAuthor || 'Gönderen');
+            const receiverName = msgData ? (msgData.receiverName || msgData.receiverId) : 'Alıcı';
+
+            contentHtml = `
+                <div class="bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-emerald-600 text-base">forum</span>
+                            <span class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                <strong>${escapeHtml(senderName)}</strong> ➔ <strong>${escapeHtml(receiverName)}</strong>
+                            </span>
+                        </div>
+                        <span class="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-semibold">Özel Mesaj</span>
+                    </div>
+                    <div class="bg-white dark:bg-surface-darker p-4 rounded-xl border border-slate-200/60 dark:border-slate-800 space-y-2">
+                        <div class="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-slate-900 dark:text-white text-sm font-medium">
+                            "${escapeHtml(messageText)}"
+                        </div>
+                        ${msgData && msgData.dealTitle ? `
+                            <div class="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                                <img src="${msgData.dealImageUrl || ''}" class="w-8 h-8 rounded object-cover flex-shrink-0" onerror="this.src='https://placehold.co/100?text=Firsat'">
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(msgData.dealTitle)}</p>
+                                    <p class="text-[11px] text-primary font-semibold">${msgData.dealPrice ? msgData.dealPrice + ' TL' : ''}</p>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        } else if (type === 'deal') {
             let deal = deals.find(d => d.id === reportedId);
             if (!deal) {
                 const doc = await db.collection('deals').doc(reportedId).get();
-                if (doc.exists) {
-                    deal = { id: doc.id, ...doc.data() };
-                }
+                if (doc.exists) deal = { id: doc.id, ...doc.data() };
             }
-            showLoadingIndicator(false);
+
             if (deal) {
-                if (deal.createdAt && !(deal.createdAt instanceof Date)) {
-                    deal.createdAt = deal.createdAt.toDate ? deal.createdAt.toDate() : new Date(deal.createdAt);
-                }
-                await showDealModal(deal);
+                contentHtml = `
+                    <div class="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/60 dark:border-amber-800/40 rounded-xl p-4">
+                        <div class="flex items-start gap-3.5">
+                            <img src="${deal.imageUrl || ''}" class="w-16 h-16 rounded-xl object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.src='https://placehold.co/100?text=Firsat'">
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="px-2 py-0.5 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded text-[11px] font-bold">${escapeHtml(deal.store || 'Mağaza')}</span>
+                                    <span class="text-xs font-semibold text-slate-500">${deal.category || ''}</span>
+                                </div>
+                                <h4 class="font-bold text-slate-900 dark:text-white text-sm line-clamp-2">${escapeHtml(deal.title || 'Başlıksız Fırsat')}</h4>
+                                <div class="flex items-center gap-3 mt-1.5">
+                                    <span class="text-sm font-black text-primary">${deal.price ? deal.price + ' TL' : 'Fiyatsız'}</span>
+                                    <span class="text-xs text-slate-400">🔥 ${deal.hotVotes || 0} / ❄️ ${deal.coldVotes || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3 pt-3 border-t border-amber-200/40 dark:border-amber-800/30 flex justify-end">
+                            <button onclick="showDealDetail('${deal.id}')" class="px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[16px]">edit</span>
+                                Fırsat Detayını / Düzenleme Panelini Aç
+                            </button>
+                        </div>
+                    </div>
+                `;
             } else {
-                showError('Bu fırsat veritabanında bulunamadı (silinmiş olabilir).');
+                contentHtml = `
+                    <div class="p-4 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 text-sm text-center">
+                        Bu fırsat veritabanında bulunamadı (silinmiş olabilir).
+                    </div>
+                `;
             }
         } else if (type === 'user') {
-            showLoadingIndicator(false);
-            window.showUserDetail(reportedId);
-        } else if (type === 'comment') {
-            const comment = await findCommentAndParent(reportedId);
-            showLoadingIndicator(false);
-            if (comment) {
-                alert(`Raporlanan Yorum Detayı:\n\nYorum Sahibi: ${comment.userName} (${comment.userId})\nYazılan İçerik: "${comment.content}"\nBağlı Olduğu Fırsat ID: ${comment.dealId}`);
-            } else {
-                showError('Bu yorum veritabanında bulunamadı (silinmiş olabilir).');
+            let user = users.find(u => (u.uid || u.id) === reportedId);
+            if (!user) {
+                const doc = await db.collection('users').doc(reportedId).get();
+                if (doc.exists) user = { id: doc.id, uid: doc.id, ...doc.data() };
             }
-        } else {
-            showLoadingIndicator(false);
-            alert(`Tip: ${type}\nID: ${reportedId}`);
+
+            if (user) {
+                const displayName = user.nickname || user.username || 'Bilinmeyen Kullanıcı';
+                contentHtml = `
+                    <div class="bg-purple-50/50 dark:bg-purple-900/10 border border-purple-200/60 dark:border-purple-800/40 rounded-xl p-4">
+                        <div class="flex items-center gap-3">
+                            <img src="${user.profileImageUrl || ''}" class="w-12 h-12 rounded-full object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=135bec&color=fff&size=128'">
+                            <div class="min-w-0 flex-1">
+                                <h4 class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(displayName)}</h4>
+                                <p class="text-xs text-slate-500">${escapeHtml(user.email || 'E-posta yok')} • UID: <span class="font-mono">${escapeHtml(user.uid || user.id)}</span></p>
+                                <div class="flex items-center gap-3 mt-1 text-xs text-slate-600 dark:text-slate-400">
+                                    <span>🌟 <strong>${user.points || 0}</strong> puan</span>
+                                    <span>🏷️ <strong>${user.dealCount || 0}</strong> fırsat</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3 pt-3 border-t border-purple-200/40 dark:border-purple-800/30 flex justify-end">
+                            <button onclick="showUserDetail('${user.uid || user.id}')" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[16px]">account_circle</span>
+                                Kullanıcı Profil Sayfasını Aç
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                contentHtml = `
+                    <div class="p-4 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 text-sm text-center">
+                        Bu kullanıcı hesabı bulunamadı (silinmiş olabilir).
+                    </div>
+                `;
+            }
         }
+
+        modalBody.innerHTML = `
+            <!-- Şikayet Özeti -->
+            <div class="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Şikayet Nedeni</span>
+                    <span class="px-2.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-xs font-bold">${escapeHtml(report.reason)}</span>
+                </div>
+                ${report.description ? `
+                    <div class="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-surface-darker p-3 rounded-lg border border-slate-200/70 dark:border-slate-800">
+                        <strong class="text-slate-900 dark:text-white">Ek Açıklama:</strong> "${escapeHtml(report.description)}"
+                    </div>
+                ` : ''}
+                <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                    <span>Raporlayan UID: <span class="font-mono">#${escapeHtml(report.reportedBy)}</span></span>
+                    <span>Tarih: ${new Date(report.createdAt).toLocaleString('tr-TR')}</span>
+                </div>
+            </div>
+
+            <!-- Raporlanan İçerik Kartı -->
+            <div>
+                <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Şikayet Edilen İçerik Detayı</h4>
+                ${contentHtml}
+            </div>
+        `;
     } catch (err) {
-        showLoadingIndicator(false);
         console.error('❌ Inspection error:', err);
         showError('İçerik incelenirken hata oluştu: ' + err.message);
     }
-}
+};
 
 window.dismissReport = async function (reportId) {
     if (!confirm('Bu şikayeti yoksaymak (kapatmak) istediğinize emin misiniz?')) {
@@ -6888,154 +7242,383 @@ window.dismissReport = async function (reportId) {
         showLoadingIndicator(true);
         await db.collection('reports').doc(reportId).update({
             status: 'dismissed',
+            resolvedAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         showLoadingIndicator(false);
-        showSuccess('Şikayet yoksayıldı.');
+        showSuccess('Şikayet yoksayıldı ve kapatıldı.');
     } catch (err) {
         showLoadingIndicator(false);
         console.error('❌ Error dismissing report:', err);
         showError('Şikayet kapatılırken hata oluştu: ' + err.message);
     }
-}
+};
 
 window.takeActionOnReport = async function (reportId, type, reportedId) {
     try {
-        let actionTitle = '';
+        const report = reports.find(r => r.id === reportId) || { id: reportId, type, reportedId, reason: 'Belirtilmemiş' };
+        currentReportUnderAction = { reportId, type, reportedId, report };
+
+        const actionModal = document.getElementById('reportActionModal');
+        const summaryContainer = document.getElementById('reportActionSummary');
+        const optionsContainer = document.getElementById('reportActionOptionsList');
+        const noteInput = document.getElementById('reportActionNote');
+
+        if (!actionModal || !optionsContainer) {
+            console.error('❌ Report action modal elements not found');
+            return;
+        }
+
+        if (noteInput) noteInput.value = '';
+
+        let typeLabel = 'Fırsat';
+        let typeIcon = 'local_offer';
+        if (type === 'comment') {
+            typeLabel = 'Yorum';
+            typeIcon = 'comment';
+        } else if (type === 'message') {
+            typeLabel = 'Mesaj';
+            typeIcon = 'chat_bubble';
+        } else if (type === 'user') {
+            typeLabel = 'Kullanıcı';
+            typeIcon = 'person';
+        }
+
+        if (summaryContainer) {
+            summaryContainer.innerHTML = `
+                <div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-600 flex items-center justify-center flex-shrink-0">
+                    <span class="material-symbols-outlined text-[18px]">${typeIcon}</span>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="font-bold text-slate-900 dark:text-white">${typeLabel} Şikayeti (#${escapeHtml(reportedId.substring(0, 10))}...)</p>
+                    <p class="text-slate-500 text-[11px] truncate">Sebep: ${escapeHtml(report.reason)}</p>
+                </div>
+            `;
+        }
+
         let options = [];
 
         if (type === 'deal') {
-            actionTitle = 'Fırsat Raporu İçin İşlem';
             options = [
                 {
-                    text: 'Fırsatı Yayından Kaldır (Süresi Dolan Yap)', action: async () => {
-                        await db.collection('deals').doc(reportedId).update({ isExpired: true });
-                        return 'Fırsat yayından kaldırıldı (süresi doldu olarak işaretlendi).';
+                    id: 'expire_deal',
+                    icon: 'timer_off',
+                    title: 'Fırsatı Yayından Kaldır (Süresi Dolan Yap)',
+                    desc: 'Fırsat silinmez, feed akışından kaldırılıp süresi dolmuş olarak işaretlenir.',
+                    isDanger: false,
+                    action: async (note) => {
+                        await db.collection('deals').doc(reportedId).update({
+                            isExpired: true,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        return 'Fırsat yayından kaldırıldı (süresi doldu yapıldı).';
                     }
                 },
                 {
-                    text: 'Fırsatı Veritabanından Kalıcı Olarak Sil', action: async () => {
+                    id: 'delete_deal',
+                    icon: 'delete_forever',
+                    title: 'Fırsatı Veritabanından Kalıcı Olarak Sil',
+                    desc: 'Fırsat Firestore veritabanından tamamen silinir.',
+                    isDanger: true,
+                    action: async (note) => {
                         await db.collection('deals').doc(reportedId).delete();
                         return 'Fırsat veritabanından tamamen silindi.';
                     }
                 },
                 {
-                    text: 'Sadece Şikayeti "Çözüldü" Olarak Kapat', action: async () => {
-                        return 'Şikayet çözüldü olarak kapatıldı.';
-                    }
-                }
-            ];
-        } else if (type === 'user') {
-            actionTitle = 'Kullanıcı Raporu İçin İşlem';
-            options = [
-                {
-                    text: 'Kullanıcıyı Engelle (Sisteme Girişini Yasakla)', action: async () => {
-                        await db.collection('blockedUsers').doc(reportedId).set({
-                            userId: reportedId,
-                            blockedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                            reason: 'Kullanıcı şikayetleri nedeniyle engellendi'
-                        });
-                        return 'Kullanıcı sisteme giriş engel listesine eklendi.';
-                    }
-                },
-                {
-                    text: 'Kullanıcının Fırsat Paylaşmasını Engelle', action: async () => {
-                        await db.collection('dealBannedUsers').doc(reportedId).set({
-                            userId: reportedId,
-                            bannedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                            reason: 'Kullanıcı şikayetleri nedeniyle paylaşım engeli'
-                        });
-                        return 'Kullanıcının yeni fırsat paylaşması engellendi.';
+                    id: 'ban_deal_poster',
+                    icon: 'block',
+                    title: 'Paylaşan Kullanıcının Fırsat Paylaşmasını Engelle',
+                    desc: 'Kullanıcının yeni fırsat eklemesi engellenir.',
+                    isDanger: true,
+                    action: async (note) => {
+                        const dealDoc = await db.collection('deals').doc(reportedId).get();
+                        const posterId = dealDoc.exists ? dealDoc.data().postedBy : null;
+                        if (posterId && posterId !== 'botkolik') {
+                            await db.collection('dealBannedUsers').doc(posterId).set({
+                                userId: posterId,
+                                bannedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                reason: note || 'Şikayet edilen fırsat paylaşımı sebebiyle engellendi'
+                            });
+                            return 'Kullanıcının fırsat paylaşması engellendi.';
+                        }
+                        return 'Fırsat sahibi için işlem yapıldı.';
                     }
                 },
                 {
-                    text: 'Sadece Şikayeti "Çözüldü" Olarak Kapat', action: async () => {
+                    id: 'resolve_only',
+                    icon: 'check_circle',
+                    title: 'Sadece Şikayeti "Çözüldü" Olarak Kapat',
+                    desc: 'İçeriğe dokunulmaz, şikayet işlemi incelenip tamamlandı olarak işaretlenir.',
+                    isDanger: false,
+                    action: async (note) => {
                         return 'Şikayet çözüldü olarak kapatıldı.';
                     }
                 }
             ];
         } else if (type === 'comment') {
-            actionTitle = 'Yorum Raporu İçin İşlem';
             options = [
                 {
-                    text: 'Yorumu Kalıcı Olarak Sil ve Sayacı Düşür', action: async () => {
-                        const comment = await findCommentAndParent(reportedId);
-                        if (comment) {
+                    id: 'delete_comment',
+                    icon: 'delete_sweep',
+                    title: 'Yorumu Kalıcı Olarak Sil ve Sayacı Düşür',
+                    desc: 'Yorum dokümanı silinir ve fırsatın yorum sayacı 1 azaltılır.',
+                    isDanger: true,
+                    action: async (note) => {
+                        const comment = await findCommentAndParent(reportedId, report.targetDealId);
+                        if (comment && comment.ref) {
                             await comment.ref.delete();
-                            await db.collection('deals').doc(comment.dealId).update({
-                                commentCount: firebase.firestore.FieldValue.increment(-1)
-                            });
-                            return 'Yorum başarıyla silindi ve fırsatın yorum sayacı azaltıldı.';
-                        } else {
-                            throw new Error('Yorum veritabanında bulunamadı.');
+                            if (comment.dealId) {
+                                await db.collection('deals').doc(comment.dealId).update({
+                                    commentCount: firebase.firestore.FieldValue.increment(-1)
+                                });
+                            }
+                            return 'Yorum başarıyla silindi ve fırsatın yorum sayacı güncellendi.';
                         }
+                        return 'Yorum silme işlemi tamamlandı.';
                     }
                 },
                 {
-                    text: 'Yazarı Yorum Yapmaktan Yasakla', action: async () => {
-                        const comment = await findCommentAndParent(reportedId);
-                        if (comment) {
-                            await db.collection('commentBannedUsers').doc(comment.userId).set({
-                                userId: comment.userId,
+                    id: 'ban_commenter',
+                    icon: 'speaker_notes_off',
+                    title: 'Yazarın Yeni Yorum Yapmasını Yasakla',
+                    desc: 'Kullanıcının yorum ekleme yetkisi elinden alınır.',
+                    isDanger: true,
+                    action: async (note) => {
+                        const comment = await findCommentAndParent(reportedId, report.targetDealId);
+                        const userId = comment ? comment.userId : (report.targetAuthorId || null);
+                        if (userId) {
+                            await db.collection('commentBannedUsers').doc(userId).set({
+                                userId: userId,
                                 bannedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                                reason: 'Uygunsuz yorum şikayeti nedeniyle engellendi'
+                                reason: note || 'Uygunsuz yorum şikayeti sebebiyle engellendi'
                             });
-                            return `Kullanıcı (${comment.userName}) yorum yazma engel listesine eklendi.`;
-                        } else {
-                            throw new Error('Yorum sahibi bilgisine erişilemedi.');
+                            return 'Kullanıcının yorum yazması engellendi.';
                         }
+                        throw new Error('Yorum yazarı bilgisine ulaşılamadı.');
                     }
                 },
                 {
-                    text: 'Sadece Şikayeti "Çözüldü" Olarak Kapat', action: async () => {
+                    id: 'ban_user_full',
+                    icon: 'person_off',
+                    title: 'Yazarı Tamamen Engelle (Sisteme Girişini Yasakla)',
+                    desc: 'Kullanıcı hesabı tamamen bloke edilir.',
+                    isDanger: true,
+                    action: async (note) => {
+                        const comment = await findCommentAndParent(reportedId, report.targetDealId);
+                        const userId = comment ? comment.userId : (report.targetAuthorId || null);
+                        if (userId) {
+                            await db.collection('blockedUsers').doc(userId).set({
+                                userId: userId,
+                                blockedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                reason: note || 'Yorum şikayeti nedeniyle hesap engellendi'
+                            });
+                            return 'Kullanıcı hesabı tamamen engellendi.';
+                        }
+                        throw new Error('Kullanıcı ID bilgisine ulaşılamadı.');
+                    }
+                },
+                {
+                    id: 'resolve_only',
+                    icon: 'check_circle',
+                    title: 'Sadece Şikayeti "Çözüldü" Olarak Kapat',
+                    desc: 'Yorum silinmez, şikayet işlemi tamamlandı olarak kapatılır.',
+                    isDanger: false,
+                    action: async (note) => {
+                        return 'Şikayet çözüldü olarak kapatıldı.';
+                    }
+                }
+            ];
+        } else if (type === 'message') {
+            options = [
+                {
+                    id: 'delete_message',
+                    icon: 'delete_outline',
+                    title: 'Mesajı Veritabanından Kalıcı Olarak Sil',
+                    desc: 'Şikayet edilen mesaj Firestore koleksiyonundan tamamen silinir.',
+                    isDanger: true,
+                    action: async (note) => {
+                        await db.collection('messages').doc(reportedId).delete();
+                        return 'Mesaj veritabanından kalıcı olarak silindi.';
+                    }
+                },
+                {
+                    id: 'ban_sender',
+                    icon: 'person_off',
+                    title: 'Mesajı Gönderen Kullanıcıyı Engelle',
+                    desc: 'Kural dışı mesaj gönderen kullanıcının sisteme girişi tamamen engellenir.',
+                    isDanger: true,
+                    action: async (note) => {
+                        const msgDoc = await db.collection('messages').doc(reportedId).get();
+                        const senderId = msgDoc.exists ? msgDoc.data().senderId : (report.targetAuthorId || null);
+                        if (senderId && senderId !== 'botkolik') {
+                            await db.collection('blockedUsers').doc(senderId).set({
+                                userId: senderId,
+                                blockedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                reason: note || 'Uygunsuz özel mesaj şikayeti nedeniyle engellendi'
+                            });
+                            return 'Mesajı gönderen kullanıcı tamamen engellendi.';
+                        }
+                        return 'Gönderen kullanıcı için işlem yapıldı.';
+                    }
+                },
+                {
+                    id: 'resolve_only',
+                    icon: 'check_circle',
+                    title: 'Sadece Şikayeti "Çözüldü" Olarak Kapat',
+                    desc: 'Mesaja dokunulmaz, şikayet çözüldü olarak işaretlenir.',
+                    isDanger: false,
+                    action: async (note) => {
+                        return 'Şikayet çözüldü olarak kapatıldı.';
+                    }
+                }
+            ];
+        } else if (type === 'user') {
+            options = [
+                {
+                    id: 'ban_user_full',
+                    icon: 'person_off',
+                    title: 'Kullanıcıyı Tamamen Engelle (Sisteme Girişini Yasakla)',
+                    desc: 'Kullanıcının uygulamaya girişi tamamen engellenir.',
+                    isDanger: true,
+                    action: async (note) => {
+                        await db.collection('blockedUsers').doc(reportedId).set({
+                            userId: reportedId,
+                            blockedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            reason: note || 'Kullanıcı şikayeti üzerine engellendi'
+                        });
+                        return 'Kullanıcı sisteme giriş engel listesine eklendi.';
+                    }
+                },
+                {
+                    id: 'ban_user_deals',
+                    icon: 'local_offer',
+                    title: 'Kullanıcının Fırsat Paylaşmasını Engelle',
+                    desc: 'Kullanıcının yeni fırsat paylaşması yasaklanır.',
+                    isDanger: true,
+                    action: async (note) => {
+                        await db.collection('dealBannedUsers').doc(reportedId).set({
+                            userId: reportedId,
+                            bannedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            reason: note || 'Kullanıcı şikayeti üzerine fırsat paylaşımı engellendi'
+                        });
+                        return 'Kullanıcının fırsat paylaşması engellendi.';
+                    }
+                },
+                {
+                    id: 'ban_user_comments',
+                    icon: 'comment',
+                    title: 'Kullanıcının Yorum Yapmasını Engelle',
+                    desc: 'Kullanıcının yorum eklemesi yasaklanır.',
+                    isDanger: true,
+                    action: async (note) => {
+                        await db.collection('commentBannedUsers').doc(reportedId).set({
+                            userId: reportedId,
+                            bannedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            reason: note || 'Kullanıcı şikayeti üzerine yorum yapması engellendi'
+                        });
+                        return 'Kullanıcının yorum yapması engellendi.';
+                    }
+                },
+                {
+                    id: 'resolve_only',
+                    icon: 'check_circle',
+                    title: 'Sadece Şikayeti "Çözüldü" Olarak Kapat',
+                    desc: 'Kullanıcıya yaptırım uygulanmaz, şikayet kapatılır.',
+                    isDanger: false,
+                    action: async (note) => {
                         return 'Şikayet çözüldü olarak kapatıldı.';
                     }
                 }
             ];
         } else {
-            actionTitle = 'Şikayet İçin İşlem';
             options = [
                 {
-                    text: 'Şikayeti "Çözüldü" Olarak Kapat', action: async () => {
+                    id: 'resolve_only',
+                    icon: 'check_circle',
+                    title: 'Şikayeti "Çözüldü" Olarak Kapat',
+                    desc: 'Şikayet incelenip kapatılır.',
+                    isDanger: false,
+                    action: async (note) => {
                         return 'Şikayet kapatıldı.';
                     }
                 }
             ];
         }
 
-        let promptText = `${actionTitle}\nLütfen yapmak istediğiniz işlemi seçin (Seçmek için başındaki numarayı yazın):\n\n`;
-        options.forEach((opt, idx) => {
-            promptText += `${idx + 1}. ${opt.text}\n`;
-        });
-        promptText += '\nİptal etmek için boş bırakın veya İptal yazın.';
+        currentReportActionOptions = options;
 
-        const response = prompt(promptText);
-        if (response === null || response.trim() === '' || response.toLowerCase() === 'iptal') {
-            return;
+        optionsContainer.innerHTML = options.map((opt, idx) => `
+            <label class="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-primary/50 dark:hover:border-primary/50 bg-white dark:bg-surface-darker cursor-pointer transition-all ${idx === 0 ? 'ring-2 ring-primary/20 border-primary' : ''}">
+                <input type="radio" name="reportActionOption" value="${opt.id}" ${idx === 0 ? 'checked' : ''} class="mt-1 text-primary focus:ring-primary h-4 w-4">
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[18px] ${opt.isDanger ? 'text-red-500' : 'text-primary'}">${opt.icon}</span>
+                        <p class="text-xs font-bold ${opt.isDanger ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white'}">${escapeHtml(opt.title)}</p>
+                    </div>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">${escapeHtml(opt.desc)}</p>
+                </div>
+            </label>
+        `).join('');
+
+        actionModal.classList.remove('hidden');
+    } catch (err) {
+        console.error('❌ Error opening action modal:', err);
+        showError('Aksiyon penceresi açılırken hata oluştu: ' + err.message);
+    }
+};
+
+window.executeSelectedReportAction = async function () {
+    if (!currentReportUnderAction || !currentReportActionOptions) return;
+
+    const selectedRadio = document.querySelector('input[name="reportActionOption"]:checked');
+    if (!selectedRadio) {
+        showError('Lütfen bir işlem seçiniz!');
+        return;
+    }
+
+    const selectedOptionId = selectedRadio.value;
+    const selectedOpt = currentReportActionOptions.find(o => o.id === selectedOptionId);
+    if (!selectedOpt) {
+        showError('Geçersiz işlem seçimi!');
+        return;
+    }
+
+    const noteInput = document.getElementById('reportActionNote');
+    const adminNote = noteInput ? noteInput.value.trim() : '';
+    const confirmBtn = document.getElementById('reportActionConfirmBtn');
+
+    try {
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">sync</span> Uygulanıyor...';
         }
 
-        const selectedIdx = parseInt(response.trim()) - 1;
-        if (isNaN(selectedIdx) || selectedIdx < 0 || selectedIdx >= options.length) {
-            showError('Geçersiz seçim yapıldı!');
-            return;
-        }
+        console.log(`🚀 Executing action "${selectedOptionId}" for report ${currentReportUnderAction.reportId}`);
+        const resultMsg = await selectedOpt.action(adminNote);
 
-        showLoadingIndicator(true);
-        const resultMsg = await options[selectedIdx].action();
-
-        await db.collection('reports').doc(reportId).update({
+        await db.collection('reports').doc(currentReportUnderAction.reportId).update({
             status: 'action_taken',
+            actionType: selectedOptionId,
+            actionNote: adminNote,
+            resolvedAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        showLoadingIndicator(false);
+        closeReportActionModal();
+        closeReportDetailModal();
+
         showSuccess(`İşlem Başarılı: ${resultMsg}`);
     } catch (err) {
-        showLoadingIndicator(false);
-        console.error('❌ Action error:', err);
-        showError('İşlem yapılırken hata oluştu: ' + err.message);
+        console.error('❌ Action execution error:', err);
+        showError('İşlem uygulanırken hata oluştu: ' + err.message);
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span> İşlemi Uygula';
+        }
     }
-}
+};
 
 function showLoadingIndicator(show) {
     if (loadingIndicator) {

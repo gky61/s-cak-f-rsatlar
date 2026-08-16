@@ -703,6 +703,33 @@ class FirestoreService {
     } catch (e) { return true; }
   }
 
+  Future<bool> isBotkolikChatEnabled() async {
+    try {
+      final doc = await firestore.collection('settings').doc('app').get();
+      return doc.data()?['botkolikChatEnabled'] ?? true;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  Future<bool> setBotkolikChatEnabled(bool enabled) async {
+    try {
+      await firestore.collection('settings').doc('app').set({
+        'botkolikChatEnabled': enabled,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Stream<bool> botkolikChatEnabledStream() => firestore
+      .collection('settings')
+      .doc('app')
+      .snapshots()
+      .map((s) => s.data()?['botkolikChatEnabled'] ?? true);
+
   void _log(String msg) {
     if (kDebugMode) {
       print('[FirestoreService] $msg');

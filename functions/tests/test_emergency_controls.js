@@ -234,7 +234,26 @@ async function runTests() {
     if (computedApproved !== false) throw new Error('Onay gerekirken fırsat onaysız olarak işaretlenmedi!');
     console.log('   🎉 [BAŞARILI] Onay gereksinimi aktifken fırsat onay bekliyor olarak işaretleniyor.');
 
-    console.log('\n🌟 TÜM MEVCUT ACİL DURUM KONTROLLERİ VE YENİ ONAY BYPASS AYARI BAŞARIYLA DOĞRULANDI!');
+    // ========================================================
+    // TEST 6: Botkolik Mesajlaşma Kontrolü (botkolikChatEnabled)
+    // ========================================================
+    console.log('\n--- TEST 6: Botkolik Mesajlaşma Kontrolü (`botkolikChatEnabled`) ---');
+
+    // Kapat
+    await db.collection('settings').doc('app').set({ botkolikChatEnabled: false }, { merge: true });
+    doc = await db.collection('settings').doc('app').get();
+    console.log('   ❌ botkolikChatEnabled = false olarak ayarlandı.');
+    if (doc.data().botkolikChatEnabled !== false) throw new Error('botkolikChatEnabled kapatılamadı!');
+    console.log('   🎉 [BAŞARILI] Botkolik mesajlaşması veritabanında başarıyla kapatıldı.');
+
+    // Aç
+    await db.collection('settings').doc('app').set({ botkolikChatEnabled: true }, { merge: true });
+    doc = await db.collection('settings').doc('app').get();
+    console.log('   ✅ botkolikChatEnabled = true olarak ayarlandı.');
+    if (doc.data().botkolikChatEnabled !== true) throw new Error('botkolikChatEnabled açılamadı!');
+    console.log('   🎉 [BAŞARILI] Botkolik mesajlaşması veritabanında başarıyla açıldı.');
+
+    console.log('\n🌟 TÜM MEVCUT ACİL DURUM KONTROLLERİ VE YENİ BOTKOLİK MESAJLAŞMA AYARI BAŞARIYLA DOĞRULANDI!');
 
   } catch (err) {
     console.error('\n❌ TEST BAŞARISIZ:', err.message);
@@ -243,7 +262,7 @@ async function runTests() {
     console.log('\n🔄 Orijinal sistem ayarları geri yükleniyor...');
     
     // Geri yükleme
-    if (originalAppConfig.hasOwnProperty('dealSharingEnabled')) {
+    if (Object.keys(originalAppConfig).length > 0) {
       await db.collection('settings').doc('app').set(originalAppConfig);
     }
     if (originalBotConfig.hasOwnProperty('botEnabled')) {

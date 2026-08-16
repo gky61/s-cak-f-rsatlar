@@ -812,6 +812,10 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                               context,
                               reportedId: comment.id,
                               type: 'comment',
+                              targetDealId: widget.deal.id,
+                              targetContent: comment.text,
+                              targetAuthor: comment.userName,
+                              targetAuthorId: comment.userId,
                             );
                           }
                         },

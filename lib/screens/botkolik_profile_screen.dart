@@ -31,6 +31,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
 
   bool _isFollowing = false;
   bool _isFollowNotificationEnabled = false;
+  bool _isHowItWorksExpanded = false;
 
   final List<Map<String, dynamic>> _categories = [
     {'id': 'all', 'name': 'Tümü', 'icon': Icons.grid_view_rounded},
@@ -609,170 +610,178 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
                 const SizedBox(height: 16),
 
                 // ─── AKSİYON ÇUBUĞU (Takip Et + Zil + Mesaj) ───
-                Row(
-                  children: [
-                    // 1. Takip Butonu
-                    Expanded(
-                      flex: 1,
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _toggleFollow,
-                          borderRadius: BorderRadius.circular(12),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeInOut,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: _isFollowing
-                                  ? AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.10)
-                                  : AppTheme.primary,
+                StreamBuilder<bool>(
+                  stream: _firestoreService.botkolikChatEnabledStream(),
+                  builder: (context, snapshot) {
+                    final isChatEnabled = snapshot.data ?? true;
+
+                    return Row(
+                      children: [
+                        // 1. Takip Butonu
+                        Expanded(
+                          flex: 1,
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _toggleFollow,
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _isFollowing
-                                    ? AppTheme.primary.withValues(alpha: 0.7)
-                                    : Colors.transparent,
-                                width: 1.2,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeInOut,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: _isFollowing
+                                      ? AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.10)
+                                      : AppTheme.primary,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: _isFollowing
+                                        ? AppTheme.primary.withValues(alpha: 0.7)
+                                        : Colors.transparent,
+                                    width: 1.2,
+                                  ),
+                                  boxShadow: [
+                                    if (!_isFollowing)
+                                      BoxShadow(
+                                        color: AppTheme.primary.withValues(alpha: 0.28),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2.5),
+                                      ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      _isFollowing
+                                          ? Icons.check_circle_rounded
+                                          : Icons.person_add_rounded,
+                                      size: 16,
+                                      color: _isFollowing ? AppTheme.primary : Colors.white,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _isFollowing ? 'Takip Ediliyor' : 'Takip Et',
+                                      style: TextStyle(
+                                        color: _isFollowing ? AppTheme.primary : Colors.white,
+                                        fontWeight: _isFollowing ? FontWeight.w700 : FontWeight.w800,
+                                        fontSize: 12.5,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              boxShadow: [
-                                if (!_isFollowing)
-                                  BoxShadow(
-                                    color: AppTheme.primary.withValues(alpha: 0.28),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2.5),
-                                  ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  _isFollowing
-                                      ? Icons.check_circle_rounded
-                                      : Icons.person_add_rounded,
-                                  size: 16,
-                                  color: _isFollowing ? AppTheme.primary : Colors.white,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  _isFollowing ? 'Takip Ediliyor' : 'Takip Et',
-                                  style: TextStyle(
-                                    color: _isFollowing ? AppTheme.primary : Colors.white,
-                                    fontWeight: _isFollowing ? FontWeight.w700 : FontWeight.w800,
-                                    fontSize: 12.5,
-                                    letterSpacing: -0.2,
-                                  ),
-                                ),
-                              ],
                             ),
                           ),
                         ),
-                      ),
-                    ),
 
-                    // 2. Bildirim Zili
-                    if (_isFollowing) ...[
-                      const SizedBox(width: 8),
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _toggleFollowNotification,
-                          borderRadius: BorderRadius.circular(12),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: _isFollowNotificationEnabled
-                                  ? const Color(0xFF10B981).withValues(alpha: isDark ? 0.18 : 0.12)
-                                  : (isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9)),
+                        // 2. Bildirim Zili
+                        if (_isFollowing) ...[
+                          const SizedBox(width: 8),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _toggleFollowNotification,
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _isFollowNotificationEnabled
-                                    ? const Color(0xFF10B981).withValues(alpha: 0.6)
-                                    : (isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFCBD5E1)),
-                                width: 1.2,
-                              ),
-                            ),
-                            child: Icon(
-                              _isFollowNotificationEnabled
-                                  ? Icons.notifications_active_rounded
-                                  : Icons.notifications_off_outlined,
-                              size: 18,
-                              color: _isFollowNotificationEnabled
-                                  ? const Color(0xFF10B981)
-                                  : (isDark ? Colors.grey[400] : Colors.grey[600]),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(width: 8),
-
-                    // 3. Mesajlaşma Butonu (Botkolik Öneri & Geri Bildirim)
-                    Expanded(
-                      flex: 1,
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            final currentUser = _authService.currentUser;
-                            if (currentUser == null) {
-                              showGuestLoginBottomSheet(
-                                context,
-                                title: 'Giriş Yapın',
-                                message: 'Botkolik ile mesajlaşmak, öneri veya geri bildirim göndermek için lütfen giriş yapın.',
-                              );
-                              return;
-                            }
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const MessageScreen(
-                                  otherUserId: 'botkolik',
-                                  otherUserName: 'Botkolik',
-                                  otherUserImageUrl: 'assets/botkolik.webp',
-                                ),
-                              ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: isDark ? AppTheme.primary.withValues(alpha: 0.15) : AppTheme.primary.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: AppTheme.primary.withValues(alpha: isDark ? 0.35 : 0.30),
-                                width: 1,
-                              ),
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.chat_bubble_outline_rounded,
-                                  size: 15,
-                                  color: AppTheme.primary,
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Mesaj',
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.primary,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: _isFollowNotificationEnabled
+                                      ? const Color(0xFF10B981).withValues(alpha: isDark ? 0.18 : 0.12)
+                                      : (isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9)),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: _isFollowNotificationEnabled
+                                        ? const Color(0xFF10B981).withValues(alpha: 0.6)
+                                        : (isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFCBD5E1)),
+                                    width: 1.2,
                                   ),
                                 ),
-                              ],
+                                child: Icon(
+                                  _isFollowNotificationEnabled
+                                      ? Icons.notifications_active_rounded
+                                      : Icons.notifications_off_outlined,
+                                  size: 18,
+                                  color: _isFollowNotificationEnabled
+                                      ? const Color(0xFF10B981)
+                                      : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-                  ],
+                        ],
+
+                        // 3. Mesajlaşma Butonu (Botkolik Öneri & Geri Bildirim)
+                        if (isChatEnabled) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 1,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  HapticFeedback.lightImpact();
+                                  final currentUser = _authService.currentUser;
+                                  if (currentUser == null) {
+                                    showGuestLoginBottomSheet(
+                                      context,
+                                      title: 'Giriş Yapın',
+                                      message: 'Botkolik ile mesajlaşmak, öneri veya geri bildirim göndermek için lütfen giriş yapın.',
+                                    );
+                                    return;
+                                  }
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const MessageScreen(
+                                        otherUserId: 'botkolik',
+                                        otherUserName: 'Botkolik',
+                                        otherUserImageUrl: 'assets/botkolik.webp',
+                                      ),
+                                    ),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: isDark ? AppTheme.primary.withValues(alpha: 0.15) : AppTheme.primary.withValues(alpha: 0.10),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: AppTheme.primary.withValues(alpha: isDark ? 0.35 : 0.30),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.chat_bubble_outline_rounded,
+                                        size: 15,
+                                        color: AppTheme.primary,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Mesaj',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppTheme.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -789,26 +798,32 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
   }) {
     final features = [
       {
-        'title': 'Akıllı Link Analizi',
-        'desc': 'Gönderdiğiniz bağlantıları anında tarayarak ürün detaylarını, güncel fiyatı ve indirimleri anında tespit eder.',
+        'title': 'Akıllı Link Analizi & Otomatik Doldurma',
+        'desc': 'Fırsat paylaşırken linki yapıştırdığınız anda devreye girer; ürün başlığı, görsel, güncel fiyat ve mağaza bilgilerini otomatik doldurur.',
         'icon': Icons.auto_awesome_rounded,
         'color': const Color(0xFF00F0FF),
       },
       {
+        'title': 'Kupon & İndirim Kodu Radarı',
+        'desc': 'Popüler mağazaların güncel indirim kuponlarını 7/24 otomatik tarar, doğrular ve Kuponlar sekmesinde topluluğa sunar.',
+        'icon': Icons.confirmation_number_rounded,
+        'color': const Color(0xFFF59E0B),
+      },
+      {
         'title': 'Sepet & Özel İndirim Hesaplama',
-        'desc': 'Mağazaya özel sepetteki indirimleri, premium üyelik avantajlarını anında tespit eder ve net indirim oranını hesaplar.',
+        'desc': 'Mağazaya özel sepetteki indirimleri, kuponları ve ek avantajları anında tespit ederek gerçek indirim oranını hesaplar.',
         'icon': Icons.shopping_bag_rounded,
         'color': const Color(0xFF6366F1),
       },
       {
         'title': 'Fiyat Anomalisi Tespiti',
-        'desc': 'İnternet üzerindeki milisaniyelik fiyat dalgalanmalarını ve dev indirimleri anında yakalar.',
+        'desc': 'İnternet üzerindeki milisaniyelik fiyat dalgalanmalarını ve hatalı fiyat indirimlerini anında yakalar.',
         'icon': Icons.candlestick_chart_rounded,
         'color': const Color(0xFF10B981),
       },
       {
         'title': 'Flaş İndirim & Stok Radarı',
-        'desc': 'Çok kısa süreli flaş indirimleri ve sınırlı stok seviyelerini takip eder, tükenmeden önce sizi haberdar eder.',
+        'desc': 'Çok kısa süreli flaş indirimleri ve sınırlı stok seviyelerini takip eder, tükenmeden önce fırsat akışına taşır.',
         'icon': Icons.flash_on_rounded,
         'color': AppTheme.primary,
       },
@@ -831,113 +846,202 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Padding(
-            padding: const EdgeInsets.all(18.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Başlık
-                Row(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  _isHowItWorksExpanded = !_isHowItWorksExpanded;
+                });
+              },
+              borderRadius: BorderRadius.circular(24),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.smart_toy_rounded,
-                        size: 16,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'BOTKOLİK NASIL ÇALIŞIR?',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 14),
-
-                // 4 Özellik Kartı
-                ...features.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final feat = entry.value;
-                  final color = feat['color'] as Color;
-                  final isLast = index == features.length - 1;
-
-                  return Padding(
-                    padding: EdgeInsets.only(bottom: isLast ? 0 : 10.0),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.03)
-                            : const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.06)
-                              : const Color(0xFFE2E8F0),
-                          width: 0.9,
-                        ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            margin: const EdgeInsets.only(top: 2),
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: isDark ? 0.15 : 0.10),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: color.withValues(alpha: isDark ? 0.35 : 0.20),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Icon(feat['icon'] as IconData, size: 18, color: color),
+                    // Başlık Satırı (Açılır / Kapanır Tetikleyici)
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          child: const Icon(
+                            Icons.smart_toy_rounded,
+                            size: 16,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
                               children: [
-                                Text(
-                                  feat['title'] as String,
+                                TextSpan(
+                                  text: 'Bot',
                                   style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const TextSpan(
+                                  text: 'kolik',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppTheme.primary,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' Nasıl Çalışır?',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
                                     fontWeight: FontWeight.w800,
                                     color: isDark ? Colors.white : const Color(0xFF0F172A),
                                     letterSpacing: -0.2,
                                   ),
                                 ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  feat['desc'] as String,
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                    height: 1.4,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
                               ],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE2E8F0),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            '5 Yetenek',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.grey[300] : const Color(0xFF475569),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        AnimatedRotation(
+                          turns: _isHowItWorksExpanded ? 0.5 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 20,
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          ),
+                        ),
+                      ],
                     ),
-                  );
-                }),
-              ],
+
+                    // Açılır / Kapanır İçerik
+                    AnimatedCrossFade(
+                      firstChild: Padding(
+                        padding: const EdgeInsets.only(top: 8.0, left: 2.0),
+                        child: Text(
+                          'Otomatik link analizi, kupon radarı, fiyat anomalisi ve flaş indirim yeteneklerini keşfedin.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                      secondChild: Padding(
+                        padding: const EdgeInsets.only(top: 14.0),
+                        child: Column(
+                          children: features.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final feat = entry.value;
+                            final color = feat['color'] as Color;
+                            final isLast = index == features.length - 1;
+
+                            return Padding(
+                              padding: EdgeInsets.only(bottom: isLast ? 0 : 10.0),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.03)
+                                      : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.06)
+                                        : const Color(0xFFE2E8F0),
+                                    width: 0.9,
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      margin: const EdgeInsets.only(top: 2),
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: color.withValues(alpha: isDark ? 0.15 : 0.10),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: color.withValues(alpha: isDark ? 0.35 : 0.20),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: Icon(feat['icon'] as IconData, size: 18, color: color),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            feat['title'] as String,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w800,
+                                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                              letterSpacing: -0.2,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            feat['desc'] as String,
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                              height: 1.4,
+                                              fontWeight: FontWeight.w400,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      crossFadeState: _isHowItWorksExpanded
+                          ? CrossFadeState.showSecond
+                          : CrossFadeState.showFirst,
+                      duration: const Duration(milliseconds: 240),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

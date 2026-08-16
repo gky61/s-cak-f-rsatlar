@@ -5,7 +5,6 @@ import '../services/report_service.dart';
 import '../services/firestore_service.dart';
 import '../screens/deal_detail_screen.dart';
 import '../screens/profile_screen.dart';
-import '../theme/app_theme.dart';
 
 class AdminReportsList extends StatefulWidget {
   final String status; // 'pending' veya 'dismissed'/'action_taken'
@@ -120,6 +119,11 @@ class _AdminReportsListState extends State<AdminReportsList> {
         typeColor = Colors.purple;
         typeLabel = 'Kullanıcı';
         break;
+      case 'message':
+        typeIcon = Icons.chat_bubble_outline_rounded;
+        typeColor = Colors.teal;
+        typeLabel = 'Mesaj';
+        break;
       default:
         typeIcon = Icons.report;
         typeColor = Colors.grey;
@@ -135,7 +139,7 @@ class _AdminReportsListState extends State<AdminReportsList> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: typeColor.withOpacity(0.1),
+              color: typeColor.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
             ),
             child: Row(
@@ -314,6 +318,22 @@ class _AdminReportsListState extends State<AdminReportsList> {
                    if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Kullanıcı engellendi ve rapor kapatıldı'), backgroundColor: Colors.green),
+                    );
+                  }
+                },
+              ),
+
+             if (report.type == 'message')
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                title: const Text('Mesajı Kalıcı Olarak Sil'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _firestoreService.deleteUserMessage(report.reportedId);
+                  await _updateStatus(report, 'action_taken');
+                   if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Mesaj silindi ve rapor kapatıldı'), backgroundColor: Colors.green),
                     );
                   }
                 },

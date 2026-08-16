@@ -1345,12 +1345,30 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.only(top: 2),
-                          child: Icon(
-                            Icons.auto_awesome_rounded,
-                            color: Color(0xFF0284C7),
-                            size: 20,
+                        // Botkolik Profil Fotoğrafı
+                        Container(
+                          margin: const EdgeInsets.only(top: 2),
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppTheme.primary.withValues(alpha: 0.6),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primary.withValues(alpha: 0.2),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: ClipOval(
+                            child: Image.asset(
+                              'assets/botkolik.webp',
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1363,7 +1381,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                                 color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E3A8A),
                               ),
                               children: [
-                                const TextSpan(text: 'Linki buraya yapıştırdığınızda '),
+                                const TextSpan(text: 'Linki buraya yapıştırdığınızda '), 
                                 TextSpan(
                                   text: 'Bot',
                                   style: TextStyle(

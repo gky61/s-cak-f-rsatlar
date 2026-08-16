@@ -217,10 +217,10 @@ service cloud.firestore {
     // REPORTS (Şikayet sistemi)
     // ========================================
     match /reports/{reportId} {
-      // Sadece admin okuyabilir
-      allow read: if isAdmin();
-      // Giriş yapmış kullanıcılar şikayet edebilir
-      allow create: if canWrite();
+      // Adminler tüm raporları, giriş yapmış kullanıcılar kendi oluşturduğu raporları okuyabilir
+      allow read: if isAdmin() || (isAuthenticated() && (resource == null || resource.data.reportedBy == userId()));
+      // Giriş yapmış ve engellenmemiş kullanıcılar kendi adına şikayet oluşturabilir
+      allow create: if canWrite() && request.resource.data.reportedBy == userId();
       // Sadece admin güncelleyebilir/silebilir
       allow update, delete: if isAdmin();
     }

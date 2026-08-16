@@ -13,9 +13,13 @@ class ReportService {
   /// Yeni bir rapor oluşturur
   Future<bool> submitReport({
     required String reportedId,
-    required String type, // 'deal', 'comment', 'user'
+    required String type, // 'deal', 'comment', 'user', 'message'
     required String reason,
     String? description,
+    String? targetDealId,
+    String? targetContent,
+    String? targetAuthor,
+    String? targetAuthorId,
   }) async {
     try {
       final user = _authService.currentUser;
@@ -23,32 +27,31 @@ class ReportService {
         throw Exception('Rapor oluşturmak için giriş yapmalısınız.');
       }
 
-      // Aynı kullanıcı aynı içeriği daha önce raporlamış mı kontrol et
-      // Bu sorgu index gerektirebilir, şimdilik basit tutuyoruz.
-      // İleride performans sorunu olursa: reportedId_reportedBy kombinasyonu ile doc ID oluşturulabilir.
-      final existingReports = await _reportsCollection
-          .where('reportedId', isEqualTo: reportedId)
-          .where('reportedBy', isEqualTo: user.uid)
-          .limit(1)
-          .get();
+      // Aynı kullanıcının aynı içeriğe mükerrer rapor açmasını önlemek için deterministik ID kullan
+      final docId = '${reportedId}_${user.uid}';
+      final reportDocRef = _reportsCollection.doc(docId);
+      final existingDoc = await reportDocRef.get();
 
-      if (existingReports.docs.isNotEmpty) {
-        // Zaten raporlamış, spam'i önlemek için başarılı dönelim ama işlem yapmayalım
+      if (existingDoc.exists) {
         if (kDebugMode) print('⚠️ Kullanıcı bu içeriği zaten raporlamış.');
         return true;
       }
 
-      final reportData = {
+      final reportData = <String, dynamic>{
         'reportedId': reportedId,
         'reportedBy': user.uid,
-        'type': type, // deal, comment, user
+        'type': type, // deal, comment, user, message
         'reason': reason,
-        'description': description,
+        'description': description ?? '',
+        if (targetDealId != null) 'targetDealId': targetDealId,
+        if (targetContent != null) 'targetContent': targetContent,
+        if (targetAuthor != null) 'targetAuthor': targetAuthor,
+        if (targetAuthorId != null) 'targetAuthorId': targetAuthorId,
         'createdAt': FieldValue.serverTimestamp(),
         'status': 'pending', // pending, reviewed, dismissed, action_taken
       };
 
-      await _reportsCollection.add(reportData);
+      await reportDocRef.set(reportData);
       
       if (kDebugMode) print('✅ Rapor başarıyla oluşturuldu: $type - $reportedId');
       return true;

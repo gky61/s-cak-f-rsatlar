@@ -2586,6 +2586,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     context,
                     reportedId: user.uid,
                     type: 'user',
+                    targetAuthor: user.nickname ?? user.username,
+                    targetAuthorId: user.uid,
                   );
                 },
               ),

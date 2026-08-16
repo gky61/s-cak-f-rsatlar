@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/message.dart';
+import '../models/deal.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
@@ -83,6 +84,8 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   Message? _replyingToMessage;
   final List<Message> _optimisticMessages = [];
   final Map<String, LinkPreviewResult?> _urlPreviews = {};
+  final Map<String, Deal?> _parsedDealsCache = {};
+  final Set<String> _fetchingDealIds = {};
 
   Timer? _typingTimer;
   bool _isCurrentlyTyping = false;
@@ -256,6 +259,31 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         otherUserId: widget.otherUserId,
         isTyping: true,
       );
+    }
+
+    // Fırsat linki otomatik algılama ve önizleme barına ekleme (örn: https://firsatkolik.app/deal/{id})
+    if (_attachedDeal == null && text.isNotEmpty) {
+      final dealLinkRegex = RegExp(r'(?:https?:\/\/)?(?:www\.)?firsatkolik\.app\/deal\/([a-zA-Z0-9_-]+)|firsatkolik:\/\/deal\/([a-zA-Z0-9_-]+)');
+      final match = dealLinkRegex.firstMatch(text);
+      if (match != null) {
+        final dealId = match.group(1) ?? match.group(2);
+        if (dealId != null && dealId.isNotEmpty) {
+          _firestoreService.getDeal(dealId).then((deal) {
+            if (mounted && deal != null && _attachedDeal == null) {
+              final formattedPrice = deal.price > 0 ? DynamicCurrencyFormatter().format(deal.price) : '';
+              setState(() {
+                _attachedDeal = AttachedDealInfo(
+                  id: deal.id,
+                  title: deal.title,
+                  imageUrl: deal.imageUrl,
+                  price: formattedPrice,
+                  store: deal.store,
+                );
+              });
+            }
+          }).catchError((_) {});
+        }
+      }
     }
 
     _typingTimer?.cancel();
@@ -586,6 +614,9 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                         context,
                         reportedId: message.id,
                         type: 'message',
+                        targetContent: message.text,
+                        targetAuthor: message.senderName,
+                        targetAuthorId: message.senderId,
                       );
                     },
                   ),
@@ -679,6 +710,8 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     context,
                     reportedId: widget.otherUserId,
                     type: 'user',
+                    targetAuthor: widget.otherUserName,
+                    targetAuthorId: widget.otherUserId,
                   );
                 },
               ),
@@ -1043,12 +1076,16 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
 
   // --- WIDGET BUILDERS ---
 
-  Widget _buildEmbeddedDealCard(
-    Message message,
-    bool isMe,
-    bool isDark,
-    Color primaryColor,
-  ) {
+  Widget _buildEmbeddedDealCard({
+    required String dealId,
+    required String dealTitle,
+    String? dealImageUrl,
+    String? dealPrice,
+    String? dealStore,
+    required bool isMe,
+    required bool isDark,
+    required Color primaryColor,
+  }) {
     final cardBg = isMe
         ? (isDark ? Colors.black.withValues(alpha: 0.28) : Colors.black.withValues(alpha: 0.18))
         : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white);
@@ -1073,6 +1110,16 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     final ctaColor = isMe
         ? Colors.white
         : (isDark ? const Color(0xFF60A5FA) : primaryColor);
+
+    String displayPrice = '';
+    if (dealPrice != null && dealPrice.trim().isNotEmpty) {
+      final p = dealPrice.trim();
+      if (p.endsWith('TL') || p.endsWith('₺') || p.startsWith('₺')) {
+        displayPrice = p;
+      } else {
+        displayPrice = '$p TL';
+      }
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1099,7 +1146,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => DealDetailScreen(dealId: message.dealId!),
+                builder: (_) => DealDetailScreen(dealId: dealId),
               ),
             );
           },
@@ -1116,9 +1163,9 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     width: 50,
                     height: 50,
                     color: isDark ? Colors.grey[850] : const Color(0xFFF1F5F9),
-                    child: message.dealImageUrl != null && message.dealImageUrl!.isNotEmpty
+                    child: dealImageUrl != null && dealImageUrl.isNotEmpty
                         ? CachedNetworkImage(
-                            imageUrl: message.dealImageUrl!,
+                            imageUrl: dealImageUrl,
                             fit: BoxFit.cover,
                             placeholder: (_, __) => Container(
                               color: isDark ? Colors.grey[800] : const Color(0xFFE2E8F0),
@@ -1166,11 +1213,11 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                               ],
                             ),
                           ),
-                          if (message.dealStore != null && message.dealStore!.isNotEmpty) ...[
+                          if (dealStore != null && dealStore.isNotEmpty) ...[
                             const SizedBox(width: 5),
                             Flexible(
                               child: Text(
-                                '• ${message.dealStore}',
+                                '• $dealStore',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -1185,7 +1232,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        message.dealTitle ?? 'Fırsat',
+                        dealTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1198,9 +1245,9 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          if (message.dealPrice != null && message.dealPrice!.isNotEmpty)
+                          if (displayPrice.isNotEmpty)
                             Text(
-                              '${message.dealPrice} TL',
+                              displayPrice,
                               style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w900,
@@ -1239,6 +1286,55 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         ),
       ),
     );
+  }
+
+  Widget _buildParsedDealLinkPreview(
+    String text,
+    bool isMe,
+    bool isDark,
+    Color primaryColor,
+  ) {
+    final dealLinkRegex = RegExp(r'(?:https?:\/\/)?(?:www\.)?firsatkolik\.app\/deal\/([a-zA-Z0-9_-]+)|firsatkolik:\/\/deal\/([a-zA-Z0-9_-]+)');
+    final match = dealLinkRegex.firstMatch(text);
+    if (match == null) return const SizedBox.shrink();
+
+    final dealId = match.group(1) ?? match.group(2);
+    if (dealId == null || dealId.isEmpty) return const SizedBox.shrink();
+
+    if (_parsedDealsCache.containsKey(dealId)) {
+      final deal = _parsedDealsCache[dealId];
+      if (deal == null) return const SizedBox.shrink();
+      final formattedPrice = deal.price > 0 ? DynamicCurrencyFormatter().format(deal.price) : '';
+      return _buildEmbeddedDealCard(
+        dealId: deal.id,
+        dealTitle: deal.title,
+        dealImageUrl: deal.imageUrl,
+        dealPrice: formattedPrice,
+        dealStore: deal.store,
+        isMe: isMe,
+        isDark: isDark,
+        primaryColor: primaryColor,
+      );
+    }
+
+    if (!_fetchingDealIds.contains(dealId)) {
+      _fetchingDealIds.add(dealId);
+      _firestoreService.getDeal(dealId).then((deal) {
+        if (mounted) {
+          setState(() {
+            _parsedDealsCache[dealId] = deal;
+          });
+        }
+      }).catchError((_) {
+        if (mounted) {
+          setState(() {
+            _parsedDealsCache[dealId] = null;
+          });
+        }
+      });
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _buildEmptyState(
@@ -1541,9 +1637,20 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     if (message.replyToSenderName != null && message.replyToText != null)
                       _buildQuotedBlock(message.replyToSenderName!, message.replyToText!, isMe, isDark, primaryColor),
 
-                    // Gömülü Fırsat Kartı (Deal Context)
+                    // Gömülü Fırsat Kartı (Deal Context veya Paylaşılan Link)
                     if (message.dealId != null && message.dealId!.isNotEmpty)
-                      _buildEmbeddedDealCard(message, isMe, isDark, primaryColor),
+                      _buildEmbeddedDealCard(
+                        dealId: message.dealId!,
+                        dealTitle: message.dealTitle ?? 'Fırsat',
+                        dealImageUrl: message.dealImageUrl,
+                        dealPrice: message.dealPrice,
+                        dealStore: message.dealStore,
+                        isMe: isMe,
+                        isDark: isDark,
+                        primaryColor: primaryColor,
+                      )
+                    else
+                      _buildParsedDealLinkPreview(message.text, isMe, isDark, primaryColor),
 
                     // Mesaj Metni (Keskin, net ve yüksek kontrastlı)
                     Text(

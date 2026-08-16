@@ -999,25 +999,26 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     }
 
     // Görsel var mı kontrol et (Telegram mesajında veya Link önizlemesinde)
-    const hasPhoto = (currentMessage.media && (
-      currentMessage.media.photo ||
-      (currentMessage.media.document && currentMessage.media.document.mimeType && currentMessage.media.document.mimeType.startsWith('image/'))
-    )) || webpageHasPhoto;
+    // DİKKAT: Çoklu link içeren mesajlarda mesaj kapağı (photo) rastgele diğer ürünlere atanmamalıdır.
+    const isSingleLinkMessage = !rawLinks || rawLinks.length <= 1;
+    const hasValidPhoto = webpageHasPhoto || (isSingleLinkMessage && (
+      (currentMessage.media && (
+        currentMessage.media.photo ||
+        (currentMessage.media.document && currentMessage.media.document.mimeType && currentMessage.media.document.mimeType.startsWith('image/'))
+      ))
+    ));
 
-    // Eğer scraper görsel bulamadıysa fakat Telegram mesajında/önizlemesinde görsel varsa Telegram görselini kullan
-    if (!imageUrl && hasPhoto) {
-      if (currentMessage.media && currentMessage.media.photo) {
-        photoSource = "Mesaj Görseli";
-      } else if (webpageHasPhoto) {
+    // Eğer scraper görsel bulamadıysa fakat geçerli görsel varsa kullan
+    if (!imageUrl && hasValidPhoto) {
+      if (webpageHasPhoto) {
         photoSource = "Telegram Link Önizleme Görseli (Storage'a Yüklendi)";
+      } else if (currentMessage.media && currentMessage.media.photo) {
+        photoSource = "Mesaj Görseli (Tekli Fırsat)";
       }
 
-      console.log(`📷 [${uniqueDocId}] Scraper görsel bulamadı fakat Telegram'da görsel/önizleme var. Yükleniyor...`);
+      console.log(`📷 [${uniqueDocId}] Scraper görsel bulamadı fakat geçerli Telegram görseli/önizlemesi var. Yükleniyor...`);
       try {
-        let mediaToDownload = currentMessage.media;
-        if (!currentMessage.media.photo && webpagePhotoObj) {
-          mediaToDownload = webpagePhotoObj;
-        }
+        let mediaToDownload = webpageHasPhoto ? webpagePhotoObj : currentMessage.media;
 
         const buffer = await client.downloadMedia(mediaToDownload, {
           workers: 4,
