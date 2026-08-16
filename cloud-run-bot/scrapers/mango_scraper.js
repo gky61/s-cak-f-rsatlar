@@ -47,13 +47,18 @@ class MangoScraper extends BaseProductScraper {
   }
 
   scrapeTitle($) {
-    // 1. og:title
-    const ogTitle = $('meta[property="og:title"]').attr('content') || $('title').text();
-    if (ogTitle && ogTitle.toLowerCase() !== 'null') return ogTitle.trim();
-
-    // 2. DOM
+    // 1. DOM (Varsa en yalın ürün adıdır)
     const el = $('h1, .product-name').first();
-    if (el.length) return el.text().trim();
+    if (el.length && el.text().trim().length > 0) return el.text().trim();
+
+    // 2. og:title / title tag
+    const ogTitle = $('meta[property="og:title"]').attr('content') || $('title').text();
+    if (ogTitle && ogTitle.toLowerCase() !== 'null') {
+      return ogTitle
+        .replace(/\s*\|\s*MANGO.*$/i, '')
+        .replace(/\s*-\s*MANGO.*$/i, '')
+        .trim();
+    }
 
     // 3. JSON-LD fallback
     const product = this.findProductJsonLd($);

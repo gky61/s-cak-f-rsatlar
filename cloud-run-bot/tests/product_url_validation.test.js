@@ -194,8 +194,12 @@ function runTests() {
   assert(isProductUrl('https://shop.mango.com/tr/tr/p/deri-ceket_12345678'), 'Ürün sayfası (underscore)', 'shop.mango.com/tr/tr/p/deri-ceket_12345678');
   assert(isProductUrl('https://shop.mango.com/tr/tr/p/deri-ceket_12345678/'), 'Trailing slash', 'shop.mango.com/tr/tr/p/deri-ceket_12345678/');
   assert(isProductUrl('https://shop.mango.com/tr/tr/p/deri-ceket/12345678/ab/cd'), 'Alternatif format', 'shop.mango.com/tr/tr/p/deri-ceket/12345678/ab/cd');
+  assert(isProductUrl('https://shop.mango.com/tr/tr/p/27034409/56/00?utm_source=product-share&utm_medium=social'), 'Share link (ID+color+size)', 'shop.mango.com/tr/tr/p/27034409/56/00');
+  assert(isProductUrl('https://shop.mango.com/tr/tr/p/27034409'), 'Direct ID link', 'shop.mango.com/tr/tr/p/27034409');
+  assert(isProductUrl('https://shop.mango.com/tr/en/p/27034409/56/00'), 'English TR link', 'shop.mango.com/tr/en/p/27034409/56/00');
   // Geçersiz
   assert(!isProductUrl('https://shop.mango.com/tr/tr/kadin'), 'Kategori sayfası', 'shop.mango.com/tr/tr/kadin');
+  assert(!isProductUrl('https://shop.mango.com/tr/tr/search?q=parka'), 'Arama sayfası', 'shop.mango.com/tr/tr/search?q=parka');
   assert(!isProductUrl('https://shop.mango.com/tr/tr/'), 'Anasayfa', 'shop.mango.com/tr/tr/');
 
   // ========================================

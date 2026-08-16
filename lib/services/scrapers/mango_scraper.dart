@@ -54,19 +54,23 @@ class MangoScraper extends BaseProductScraper {
 
   @override
   String? scrapeTitle(dom.Document document) {
-    // 1. og:title meta tag (Next.js server-side render eder)
+    // 1. DOM h1 (Varsa en yalın ürün adıdır)
+    final titleEl = document.querySelector('h1') ?? 
+                    document.querySelector('.product-name');
+    if (titleEl != null && titleEl.text.trim().isNotEmpty) {
+      return titleEl.text.trim();
+    }
+
+    // 2. og:title meta tag (Next.js server-side render eder)
     final ogTitle = document.querySelector('meta[property="og:title"]')?.attributes['content'] ??
                     document.querySelector('title')?.text;
     if (ogTitle != null && ogTitle.isNotEmpty && ogTitle.toLowerCase() != 'null') {
-      return ogTitle.trim();
+      return ogTitle
+          .replaceAll(RegExp(r'\s*\|\s*MANGO.*$', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*-\s*MANGO.*$', caseSensitive: false), '')
+          .trim();
     }
 
-    // 2. DOM h1
-    final titleEl = document.querySelector('h1') ?? 
-                    document.querySelector('.product-name');
-    if (titleEl != null) {
-      return titleEl.text.trim();
-    }
     return null;
   }
 
