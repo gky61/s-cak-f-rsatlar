@@ -204,6 +204,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   int? _scrapedRatingCount;
   String? _scrapedBrand;
   bool _isAmazonWarehouse = false;
+  bool _showInfoBanner = true;
   
   String _lastProcessedUrl = '';
   String _lastProcessedTitle = '';
@@ -820,7 +821,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       }
     } catch (_) {}
 
-    // 2. Özel Görsel CDN Alan Adları (Sadece görsel barındıran alt alan adları)
+    // 2. Dynamic Media / Scene7 veya /is/image/ endpoint'leri (Örn: Mango media.mango.com/is/image/...)
+    if (lowerUrl.contains('/is/image/') || lowerUrl.contains('/images/') || lowerUrl.contains('/image/')) {
+      const htmlPagePatterns = ['/urun/', '-p-', '/item/', '/detail/', '.html', '.htm', '.php'];
+      if (!htmlPagePatterns.any((pattern) => lowerUrl.contains(pattern))) {
+        return true;
+      }
+    }
+
+    // 3. Özel Görsel CDN Alan Adları (Sadece görsel barındıran alt alan adları)
     const imageCdnPatterns = [
       'assets.mmsrg.com',      // MediaMarkt CDN
       'img.pzrmcdn.com',       // Pazarama CDN
@@ -838,6 +847,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       'sky-static.mavi.com',    // Mavi CDN
       'dfcdn.net',              // DeFacto CDN
       'static.zara.net',        // Zara CDN
+      'media.mango.com',        // Mango Media CDN
       'st.mango.com',           // Mango CDN
       'st-mango.mncdn.com',     // Mango Alternative CDN
       'cdn.beymen.com',         // Beymen CDN
@@ -1315,45 +1325,89 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                     ),
                   ),
 
-                // Otomatik Bilgi Alma Bilgilendirme Kutusu
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: isDark 
-                        ? const Color(0xFF1E293B).withOpacity(0.8) 
-                        : const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
+                // Otomatik Bilgi Alma Bilgilendirme Kutusu (Kapatılabilir & Botkolik Vurgulu)
+                if (_showInfoBanner)
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
                       color: isDark 
-                          ? const Color(0xFF38BDF8).withOpacity(0.3) 
-                          : const Color(0xFFBFDBFE),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.auto_awesome_rounded,
-                        color: Color(0xFF0284C7),
-                        size: 22,
+                          ? const Color(0xFF1E293B).withValues(alpha: 0.8) 
+                          : const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark 
+                            ? const Color(0xFF38BDF8).withValues(alpha: 0.3) 
+                            : const Color(0xFFBFDBFE),
+                        width: 1,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Ürün linkini yapıştırdığınızda tüm bilgiler otomatik doldurulur. Boş kalan veya eksik verileri elle tamamlayabilirsiniz.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.4,
-                            color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E3A8A),
-                            fontWeight: FontWeight.w400,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2),
+                          child: Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Color(0xFF0284C7),
+                            size: 20,
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.4,
+                                color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E3A8A),
+                              ),
+                              children: [
+                                const TextSpan(text: 'Linki buraya yapıştırdığınızda '),
+                                TextSpan(
+                                  text: 'Bot',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const TextSpan(
+                                  text: 'kolik',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    color: AppTheme.primary,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const TextSpan(
+                                  text:
+                                      ' anında devreye girer ve ürün bilgilerini otomatik olarak doldurur. Tarama sonrası doğrulama yapabilir veya eksikleri elle tamamlayabilirsiniz.',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              _showInfoBanner = false;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(16),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: isDark ? Colors.grey[400] : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
                 // Ürün URL (En üstte olması daha iyi bir kullanıcı deneyimi sağlar)
                 TextFormField(
@@ -1621,23 +1675,83 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             return null;
           },
         ),
-        SwitchListTile(
-          value: _hidePrice,
-          contentPadding: EdgeInsets.zero,
-          title: const Text(
-            'Fiyatı Gizle (Kampanya / Fiyatsız Paylaşım)',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          ),
-          subtitle: const Text(
-            'Fiyatı olmayan bir kampanya veya duyuru paylaşıyorsanız aktifleştirin',
-            style: TextStyle(fontSize: 11),
-          ),
-          activeColor: AppTheme.primary,
-          onChanged: (val) {
+        // Fiyatı Gizle (Minimalist Tasarım)
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () {
             setState(() {
-              _hidePrice = val;
+              _hidePrice = !_hidePrice;
             });
           },
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: _hidePrice
+                  ? AppTheme.primary.withValues(alpha: isDark ? 0.12 : 0.06)
+                  : (isDark ? AppTheme.darkSurfaceElevated : Colors.grey[50]),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _hidePrice
+                    ? AppTheme.primary.withValues(alpha: 0.45)
+                    : (isDark ? AppTheme.darkBorder : Colors.grey[300]!),
+                width: 0.9,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _hidePrice ? Icons.visibility_off_rounded : Icons.visibility_off_outlined,
+                  size: 18,
+                  color: _hidePrice ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : Colors.grey[600]),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Fiyatı Gizle',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _hidePrice
+                              ? (isDark ? Colors.white : AppTheme.primary)
+                              : textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Fiyatı olmayan bir kampanya veya duyuru paylaşıyorsanız işaretleyin',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: Checkbox(
+                    value: _hidePrice,
+                    activeColor: AppTheme.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) {
+                      setState(() {
+                        _hidePrice = val ?? false;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 16),
 
@@ -1721,55 +1835,81 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           ),
         ],
 
-        // Amazon Depo Ürünü Checkbox (Sadece Amazon seçili ise göster)
+        // Amazon Depo Ürünü Checkbox (Sadece Amazon seçili ise göster - Minimalist Tasarım)
         if (_selectedStore == 'Amazon') ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFD97706).withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFFD97706).withValues(alpha: 0.3),
-                width: 1,
+          const SizedBox(height: 10),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isAmazonWarehouse = !_isAmazonWarehouse;
+              });
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _isAmazonWarehouse
+                    ? const Color(0xFFD97706).withValues(alpha: isDark ? 0.14 : 0.08)
+                    : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFFFFBEB)),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _isAmazonWarehouse
+                      ? const Color(0xFFD97706).withValues(alpha: 0.5)
+                      : const Color(0xFFD97706).withValues(alpha: 0.25),
+                  width: 0.9,
+                ),
               ),
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: CheckboxListTile(
-                value: _isAmazonWarehouse,
-                onChanged: (value) {
-                  setState(() {
-                    _isAmazonWarehouse = value ?? false;
-                  });
-                },
-                title: const Row(
-                  children: [
-                    Icon(
-                      Icons.inventory_2_rounded,
-                      size: 18,
-                      color: Color(0xFFD97706),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.inventory_2_rounded,
+                    size: 18,
+                    color: Color(0xFFD97706),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Amazon Depo Ürünü',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Amazon Depo tarafından satılıyorsa bu seçenek işaretlenmelidir.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
+                            height: 1.2,
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Amazon Depo Ürünü',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFD97706),
-                      ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: Checkbox(
+                      value: _isAmazonWarehouse,
+                      activeColor: const Color(0xFFD97706),
+                      checkColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      onChanged: (val) {
+                        setState(() {
+                          _isAmazonWarehouse = val ?? false;
+                        });
+                      },
                     ),
-                  ],
-                ),
-                subtitle: const Text(
-                  'Bu ürün Amazon Depo tarafından satılmaktadır.',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
-                ),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                activeColor: const Color(0xFFD97706),
-                checkColor: Colors.white,
-                controlAffinity: ListTileControlAffinity.trailing,
+                  ),
+                ],
               ),
             ),
           ),

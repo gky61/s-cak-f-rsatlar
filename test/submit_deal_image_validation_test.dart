@@ -16,52 +16,66 @@ bool isValidImageUrl(String url) {
     }
   } catch (_) {}
 
-  // 2. Özel Görsel CDN Alan Adları (Sadece görsel barındıran alt alan adları)
-  const imageCdnPatterns = [
-    'assets.mmsrg.com',      // MediaMarkt CDN
-    'img.pzrmcdn.com',       // Pazarama CDN
-    'cdn.dsmcdn.com',        // Trendyol CDN
-    'hepsiburada.net',       // Hepsiburada CDN
-    'images-amazon.com',     // Amazon CDN
-    'images-na.ssl-images-amazon.com',
-    'media-amazon.com',      // Amazon Media CDN
-    'm.media-amazon.com',    // Amazon Mobile Media CDN
-    'ssl-images-amazon.com',
-    'n11scdn.akamaized.net',  // N11 CDN
-    'cdn.vatanbilgisayar.com', // Vatan Bilgisayar CDN
-    'yenieera22.com',          // Itopya Image CDN
-    'teknosa-cloud-prod.mncdn.com', // Teknosa Image CDN
-    'sky-static.mavi.com',    // Mavi CDN
-    'dfcdn.net',              // DeFacto CDN
-    'static.zara.net',        // Zara CDN
-    'st.mango.com',           // Mango CDN
-    'st-mango.mncdn.com',     // Mango Alternative CDN
-    'cdn.beymen.com',         // Beymen CDN
-    'cdn-s3.pttavm.com',      // PttAVM CDN
-    'images.migrosone.com',   // Migros Image CDN
-    'cdn.getir.com',          // Getir CDN
-    'cdn.boyner.com.tr',      // Boyner CDN
-    'cdn03.ciceksepeti.net',  // Çiçeksepeti CDN
-    'imgbb.co',
-    'imgur.com',
-    'i.ibb.co',
-    'images.unsplash.com',
-    'i.imgur.com',
-    'cloudinary.com',
-    'cloudfront.net',
-  ];
-  if (imageCdnPatterns.any((pattern) => lowerUrl.contains(pattern))) {
-    const htmlPagePatterns = ['/urun/', '-p-', '/item/', '/detail/', '.html', '.htm', '.php'];
-    if (!htmlPagePatterns.any((pattern) => lowerUrl.contains(pattern)) || lowerUrl.contains('.jpg') || lowerUrl.contains('.png') || lowerUrl.contains('.webp')) {
-      return true;
+    // 2. Dynamic Media / Scene7 veya /is/image/ endpoint'leri (Örn: Mango media.mango.com/is/image/...)
+    if (lowerUrl.contains('/is/image/') || lowerUrl.contains('/images/') || lowerUrl.contains('/image/')) {
+      const htmlPagePatterns = ['/urun/', '-p-', '/item/', '/detail/', '.html', '.htm', '.php'];
+      if (!htmlPagePatterns.any((pattern) => lowerUrl.contains(pattern))) {
+        return true;
+      }
     }
-  }
 
-  return false;
-}
+    // 3. Özel Görsel CDN Alan Adları (Sadece görsel barındıran alt alan adları)
+    const imageCdnPatterns = [
+      'assets.mmsrg.com',      // MediaMarkt CDN
+      'img.pzrmcdn.com',       // Pazarama CDN
+      'cdn.dsmcdn.com',        // Trendyol CDN
+      'hepsiburada.net',       // Hepsiburada CDN
+      'images-amazon.com',     // Amazon CDN
+      'images-na.ssl-images-amazon.com',
+      'media-amazon.com',      // Amazon Media CDN
+      'm.media-amazon.com',    // Amazon Mobile Media CDN
+      'ssl-images-amazon.com',
+      'n11scdn.akamaized.net',  // N11 CDN
+      'cdn.vatanbilgisayar.com', // Vatan Bilgisayar CDN
+      'yenieera22.com',          // Itopya Image CDN
+      'teknosa-cloud-prod.mncdn.com', // Teknosa Image CDN
+      'sky-static.mavi.com',    // Mavi CDN
+      'dfcdn.net',              // DeFacto CDN
+      'static.zara.net',        // Zara CDN
+      'media.mango.com',        // Mango Media CDN
+      'st.mango.com',           // Mango CDN
+      'st-mango.mncdn.com',     // Mango Alternative CDN
+      'cdn.beymen.com',         // Beymen CDN
+      'cdn-s3.pttavm.com',      // PttAVM CDN
+      'images.migrosone.com',   // Migros Image CDN
+      'cdn.getir.com',          // Getir CDN
+      'cdn.boyner.com.tr',      // Boyner CDN
+      'cdn03.ciceksepeti.net',  // Çiçeksepeti CDN
+      'imgbb.co',
+      'imgur.com',
+      'i.ibb.co',
+      'images.unsplash.com',
+      'i.imgur.com',
+      'cloudinary.com',
+      'cloudfront.net',
+    ];
+    if (imageCdnPatterns.any((pattern) => lowerUrl.contains(pattern))) {
+      const htmlPagePatterns = ['/urun/', '-p-', '/item/', '/detail/', '.html', '.htm', '.php'];
+      if (!htmlPagePatterns.any((pattern) => lowerUrl.contains(pattern)) || lowerUrl.contains('.jpg') || lowerUrl.contains('.png') || lowerUrl.contains('.webp')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 
 void main() {
   group('SubmitDealScreen Image URL Validation Tests', () {
+    test('Mango media.mango.com Scene7 image without extension should be valid', () {
+      const url = 'https://media.mango.com/is/image/punto/27034409-56-002?wid=1024';
+      expect(isValidImageUrl(url), isTrue);
+    });
+
     test('Migros product image ending in .jpg should be valid', () {
       const url = 'https://images.migrosone.com/sanalmarket/product/34013753/34013753_1-fab227.jpg';
       expect(isValidImageUrl(url), isTrue);

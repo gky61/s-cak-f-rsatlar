@@ -790,13 +790,13 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
     final features = [
       {
         'title': 'Akıllı Link Analizi',
-        'desc': 'Gönderdiğiniz bağlantıları anında tarayarak ürün detaylarını, güncel fiyatı ve detaylarını sizin için toplar.',
+        'desc': 'Gönderdiğiniz bağlantıları anında tarayarak ürün detaylarını, güncel fiyatı ve indirimleri anında tespit eder.',
         'icon': Icons.auto_awesome_rounded,
         'color': const Color(0xFF00F0FF),
       },
       {
         'title': 'Sepet & Özel İndirim Hesaplama',
-        'desc': 'Mağazaya özel sepetteki indirimleri, premium abonelik avantajlarını anında tespit eder ve net indirim oranını hesaplar.',
+        'desc': 'Mağazaya özel sepetteki indirimleri, premium üyelik avantajlarını anında tespit eder ve net indirim oranını hesaplar.',
         'icon': Icons.shopping_bag_rounded,
         'color': const Color(0xFF6366F1),
       },
