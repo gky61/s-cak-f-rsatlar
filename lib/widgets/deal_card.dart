@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/deal.dart';
 import '../services/link_preview_service.dart';
@@ -9,10 +6,6 @@ import '../services/theme_service.dart';
 import 'deal_card/deal_card_helpers.dart';
 import 'deal_card/vertical_deal_card.dart';
 import 'deal_card/horizontal_deal_card.dart';
-
-void _log(String message) {
-  if (kDebugMode) print(message);
-}
 
 class DealCard extends StatefulWidget {
   final Deal deal;
@@ -31,8 +24,6 @@ class DealCard extends StatefulWidget {
 }
 
 class _DealCardState extends State<DealCard> {
-  static final Map<String, String> _resolvedImageCache = {};
-
   String? _effectiveImageUrl;
   bool _isLoadingImage = false;
   bool _imageLoadAttempted = false;
@@ -61,77 +52,38 @@ class _DealCardState extends State<DealCard> {
     }
   }
     
-  void _checkImage() async {
+  void _checkImage() {
     final dealImageUrl = widget.deal.imageUrl.trim();
     final isBlobUrl = dealImageUrl.startsWith('blob:');
     
-    if (isBlobUrl) {
+    if (isBlobUrl || dealImageUrl.isEmpty) {
       _effectiveImageUrl = null;
-    } else if (dealImageUrl.isNotEmpty) {
-      _effectiveImageUrl = dealImageUrl;
     } else {
-      final cached = _resolvedImageCache[widget.deal.id] ?? _resolvedImageCache[widget.deal.link.trim()];
-      _effectiveImageUrl = cached;
+      _effectiveImageUrl = dealImageUrl;
     }
     
+    // Yalnızca Amazon linklerinde deterministik ve güvenli ASIN görsel çözümlemesi yap.
+    // Diğer mağazalarda generic banner çekilmesini engelleyerek temiz mağaza logosu fallback'ini koru.
     if (!_imageLoadAttempted && (_effectiveImageUrl == null || isBlobUrl) && widget.deal.link.isNotEmpty) {
-      _imageLoadAttempted = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _loadImageFromLink();
-      });
-    }
-  }
-
-  void _persistFoundImage(String foundUrl) {
-    _resolvedImageCache[widget.deal.id] = foundUrl;
-    if (widget.deal.link.trim().isNotEmpty) {
-      _resolvedImageCache[widget.deal.link.trim()] = foundUrl;
-    }
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null && widget.deal.id.isNotEmpty) {
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('favorites')
-          .doc(widget.deal.id)
-          .set({'imageUrl': foundUrl}, SetOptions(merge: true))
-          .catchError((_) {});
+      final link = widget.deal.link.trim();
+      if (link.contains("amazon") || link.contains("amzn")) {
+        _imageLoadAttempted = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _loadAmazonImage(link);
+        });
+      }
     }
   }
   
-  Future<void> _loadImageFromLink() async {
+  Future<void> _loadAmazonImage(String link) async {
     if (_isLoadingImage || !mounted) return;
-    final link = widget.deal.link.trim();
-    if (link.isEmpty) return;
-
-    // --- AMAZON ÖZEL KONTROLÜ BAŞLANGIÇ ---
-    if (link.contains("amazon") || link.contains("amzn")) {
-      final amazonImage = await _linkPreviewService.getAmazonImageSmart(link);
-      
-      if (amazonImage != null && mounted) {
-        _log('✅ DealCard: Amazon görsel bulundu (ASIN yöntemi): $amazonImage');
-        _persistFoundImage(amazonImage);
-        setState(() {
-          _effectiveImageUrl = amazonImage;
-          _isLoadingImage = false;
-        });
-        return;
-      } else {
-        _log('⚠️ DealCard: Amazon ASIN bulunamadı, normal scraper yöntemi deneniyor...');
-      }
-    }
-    // --- AMAZON ÖZEL KONTROLÜ BİTİŞ ---
-
     _isLoadingImage = true;
 
     try {
-      final preview = await _linkPreviewService.fetchMetadata(link)
-          .timeout(const Duration(seconds: 5), onTimeout: () => null);
-      
-      if (mounted && preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
-        _persistFoundImage(preview.imageUrl!);
+      final amazonImage = await _linkPreviewService.getAmazonImageSmart(link);
+      if (amazonImage != null && mounted) {
         setState(() {
-          _effectiveImageUrl = preview.imageUrl;
+          _effectiveImageUrl = amazonImage;
           _isLoadingImage = false;
         });
       } else if (mounted) {
@@ -139,7 +91,7 @@ class _DealCardState extends State<DealCard> {
           _isLoadingImage = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
           _isLoadingImage = false;

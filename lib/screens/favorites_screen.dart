@@ -30,6 +30,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   String? _cachedUserId;
   StreamSubscription? _authSub;
 
+  int _favoriteFilterIndex = 0; // 0: Tümü, 1: Aktif, 2: Süresi Dolanlar
+
   late ScrollController _myFavoritesScrollController;
   late ScrollController _followedCategoriesScrollController;
   bool _showBanner = true;
@@ -221,6 +223,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   }
 
   Widget _buildMyFavorites(User? currentUser, bool isDark) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
     if (currentUser == null) {
       return Center(
         child: Padding(
@@ -348,7 +351,18 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           );
         }
 
-        final hasExpired = deals.any((d) => d.isExpired);
+        final totalCount = deals.length;
+        final activeDeals = deals.where((d) => !d.isExpired).toList();
+        final expiredDeals = deals.where((d) => d.isExpired).toList();
+        final activeCount = activeDeals.length;
+        final expiredCount = expiredDeals.length;
+
+        List<Deal> displayedDeals = deals;
+        if (_favoriteFilterIndex == 1) {
+          displayedDeals = activeDeals;
+        } else if (_favoriteFilterIndex == 2) {
+          displayedDeals = expiredDeals;
+        }
 
         return Column(
           children: [
@@ -389,72 +403,86 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               crossFadeState: _showBanner ? CrossFadeState.showFirst : CrossFadeState.showSecond,
               duration: const Duration(milliseconds: 200),
             ),
-            AnimatedCrossFade(
-              firstChild: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
+
+            // Filtre Çipleri & Temizle Barı (Ekrana Tam Oturan Dengeli ve Ferah Tasarım)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildFilterChip(
+                      label: 'Tümü ($totalCount)',
+                      icon: Icons.grid_view_rounded,
+                      isSelected: _favoriteFilterIndex == 0,
+                      isDark: isDark,
+                      selectedColor: primaryColor,
+                      onTap: () => setState(() => _favoriteFilterIndex = 0),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: _buildFilterChip(
+                      label: 'Aktif ($activeCount)',
+                      icon: Icons.local_fire_department_rounded,
+                      isSelected: _favoriteFilterIndex == 1,
+                      isDark: isDark,
+                      selectedColor: const Color(0xFF10B981),
+                      onTap: () => setState(() => _favoriteFilterIndex = 1),
+                    ),
+                  ),
+                  if (expiredCount > 0) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: _buildFilterChip(
+                        label: 'Süresi Dolan ($expiredCount)',
+                        icon: Icons.hourglass_bottom_rounded,
+                        isSelected: _favoriteFilterIndex == 2,
+                        isDark: isDark,
+                        selectedColor: const Color(0xFFEF4444),
+                        onTap: () => setState(() => _favoriteFilterIndex = 2),
+                      ),
+                    ),
+                  ],
+
+                  // Temizle Butonu
+                  if (totalCount > 0) ...[
+                    const SizedBox(width: 8),
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Temizle'),
-                              content: const Text('Süresi dolmuş tüm kayıtlı ilanları listenizden kaldırmak istediğinize emin misiniz?'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
-                                  child: const Text('İptal'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                  child: const Text('Temizle'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            final expiredDeals = deals.where((d) => d.isExpired).toList();
-                            for (var d in expiredDeals) {
-                              await _firestoreService.removeFromFavorites(currentUser.uid, d.id);
-                            }
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Süresi dolan kayıtlar temizlendi')),
-                              );
-                            }
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => _showClearFavoritesBottomSheet(
+                          context,
+                          currentUser,
+                          deals,
+                          expiredDeals,
+                          isDark,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
                           decoration: BoxDecoration(
-                            color: Colors.redAccent.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(20),
+                            color: Colors.redAccent.withValues(alpha: isDark ? 0.15 : 0.08),
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: Colors.redAccent.withValues(alpha: 0.18),
+                              color: Colors.redAccent.withValues(alpha: 0.25),
                               width: 0.8,
                             ),
                           ),
-                          child: Row(
+                          child: const Row(
                             mainAxisSize: MainAxisSize.min,
-                            children: const [
+                            children: [
                               Icon(
                                 Icons.auto_delete_outlined,
                                 color: Colors.redAccent,
-                                size: 14,
+                                size: 13,
                               ),
-                              SizedBox(width: 5),
+                              SizedBox(width: 4),
                               Text(
-                                'Süresi Dolanları Temizle',
+                                'Temizle',
                                 style: TextStyle(
                                   color: Colors.redAccent,
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 10.5,
+                                  fontSize: 11.5,
                                 ),
                               ),
                             ],
@@ -463,18 +491,389 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
-              secondChild: const SizedBox.shrink(),
-              crossFadeState: (hasExpired && _showCleanupButton) ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-              duration: const Duration(milliseconds: 200),
             ),
+
             Expanded(
-              child: _buildDealGrid(deals, isDark, _myFavoritesScrollController),
+              child: displayedDeals.isEmpty
+                  ? _buildEmptyFilteredState(isDark)
+                  : _buildDealGrid(displayedDeals, isDark, _myFavoritesScrollController),
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required bool isDark,
+    required Color selectedColor,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? selectedColor
+                : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? selectedColor
+                  : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
+              width: 0.9,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 13,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.grey[400] : const Color(0xFF64748B)),
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                      color: isSelected
+                          ? Colors.white
+                          : (isDark ? AppTheme.darkTextPrimary : const Color(0xFF334155)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showClearFavoritesBottomSheet(
+    BuildContext context,
+    User currentUser,
+    List<Deal> allDeals,
+    List<Deal> expiredDeals,
+    bool isDark,
+  ) {
+    final messenger = ScaffoldMessenger.of(context);
+    final totalCount = allDeals.length;
+    final expiredCount = expiredDeals.length;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Tutamaç Çizgisi
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey[700] : Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Başlık & Açıklama
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: isDark ? 0.2 : 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.auto_delete_rounded,
+                        color: Colors.redAccent,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Kayıtları Temizle',
+                            style: TextStyle(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'Listenizden kaldırmak istediğiniz seçeneği belirleyin',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // Seçenek 1: Süresi Dolanları Temizle (Varsa)
+                if (expiredCount > 0) ...[
+                  _buildClearOptionTile(
+                    title: 'Süresi Dolanları Temizle ($expiredCount İlan)',
+                    subtitle: 'Yalnızca süresi dolmuş veya tükenmiş fırsatları kaldırır. Aktif fırsatlarınız korunur.',
+                    icon: Icons.hourglass_bottom_rounded,
+                    iconColor: const Color(0xFFF59E0B),
+                    isDark: isDark,
+                    onTap: () async {
+                      Navigator.pop(bottomSheetContext);
+                      for (var d in expiredDeals) {
+                        await _firestoreService.removeFromFavorites(currentUser.uid, d.id);
+                      }
+                      if (mounted) {
+                        setState(() {
+                          if (_favoriteFilterIndex == 2) {
+                            _favoriteFilterIndex = 0;
+                          }
+                        });
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text('$expiredCount adet süresi dolan kayıt temizlendi'),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+                // Seçenek 2: Tümünü Temizle
+                _buildClearOptionTile(
+                  title: 'Tüm Kayıtları Temizle ($totalCount İlan)',
+                  subtitle: 'Aktif ve süresi dolan tüm kayıtlı fırsatları listenizden kalıcı olarak siler.',
+                  icon: Icons.delete_forever_rounded,
+                  iconColor: Colors.redAccent,
+                  isDark: isDark,
+                  onTap: () async {
+                    Navigator.pop(bottomSheetContext);
+                    for (var d in allDeals) {
+                      await _firestoreService.removeFromFavorites(currentUser.uid, d.id);
+                    }
+                    if (mounted) {
+                      setState(() {
+                        _favoriteFilterIndex = 0;
+                      });
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text('$totalCount adet kayıtlı fırsat temizlendi'),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                // İptal Butonu
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(bottomSheetContext),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      side: BorderSide(
+                        color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.grey[300]!,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Vazgeç',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.grey[300] : Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildClearOptionTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: isDark ? 0.2 : 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 18),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2.5),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.3,
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 17,
+                color: isDark ? Colors.grey[600] : Colors.grey[400],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyFilteredState(bool isDark) {
+    String title = 'Fırsat Bulunamadı';
+    String message = 'Bu filtreye uygun kayıtlı fırsatınız bulunmuyor.';
+    IconData icon = Icons.inbox_rounded;
+
+    if (_favoriteFilterIndex == 1) {
+      title = 'Aktif Fırsat Bulunmuyor';
+      message = 'Kaydettiğiniz tüm fırsatların süresi dolmuş. \'Süresi Dolanlar\' filtresinden arşive bakabilirsiniz.';
+      icon = Icons.hourglass_bottom_rounded;
+    } else if (_favoriteFilterIndex == 2) {
+      title = 'Süresi Dolan Fırsat Yok 🎉';
+      message = 'Kaydettiğiniz tüm fırsatlar hala güncel ve aktif!';
+      icon = Icons.check_circle_outline_rounded;
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 54, color: isDark ? Colors.grey[600] : Colors.grey[400]),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16.5,
+                fontWeight: FontWeight.w700,
+                color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () => setState(() => _favoriteFilterIndex = 0),
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Tüm Kayıtları Göster'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.primary,
+                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

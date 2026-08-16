@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/deal.dart';
@@ -38,6 +38,7 @@ String getStoreAsset(String storeName) {
   if (lower.contains('incehesap') || lower.contains('ince hesap')) return 'assets/incehesap.webp';
   if (lower.contains('itopya')) return 'assets/itopya.webp';
   if (lower.contains('teknosa')) return 'assets/teknosa.webp';
+  if (lower.contains('pttavm') || lower.contains('ptt avm') || lower.contains('ptt')) return 'assets/pttavm.webp';
   if (lower.contains('zara')) return 'assets/zara.webp';
   if (lower.contains('mango')) return 'assets/mango.webp';
   if (lower.contains('mavi')) return 'assets/mavi.webp';
@@ -48,6 +49,13 @@ String getStoreAsset(String storeName) {
   if (lower.contains('migros')) return 'assets/migros.webp';
   if (lower.contains('getir')) return 'assets/getir.webp';
   if (lower.contains('boyner')) return 'assets/boyner.webp';
+  if (lower.contains('a101')) return 'assets/a101.webp';
+  if (lower.contains('bim')) return 'assets/bim.webp';
+  if (lower.contains('şok') || lower.contains('sok')) return 'assets/sok.webp';
+  if (lower.contains('carrefour')) return 'assets/carrefoursa.webp';
+  if (lower.contains('gratis')) return 'assets/gratis.webp';
+  if (lower.contains('watsons')) return 'assets/watsons.webp';
+  if (lower.contains('rossmann')) return 'assets/rossmann.webp';
   return 'assets/logo.webp';
 }
 

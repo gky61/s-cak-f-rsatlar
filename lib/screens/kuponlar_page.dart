@@ -803,7 +803,6 @@ class _KuponlarPageState extends State<KuponlarPage> {
     final borderColor = isDark
         ? AppTheme.primary.withValues(alpha: 0.3)
         : const Color(0xFFBFDBFE);
-    final iconColor = isDark ? const Color(0xFF93C5FD) : AppTheme.primary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -816,16 +815,30 @@ class _KuponlarPageState extends State<KuponlarPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Botkolik Avatarı
           Container(
-            padding: const EdgeInsets.all(6),
+            margin: const EdgeInsets.only(top: 2),
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
               shape: BoxShape.circle,
+              border: Border.all(
+                color: AppTheme.primary.withValues(alpha: 0.6),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withValues(alpha: 0.2),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            child: Icon(
-              Icons.radar_rounded,
-              size: 20,
-              color: iconColor,
+            child: ClipOval(
+              child: Image.asset(
+                'assets/botkolik.webp',
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -836,12 +849,36 @@ class _KuponlarPageState extends State<KuponlarPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '📡 Otomatik Radar & Topluluk Doğrulaması',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : const Color(0xFF1E3A8A),
+                    RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'Bot',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w900,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const TextSpan(
+                            text: 'kolik',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w900,
+                              color: AppTheme.primary,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' Radar & Topluluk Doğrulaması',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF1E3A8A),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     InkWell(
@@ -867,25 +904,42 @@ class _KuponlarPageState extends State<KuponlarPage> {
                   text: TextSpan(
                     style: TextStyle(
                       fontSize: 11.5,
-                      height: 1.35,
+                      height: 1.4,
                       color: isDark ? Colors.grey[300] : const Color(0xFF1E40AF),
                     ),
-                    children: const [
-                      TextSpan(
-                        text: 'Bu sekmedeki kuponlar web kaynaklarından otomatik taranarak toplanır. Mağaza koşullarına göre bazı kodlar değişkenlik gösterebilir. Denediğiniz kuponların çalışıp çalışmadığını ',
+                    children: [
+                      const TextSpan(
+                        text: 'Bu sayfadaki kuponlar ',
                       ),
                       TextSpan(
-                        text: '🔥 (Çalıştı)',
+                        text: '"Bot',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      const TextSpan(
+                        text: 'kolik"',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: ' radarıyla otomatik yakalanır. Çalışıp çalışmadıklarını ',
+                      ),
+                      const TextSpan(
+                        text: '🔥',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      TextSpan(
+                      const TextSpan(
                         text: ' veya ',
                       ),
-                      TextSpan(
-                        text: '❄️ (Çalışmadı)',
+                      const TextSpan(
+                        text: '❄️',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      TextSpan(
+                      const TextSpan(
                         text: ' butonlarıyla oylayarak topluluğa rehberlik edebilirsiniz.',
                       ),
                     ],

@@ -4,13 +4,14 @@ import 'package:sicak_firsatlar/widgets/deal_card/deal_card_helpers.dart';
 void main() {
   group('DealCard Helper Unit Tests', () {
     test('getStoreAsset should return correct asset for known stores', () {
-      expect(getStoreAsset('Trendyol'), 'assets/trendyol.jpg');
-      expect(getStoreAsset('Hepsiburada'), 'assets/hepsiburada.jpg');
-      expect(getStoreAsset('Amazon TR'), 'assets/amazon.jpg');
-      expect(getStoreAsset('n11'), 'assets/n11.jpg');
-      expect(getStoreAsset('Pazarama'), 'assets/pazarama.jpg');
-      expect(getStoreAsset('Migros Hemen'), 'assets/migros.jpg');
-      expect(getStoreAsset('Bilinmeyen Magaza'), 'assets/logo.jpg');
+      expect(getStoreAsset('Trendyol'), 'assets/trendyol.webp');
+      expect(getStoreAsset('Hepsiburada'), 'assets/hepsiburada.webp');
+      expect(getStoreAsset('Amazon TR'), 'assets/amazon.webp');
+      expect(getStoreAsset('n11'), 'assets/n11.webp');
+      expect(getStoreAsset('Pazarama'), 'assets/pazarama.webp');
+      expect(getStoreAsset('PttAVM'), 'assets/pttavm.webp');
+      expect(getStoreAsset('Migros Hemen'), 'assets/migros.webp');
+      expect(getStoreAsset('Bilinmeyen Magaza'), 'assets/logo.webp');
     });
 
     test('getCategoryDisplayName should resolve category display names', () {
