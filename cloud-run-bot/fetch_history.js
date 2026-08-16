@@ -462,8 +462,8 @@ async function saveDealToFirebase(message, chatInfo) {
     // 🎯 DOMAIN ALLOWLIST İLE DESTEKLENEN MAĞAZA ÜRÜN LİNKİNİ TESPİT ET
     let mainLink = null;
     for (const rawLink of rawLinks) {
-      // 1. Doğrudan allowlist'te var mı kontrol et (Ağ isteği atmadan instant eşleşme)
-      if (domainAllowlist.isDomainAllowed(rawLink)) {
+      // 1. Doğrudan allowlist'te var mı VE geçerli bir ürün sayfası mı kontrol et (Ağ isteği atmadan instant eşleşme)
+      if (domainAllowlist.isDomainAllowed(rawLink) && domainAllowlist.isProductUrl(rawLink)) {
         mainLink = rawLink;
         console.log(`🎯 [ALLOWLIST MATCH] Desteklenen mağaza ürün linki bulundu: ${mainLink}`);
         break;
