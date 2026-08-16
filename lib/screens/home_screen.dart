@@ -1250,9 +1250,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (_searchQuery.trim().isNotEmpty) {
                   filteredDeals = DealSearchEngine.searchDeals(filteredDeals, _searchQuery);
                 } else {
-                  // Arama yapılmıyorsa en yeni eklenen fırsatlar en üstte yer alır (Freshness First)
+                  // Arama yapılmıyorsa Home Feed Skoru (homeFeedScore) ile sıralanır (%85 Tazelik + Alevlenme Bonusu - Troll/FOMO)
                   final List<Deal> sortedDeals = List<Deal>.from(filteredDeals);
-                  sortedDeals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+                  sortedDeals.sort((a, b) => b.homeFeedScore.compareTo(a.homeFeedScore));
                   filteredDeals = sortedDeals;
                 }
 

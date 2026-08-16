@@ -92,20 +92,44 @@ class N11Scraper extends BaseProductScraper {
     // 1. window.model JSON'ından başlığı çekmeyi dene (Öncelikli)
     const model = this._getN11Model($);
     if (model) {
-      const title = model?.product?.name || model?.seoMetaData?.title;
-      if (title) return title.toString().trim();
+      const p = model.product;
+      const title = p?.title || p?.name || p?.proName || model.seoMetaData?.title;
+      if (title && title.toString().trim().length > 0) {
+        return title.toString().trim();
+      }
     }
 
-    // 2. window.model içinden regex ile başlık çekmeyi dene (Live sayfalar için fallback 1)
-    const html = $.html();
-    const match = html.match(/"title"\s*:\s*"([^"]+)"/);
-    if (match) return match[1].trim();
-
-    // 3. DOM Seçicileri (Fallback 2)
-    const el = $('.titleArea h1.title, h1.title, h1.proName').first();
-    if (el.length) return el.text().trim();
+    // 2. DOM Başlık Seçicileri (h1.title, .titleArea h1.title, h1.proName)
+    const el = $('.titleArea h1.title, h1.title, h1.proName, h1.product-name, h1[class*="title"], .proName').first();
+    if (el.length && el.text().trim().length > 0) {
+      return el.text().trim();
+    }
     const ogTitle = $('meta[property="og:title"]').attr('content');
-    if (ogTitle) return ogTitle.trim();
+    if (ogTitle && ogTitle.trim().length > 0) {
+      return ogTitle.trim();
+    }
+
+    // 3. JSON-LD Şeması Fallback
+    const product = this.findProductJsonLd($);
+    if (product && product.name) {
+      return product.name
+        .replace(/\s*Fiyatları ve Özellikleri.*$/i, '')
+        .replace(/\s*-\s*n11\.com$/i, '')
+        .trim();
+    }
+
+    // 4. window.model product JSON bloğundan regex ile çekmeyi dene
+    const html = $.html();
+    const productTitleMatch = html.match(/"product"\s*:\s*\{[^}]*"title"\s*:\s*"([^"]+)"/);
+    if (productTitleMatch && productTitleMatch[1].trim().length > 0) {
+      return productTitleMatch[1].trim();
+    }
+
+    const proNameMatch = html.match(/"proName"\s*:\s*"([^"]+)"/);
+    if (proNameMatch && proNameMatch[1].trim().length > 0) {
+      return proNameMatch[1].trim();
+    }
+
     return null;
   }
 

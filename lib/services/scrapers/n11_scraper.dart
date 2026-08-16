@@ -103,34 +103,65 @@ class N11Scraper extends BaseProductScraper {
     // 1. window.model JSON'ından başlığı çekmeyi dene (Öncelikli)
     final model = _getN11Model(document);
     if (model != null) {
-      final title = model['product']?['name'] ?? model['seoMetaData']?['title'];
-      if (title != null && title.toString().isNotEmpty) {
-        return title.toString().trim();
+      final p = model['product'];
+      final title = p is Map ? (p['title'] ?? p['name'] ?? p['proName']) : null;
+      final seoTitle = model['seoMetaData']?['title'];
+      final candidate = title ?? seoTitle;
+      if (candidate != null && candidate.toString().trim().isNotEmpty) {
+        return candidate.toString().trim();
       }
     }
 
-    // 2. window.model içinden regex ile başlık çekmeyi dene (Live sayfalar için fallback 1)
+    // 2. DOM Başlık Seçicileri (h1.title, .titleArea h1.title, h1.proName)
+    final titleEl = document.querySelector('.titleArea h1.title') ??
+                    document.querySelector('h1.title') ??
+                    document.querySelector('h1.proName') ??
+                    document.querySelector('h1.product-name') ??
+                    document.querySelector('h1[class*="title"]') ??
+                    document.querySelector('.proName') ??
+                    document.querySelector('meta[property="og:title"]');
+    if (titleEl != null) {
+      if (titleEl.localName == 'meta') {
+        final content = titleEl.attributes['content']?.trim();
+        if (content != null && content.isNotEmpty) return content;
+      } else {
+        final text = titleEl.text.trim();
+        if (text.isNotEmpty) return text;
+      }
+    }
+
+    // 3. JSON-LD Şeması Fallback
+    final productJson = findProductJsonLd(document);
+    if (productJson != null && productJson['name'] != null) {
+      final name = productJson['name'].toString().trim();
+      if (name.isNotEmpty) {
+        return name
+            .replaceAll(RegExp(r'\s*Fiyatları ve Özellikleri.*$', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\s*-\s*n11\.com$', caseSensitive: false), '')
+            .trim();
+      }
+    }
+
+    // 4. window.model product JSON bloğundan regex ile çekmeyi dene
     final html = document.outerHtml;
-    final titleReg = RegExp(r'"title"\s*:\s*"([^"]+)"');
-    final titleMatch = titleReg.firstMatch(html);
-    if (titleMatch != null) {
-      final matched = titleMatch.group(1);
-      if (matched != null && matched.isNotEmpty) {
+    final productTitleReg = RegExp(r'"product"\s*:\s*\{[^}]*"title"\s*:\s*"([^"]+)"');
+    final productTitleMatch = productTitleReg.firstMatch(html);
+    if (productTitleMatch != null) {
+      final matched = productTitleMatch.group(1);
+      if (matched != null && matched.trim().isNotEmpty) {
         return matched.trim();
       }
     }
 
-    // 3. DOM Seçicileri (Fallback 2)
-    final titleEl = document.querySelector('.titleArea h1.title') ??
-                    document.querySelector('h1.title') ??
-                    document.querySelector('h1.proName') ??
-                    document.querySelector('meta[property="og:title"]');
-    if (titleEl != null) {
-      if (titleEl.localName == 'meta') {
-        return titleEl.attributes['content']?.trim();
+    final proNameReg = RegExp(r'"proName"\s*:\s*"([^"]+)"');
+    final proNameMatch = proNameReg.firstMatch(html);
+    if (proNameMatch != null) {
+      final matched = proNameMatch.group(1);
+      if (matched != null && matched.trim().isNotEmpty) {
+        return matched.trim();
       }
-      return titleEl.text.trim();
     }
+
     return null;
   }
 

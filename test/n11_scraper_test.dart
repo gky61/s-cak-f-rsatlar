@@ -27,5 +27,32 @@ void main() {
       final brand = scraper.scrapeBrand(doc);
       expect(brand, equals('Siemens'));
     });
+
+    test('should parse title correctly from window.model product.title', () {
+      const html = '''
+      <script>
+      window.model = {
+        "product": {
+          "id": 131285296,
+          "title": "Begüsa Mango Tekli Eskitme Avize"
+        }
+      };
+      </script>
+      ''';
+      final doc = html_parser.parse(html);
+      final title = scraper.scrapeTitle(doc);
+      expect(title, equals('Begüsa Mango Tekli Eskitme Avize'));
+    });
+
+    test('should parse title correctly from DOM h1.title when window.model is absent', () {
+      const html = '''
+      <div class="titleArea">
+        <h1 class="title max-three-lines">Begüsa Mango Tekli Eskitme Avize</h1>
+      </div>
+      ''';
+      final doc = html_parser.parse(html);
+      final title = scraper.scrapeTitle(doc);
+      expect(title, equals('Begüsa Mango Tekli Eskitme Avize'));
+    });
   });
 }
