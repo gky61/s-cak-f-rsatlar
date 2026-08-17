@@ -1632,19 +1632,18 @@ function resolveRedirect(url) {
 
 /**
  * 📷 ESKİ GÖRSELLERİ TEMİZLE - Her gün gece yarısı çalışır
- * 7 günden eski deal görsellerini Firebase Storage'dan siler
+ * 30 günden eski sahipsiz/eski deal görsellerini Firebase Storage'dan siler
  */
 exports.cleanupOldImages = functions
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
   .pubsub.schedule('0 0 * * *') // Her gün gece 00:00'da çalışır
   .timeZone('Europe/Istanbul')
   .onRun(wrapTrigger('cleanupOldImages', async (context) => {
-    functions.logger.info('🧹 Eski görsel temizleme başlıyor...');
+    functions.logger.info('🧹 Eski görsel temizleme başlıyor (30 Günlük)...');
 
-    const bucketName = 'sicak-firsatlar-e6eae.firebasestorage.app';
-    const bucket = admin.storage().bucket(bucketName);
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const bucket = admin.storage().bucket();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     let deletedCount = 0;
     let errorCount = 0;
@@ -1662,8 +1661,8 @@ exports.cleanupOldImages = functions
           const [metadata] = await file.getMetadata();
           const createdTime = new Date(metadata.timeCreated);
 
-          // 7 günden eski mi kontrol et
-          if (createdTime < sevenDaysAgo) {
+          // 30 günden eski mi kontrol et
+          if (createdTime < thirtyDaysAgo) {
             await file.delete();
             deletedCount++;
             functions.logger.info(`🗑️ Silindi: ${file.name} (${createdTime.toISOString()})`);
@@ -1678,7 +1677,7 @@ exports.cleanupOldImages = functions
 
       functions.logger.info(`✅ Temizlik tamamlandı! Silinen: ${deletedCount}, Atlanan: ${skippedCount}, Hata: ${errorCount}`);
 
-      // İstatistikleri kaydet (opsiyonel)
+      // İstatistikleri kaydet
       await admin.firestore().collection('system').doc('cleanup_stats').set({
         lastRun: admin.firestore.FieldValue.serverTimestamp(),
         deletedCount,
@@ -1701,12 +1700,11 @@ exports.cleanupOldImages = functions
 exports.cleanupOldImagesManual = functions
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
   .https.onRequest(wrapRequest('cleanupOldImagesManual', async (req, res) => {
-    functions.logger.info('🧹 Manuel görsel temizleme başlıyor...');
+    functions.logger.info('🧹 Manuel görsel temizleme başlıyor (30 Günlük)...');
 
-    const bucketName = 'sicak-firsatlar-e6eae.firebasestorage.app';
-    const bucket = admin.storage().bucket(bucketName);
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const bucket = admin.storage().bucket();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     let deletedCount = 0;
     let errorCount = 0;
@@ -1721,7 +1719,7 @@ exports.cleanupOldImagesManual = functions
           const [metadata] = await file.getMetadata();
           const createdTime = new Date(metadata.timeCreated);
 
-          if (createdTime < sevenDaysAgo) {
+          if (createdTime < thirtyDaysAgo) {
             await file.delete();
             deletedCount++;
             deletedFiles.push({ name: file.name, createdAt: createdTime.toISOString() });
@@ -1742,8 +1740,8 @@ exports.cleanupOldImagesManual = functions
           skippedCount,
           errorCount,
         },
-        deletedFiles: deletedFiles.slice(0, 20), // İlk 20'yi göster
-        threshold: sevenDaysAgo.toISOString(),
+        deletedFiles: deletedFiles.slice(0, 20),
+        threshold: thirtyDaysAgo.toISOString(),
       });
 
     } catch (error) {
@@ -2151,142 +2149,152 @@ async function deleteDealImage(imageUrl) {
 }
 
 /**
- * 48 Saat Geçen Fırsatları Firestore ve Storage'dan Siler
+ * ⌛ 48 Saat Geçen Fırsatları Süresi Doldu (isExpired: true) Olarak İşaretler
+ * Fırsatlar veritabanından SİLİNMEZ, 30 gün boyunca kullanıcının favorilerinde ve arşivde orijinal görseliyle kalır.
  */
 exports.cleanupExpiredDeals = functions
   .runWith({ timeoutSeconds: 360, memory: '512MB' })
   .pubsub.schedule('0 3 * * *') // Her gün gece 03:00'da çalışır
   .timeZone('Europe/Istanbul')
   .onRun(wrapTrigger('cleanupExpiredDeals', async (context) => {
-    functions.logger.info('🧹 48 saatlik eski fırsatları temizleme görevi başladı...');
+    functions.logger.info('⌛ 48 saatlik eski fırsatları süresi doldu olarak işaretleme görevi başladı...');
     
     const now = new Date();
     const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
     
-    let deletedCount = 0;
+    let expiredCount = 0;
     let errorCount = 0;
     
     try {
       const db = admin.firestore();
-      const targetDocIds = new Set();
-      const docsToDelete = [];
+      const targetDocs = new Map();
       
-      // 1. Query by 'createdAt'
-      const snap1 = await db.collection('deals').where('createdAt', '<', fortyEightHoursAgo).get();
-      snap1.forEach(doc => {
-        if (!targetDocIds.has(doc.id)) {
-          targetDocIds.add(doc.id);
-          docsToDelete.push(doc);
-        }
-      });
+      // 1. 48 saatten eski olup henüz isExpired=true yapılmamış fırsatları bul
+      const snap1 = await db.collection('deals')
+        .where('createdAt', '<', fortyEightHoursAgo)
+        .where('isExpired', '==', false)
+        .get();
+      snap1.forEach(doc => targetDocs.set(doc.id, doc));
       
-      // 2. Query by 'timestamp'
-      const snap2 = await db.collection('deals').where('timestamp', '<', fortyEightHoursAgo).get();
-      snap2.forEach(doc => {
-        if (!targetDocIds.has(doc.id)) {
-          targetDocIds.add(doc.id);
-          docsToDelete.push(doc);
-        }
-      });
+      const snap2 = await db.collection('deals')
+        .where('timestamp', '<', fortyEightHoursAgo)
+        .where('isExpired', '==', false)
+        .get();
+      snap2.forEach(doc => targetDocs.set(doc.id, doc));
       
-      functions.logger.info(`🔍 Toplam temizlenecek ${docsToDelete.length} eski fırsat bulundu.`);
+      functions.logger.info(`🔍 Toplam süresi doldu işaretlenecek ${targetDocs.size} eski fırsat bulundu.`);
       
-      for (const doc of docsToDelete) {
+      const batchSize = 400;
+      let batch = db.batch();
+      let countInBatch = 0;
+
+      for (const [dealId, doc] of targetDocs) {
         try {
-          const deal = doc.data();
-          const dealId = doc.id;
+          batch.update(doc.ref, {
+            isExpired: true,
+            expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          countInBatch++;
+          expiredCount++;
           
-          // Storage görselini temizle
-          const url = deal.imageUrl || deal.image_url;
-          if (url) {
-            await deleteDealImage(url);
+          if (countInBatch >= batchSize) {
+            await batch.commit();
+            batch = db.batch();
+            countInBatch = 0;
           }
-          
-          // Firestore belgesini sil
-          await db.collection('deals').doc(dealId).delete();
-          deletedCount++;
-          functions.logger.info(`🗑️ Firestore'dan silindi: ${dealId} - ${deal.title}`);
         } catch (docError) {
           errorCount++;
-          functions.logger.error(`❌ Fırsat silme hatası (doc.id: ${doc.id}):`, docError.message);
+          functions.logger.error(`❌ Fırsat süresi doldu işaretleme hatası (${dealId}):`, docError.message);
         }
       }
+
+      if (countInBatch > 0) {
+        await batch.commit();
+      }
       
-      functions.logger.info(`✅ 48 saatlik fırsat temizliği bitti. Silinen: ${deletedCount}, Hata: ${errorCount}`);
+      functions.logger.info(`✅ 48 saatlik fırsat süresi doldu işaretlemesi bitti. İşaretlenen: ${expiredCount}, Hata: ${errorCount}`);
     } catch (error) {
-      functions.logger.error('❌ Fırsat temizliği genel hatası:', error);
+      functions.logger.error('❌ Fırsat süresi doldu işaretleme genel hatası:', error);
     }
     
     return null;
   }));
 
 /**
- * 🧹 MANUEL ESKİ FIRSATLARI TEMİZLE - HTTP ile tetiklenir (test için)
+ * ⌛ MANUEL ESKİ FIRSATLARI SÜRESİ DOLDU YAP - HTTP ile tetiklenir (test için)
  * Kullanım: GET veya POST isteği at
  */
 exports.cleanupExpiredDealsManual = functions
   .runWith({ timeoutSeconds: 360, memory: '512MB' })
   .https.onRequest(wrapRequest('cleanupExpiredDealsManual', async (req, res) => {
-    functions.logger.info('🧹 Manuel 48 saatlik fırsat temizliği başlıyor...');
+    functions.logger.info('⌛ Manuel 48 saatlik fırsat süresi doldu işaretleme başlıyor...');
     
     const now = new Date();
     const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
     
-    let deletedCount = 0;
+    let expiredCount = 0;
     let errorCount = 0;
-    const deletedDeals = [];
+    const updatedDeals = [];
     
     try {
       const db = admin.firestore();
-      const targetDocIds = new Set();
-      const docsToDelete = [];
+      const targetDocs = new Map();
       
-      const snap1 = await db.collection('deals').where('createdAt', '<', fortyEightHoursAgo).get();
-      snap1.forEach(doc => {
-        if (!targetDocIds.has(doc.id)) {
-          targetDocIds.add(doc.id);
-          docsToDelete.push(doc);
-        }
-      });
+      const snap1 = await db.collection('deals')
+        .where('createdAt', '<', fortyEightHoursAgo)
+        .where('isExpired', '==', false)
+        .get();
+      snap1.forEach(doc => targetDocs.set(doc.id, doc));
       
-      const snap2 = await db.collection('deals').where('timestamp', '<', fortyEightHoursAgo).get();
-      snap2.forEach(doc => {
-        if (!targetDocIds.has(doc.id)) {
-          targetDocIds.add(doc.id);
-          docsToDelete.push(doc);
-        }
-      });
+      const snap2 = await db.collection('deals')
+        .where('timestamp', '<', fortyEightHoursAgo)
+        .where('isExpired', '==', false)
+        .get();
+      snap2.forEach(doc => targetDocs.set(doc.id, doc));
       
-      for (const doc of docsToDelete) {
+      const batchSize = 400;
+      let batch = db.batch();
+      let countInBatch = 0;
+
+      for (const [dealId, doc] of targetDocs) {
         try {
           const deal = doc.data();
-          const dealId = doc.id;
-          
-          const url = deal.imageUrl || deal.image_url;
-          if (url) {
-            await deleteDealImage(url);
+          batch.update(doc.ref, {
+            isExpired: true,
+            expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          countInBatch++;
+          expiredCount++;
+          updatedDeals.push({ id: dealId, title: deal.title });
+
+          if (countInBatch >= batchSize) {
+            await batch.commit();
+            batch = db.batch();
+            countInBatch = 0;
           }
-          
-          await db.collection('deals').doc(dealId).delete();
-          deletedCount++;
-          deletedDeals.push({ id: dealId, title: deal.title });
         } catch (docError) {
           errorCount++;
         }
       }
+
+      if (countInBatch > 0) {
+        await batch.commit();
+      }
       
       res.status(200).json({
         success: true,
-        message: 'Fırsat temizliği tamamlandı',
+        message: 'Fırsat süresi doldu işaretleme tamamlandı (Fırsatlar silinmedi, arşivlendi).',
         stats: {
-          totalFound: docsToDelete.length,
-          deletedCount,
+          totalFound: targetDocs.size,
+          expiredCount,
           errorCount
         },
-        deletedDeals
+        updatedDeals
       });
     } catch (error) {
-      functions.logger.error('❌ Manuel temizlik genel hatası:', error);
+      functions.logger.error('❌ Manuel süresi doldu işaretleme genel hatası:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   }));

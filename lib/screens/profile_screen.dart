@@ -28,6 +28,7 @@ import '../models/deal.dart';
 import '../widgets/deal_card.dart';
 import 'deal_detail_screen.dart';
 import 'package:flutter/services.dart';
+import '../utils/circular_theme_transition.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -47,6 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirestoreService _firestoreService = FirestoreService();
   final ThemeService _themeService = ThemeService();
+  final GlobalKey _themeButtonKey = GlobalKey();
   
   AppUser? _user;
   bool _isLoading = false;
@@ -1014,23 +1016,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               );
                             },
-                            isDark: isDark,
-                          ),
-                          _buildDivider(isDark),
-                          // Dark Mode
-                          _buildSettingItem(
-                            icon: isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-                            title: 'Karanlık Mod',
-                            iconBgColor: isDark ? Colors.indigo.withValues(alpha: 0.2) : Colors.amber.withValues(alpha: 0.2),
-                            iconColor: isDark ? Colors.indigo[300]! : Colors.amber[700]!,
-                            trailing: Switch(
-                              value: _themeService.isDarkMode,
-                              onChanged: (value) {
-                                _themeService.toggleTheme();
-                              },
-                              activeThumbColor: primaryColor,
-                              activeTrackColor: primaryColor.withValues(alpha: 0.5),
-                            ),
                             isDark: isDark,
                           ),
                           _buildDivider(isDark),
@@ -2013,26 +1998,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            // More Options (Report, Block, Badge for Admin)
+            // Right Actions (Theme Switcher Button & Optional More Options)
             if (!_isOwnProfile && _user != null)
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _showProfileOptionsModal(_user!),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                      shape: BoxShape.circle,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildThemeToggleButton(context, isDark: isDark, textMain: textMain),
+                  const SizedBox(width: 8),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _showProfileOptionsModal(_user!),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.more_horiz_rounded, size: 18, color: textMain),
+                      ),
                     ),
-                    child: Icon(Icons.more_horiz_rounded, size: 18, color: textMain),
                   ),
-                ),
+                ],
               )
             else
-              const SizedBox(width: 36),
+              _buildThemeToggleButton(context, isDark: isDark, textMain: textMain),
           ],
+        ),
+      ),
+    );
+  }
+
+  // Quick Moon / Sun theme toggle button with Telegram-style circular transition
+  Widget _buildThemeToggleButton(
+    BuildContext context, {
+    required bool isDark,
+    required Color textMain,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: isDark ? 'Aydınlık Moda Geç' : 'Karanlık Moda Geç',
+        child: InkWell(
+          key: _themeButtonKey,
+          onTap: () {
+            CircularThemeTransition.animate(
+              context: context,
+              buttonKey: _themeButtonKey,
+              isCurrentlyDark: isDark,
+              onToggleTheme: () => _themeService.toggleTheme(),
+            );
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.amber.withValues(alpha: 0.15)
+                  : Colors.indigo.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isDark
+                    ? Colors.amber.withValues(alpha: 0.35)
+                    : Colors.indigo.withValues(alpha: 0.2),
+                width: 1,
+              ),
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, anim) => RotationTransition(
+                turns: anim,
+                child: ScaleTransition(scale: anim, child: child),
+              ),
+              child: Icon(
+                isDark ? Icons.wb_sunny_rounded : Icons.nightlight_round,
+                key: ValueKey<bool>(isDark),
+                size: 18,
+                color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
+              ),
+            ),
+          ),
         ),
       ),
     );

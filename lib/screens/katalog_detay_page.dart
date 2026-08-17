@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/katalog.dart';
 import '../services/katalog_share_service.dart';
@@ -15,8 +17,7 @@ class KatalogDetayPage extends StatefulWidget {
   State<KatalogDetayPage> createState() => _KatalogDetayPageState();
 }
 
-class _KatalogDetayPageState extends State<KatalogDetayPage>
-    with TickerProviderStateMixin {
+class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProviderStateMixin {
   late final PageController _pageController;
   late final TransformationController _transformationController;
   late final AnimationController _zoomAnimController;
@@ -46,7 +47,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
 
   void _handleZoomChange() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
-    final isZoomedNow = scale > 1.02; // small threshold to avoid float jitter
+    final isZoomedNow = scale > 1.02;
     if (isZoomedNow != _isZoomed) {
       setState(() {
         _isZoomed = isZoomedNow;
@@ -55,6 +56,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
   }
 
   void _handleDoubleTap() {
+    HapticFeedback.lightImpact();
     final currentScale = _transformationController.value.getMaxScaleOnAxis();
     final Matrix4 targetMatrix;
 
@@ -69,8 +71,8 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
       final double x = -(width * (scale - 1)) / 2;
       final double y = -(height * (scale - 1)) / 2;
       targetMatrix = Matrix4.identity()
-        ..translate(x, y)
-        ..scale(scale, scale, 1.0);
+        ..translateByDouble(x, y, 0.0, 1.0)
+        ..scaleByDouble(scale, scale, 1.0, 1.0);
     }
 
     _zoomAnimation = Matrix4Tween(
@@ -97,7 +99,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
     return widget.catalog.getValidityText();
   }
 
-  Color _getValidityColor(bool isDark) {
+  Color _getValidityColor() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     
@@ -114,17 +116,17 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
     );
 
     if (today.isBefore(start)) {
-      return Colors.blue[300]!;
+      return const Color(0xFF60A5FA); // Blue 400
     } else {
       final diff = expiry.difference(today).inDays;
       if (diff < 0) {
-        return Colors.grey[500]!;
+        return const Color(0xFFA1A1AA); // Zinc 400
       } else if (diff <= 1) {
-        return Colors.red[400] ?? Colors.red;
+        return const Color(0xFFF87171); // Red 400
       } else if (diff <= 3) {
-        return Colors.amber[600] ?? Colors.amber;
+        return const Color(0xFFFBBF24); // Amber 400
       } else {
-        return Colors.blue[300]!;
+        return const Color(0xFF4ADE80); // Green 400
       }
     }
   }
@@ -137,7 +139,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Main PageView with zoomable images
+          // 1. MAIN PAGEVIEW WITH ZOOMABLE HIGH-RES IMAGES
           Positioned.fill(
             child: PageView.builder(
               controller: _pageController,
@@ -171,9 +173,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
                     if (isCurrent) {
                       _pointerCount = (_pointerCount - 1).clamp(0, 99);
                       if (_pointerCount < 2 &&
-                          _transformationController.value
-                                  .getMaxScaleOnAxis() <=
-                              1.02) {
+                          _transformationController.value.getMaxScaleOnAxis() <= 1.02) {
                         setState(() {
                           _isZoomed = false;
                         });
@@ -184,9 +184,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
                     if (isCurrent) {
                       _pointerCount = (_pointerCount - 1).clamp(0, 99);
                       if (_pointerCount < 2 &&
-                          _transformationController.value
-                                  .getMaxScaleOnAxis() <=
-                              1.02) {
+                          _transformationController.value.getMaxScaleOnAxis() <= 1.02) {
                         setState(() {
                           _isZoomed = false;
                         });
@@ -197,13 +195,10 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
                     child: InteractiveViewer(
                       minScale: 1.0,
                       maxScale: 4.0,
-                      transformationController:
-                          isCurrent ? _transformationController : null,
+                      transformationController: isCurrent ? _transformationController : null,
                       onInteractionEnd: (details) {
                         if (isCurrent &&
-                            _transformationController.value
-                                    .getMaxScaleOnAxis() <=
-                                1.02) {
+                            _transformationController.value.getMaxScaleOnAxis() <= 1.02) {
                           setState(() {
                             _isZoomed = false;
                           });
@@ -219,19 +214,18 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
                           placeholder: (context, url) => const Center(
                             child: CircularProgressIndicator(
                               color: Colors.white,
+                              strokeWidth: 2.5,
                             ),
                           ),
                           errorWidget: (context, url, error) => const Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.broken_image,
-                                    color: Colors.white60, size: 60),
+                                Icon(Icons.broken_image_rounded, color: Colors.white60, size: 56),
                                 SizedBox(height: 12),
                                 Text(
                                   'Görsel yüklenemedi',
-                                  style: TextStyle(
-                                      color: Colors.white70, fontSize: 16),
+                                  style: TextStyle(color: Colors.white70, fontSize: 15),
                                 ),
                               ],
                             ),
@@ -245,157 +239,207 @@ class _KatalogDetayPageState extends State<KatalogDetayPage>
             ),
           ),
 
-          // Custom Top Overlay Bar
+          // 2. FROSTED GLASS TOP OVERLAY BAR
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Container(
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 8,
-                bottom: 16,
-                left: 8,
-                right: 16,
-              ),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.8),
-                    Colors.transparent,
-                  ],
+            child: ClipRRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.of(context).padding.top + 8,
+                    bottom: 14,
+                    left: 12,
+                    right: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        width: 0.8,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      // Frosted Back Button
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => Navigator.pop(context),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Title and Validity Tag
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.catalog.katalogBasligi,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: _getValidityColor(),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  _getValidityText(),
+                                  style: TextStyle(
+                                    color: _getValidityColor(),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Modern Share Button
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            KatalogShareService.shareCatalogPage(
+                              context,
+                              catalog: widget.catalog,
+                              currentPageIndex: _currentPage,
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.share_rounded,
+                              color: Colors.white,
+                              size: 17,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.catalog.katalogBasligi,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _getValidityText(),
-                          style: TextStyle(
-                            color: _getValidityColor(true),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Modern Paylaşım Butonu
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        width: 1,
-                      ),
-                    ),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.share_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      tooltip: 'Kataloğu Paylaş',
-                      onPressed: () {
-                        KatalogShareService.shareCatalogPage(
-                          context,
-                          catalog: widget.catalog,
-                          currentPageIndex: _currentPage,
-                        );
-                      },
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
 
-          // Custom Bottom Overlay Page Indicator
+          // 3. FROSTED GLASS BOTTOM PAGE INDICATOR
           if (pageCount > 1)
             Positioned(
               bottom: 0,
               left: 0,
               right: 0,
-              child: Container(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).padding.bottom + 16,
-                  top: 24,
-                ),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.8),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        '${_currentPage + 1} / $pageCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
+              child: ClipRRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).padding.bottom + 12,
+                      top: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      border: Border(
+                        top: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          width: 0.8,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        pageCount,
-                        (index) => Container(
-                          margin:
-                              const EdgeInsets.symmetric(horizontal: 3),
-                          width: _currentPage == index ? 16 : 6,
-                          height: 6,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Page Count Capsule
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                           decoration: BoxDecoration(
-                            color: _currentPage == index
-                                ? Colors.white
-                                : Colors.white.withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(999),
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            'Sayfa ${_currentPage + 1} / $pageCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.2,
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        // Page Dots Indicator
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                            pageCount,
+                            (index) => AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              width: _currentPage == index ? 16 : 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: _currentPage == index
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
@@ -34,7 +35,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
-  
+
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
@@ -42,7 +43,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   final _imageUrlController = TextEditingController();
   final _urlController = TextEditingController();
   final _customStoreController = TextEditingController();
-  
+
   String? _selectedStore;
   String? _priceLabel;
   double? _scrapedOriginalPrice;
@@ -123,10 +124,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   void _updateStoreSelection(String storeName) {
     if (!mounted) return;
-    
+
     final lowerName = storeName.toLowerCase();
     String? matchedStore;
-    
+
     if (lowerName.contains('trendyol') || lowerName.contains('ty.gl')) {
       matchedStore = 'Trendyol';
     } else if (lowerName.contains('hepsiburada') || lowerName.contains('hb.biz')) {
@@ -170,7 +171,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     } else if (lowerName.contains('boyner')) {
       matchedStore = 'Boyner';
     }
-    
+
     setState(() {
       if (matchedStore != null) {
         _selectedStore = matchedStore;
@@ -183,9 +184,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
       if (matchedStore == 'Getir' || matchedStore == 'Migros') {
         _selectedCategory = 'supermarket';
-        if (_selectedSubCategory == null) {
-          _selectedSubCategory = 'Gıda Ürünleri';
-        }
+        _selectedSubCategory ??= 'Gıda Ürünleri';
       }
     });
   }
@@ -205,7 +204,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   String? _scrapedBrand;
   bool _isAmazonWarehouse = false;
   bool _showInfoBanner = true;
-  
+  bool _showManualImageInput = false;
+
   String _lastProcessedUrl = '';
   String _lastProcessedTitle = '';
   String _lastProcessedDescription = '';
@@ -214,15 +214,12 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   @override
   void initState() {
     super.initState();
-    
-    // Başlık veya açıklama değiştiğinde kategori tespit et
+
     _titleController.addListener(_onTextChanged);
     _descriptionController.addListener(_onTextChanged);
-    // URL değiştiğinde AI analizi yap
     _urlController.addListener(_onUrlChanged);
-    // Görsel URL değiştiğinde otomatik görsel çek
     _imageUrlController.addListener(_onImageUrlChanged);
-    // Deal paylaşım durumunu kontrol et
+    _priceController.addListener(() => setState(() {}));
     _checkDealSharingStatus();
 
     if (widget.initialUrl != null) {
@@ -252,10 +249,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     SnackBarAction? action,
   }) {
     if (!mounted) return;
-    
-    // Clear any active SnackBars immediately so they don't pile up
+
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -267,8 +262,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 message,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -278,10 +273,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         duration: duration,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
         ),
-        margin: const EdgeInsets.all(12),
-        elevation: 4,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        elevation: 6,
         action: action,
       ),
     );
@@ -289,7 +284,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   void _showUrlValidationErrorDialog(UrlValidationResult result) {
     if (!mounted) return;
-    
+
     String titleText = 'Geçersiz Link';
     String messageText = 'Girdiğiniz link geçerli bir ürün sayfası değildir.';
     IconData icon = Icons.warning_amber_rounded;
@@ -315,22 +310,22 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         iconColor = const Color(0xFF2E7D32);
         break;
       case UrlValidationResult.valid:
-        return; // Valid ise pencere gösterme
+        return;
     }
 
     showDialog(
       context: context,
       builder: (BuildContext ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
             children: [
-              Icon(icon, color: iconColor, size: 28),
+              Icon(icon, color: iconColor, size: 26),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   titleText,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -341,13 +336,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             children: [
               Text(
                 messageText,
-                style: const TextStyle(fontSize: 14, height: 1.4),
+                style: const TextStyle(fontSize: 13.5, height: 1.4),
               ),
               if (_urlController.text.trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
                   '🔗 URL: ${_urlController.text.trim()}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+                  style: const TextStyle(fontSize: 11.5, color: Colors.grey, fontStyle: FontStyle.italic),
                 ),
               ]
             ],
@@ -357,7 +352,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text(
                 'Anladım',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFFF6B35)),
+                style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary),
               ),
             ),
           ],
@@ -377,16 +372,16 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   void _onTextChanged() {
     final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
-    
+
     if (title == _lastProcessedTitle && description == _lastProcessedDescription) {
-      return; // Değişiklik yoksa boşuna tetikleme
+      return;
     }
-    
+
     _lastProcessedTitle = title;
     _lastProcessedDescription = description;
-    
+
     if (title.isEmpty && description.isEmpty) return;
-    
+
     _textDebounceTimer?.cancel();
     _textDebounceTimer = Timer(const Duration(milliseconds: 800), () {
       if (!mounted || _isAutoDetecting) return;
@@ -398,15 +393,14 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   Future<void> _onUrlChanged() async {
     final url = _urlController.text.trim();
-    
+
     if (url == _lastProcessedUrl) {
-      return; // Değişiklik yoksa boşuna tetikleme
+      return;
     }
-    
+
     _lastProcessedUrl = url;
-    
+
     if (url.isEmpty || !url.startsWith('http')) {
-      // URL boşsa veya geçersizse, otomatik doldurulan tüm alanları temizle ve loading'i durdur
       _urlDebounceTimer?.cancel();
       setState(() {
         _isAutoDetecting = false;
@@ -423,11 +417,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _selectedSubCategory = null;
         _isCategoryLockedByScraper = false;
         _isAmazonWarehouse = false;
+        _scrapedOriginalPrice = null;
+        _scrapedRatingValue = null;
+        _scrapedRatingCount = null;
+        _scrapedBrand = null;
+        _priceLabel = null;
       });
       return;
     }
-    
-    // Link yapıştırıldığı veya yazıldığı an beklemeden ANINDA loading başlat ve alanları hazırla
+
     setState(() {
       _isAutoDetecting = true;
       _isLoadingImage = true;
@@ -444,22 +442,44 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       _isCategoryLockedByScraper = false;
       _priceLabel = null;
       _isAmazonWarehouse = false;
+      _scrapedOriginalPrice = null;
+      _scrapedRatingValue = null;
+      _scrapedRatingCount = null;
+      _scrapedBrand = null;
     });
-    
-    // Debounce: Yazma bittikten 400ms sonra verileri otomatik çek
+
     _urlDebounceTimer?.cancel();
     _urlDebounceTimer = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
       _autoFetchProductData(url);
     });
   }
-  
+
+  Future<void> _pasteFromClipboard() async {
+    HapticFeedback.lightImpact();
+    try {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData?.text != null && clipboardData!.text!.trim().isNotEmpty) {
+        final text = clipboardData.text!.trim();
+        _urlController.text = text;
+        _urlController.selection = TextSelection.fromPosition(TextPosition(offset: text.length));
+        _formKey.currentState?.validate();
+        setState(() {});
+      } else {
+        _showCustomSnackBar(
+          message: 'Panoda yapıştırılacak link bulunamadı.',
+          icon: Icons.content_paste_off_rounded,
+          backgroundColor: Colors.grey[800]!,
+        );
+      }
+    } catch (_) {}
+  }
+
   Future<void> _autoFetchProductData(String url) async {
     if (_isFetchingActive) return;
     _isFetchingActive = true;
 
     try {
-      // Eğer henüz loading başlamadıysa başlat
       if (!_isAutoDetecting && mounted) {
         setState(() {
           _isAutoDetecting = true;
@@ -467,7 +487,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         });
       }
 
-      // Domain Allowlist Kontrolü
       final validationResult = await DomainAllowlistService.validateUrl(url);
       if (validationResult != UrlValidationResult.valid) {
         if (mounted) {
@@ -488,7 +507,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       bool hasCategory = false;
       bool hasPrice = false;
 
-      // 1. AMAZON ÖZEL KONTROLÜ
+      // 1. AMAZON ASIN CHECK
       String? amazonImage;
       if (url.contains("amazon") || url.contains("amzn")) {
         try {
@@ -509,7 +528,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         }
       }
 
-      // 2. LİNK PREVIEW (CLIENT-SIDE SCRAPING)
+      // 2. CLIENT-SIDE SCRAPING
       LinkPreviewResult? preview;
       try {
         preview = await _linkPreviewService.fetchMetadata(url)
@@ -517,10 +536,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           _log('⏱️ LinkPreview timeout');
           return null;
         });
-        
+
         final cleanPreview = preview;
         if (cleanPreview != null && mounted) {
-          // Görseli al
           final cleanImage = _cleanScrapedString(cleanPreview.imageUrl);
           if (!hasImage && cleanImage != null && _isValidImageUrl(cleanImage)) {
             setState(() {
@@ -530,22 +548,19 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             });
             hasImage = true;
           }
-          
-          // Başlığı al (boşsa)
+
           final cleanTitle = _cleanScrapedString(cleanPreview.title);
           if (_titleController.text.trim().isEmpty && cleanTitle != null) {
             _titleController.text = cleanTitle;
             hasTitle = true;
           }
 
-          // Mağazayı al (boşsa)
           final cleanProvider = _cleanScrapedString(cleanPreview.provider);
           if (_storeController.text.trim().isEmpty && cleanProvider != null) {
             _updateStoreSelection(cleanProvider);
             hasStore = true;
           }
 
-          // Fiyatı al (boşsa)
           if (_priceController.text.trim().isEmpty && cleanPreview.price != null && cleanPreview.price! > 0) {
             final doubleVal = cleanPreview.price!;
             if (doubleVal == doubleVal.toInt()) {
@@ -556,13 +571,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             hasPrice = true;
           }
 
-          // Açıklamayı al (boşsa)
           final cleanDesc = _cleanScrapedString(cleanPreview.description);
           if (_descriptionController.text.trim().isEmpty && cleanDesc != null) {
             _descriptionController.text = AdvertisingComplianceService.ensureDisclosure(cleanDesc);
           }
 
-          // Fiyat Etiketini al (kampanya/CRM)
           final label = cleanPreview.priceLabel;
           if (label != null && label.isNotEmpty) {
             setState(() {
@@ -571,7 +584,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel');
           }
 
-          // Rating & Marka & İndirimsiz Fiyat verilerini al
           if (cleanPreview.ratingValue != null || cleanPreview.ratingCount != null || cleanPreview.brand != null || cleanPreview.originalPrice != null) {
             setState(() {
               _scrapedRatingValue = cleanPreview.ratingValue;
@@ -579,23 +591,18 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               _scrapedBrand = cleanPreview.brand;
               _scrapedOriginalPrice = cleanPreview.originalPrice;
             });
-            _log('⭐ Scraper rating/marka/eskiFiyat tespiti: Rating=$_scrapedRatingValue ($_scrapedRatingCount), Brand=$_scrapedBrand, OriginalPrice=$_scrapedOriginalPrice');
           }
 
-          // Amazon Depo ürünü tespiti
           if (cleanPreview.isAmazonWarehouse || Deal.checkIsAmazonWarehouse(url)) {
             setState(() {
               _isAmazonWarehouse = true;
             });
-            _log('📦 Amazon Depo ürünü tespit edildi');
           }
 
-          // Kategori ekmek kırıntılarını (breadcrumbs) ve başlığı birleştirip sınıflandır
           if (cleanPreview.breadcrumbs != null && cleanPreview.breadcrumbs!.isNotEmpty) {
             final joinedBreadcrumbs = cleanPreview.breadcrumbs!.join(' ');
-            final cleanTitle = _cleanScrapedString(cleanPreview.title) ?? '';
-            final textToClassify = '$joinedBreadcrumbs $cleanTitle';
-            _log('🔍 Scraper kırıntıları ve başlık ile kategori tespiti yapılıyor: $textToClassify');
+            final cleanT = _cleanScrapedString(cleanPreview.title) ?? '';
+            final textToClassify = '$joinedBreadcrumbs $cleanT';
             final result = CategoryDetectionService.detectCategory(
               textToClassify,
               url: url,
@@ -608,7 +615,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 _isCategoryLockedByScraper = true;
               });
               hasCategory = true;
-              _log('✅ Scraper kategori tespiti başarılı: $_selectedCategory -> $_selectedSubCategory (Kilitlendi)');
             }
           }
         }
@@ -616,7 +622,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _log('❌ LinkPreview metadata çekme hatası: $e');
       }
 
-      // Görsel yükleniyor durumunu kapat
       if (mounted) {
         setState(() {
           _isLoadingImage = false;
@@ -633,7 +638,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         );
 
         if (aiResult['success'] == true && mounted) {
-          // AI'dan gelen verileri ata (eğer alanlar boşsa)
           final aiTitle = _cleanScrapedString(aiResult['title']?.toString());
           if (_titleController.text.trim().isEmpty && aiTitle != null) {
             _titleController.text = aiTitle;
@@ -661,14 +665,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             });
             hasCategory = true;
           }
-        } else {
-          _log('⚠️ AI Analiz başarısız veya proxy hatası verdi.');
         }
       } catch (e) {
-        _log('❌ AI Analiz sırasında hata oluştu: $e');
+        _log('❌ AI Analiz sırasında hata: $e');
       }
 
-      // İşlem bitti
       if (mounted) {
         setState(() {
           _isAutoDetecting = false;
@@ -678,7 +679,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       // 4. KULLANICI BİLGİLENDİRME (SNACKBAR)
       if (mounted) {
         final anySuccess = hasImage || hasTitle || hasStore || hasCategory || hasPrice;
-        
+
         if (anySuccess) {
           final List<String> missingFields = [];
           if (_imageUrlController.text.trim().isEmpty) missingFields.add('Görsel');
@@ -688,20 +689,20 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
           String msg;
           if (missingFields.isEmpty) {
-            msg = '✨ Ürün bilgileri otomatik olarak başarıyla çekildi!';
+            msg = '✨ Ürün bilgileri Botkolik tarafından başarıyla dolduruldu!';
           } else {
-            msg = '✨ Ürün bilgileri kısmen çekildi. Eksik alanları (${missingFields.join(", ")}) lütfen elle tamamlayın.';
+            msg = '✨ Bilgiler kısmen çekildi. Lütfen eksik alanları (${missingFields.join(", ")}) tamamlayın.';
           }
 
           _showCustomSnackBar(
             message: msg,
-            icon: Icons.check_circle_rounded,
+            icon: Icons.auto_awesome_rounded,
             backgroundColor: const Color(0xFF2E7D32),
             duration: const Duration(seconds: 3),
           );
         } else {
           _showCustomSnackBar(
-            message: 'Ürün bilgileri otomatik çekilemedi, lütfen elle doldurun.',
+            message: 'Ürün bilgileri otomatik çekilemedi, lütfen bilgileri elle doldurun.',
             icon: Icons.info_outline_rounded,
             backgroundColor: const Color(0xFF546E7A),
             duration: const Duration(seconds: 3),
@@ -721,14 +722,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   void _onImageUrlChanged() {
     final imageUrl = _imageUrlController.text.trim();
-    
+
     if (imageUrl == _lastProcessedImageUrl) {
-      return; // Değişiklik yoksa boşuna tetikleme
+      return;
     }
-    
+
     _lastProcessedImageUrl = imageUrl;
-    
-    // Eğer boşsa veya geçerli bir görsel URL'si ise, preview'ı güncelle
+
     if (imageUrl.isEmpty) {
       setState(() {
         _previewImageUrl = null;
@@ -736,8 +736,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       });
       return;
     }
-    
-    // Eğer geçerli bir görsel URL'si ise, direkt kullan
+
     if (_isValidImageUrl(imageUrl)) {
       setState(() {
         _previewImageUrl = imageUrl;
@@ -745,43 +744,38 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       });
       return;
     }
-    
-    // Eğer geçersiz bir URL ise (ürün sayfası gibi), linkten görsel çek
+
     if (imageUrl.startsWith('http') && !_isValidImageUrl(imageUrl)) {
       _fetchImageFromUrl(imageUrl);
     }
   }
-  
+
   Future<void> _fetchImageFromUrl(String url) async {
     if (_isLoadingImage) return;
-    
+
     setState(() {
       _isLoadingImage = true;
       _previewImageUrl = null;
     });
-    
+
     try {
       final preview = await _linkPreviewService.fetchMetadata(url)
           .timeout(const Duration(seconds: 10), onTimeout: () {
-        _log('⏱️ Görsel çekme timeout (10 saniye)');
         return null;
       });
-      
+
       if (mounted && preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
-        // Görsel URL'sinin geçerli olup olmadığını kontrol et
         if (_isValidImageUrl(preview.imageUrl!)) {
           setState(() {
             _previewImageUrl = preview.imageUrl;
             _imageUrlController.text = preview.imageUrl!;
             _isLoadingImage = false;
           });
-          _log('✅ Görsel bulundu ve güncellendi: ${preview.imageUrl}');
         } else {
           setState(() {
             _previewImageUrl = null;
             _isLoadingImage = false;
           });
-          _log('⚠️ Bulunan URL geçerli bir görsel URL\'si değil: ${preview.imageUrl}');
         }
       } else {
         if (mounted) {
@@ -790,11 +784,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             _isLoadingImage = false;
           });
         }
-        _log('⚠️ Linkten görsel bulunamadı');
       }
-    } catch (e, stackTrace) {
-      _log('❌ Görsel çekme hatası: $e');
-      _log('❌ Stack trace: $stackTrace');
+    } catch (e) {
       if (mounted) {
         setState(() {
           _previewImageUrl = null;
@@ -803,15 +794,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       }
     }
   }
-  
-  // URL'nin görsel URL'si olup olmadığını kontrol et
+
   bool _isValidImageUrl(String url) {
     if (url.isEmpty) return false;
     if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
-    
+
     final lowerUrl = url.toLowerCase();
-    
-    // 1. URI analizi ile uzantı kontrolü (path .jpg, .png vb. ile bitiyor veya içeriyorsa kesinlikle görseldir)
+
     try {
       final uri = Uri.parse(url);
       final path = uri.path.toLowerCase();
@@ -821,7 +810,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       }
     } catch (_) {}
 
-    // 2. Dynamic Media / Scene7 veya /is/image/ endpoint'leri (Örn: Mango media.mango.com/is/image/...)
     if (lowerUrl.contains('/is/image/') || lowerUrl.contains('/images/') || lowerUrl.contains('/image/')) {
       const htmlPagePatterns = ['/urun/', '-p-', '/item/', '/detail/', '.html', '.htm', '.php'];
       if (!htmlPagePatterns.any((pattern) => lowerUrl.contains(pattern))) {
@@ -829,33 +817,32 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       }
     }
 
-    // 3. Özel Görsel CDN Alan Adları (Sadece görsel barındıran alt alan adları)
     const imageCdnPatterns = [
-      'assets.mmsrg.com',      // MediaMarkt CDN
-      'img.pzrmcdn.com',       // Pazarama CDN
-      'cdn.dsmcdn.com',        // Trendyol CDN
-      'hepsiburada.net',       // Hepsiburada CDN
-      'images-amazon.com',     // Amazon CDN
+      'assets.mmsrg.com',
+      'img.pzrmcdn.com',
+      'cdn.dsmcdn.com',
+      'hepsiburada.net',
+      'images-amazon.com',
       'images-na.ssl-images-amazon.com',
-      'media-amazon.com',      // Amazon Media CDN
-      'm.media-amazon.com',    // Amazon Mobile Media CDN
+      'media-amazon.com',
+      'm.media-amazon.com',
       'ssl-images-amazon.com',
-      'n11scdn.akamaized.net',  // N11 CDN
-      'cdn.vatanbilgisayar.com', // Vatan Bilgisayar CDN
-      'yenieera22.com',          // Itopya Image CDN
-      'teknosa-cloud-prod.mncdn.com', // Teknosa Image CDN
-      'sky-static.mavi.com',    // Mavi CDN
-      'dfcdn.net',              // DeFacto CDN
-      'static.zara.net',        // Zara CDN
-      'media.mango.com',        // Mango Media CDN
-      'st.mango.com',           // Mango CDN
-      'st-mango.mncdn.com',     // Mango Alternative CDN
-      'cdn.beymen.com',         // Beymen CDN
-      'cdn-s3.pttavm.com',      // PttAVM CDN
-      'images.migrosone.com',   // Migros Image CDN
-      'cdn.getir.com',          // Getir CDN
-      'cdn.boyner.com.tr',      // Boyner CDN
-      'cdn03.ciceksepeti.net',  // Çiçeksepeti CDN
+      'n11scdn.akamaized.net',
+      'cdn.vatanbilgisayar.com',
+      'yenieera22.com',
+      'teknosa-cloud-prod.mncdn.com',
+      'sky-static.mavi.com',
+      'dfcdn.net',
+      'static.zara.net',
+      'media.mango.com',
+      'st.mango.com',
+      'st-mango.mncdn.com',
+      'cdn.beymen.com',
+      'cdn-s3.pttavm.com',
+      'images.migrosone.com',
+      'cdn.getir.com',
+      'cdn.boyner.com.tr',
+      'cdn03.ciceksepeti.net',
       'imgbb.co',
       'imgur.com',
       'i.ibb.co',
@@ -870,48 +857,36 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         return true;
       }
     }
-    
+
     return false;
   }
 
-
-
   void _detectCategory() {
-    if (_isCategoryLockedByScraper) {
-      _log('ℹ️ Kategori scraper kırıntısı (breadcrumbs) tarafından kilitlendiği için otomatik eşleştirme atlanıyor.');
-      return;
-    }
+    if (_isCategoryLockedByScraper) return;
 
     final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
-    
+
     if (title.isEmpty && description.isEmpty) return;
-    
-    // Başlık ve açıklamayı birleştir
+
     final combinedText = '$title $description';
-    
-    _log('🔍 Kategori tespiti yapılıyor: $combinedText');
     final result = CategoryDetectionService.detectCategory(
       combinedText,
       url: _urlController.text.trim(),
       store: _selectedStore,
     );
-    _log('✅ Tespit sonucu: $result');
-    
+
     if (result != null && mounted) {
       final categoryId = result['categoryId'];
       final subCategory = result['subCategory'];
-      
+
       if (categoryId != null && categoryId != _selectedCategory) {
-        _log('📝 Kategori güncelleniyor: $categoryId, alt kategori: $subCategory');
         _isAutoDetecting = true;
         setState(() {
           _selectedCategory = categoryId;
           _selectedSubCategory = subCategory;
         });
         _isAutoDetecting = false;
-        
-        _log('✅ Kategori güncellendi: ${Category.getById(categoryId).name}');
       }
     }
   }
@@ -936,12 +911,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   String _getCategoryDisplayText() {
     final category = Category.getById(_selectedCategory);
     if (_selectedSubCategory != null && _selectedSubCategory!.isNotEmpty) {
-      return '${category.icon} ${category.name} > $_selectedSubCategory';
+      return '${category.name} › $_selectedSubCategory';
     }
-    return '${category.icon} ${category.name}';
+    return category.name;
   }
 
   void _showCategorySelector() {
+    HapticFeedback.selectionClick();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -951,19 +927,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         selectedSubCategory: _selectedSubCategory,
         onCategorySelected: (categoryId, subCategory) {
           setState(() {
-            _isCategoryLockedByScraper = false; // Manuel seçim yapıldı, kilidi kaldır
-            _isAutoDetecting = false; // Manuel seçim yapıldı, otomatik tespiti durdur
+            _isCategoryLockedByScraper = false;
+            _isAutoDetecting = false;
             _selectedCategory = categoryId;
-            _selectedSubCategory = subCategory; // Alt kategori bilgisi de kaydediliyor
+            _selectedSubCategory = subCategory;
           });
-          
-          // Seçimi doğrulama için log
+
           final category = Category.getById(categoryId);
-          _log('✅ Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}');
-          
-          // Kullanıcıya bilgi ver (modal widget tarafından zaten kapatılıyor)
           _showCustomSnackBar(
-            message: 'Kategori seçildi: ${category.name}${subCategory != null ? " > $subCategory" : ""}',
+            message: 'Kategori: ${category.name}${subCategory != null ? " › $subCategory" : ""}',
             icon: Icons.check_circle_rounded,
             backgroundColor: const Color(0xFF2E7D32),
             duration: const Duration(seconds: 2),
@@ -974,7 +946,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   }
 
   Future<void> _submitDeal() async {
-    // Deal paylaşım durumunu kontrol et
+    HapticFeedback.mediumImpact();
     final isEnabled = await _firestoreService.isDealSharingEnabled();
     if (!isEnabled) {
       if (mounted) {
@@ -987,7 +959,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       }
       return;
     }
+
     if (!_formKey.currentState!.validate()) {
+      _showCustomSnackBar(
+        message: 'Lütfen zorunlu alanları eksiksiz doldurun.',
+        icon: Icons.error_outline_rounded,
+        backgroundColor: const Color(0xFFC62828),
+      );
       return;
     }
 
@@ -1011,69 +989,35 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Kategori bilgilerini doğru şekilde al
-      // Kategori ID'sini direkt kaydet (kategori adı yerine)
       final categoryId = _selectedCategory;
       final subCategoryName = _selectedSubCategory;
-      final categoryName = Category.getNameById(_selectedCategory);
-      
-      _log('📝 Deal kaydediliyor:');
-      _log('   Ana Kategori ID: $categoryId');
-      _log('   Ana Kategori Adı: $categoryName');
-      _log('   Alt Kategori: ${subCategoryName ?? "Yok"}');
-      
-      // Eğer görsel URL boşsa veya geçersiz bir URL ise (ürün sayfası gibi), linkten görsel çek
+
       String imageUrl = _imageUrlController.text.trim();
-      final urlControllerText = _urlController.text.trim();
-      
-      // Görsel URL'sinin geçerli olup olmadığını kontrol et
       final isValidImageUrl = imageUrl.isNotEmpty && _isValidImageUrl(imageUrl);
-      
+
       if ((imageUrl.isEmpty || !isValidImageUrl) && urlControllerText.isNotEmpty) {
-        _log('🖼️ Görsel URL boş veya geçersiz, linkten görsel çekiliyor...');
-        _log('🔗 URL: $urlControllerText');
-        _log('📸 Mevcut imageUrl: ${imageUrl.isEmpty ? "BOŞ" : imageUrl}');
         try {
           final preview = await _linkPreviewService.fetchMetadata(urlControllerText)
-              .timeout(const Duration(seconds: 10), onTimeout: () {
-            _log('⏱️ Görsel çekme timeout (10 saniye)');
-            return null;
-          });
-          
+              .timeout(const Duration(seconds: 10), onTimeout: () => null);
+
           if (preview?.imageUrl != null && preview!.imageUrl!.isNotEmpty) {
             imageUrl = preview.imageUrl!;
-            _log('✅ Görsel bulundu ve kaydediliyor: $imageUrl');
-            // UI'da da güncelle
             if (mounted) {
               _imageUrlController.text = imageUrl;
             }
-          } else {
-            _log('⚠️ Linkten görsel bulunamadı (preview: ${preview?.imageUrl ?? "null"})');
           }
-        } catch (e, stackTrace) {
-          _log('❌ Görsel çekme hatası: $e');
-          _log('❌ Stack trace: $stackTrace');
-          // Hata olsa bile devam et
-        }
-      } else if (imageUrl.isNotEmpty && isValidImageUrl) {
-        _log('✅ Kullanıcının girdiği görsel URL kullanılıyor: $imageUrl');
-      } else if (imageUrl.isNotEmpty && !isValidImageUrl) {
-        _log('⚠️ Kullanıcının girdiği URL geçersiz (ürün sayfası olabilir): $imageUrl');
-        // Geçersiz URL'yi temizle, linkten çekmeyi dene
-        imageUrl = '';
+        } catch (_) {}
       }
-      
-      _log('📸 Final imageUrl: ${imageUrl.isEmpty ? "BOŞ" : imageUrl}');
-      
+
       try {
         await _firestoreService.createDeal(
           title: _titleController.text.trim(),
           description: AdvertisingComplianceService.ensureDisclosure(_descriptionController.text.trim()),
           price: double.tryParse(_priceController.text.trim()) ?? 0.0,
           store: _storeController.text.trim(),
-          category: categoryId, // Kategori ID'si kaydediliyor (kategori adı yerine)
-          subCategory: subCategoryName, // Alt kategori adı (varsa)
-          imageUrl: imageUrl, // Linkten çekilen veya kullanıcının girdiği görsel
+          category: categoryId,
+          subCategory: subCategoryName,
+          imageUrl: imageUrl,
           url: _urlController.text.trim(),
           userId: user.uid,
           originalPrice: _scrapedOriginalPrice,
@@ -1088,9 +1032,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         if (mounted) {
           Navigator.pop(context);
           _showCustomSnackBar(
-            message: 'Fırsat başarıyla paylaşıldı!',
+            message: '🎉 Fırsat başarıyla paylaşıldı!',
             icon: Icons.check_circle_rounded,
-            backgroundColor: const Color(0xFFFF6B35), // Primary orange accent
+            backgroundColor: AppTheme.primary,
           );
         }
       } catch (e) {
@@ -1133,21 +1077,21 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
           ),
-          title: Row(
+          title: const Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.info_outline_rounded,
-                color: Color(0xFFFF6B35),
-                size: 28,
+                color: AppTheme.primary,
+                size: 26,
               ),
-              const SizedBox(width: 10),
-              const Expanded(
+              SizedBox(width: 10),
+              Expanded(
                 child: Text(
                   'Bu Ürün Zaten Paylaşıldı',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 17,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1155,9 +1099,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             ],
           ),
           content: const Text(
-            'Paylaşmaya çalıştığınız ürünün aktif ve sıcak bir fırsat paylaşımı zaten mevcut. '
+            'Paylaşmaya çalıştığınız ürünün aktif bir paylaşımı zaten mevcut. '
             'Yeni bir mükerrer konu açmak yerine, mevcut fırsata giderek oy verebilir veya yorum yazabilirsiniz.',
-            style: TextStyle(fontSize: 14, height: 1.4),
+            style: TextStyle(fontSize: 13.5, height: 1.4),
           ),
           actionsPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
           actions: [
@@ -1172,17 +1116,17 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF6B35),
+                backgroundColor: AppTheme.primary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
               onPressed: () {
-                Navigator.pop(context); // Diyalogu kapat
+                Navigator.pop(context);
                 if (mounted) {
-                  Navigator.pop(context); // Paylaşım formunu kapat
+                  Navigator.pop(context);
                 }
                 Navigator.push(
                   context,
@@ -1191,7 +1135,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   ),
                 );
               },
-              child: const Text('Fırsata Git'),
+              child: const Text('Fırsata Git ↗', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -1199,55 +1143,172 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     );
   }
 
+  // --- UI ROOT BUILDER ---
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
     final currentUser = _authService.currentUser;
 
     if (currentUser == null) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Fırsat Paylaş',
-            style: TextStyle(fontWeight: FontWeight.bold),
+      return _buildGuestLoginView(isDark);
+    }
+
+    return Scaffold(
+      backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: Text(
+          'Fırsat Paylaş',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            letterSpacing: -0.3,
+            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
           ),
-          centerTitle: true,
-          elevation: 0,
-          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
         ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 19,
+            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Geri',
+        ),
+      ),
+      bottomNavigationBar: _buildStickySubmitBar(isDark),
+      body: StreamBuilder<bool>(
+        stream: _firestoreService.dealSharingEnabledStream(),
+        builder: (context, snapshot) {
+          final isEnabled = snapshot.data ?? true;
+
+          return Form(
+            key: _formKey,
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
               children: [
-                Icon(
-                  Icons.add_circle_outline_rounded,
-                  size: 64,
-                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                // 1. Paylaşım Durduruldu Bildirimi
+                if (!isEnabled) _buildSharingDisabledAlert(isDark),
+
+                // 2. Sihirli Link & Otomatik Tarama Alanı
+                _buildMagicLinkSection(isDark),
+
+                const SizedBox(height: 14),
+
+                // 3. Canlı Fırsat Vitrini (Hero Live Preview)
+                _buildLiveHeroPreviewCard(isDark),
+
+                const SizedBox(height: 14),
+
+                // 4. Form Alanları (Skeleton Loader veya Kartlar - Akıcı Geçiş)
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 550),
+                  reverseDuration: const Duration(milliseconds: 250),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (Widget child, Animation<double> animation) {
+                    final offsetAnimation = Tween<Offset>(
+                      begin: const Offset(0.0, 0.05),
+                      end: Offset.zero,
+                    ).animate(CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ));
+
+                    return FadeTransition(
+                      opacity: CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOut,
+                      ),
+                      child: SlideTransition(
+                        position: offsetAnimation,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: _isAutoDetecting
+                      ? KeyedSubtree(
+                          key: const ValueKey('form_skeleton'),
+                          child: _buildModernSkeletonLoader(isDark),
+                        )
+                      : KeyedSubtree(
+                          key: const ValueKey('form_loaded'),
+                          child: _buildFormSections(isDark),
+                        ),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Fırsat Paylaşmak İçin Giriş Yap',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // --- GUEST LOGIN PROMPT ---
+  Widget _buildGuestLoginView(bool isDark) {
+    return Scaffold(
+      backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: Text(
+          'Fırsat Paylaş',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+          ),
+        ),
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Yakaladığınız indirimleri tüm toplulukla paylaşmak için hızlıca giriş yapın.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.4,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-                  ),
+                child: const Icon(
+                  Icons.local_fire_department_rounded,
+                  size: 40,
+                  color: AppTheme.primary,
                 ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Fırsat Paylaşmak İçin Giriş Yap',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Yakaladığınız indirimleri FırsatKolik topluluğuyla paylaşarak sıcak fırsatları herkese duyurun.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton.icon(
                   onPressed: () {
                     showGuestLoginBottomSheet(
                       context,
@@ -1259,792 +1320,1341 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   },
                   icon: const Icon(Icons.login_rounded, size: 18),
                   label: const Text(
-                    'Giriş Yap',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    'Giriş Yap ve Paylaş',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                    elevation: 3,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      );
-    }
-    
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Fırsat Paylaş',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-      ),
-      body: StreamBuilder<bool>(
-        stream: _firestoreService.dealSharingEnabledStream(),
-        builder: (context, snapshot) {
-          final isEnabled = snapshot.data ?? true;
-          
-          return Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // Paylaşım durduruldu uyarısı
-                if (!isEnabled)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange, width: 2),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.orange[700]),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Fırsat paylaşımı şu anda geçici olarak durdurulmuştur.',
-                            style: TextStyle(
-                              color: Colors.orange[900],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Otomatik Bilgi Alma Bilgilendirme Kutusu (Kapatılabilir & Botkolik Vurgulu)
-                if (_showInfoBanner)
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: isDark 
-                          ? const Color(0xFF1E293B).withValues(alpha: 0.8) 
-                          : const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark 
-                            ? const Color(0xFF38BDF8).withValues(alpha: 0.3) 
-                            : const Color(0xFFBFDBFE),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Botkolik Profil Fotoğrafı
-                        Container(
-                          margin: const EdgeInsets.only(top: 2),
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppTheme.primary.withValues(alpha: 0.6),
-                              width: 1.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.primary.withValues(alpha: 0.2),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: ClipOval(
-                            child: Image.asset(
-                              'assets/botkolik.webp',
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text.rich(
-                            TextSpan(
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                height: 1.4,
-                                color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E3A8A),
-                              ),
-                              children: [
-                                const TextSpan(text: 'Linki buraya yapıştırdığınızda '), 
-                                TextSpan(
-                                  text: 'Bot',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
-                                const TextSpan(
-                                  text: 'kolik',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    color: AppTheme.primary,
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
-                                const TextSpan(
-                                  text:
-                                      ' anında devreye girer ve ürün bilgilerini otomatik olarak doldurur. Tarama sonrası doğrulama yapabilir veya eksikleri elle tamamlayabilirsiniz.',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        InkWell(
-                          onTap: () {
-                            setState(() {
-                              _showInfoBanner = false;
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Icon(
-                              Icons.close_rounded,
-                              size: 18,
-                              color: isDark ? Colors.grey[400] : const Color(0xFF64748B),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Ürün URL (En üstte olması daha iyi bir kullanıcı deneyimi sağlar)
-                TextFormField(
-                  controller: _urlController,
-                  style: TextStyle(color: textColor),
-                  decoration: InputDecoration(
-                    labelText: 'Ürün Linki *',
-                    hintText: 'https://...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: const Icon(Icons.link),
-                    suffixIcon: _urlController.text.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(
-                              Icons.close,
-                              color: Colors.grey[600],
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _urlController.clear();
-                              });
-                            },
-                            tooltip: 'Linki Temizle',
-                          )
-                        : null,
-                  ),
-                  onChanged: (value) {
-                    setState(() {}); // Clear butonu görünürlüğü için yeniden çiz
-                  },
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Ürün linki gerekli';
-                    }
-                    if (!value.startsWith('http')) {
-                      return 'Geçerli bir URL girin';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 500),
-                  switchInCurve: Curves.easeInOut,
-                  switchOutCurve: Curves.easeInOut,
-                  transitionBuilder: (Widget child, Animation<double> animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0.0, 0.04),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: _isAutoDetecting
-                      ? _buildSkeletonLoader(isDark)
-                      : _buildFormFields(isDark, isEnabled, textColor),
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
 
-  Widget _buildSkeletonLoader(bool isDark) {
-    final baseColor = isDark ? Colors.grey[850]! : Colors.grey[300]!;
-    final highlightColor = isDark ? Colors.grey[700]! : Colors.grey[100]!;
-    
-    return Shimmer.fromColors(
-      key: const ValueKey('skeleton_loader'),
-      baseColor: baseColor,
-      highlightColor: highlightColor,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  // --- SHARING DISABLED ALERT ---
+  Widget _buildSharingDisabledAlert(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF451A03).withValues(alpha: 0.6) : const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? const Color(0xFFB45309) : const Color(0xFFF59E0B),
+          width: 1,
+        ),
+      ),
+      child: Row(
         children: [
-          // Loader status indicator
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+          Icon(
+            Icons.pause_circle_filled_rounded,
+            color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Fırsat paylaşımı şu anda bakım nedeniyle geçici olarak durdurulmuştur.',
+              style: TextStyle(
+                color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
               ),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  width: 180,
-                  height: 16,
-                  color: Colors.white,
-                ),
-              ],
-            ),
           ),
-          const SizedBox(height: 16),
-          // Title skeleton
-          Container(
-            height: 56,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Category skeleton
-          Container(
-            height: 56,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Price skeleton
-          Container(
-            height: 56,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Store skeleton
-          Container(
-            height: 56,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Description skeleton
-          Container(
-            height: 110,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          // Image preview box skeleton
-          Container(
-            height: 200,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          const SizedBox(height: 24),
         ],
       ),
     );
   }
 
-  Widget _buildFormFields(bool isDark, bool isEnabled, Color textColor) {
-    return Column(
-      key: const ValueKey('form_fields'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Başlık
-        TextFormField(
-          controller: _titleController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'Başlık *',
-            hintText: 'Örn: iPhone 15 Pro Max',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            prefixIcon: const Icon(Icons.title),
+  // --- SECTION 1: MAGIC LINK & BOTKOLIK BAR ---
+  Widget _buildMagicLinkSection(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Başlık gerekli';
-            }
-            return null;
-          },
+        ],
+        border: Border.all(
+          color: _urlController.text.isNotEmpty
+              ? AppTheme.primary.withValues(alpha: 0.5)
+              : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+          width: 1,
         ),
-        const SizedBox(height: 16),
-
-        // Kategori Seçimi
-        InkWell(
-          onTap: () => _showCategorySelector(),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF8C42), AppTheme.primary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.link_rounded, color: Colors.white, size: 16),
               ),
-              borderRadius: BorderRadius.circular(12),
-              color: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.category, color: isDark ? AppTheme.darkTextSecondary : Colors.grey),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Kategori *',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _getCategoryDisplayText(),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: textColor,
-                        ),
-                      ),
-                    ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Ürün Linki (URL)',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                    letterSpacing: -0.2,
                   ),
                 ),
-                Icon(Icons.arrow_forward_ios, size: 16, color: isDark ? AppTheme.darkTextSecondary : Colors.grey),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Fiyat
-        TextFormField(
-          controller: _priceController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'Fiyat (₺) *',
-            hintText: 'Örn: 999.99',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            prefixIcon: const Icon(Icons.attach_money),
-          ),
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          validator: (value) {
-            if (_hidePrice) return null;
-            if (value == null || value.isEmpty) {
-              return 'Fiyat gerekli';
-            }
-            if (double.tryParse(value) == null) {
-              return 'Geçerli bir fiyat girin';
-            }
-            return null;
-          },
-        ),
-        // Fiyatı Gizle (Minimalist Tasarım)
-        const SizedBox(height: 8),
-        InkWell(
-          onTap: () {
-            setState(() {
-              _hidePrice = !_hidePrice;
-            });
-          },
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: _hidePrice
-                  ? AppTheme.primary.withValues(alpha: isDark ? 0.12 : 0.06)
-                  : (isDark ? AppTheme.darkSurfaceElevated : Colors.grey[50]),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: _hidePrice
-                    ? AppTheme.primary.withValues(alpha: 0.45)
-                    : (isDark ? AppTheme.darkBorder : Colors.grey[300]!),
-                width: 0.9,
               ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _hidePrice ? Icons.visibility_off_rounded : Icons.visibility_off_outlined,
-                  size: 18,
-                  color: _hidePrice ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : Colors.grey[600]),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Fiyatı Gizle',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: _hidePrice
-                              ? (isDark ? Colors.white : AppTheme.primary)
-                              : textColor,
+              if (_urlController.text.isEmpty)
+                InkWell(
+                  onTap: _pasteFromClipboard,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.content_paste_rounded, size: 13, color: AppTheme.primary),
+                        SizedBox(width: 4),
+                        Text(
+                          'Yapıştır',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: AppTheme.primary,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Fiyatı olmayan bir kampanya veya duyuru paylaşıyorsanız işaretleyin',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
-                          height: 1.2,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  height: 22,
-                  width: 22,
-                  child: Checkbox(
-                    value: _hidePrice,
-                    activeColor: AppTheme.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    onChanged: (val) {
-                      setState(() {
-                        _hidePrice = val ?? false;
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
-        ),
-        const SizedBox(height: 16),
-
-        // Mağaza (Dropdown)
-        DropdownButtonFormField<String>(
-          value: _selectedStore,
-          menuMaxHeight: 250,
-          dropdownColor: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'Mağaza *',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            prefixIcon: const Icon(Icons.store),
-          ),
-          items: _stores.map((store) {
-            return DropdownMenuItem<String>(
-              value: store,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    _getStoreAsset(store),
-                    width: 20,
-                    height: 20,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(Icons.store, size: 20);
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  Text(store, style: TextStyle(color: textColor)),
-                ],
-              ),
-            );
-          }).toList(),
-          onChanged: (value) {
-            setState(() {
-              _selectedStore = value;
-              if (value != 'Diğer') {
-                _storeController.text = value ?? '';
-              } else {
-                _storeController.text = _customStoreController.text;
-              }
-            });
-          },
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Mağaza gerekli';
-            }
-            if (value == 'Diğer' && _customStoreController.text.trim().isEmpty) {
-              return 'Özel mağaza adı girilmelidir';
-            }
-            return null;
-          },
-        ),
-        
-        if (_selectedStore == 'Diğer') ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           TextFormField(
-            controller: _customStoreController,
-            style: TextStyle(color: textColor),
-            decoration: InputDecoration(
-              labelText: 'Özel Mağaza Adı *',
-              hintText: 'Örn: CarrefourSA, MediaMarkt vb.',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              prefixIcon: const Icon(Icons.edit),
+            controller: _urlController,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            style: TextStyle(
+              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
             ),
-            onChanged: (value) {
-              _storeController.text = value.trim();
-            },
+            maxLines: 2,
+            minLines: 1,
+            decoration: InputDecoration(
+              hintText: 'https://www.trendyol.com/... veya https://ty.gl/...',
+              hintStyle: TextStyle(
+                color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                fontSize: 12,
+              ),
+              filled: true,
+              fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: isDark ? AppTheme.darkBorder : Colors.transparent,
+                  width: 1,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: isDark ? AppTheme.darkBorder : Colors.transparent,
+                  width: 1,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+              ),
+              suffixIcon: _urlController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.cancel_rounded, size: 18),
+                      color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _urlController.clear();
+                        _formKey.currentState?.validate();
+                      },
+                      tooltip: 'Temizle',
+                    )
+                  : null,
+            ),
             validator: (value) {
-              if (_selectedStore == 'Diğer' && (value == null || value.trim().isEmpty)) {
-                return 'Mağaza adı boş bırakılamaz';
+              if (value == null || value.trim().isEmpty) {
+                return 'Ürün linki boş bırakılamaz';
+              }
+              if (!value.trim().startsWith('http')) {
+                return 'Geçerli bir web linki (http/https) giriniz';
               }
               return null;
             },
           ),
-        ],
-
-        // Amazon Depo Ürünü Checkbox (Sadece Amazon seçili ise göster - Minimalist Tasarım)
-        if (_selectedStore == 'Amazon') ...[
-          const SizedBox(height: 10),
-          InkWell(
-            onTap: () {
-              setState(() {
-                _isAmazonWarehouse = !_isAmazonWarehouse;
-              });
-            },
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          if (_showInfoBanner) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
-                color: _isAmazonWarehouse
-                    ? const Color(0xFFD97706).withValues(alpha: isDark ? 0.14 : 0.08)
-                    : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFFFFBEB)),
+                color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFEFF6FF),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: _isAmazonWarehouse
-                      ? const Color(0xFFD97706).withValues(alpha: 0.5)
-                      : const Color(0xFFD97706).withValues(alpha: 0.25),
-                  width: 0.9,
+                  color: isDark ? AppTheme.primary.withValues(alpha: 0.25) : const Color(0xFFBFDBFE),
+                  width: 0.8,
                 ),
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.inventory_2_rounded,
-                    size: 18,
-                    color: Color(0xFFD97706),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Amazon Depo Ürünü',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFD97706),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Amazon Depo tarafından satılıyorsa bu seçenek işaretlenmelidir.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
-                            height: 1.2,
-                          ),
-                        ),
-                      ],
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: const BoxDecoration(shape: BoxShape.circle),
+                    child: ClipOval(
+                      child: Image.asset('assets/botkolik.webp', fit: BoxFit.cover),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: Checkbox(
-                      value: _isAmazonWarehouse,
-                      activeColor: const Color(0xFFD97706),
-                      checkColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (val) {
-                        setState(() {
-                          _isAmazonWarehouse = val ?? false;
-                        });
-                      },
+                  Expanded(
+                    child: Text(
+                      'Linki yapıştırdığınızda **Botkolik** ürün bilgilerini otomatik çeker. Tarama sonrası doğrulama yapabilir veya eksikleri kendiniz tamamlayabilirsiniz.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.3,
+                        color: isDark ? const Color(0xFFE4E4E7) : const Color(0xFF1E3A8A),
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => setState(() => _showInfoBanner = false),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2.0),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 15,
+                        color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // --- SECTION 2: HERO LIVE DEAL PREVIEW CARD (SMOOTH ANIMATED TRANSITION & SHIMMER LOADING) ---
+  Widget _buildLiveHeroPreviewCard(bool isDark) {
+    final title = _titleController.text.trim();
+    final priceText = _priceController.text.trim();
+    final price = double.tryParse(priceText) ?? 0.0;
+    final store = _selectedStore ?? _storeController.text.trim();
+    final category = Category.getById(_selectedCategory);
+
+    final bool hasData = _previewImageUrl != null || title.isNotEmpty || price > 0 || _isAutoDetecting;
+
+    if (!hasData) {
+      return const SizedBox.shrink();
+    }
+
+    final shimmerBase = isDark ? const Color(0xFF1C1C1C) : const Color(0xFFE2E8F0);
+    final shimmerHighlight = isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF8FAFC);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
         ],
-        const SizedBox(height: 16),
-
-        // Açıklama
-        TextFormField(
-          controller: _descriptionController,
-          style: TextStyle(color: textColor),
-          decoration: InputDecoration(
-            labelText: 'Açıklama *',
-            hintText: 'Fırsat hakkında detaylar',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            prefixIcon: const Icon(Icons.description),
-          ),
-          maxLines: 4,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Açıklama gerekli';
-            }
-            return null;
-          },
+        border: Border.all(
+          color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+          width: 1,
         ),
-        const SizedBox(height: 16),
-
-        // Görsel Önizleme
-        if (_previewImageUrl != null || _isLoadingImage)
-          Container(
-            height: 200,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: _isLoadingImage
-                  ? Container(
-                      color: isDark ? AppTheme.darkSurfaceElevated : Colors.grey[100],
-                      child: const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
-                  : _previewImageUrl != null
-                      ? Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: CachedNetworkImage(
-                            imageUrl: _previewImageUrl!,
-                            fit: BoxFit.contain,
-                            placeholder: (context, url) => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                            errorWidget: (context, url, error) {
-                              return Container(
-                                color: isDark ? AppTheme.darkSurfaceElevated : Colors.grey[100],
-                                child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.error_outline,
-                                        color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
-                                        size: 48,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Görsel yüklenemedi',
-                                        style: TextStyle(
-                                          color: isDark ? AppTheme.darkTextSecondary : Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        )
-                      : null,
-            ),
-          ),
-        if (_previewImageUrl != null || _isLoadingImage) const SizedBox(height: 24),
-
-        // Gönder butonu
-        ElevatedButton(
-          onPressed: (_isLoading || !isEnabled) ? null : _submitDeal,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFFF6B35),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 0,
-          ),
-          child: _isLoading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Text(
-                  'Fırsatı Paylaş',
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Bar with Animated Tag
+          Row(
+            children: [
+              const Icon(Icons.remove_red_eye_rounded, size: 15, color: AppTheme.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Canlı Fırsat Önizlemesi',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? const Color(0xFFA1A1AA) : const Color(0xFF475569),
                   ),
                 ),
+              ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(scale: Tween<double>(begin: 0.85, end: 1.0).animate(animation), child: child),
+                ),
+                child: _isAutoDetecting
+                    ? Container(
+                        key: const ValueKey('scanning_tag'),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppTheme.primary.withValues(alpha: 0.35),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppTheme.primary, width: 1),
+                              ),
+                              child: ClipOval(
+                                child: Image.asset('assets/botkolik.webp', fit: BoxFit.cover),
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            const Text(
+                              'Botkolik tarıyor...',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : (title.isNotEmpty || price > 0)
+                        ? Container(
+                            key: const ValueKey('ready_tag'),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.18 : 0.08),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: const Color(0xFF16A34A).withValues(alpha: 0.35),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle_rounded, size: 13, color: Color(0xFF16A34A)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Bilgiler Dolduruldu',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF16A34A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const SizedBox.shrink(key: ValueKey('empty_tag')),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Product Content with Fluid Animated Switcher
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            reverseDuration: const Duration(milliseconds: 250),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.04),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                  child: child,
+                ),
+              );
+            },
+            child: _isAutoDetecting
+                ? _buildPreviewShimmerBody(isDark, shimmerBase, shimmerHighlight)
+                : _buildPreviewLoadedBody(isDark, title, price, store, category),
+          ),
+
+          // Expandable Image URL editing bar
+          if (_showManualImageInput) ...[
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _imageUrlController,
+              style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A), fontSize: 12),
+              decoration: InputDecoration(
+                labelText: 'Görsel URL Bağlantısı',
+                hintText: 'https://.../resim.jpg',
+                isDense: true,
+                filled: true,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+                prefixIcon: const Icon(Icons.image_outlined, size: 16),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Preview Shimmer Body
+  Widget _buildPreviewShimmerBody(bool isDark, Color shimmerBase, Color shimmerHighlight) {
+    return KeyedSubtree(
+      key: const ValueKey('preview_shimmer_body'),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Image Shimmer
+          Shimmer.fromColors(
+            baseColor: shimmerBase,
+            highlightColor: shimmerHighlight,
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  color: isDark ? Colors.grey[700] : Colors.grey[400],
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Text Shimmers
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Badges Shimmer
+                Shimmer.fromColors(
+                  baseColor: shimmerBase,
+                  highlightColor: shimmerHighlight,
+                  child: Row(
+                    children: [
+                      Container(
+                        height: 16,
+                        width: 75,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Container(
+                        height: 16,
+                        width: 55,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 7),
+
+                // Title Shimmer
+                Shimmer.fromColors(
+                  baseColor: shimmerBase,
+                  highlightColor: shimmerHighlight,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 11,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Container(
+                        height: 11,
+                        width: 110,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Price Shimmer
+                Shimmer.fromColors(
+                  baseColor: shimmerBase,
+                  highlightColor: shimmerHighlight,
+                  child: Container(
+                    height: 15,
+                    width: 55,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Preview Loaded Body
+  Widget _buildPreviewLoadedBody(bool isDark, String title, double price, String store, Category category) {
+    return KeyedSubtree(
+      key: ValueKey('preview_loaded_${_previewImageUrl}_${title}_$price'),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Product Image
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _showManualImageInput = !_showManualImageInput;
+              });
+            },
+            child: Stack(
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(11),
+                    child: (_previewImageUrl != null && _previewImageUrl!.isNotEmpty)
+                        ? CachedNetworkImage(
+                            imageUrl: _previewImageUrl!,
+                            fit: BoxFit.contain,
+                            fadeInDuration: const Duration(milliseconds: 450),
+                            fadeInCurve: Curves.easeOutCubic,
+                            errorWidget: (_, __, ___) => const Center(
+                              child: Icon(Icons.broken_image_rounded, color: Colors.grey, size: 24),
+                            ),
+                          )
+                        : Center(
+                            child: Icon(
+                              Icons.add_photo_alternate_rounded,
+                              size: 26,
+                              color: isDark ? const Color(0xFF64748B) : const Color(0xFFCBD5E1),
+                            ),
+                          ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 2,
+                  right: 2,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppTheme.darkSurface : Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
+                    ),
+                    child: const Icon(Icons.edit_rounded, size: 9, color: AppTheme.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Product Info Column
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Badges Wrap (Zero Overflow)
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    if (store.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Image.asset(
+                              _getStoreAsset(store),
+                              width: 12,
+                              height: 12,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 12),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              store,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        '${category.icon} ${category.name}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ),
+                    if (_scrapedBrand != null && _scrapedBrand!.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          _scrapedBrand!,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white70 : Colors.black87,
+                          ),
+                        ),
+                      ),
+                    if (_isAmazonWarehouse)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: const Text(
+                          '📦 Amazon Depo',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+
+                // Title
+                Text(
+                  title.isNotEmpty ? title : 'Ürün Başlığı',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+
+                // Price Wrap
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 5,
+                  runSpacing: 2,
+                  children: [
+                    if (_hidePrice)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: const Text(
+                          'Fiyatsız Kampanya',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      )
+                    else ...[
+                      Text(
+                        price > 0 ? '${price.toStringAsFixed(price.truncateToDouble() == price ? 0 : 2)} ₺' : '0 ₺',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.primary,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      if (_scrapedOriginalPrice != null && _scrapedOriginalPrice! > price) ...[
+                        Text(
+                          '${_scrapedOriginalPrice!.toStringAsFixed(0)} ₺',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '%${(((_scrapedOriginalPrice! - price) / _scrapedOriginalPrice!) * 100).round()} İndirim',
+                            style: const TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFDC2626),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- SECTION 3: SKELETON LOADER ---
+  Widget _buildModernSkeletonLoader(bool isDark) {
+    final baseColor = isDark ? const Color(0xFF1C1C1C) : const Color(0xFFE2E8F0);
+    final highlightColor = isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF1F5F9);
+
+    return Shimmer.fromColors(
+      baseColor: baseColor,
+      highlightColor: highlightColor,
+      child: Column(
+        children: [
+          Container(
+            height: 90,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 130,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 100,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- SECTION 4: FORM FIELDS CONTAINER (100% OVERFLOW PROOF) ---
+  Widget _buildFormSections(bool isDark) {
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // CARD 1: FİYAT VE MAĞAZA
+        _buildCardContainer(
+          isDark: isDark,
+          title: 'Fiyat ve Mağaza Bilgileri',
+          icon: Icons.payments_rounded,
+          children: [
+            // Fiyat Girişi
+            TextFormField(
+              controller: _priceController,
+              enabled: !_hidePrice,
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w700, fontSize: 15),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Fiyat (₺) *',
+                hintText: '0.00',
+                filled: true,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    '₺',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: AppTheme.primary),
+                  ),
+                ),
+                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+              validator: (value) {
+                if (_hidePrice) return null;
+                if (value == null || value.trim().isEmpty) {
+                  return 'Lütfen bir fiyat giriniz';
+                }
+                if (double.tryParse(value.trim()) == null) {
+                  return 'Geçerli bir sayı giriniz';
+                }
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 12),
+
+            // Mağaza Seçimi
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: _selectedStore,
+              menuMaxHeight: 300,
+              isExpanded: true,
+              dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,
+              style: TextStyle(color: textColor, fontSize: 13.5, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                labelText: 'Satıcı / Mağaza *',
+                filled: true,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                prefixIcon: const Icon(Icons.storefront_rounded, size: 20),
+              ),
+              items: _stores.map((store) {
+                return DropdownMenuItem<String>(
+                  value: store,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        _getStoreAsset(store),
+                        width: 18,
+                        height: 18,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        store,
+                        style: TextStyle(color: textColor, fontSize: 13.5),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedStore = value;
+                  if (value != 'Diğer') {
+                    _storeController.text = value ?? '';
+                  } else {
+                    _storeController.text = _customStoreController.text;
+                  }
+                });
+              },
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Lütfen mağaza seçiniz';
+                }
+                return null;
+              },
+            ),
+
+            if (_selectedStore == 'Diğer') ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _customStoreController,
+                style: TextStyle(color: textColor),
+                decoration: InputDecoration(
+                  labelText: 'Özel Mağaza Adı *',
+                  hintText: 'Örn: CarrefourSA, MediaMarkt vb.',
+                  filled: true,
+                  fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                  ),
+                  prefixIcon: const Icon(Icons.edit_note_rounded),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                onChanged: (val) => _storeController.text = val.trim(),
+                validator: (val) {
+                  if (_selectedStore == 'Diğer' && (val == null || val.trim().isEmpty)) {
+                    return 'Mağaza adını giriniz';
+                  }
+                  return null;
+                },
+              ),
+            ],
+
+            const SizedBox(height: 10),
+
+            // Fiyatı Gizle Toggle
+            InkWell(
+              onTap: () => setState(() => _hidePrice = !_hidePrice),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _hidePrice
+                      ? AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08)
+                      : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC)),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _hidePrice
+                        ? AppTheme.primary.withValues(alpha: 0.5)
+                        : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _hidePrice ? Icons.visibility_off_rounded : Icons.visibility_off_outlined,
+                      size: 17,
+                      color: _hidePrice ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Fiyatsız kampanya / duyuru',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: _hidePrice ? FontWeight.w700 : FontWeight.w500,
+                          color: _hidePrice ? (isDark ? Colors.white : AppTheme.primary) : textColor,
+                        ),
+                      ),
+                    ),
+                    Switch(
+                      value: _hidePrice,
+                      activeTrackColor: AppTheme.primary,
+                      onChanged: (val) => setState(() => _hidePrice = val),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            if (_selectedStore == 'Amazon') ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => setState(() => _isAmazonWarehouse = !_isAmazonWarehouse),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _isAmazonWarehouse
+                        ? const Color(0xFFD97706).withValues(alpha: isDark ? 0.18 : 0.08)
+                        : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFFFFBEB)),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFFD97706).withValues(alpha: _isAmazonWarehouse ? 0.6 : 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.inventory_2_rounded, size: 17, color: Color(0xFFD97706)),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Amazon Depo Ürünü (2. El / Açık Kutu)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                      ),
+                      Checkbox(
+                        value: _isAmazonWarehouse,
+                        activeColor: const Color(0xFFD97706),
+                        onChanged: (val) => setState(() => _isAmazonWarehouse = val ?? false),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+
+        const SizedBox(height: 14),
+
+        // CARD 2: BAŞLIK VE KATEGORİ
+        _buildCardContainer(
+          isDark: isDark,
+          title: 'Ürün ve Kategori Bilgileri',
+          icon: Icons.category_rounded,
+          children: [
+            // Kategori Seçici
+            InkWell(
+              onTap: _showCategorySelector,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      Category.getById(_selectedCategory).icon,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Kategori *',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _getCategoryDisplayText(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: textColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Başlık
+            TextFormField(
+              controller: _titleController,
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 13.5),
+              decoration: InputDecoration(
+                labelText: 'Fırsat Başlığı *',
+                hintText: 'Örn: Sony WH-1000XM5 Kablosuz Kulaklık',
+                filled: true,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+              maxLines: 2,
+              minLines: 1,
+              validator: (val) {
+                if (val == null || val.trim().isEmpty) {
+                  return 'Başlık zorunludur';
+                }
+                if (val.trim().length < 5) {
+                  return 'Başlık en az 5 karakter olmalıdır';
+                }
+                return null;
+              },
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 14),
+
+        // CARD 3: AÇIKLAMA
+        _buildCardContainer(
+          isDark: isDark,
+          title: 'Detaylı Açıklama & Notlar',
+          icon: Icons.notes_rounded,
+          children: [
+            TextFormField(
+              controller: _descriptionController,
+              style: TextStyle(color: textColor, fontSize: 13, height: 1.4),
+              maxLines: 4,
+              minLines: 3,
+              decoration: InputDecoration(
+                labelText: 'Fırsat Detayları *',
+                hintText: 'İndirimin geçerli olduğu koşullar, sepet indirimleri, kupon detayları...',
+                alignLabelWithHint: true,
+                filled: true,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.all(12),
+              ),
+              validator: (val) {
+                if (val == null || val.trim().isEmpty) {
+                  return 'Açıklama alanı zorunludur';
+                }
+                return null;
+              },
+            ),
+          ],
         ),
       ],
+    );
+  }
+
+  // Helper container card builder
+  Widget _buildCardContainer({
+    required bool isDark,
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+        border: Border.all(
+          color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E293B),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  // --- STICKY FLOATING SUBMIT BAR ---
+  Widget _buildStickySubmitBar(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface.withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.95),
+        border: Border(
+          top: BorderSide(
+            color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 46,
+          child: ElevatedButton(
+            onPressed: (_isLoading || !_dealSharingEnabled) ? null : _submitDeal,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[700],
+              elevation: 2,
+              shadowColor: AppTheme.primary.withValues(alpha: 0.3),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.rocket_launch_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'Fırsatı Toplulukla Paylaş',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -74,22 +74,23 @@ class UserService {
 
   Future<bool> addToFavorites(String userId, String dealId, {String? title, double? price, String? store, String? link, String? imageUrl}) async {
     try {
-      String finalTitle = title ?? '';
+      String finalTitle = title?.trim() ?? '';
       double finalPrice = price ?? 0.0;
-      String finalStore = store ?? '';
-      String finalLink = link ?? '';
-      String finalImageUrl = imageUrl ?? '';
+      String finalStore = store?.trim() ?? '';
+      String finalLink = link?.trim() ?? '';
+      String finalImageUrl = imageUrl?.trim() ?? '';
 
-      if (finalTitle.isEmpty || finalLink.isEmpty || finalImageUrl.isEmpty) {
+      // Eğer parametrelerden herhangi biri eksikse, ana deals dokümanından çekip eksiksiz snapshot oluştur
+      if (finalTitle.isEmpty || finalLink.isEmpty || finalImageUrl.isEmpty || finalStore.isEmpty || finalPrice == 0.0) {
         final doc = await _firestore.collection('deals').doc(dealId).get();
         if (doc.exists) {
           final data = doc.data();
           if (data != null) {
-            if (finalTitle.isEmpty) finalTitle = data['title'] ?? '';
+            if (finalTitle.isEmpty) finalTitle = (data['title'] ?? data['baslik'] ?? '').toString();
             if (finalPrice == 0.0) finalPrice = (data['price'] as num?)?.toDouble() ?? 0.0;
-            if (finalStore.isEmpty) finalStore = data['store'] ?? '';
-            if (finalLink.isEmpty) finalLink = data['link'] ?? data['url'] ?? '';
-            if (finalImageUrl.isEmpty) finalImageUrl = data['imageUrl'] ?? data['image_url'] ?? data['gorselUrl'] ?? '';
+            if (finalStore.isEmpty) finalStore = (data['store'] ?? data['magazaAdi'] ?? '').toString();
+            if (finalLink.isEmpty) finalLink = (data['link'] ?? data['url'] ?? '').toString();
+            if (finalImageUrl.isEmpty) finalImageUrl = (data['imageUrl'] ?? data['image_url'] ?? data['gorselUrl'] ?? '').toString();
           }
         }
       }
@@ -140,10 +141,12 @@ class UserService {
         final dealId = doc.id;
         final dealDoc = await _firestore.collection('deals').doc(dealId).get();
         final savedImageUrl = (data['imageUrl'] ?? data['gorselUrl'] ?? data['image_url'])?.toString() ?? '';
+        final addedAtTimestamp = (data['savedAt'] ?? data['eklenmeTarihi']) as Timestamp?;
+        final addedAt = addedAtTimestamp?.toDate() ?? now;
         
         if (dealDoc.exists) {
           final deal = Deal.fromFirestore(dealDoc);
-          // Favoriler alt dokümanında imageUrl eksikse arka planda doldur
+          // Favoriler alt dokümanında imageUrl eksikse arka planda doldur (snapshot tamamlama)
           if (savedImageUrl.isEmpty && deal.imageUrl.isNotEmpty) {
             _firestore.collection('users').doc(userId).collection('favorites').doc(dealId).set({
               'imageUrl': deal.imageUrl,
@@ -151,14 +154,17 @@ class UserService {
           }
           return deal;
         } else {
+          // İlan 30 günden eski ve veritabanından kalıcı silinmişse + görseli de yoksa yetim kaydı arka planda temizle
+          if (savedImageUrl.isEmpty && now.difference(addedAt).inDays >= 30) {
+            _firestore.collection('users').doc(userId).collection('favorites').doc(dealId).delete().catchError((_) {});
+          }
+
           // İlan silinmişse yedek süresi doldu verisi oluştur
           final baslik = data['baslik'] ?? data['title'] ?? 'Süresi Dolan Fırsat';
           final fiyatStr = data['fiyat']?.toString() ?? '0';
           final fiyat = double.tryParse(fiyatStr) ?? 0.0;
           final store = data['magazaAdi'] ?? data['store'] ?? 'Mağaza';
           final link = data['link'] ?? '';
-          final addedAtTimestamp = (data['savedAt'] ?? data['eklenmeTarihi']) as Timestamp?;
-          final addedAt = addedAtTimestamp?.toDate() ?? now;
           
           return Deal(
             id: dealId,

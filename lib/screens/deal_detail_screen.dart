@@ -1605,7 +1605,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                       _buildGlassCircleButton(
                         icon: Icons.share_rounded,
                         isDark: isDark,
-                        onTap: () => _showShareOptions(context, deal),
+                        onTap: () => DealShareSheet.shareToNativeApps(context, deal),
                       ),
                       const SizedBox(width: 8),
                       // Popup Menu
@@ -1924,11 +1924,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       }
     }
   }
-
-
-  Future<void> _showShareOptions(BuildContext context, Deal deal) =>
-      DealShareSheet.showShareOptions(context, deal);
-
 
 
   Widget _buildDetailImage(Deal deal) {

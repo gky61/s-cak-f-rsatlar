@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import '../models/katalog.dart';
 import '../theme/app_theme.dart';
 import 'katalog_detay_page.dart';
 
 enum KatalogSortOption {
-  defaultNewest,
-  expirySoonest,
-  expiryLatest,
+  defaultNewest('En Yeni', Icons.calendar_month_rounded),
+  expirySoonest('Bitişi Yaklaşanlar', Icons.hourglass_bottom_rounded),
+  expiryLatest('En Uzun Süreli', Icons.event_available_rounded);
+
+  final String label;
+  final IconData icon;
+  const KatalogSortOption(this.label, this.icon);
 }
 
 class KatalogListesiPage extends StatefulWidget {
@@ -39,11 +45,39 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
     }
   }
 
-  String _getValidityText(Katalog catalog) {
-    return catalog.getValidityText();
+  String _getStoreAsset(String storeName) {
+    final lower = storeName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final map = {
+      'bim': 'assets/bim.webp',
+      'a101': 'assets/a101.webp',
+      'sok': 'assets/sok.webp',
+      'migros': 'assets/migros.webp',
+      'carrefoursa': 'assets/carrefoursa.webp',
+      'metro': 'assets/metro.webp',
+      'macrocenter': 'assets/macrocenter.webp',
+      'getirbuyuk': 'assets/getirbuyuk.webp',
+      'bizim': 'assets/bizim.webp',
+      'file': 'assets/file.webp',
+      'happycenter': 'assets/happycenter.webp',
+      'hakmarexpress': 'assets/hakmar-express.webp',
+      'hakmar': 'assets/hakmar.webp',
+      'cagri': 'assets/cagri.webp',
+      'kooperatifmarket': 'assets/kooperatif.webp',
+      'watsons': 'assets/watsons.webp',
+      'gratis': 'assets/gratis.webp',
+      'rossmann': 'assets/rossmann.webp',
+      'cetinkaya': 'assets/cetinkaya.webp',
+      'civil': 'assets/civil.webp',
+      'evkur': 'assets/evkur.webp',
+      'mrdiy': 'assets/mrdiy.webp',
+      'teknosa': 'assets/teknosa.webp',
+      'vatan': 'assets/vatan.webp',
+      'vestel': 'assets/vestel.webp',
+    };
+    return map[lower] ?? 'assets/store-icon.png';
   }
 
-  Widget _buildValidityTextRow(Katalog catalog, bool isDark) {
+  Widget _buildValidityBadge(Katalog catalog, bool isDark) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     
@@ -59,50 +93,66 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
       catalog.bitisTarihi.day,
     );
 
+    Color badgeBg;
     Color textColor;
     IconData icon;
+    String text = catalog.getValidityText();
 
     if (today.isBefore(start)) {
-      textColor = isDark ? Colors.blue[300]! : const Color(0xFF2563EB); // Blue 600
-      icon = Icons.date_range;
+      badgeBg = const Color(0xFF2563EB);
+      textColor = Colors.white;
+      icon = Icons.date_range_rounded;
     } else {
       final diff = expiry.difference(today).inDays;
       if (diff < 0) {
-        textColor = isDark ? Colors.grey[500]! : Colors.grey[600]!;
-        icon = Icons.event_busy;
+        badgeBg = isDark ? const Color(0xFF3F3F46) : const Color(0xFF71717A);
+        textColor = Colors.white;
+        icon = Icons.event_busy_rounded;
       } else if (diff <= 1) {
-        textColor = const Color(0xFFDC2626); // Red 600
-        icon = Icons.alarm;
+        badgeBg = const Color(0xFFDC2626);
+        textColor = Colors.white;
+        icon = Icons.local_fire_department_rounded;
       } else if (diff <= 3) {
-        textColor = const Color(0xFFD97706); // Orange 600
-        icon = Icons.hourglass_empty;
+        badgeBg = const Color(0xFFD97706);
+        textColor = Colors.white;
+        icon = Icons.hourglass_top_rounded;
       } else {
-        textColor = isDark ? Colors.blue[300]! : const Color(0xFF2563EB); // Blue 600
-        icon = Icons.event_available;
+        badgeBg = const Color(0xFF16A34A);
+        textColor = Colors.white;
+        icon = Icons.check_circle_rounded;
       }
     }
 
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 11,
-          color: textColor,
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            _getValidityText(catalog),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: badgeBg.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 4,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: textColor),
+          const SizedBox(width: 3.5),
+          Text(
+            text,
             style: TextStyle(
               fontSize: 10,
               color: textColor,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w800,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -111,70 +161,30 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8F9FA),
+      backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(
           '${widget.magazaAdi} Aktüel',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        elevation: 0,
-        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black87),
-        actions: [
-          PopupMenuButton<KatalogSortOption>(
-            icon: const Icon(Icons.sort),
-            tooltip: 'Sırala',
-            onSelected: (option) {
-              setState(() {
-                _currentSort = option;
-              });
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: KatalogSortOption.defaultNewest,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.calendar_month,
-                      size: 18,
-                      color: _currentSort == KatalogSortOption.defaultNewest ? AppTheme.primary : null,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text('Yayınlanma Tarihine Göre (Yeni)'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: KatalogSortOption.expirySoonest,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.hourglass_bottom,
-                      size: 18,
-                      color: _currentSort == KatalogSortOption.expirySoonest ? AppTheme.primary : null,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text('Süresi En Yakın Bitenler'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: KatalogSortOption.expiryLatest,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.hourglass_top,
-                      size: 18,
-                      color: _currentSort == KatalogSortOption.expiryLatest ? AppTheme.primary : null,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text('Süresi En Geç Bitenler'),
-                  ],
-                ),
-              ),
-            ],
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            letterSpacing: -0.3,
+            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
           ),
-        ],
+        ),
+        centerTitle: true,
+        backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 19,
+            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Geri',
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -183,7 +193,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return _buildShimmerCatalogGrid(isDark);
           }
 
           if (snapshot.hasError) {
@@ -195,7 +205,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
             );
           }
 
-          // Parse and filter in memory to avoid requiring complex composite indexes in Firestore
+          // Parse and filter active catalogs
           final now = DateTime.now();
           final catalogs = snapshot.data?.docs
                   .map((doc) => Katalog.fromFirestore(doc))
@@ -216,163 +226,492 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
           }
 
           if (catalogs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.menu_book_outlined,
-                    size: 80,
-                    color: isDark ? Colors.grey[700] : Colors.grey[400],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Aktif Katalog Bulunmuyor',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Text(
-                      '${widget.magazaAdi} için şu anda yayında olan bir kampanya broşürü bulunamadı.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isDark ? Colors.grey[400] : Colors.grey[600],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
+            return _buildEmptyCatalogState(isDark);
           }
 
-          return GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 0.60, // Adjusted to fit the extra status row neatly
-            ),
-            itemCount: catalogs.length,
+          return CustomScrollView(
             physics: const BouncingScrollPhysics(),
-            itemBuilder: (context, index) {
-              final catalog = catalogs[index];
-              return _buildCatalogCard(context, catalog, isDark);
-            },
+            slivers: [
+              // 1. STORE HERO HEADER CARD
+              SliverToBoxAdapter(
+                child: _buildStoreHeroHeader(catalogs.length, isDark),
+              ),
+
+              // 2. SORT PILL CHIPS
+              SliverToBoxAdapter(
+                child: _buildSortPills(isDark),
+              ),
+
+              // 3. CATALOG GRID
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                    childAspectRatio: 0.58,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final catalog = catalogs[index];
+                      return _buildCatalogCard(context, catalog, isDark);
+                    },
+                    childCount: catalogs.length,
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _buildCatalogCard(BuildContext context, Katalog catalog, bool isDark) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => KatalogDetayPage(catalog: catalog),
-          ),
-        );
-      },
+  // --- STORE HERO HEADER ---
+  Widget _buildStoreHeroHeader(int catalogCount, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
       child: Container(
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark 
-                ? Colors.white.withValues(alpha: 0.08) 
-                : Colors.grey[300]!,
-            width: 1.2,
-          ),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: isDark 
-                  ? Colors.black.withValues(alpha: 0.3) 
-                  : Colors.grey.withValues(alpha: 0.12),
+              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.04),
               blurRadius: 10,
-              offset: const Offset(0, 4),
+              offset: const Offset(0, 3),
+            ),
+          ],
+          border: Border.all(
+            color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+                ],
+                border: Border.all(
+                  color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                  width: 1,
+                ),
+              ),
+              child: Image.asset(
+                _getStoreAsset(widget.magazaAdi),
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(Icons.storefront_rounded, size: 28, color: AppTheme.primary),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.magazaAdi,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.2 : 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.check_circle_rounded, size: 11, color: Color(0xFF16A34A)),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$catalogCount Yayında',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF16A34A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Resmi İndirim Kataloğu',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Cover Image
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  height: double.infinity,
-                  color: isDark ? AppTheme.darkBackground : const Color(0xFFF0F2F5),
-                  child: CachedNetworkImage(
-                    imageUrl: catalog.kapakResmi,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+  }
+
+  // --- SORT PILL CHIPS ---
+  Widget _buildSortPills(bool isDark) {
+    return SizedBox(
+      height: 38,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: KatalogSortOption.values.length,
+        itemBuilder: (context, index) {
+          final sortOption = KatalogSortOption.values[index];
+          final isSelected = _currentSort == sortOption;
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _currentSort = sortOption);
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppTheme.primary.withValues(alpha: isDark ? 0.22 : 0.12)
+                        : (isDark ? AppTheme.darkSurface : Colors.white),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppTheme.primary
+                          : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                      width: isSelected ? 1.2 : 0.9,
                     ),
-                    errorWidget: (context, url, error) => Icon(
-                      Icons.broken_image_outlined,
-                      size: 40,
-                      color: isDark ? Colors.grey[700] : Colors.grey[400],
-                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        sortOption.icon,
+                        size: 14,
+                        color: isSelected ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        sortOption.label,
+                        style: TextStyle(
+                          color: isSelected
+                              ? (isDark ? Colors.white : AppTheme.primary)
+                              : (isDark ? const Color(0xFFD4D4D8) : const Color(0xFF475569)),
+                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              // Content Info
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      catalog.katalogBasligi,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
-                        height: 1.3,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.calendar_today_outlined,
-                          size: 11,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            _formatDateRange(catalog.baslangicTarihi, catalog.bitisTarihi),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isDark ? Colors.grey[400] : Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    _buildValidityTextRow(catalog, isDark),
-                  ],
-                ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // --- MODERN CATALOG CARD ---
+  Widget _buildCatalogCard(BuildContext context, Katalog catalog, bool isDark) {
+    final pageCount = catalog.sayfaResimleri.length;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => KatalogDetayPage(catalog: catalog),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(18),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkSurface : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Cover Image with Overlay Badges
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Container(
+                          color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                          child: CachedNetworkImage(
+                            imageUrl: catalog.kapakResmi,
+                            fit: BoxFit.cover,
+                            fadeInDuration: const Duration(milliseconds: 350),
+                            placeholder: (context, url) => Center(
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: isDark ? Colors.white38 : AppTheme.primary,
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Center(
+                              child: Icon(
+                                Icons.broken_image_outlined,
+                                size: 36,
+                                color: isDark ? Colors.grey[700] : Colors.grey[400],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Top Left: Validity Badge
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: _buildValidityBadge(catalog, isDark),
+                      ),
+                      // Bottom Right: Page Count Badge (Separated from validity badge to prevent overlap)
+                      if (pageCount > 0)
+                        Positioned(
+                          bottom: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.72),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 4,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.file_copy_rounded, size: 9.5, color: Colors.white),
+                                const SizedBox(width: 3.5),
+                                Text(
+                                  '$pageCount Sayfa',
+                                  style: const TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // 2. Info Area
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        catalog.katalogBasligi,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                          height: 1.25,
+                          letterSpacing: -0.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today_rounded,
+                            size: 10.5,
+                            color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              _formatDateRange(catalog.baslangicTarihi, catalog.bitisTarihi),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Examine Button
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Broşürü İncele',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primary,
+                              ),
+                            ),
+                            SizedBox(width: 3),
+                            Icon(Icons.arrow_forward_ios_rounded, size: 9, color: AppTheme.primary),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- SKELETON SHIMMER CATALOG GRID ---
+  Widget _buildShimmerCatalogGrid(bool isDark) {
+    final shimmerBase = isDark ? const Color(0xFF1C1C1C) : const Color(0xFFE2E8F0);
+    final shimmerHighlight = isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF8FAFC);
+
+    return Shimmer.fromColors(
+      baseColor: shimmerBase,
+      highlightColor: shimmerHighlight,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 14,
+            childAspectRatio: 0.58,
+          ),
+          itemCount: 4,
+          itemBuilder: (_, __) => Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- EMPTY CATALOG STATE ---
+  Widget _buildEmptyCatalogState(bool isDark) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.menu_book_rounded,
+                size: 38,
+                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Aktif Broşür Bulunmuyor',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${widget.magazaAdi} için şu anda yayında olan güncel bir kampanya broşürü bulunamadı.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+              label: const Text(
+                'Diğer Mağazalara Bak',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
         ),
       ),
     );

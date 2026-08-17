@@ -20,6 +20,7 @@ import 'screens/splash_screen.dart';
 import 'services/firestore_service.dart';
 import 'services/ai_service.dart';
 import 'theme/app_theme.dart';
+import 'utils/circular_theme_transition.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -333,8 +334,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final darkTheme = AppTheme.getDarkTheme();
     
     return AnimatedTheme(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
+      duration: Duration.zero,
       data: _themeService.themeMode == ThemeMode.dark ? darkTheme : lightTheme,
       child: MaterialApp(
         title: 'FIRSATKOLİK',
@@ -343,6 +343,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         darkTheme: darkTheme,
         themeMode: _themeService.themeMode,
         navigatorKey: navigatorKey,
+        builder: (context, child) {
+          return RepaintBoundary(
+            key: rootRepaintBoundaryKey,
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
         // Türkçe locale desteği
         locale: const Locale('tr', 'TR'),
         supportedLocales: const [

@@ -122,21 +122,28 @@ Veritabanı şişkinliğini önlemek, sunucu maliyetlerini optimize etmek ve kul
 ```
 [Yeni Fırsat Paylaşıldı]
        │
-       ├─► 0 - 48 Saat ───► Anasayfa, Favori Kategorilerim ve Popüler'de Canlı
+       ├─► 0 - 48 Saat ────► Anasayfa, Favori Kategorilerim ve Popüler'de Canlı
        │
-       ├─► 48 Saat Sonrası ─► Anasayfadan kalkar. Favorilerde "KAÇTI" rozeti ile arşivde kalır.
+       ├─► 48 Saat Sonrası ────► cleanupExpiredDeals (Her gün 03:00)
+       │                         • Fırsat veritabanından SİLİNMEZ!
+       │                         • Sadece `isExpired: true` olarak etiketlenir (Soft-Expire).
+       │                         • Anasayfa ve Popüler akışlarından düşer.
+       │                         • Favorilerde orijinal görseli, fiyatı ve "⌛ KAÇTI" rozetiyle 30 gün kalır.
        │
-       └─► 30 Gün Sonrası ──► Purge Job (Haftalık Otomatik Cloud Function veya Web Admin)
-                              └─► Fırsat dokümanı, oylar, yorumlar, görseller ve 
-                                  tüm kullanıcı favorileri KALICI OLARAK SİLİNİR 🗑️
+       └─► 30 Gün Sonrası ─────► purgeOldDeals (Her Pazar 04:00 veya Web Admin "30+ Günlük Temizlik")
+                                 • Fırsat dokümanı, oylar, yorumlar, Storage görselleri ve 
+                                   tüm kullanıcı favorileri KALICI OLARAK SİLİNİR (Hard-Purge) 🗑️
 ```
 
-### Kalıcı Silme (Purge) Kapsamı:
+### Kalıcı Silme (Purge) Kapsamı (`purgeOldDeals` & `purgeOldDealsWeb`):
 1. `deals/{dealId}` (Ana Fırsat Dokümanı)
 2. `deals/{dealId}/votes/*` (Tüm Oy Kayıtları)
 3. `deals/{dealId}/comments/*` (Tüm Yorumlar)
 4. `users/{userId}/favorites/{dealId}` (Tüm Kullanıcıların Favori Referansları)
-5. Firebase Storage Görselleri
+5. Firebase Storage Görselleri (`cleanupOldImages` ile 30 gün korumalı)
+
+### Favori Snapshot Garantisi (`UserService.addToFavorites`):
+Kullanıcı bir fırsatı kaydettiği anda ürünün `title`, `price`, `store`, `link` ve `imageUrl` alanları favoriler alt dokümanına snapshot olarak yazılır. Böylece olası ağ gecikmelerinde veya 30 gün içinde ana dokümanda güncelleme olsa dahi kullanıcının favorilerinde ürünün gerçek görseli ve bilgileri asla kaybolmaz.
 
 ---
 

@@ -8,9 +8,9 @@ import '../../widgets/deal_forward_bottom_sheet.dart';
 class DealShareSheet {
   DealShareSheet._();
 
-  /// Fırsat Paylaşım & İletme ekranını (In-App Chat Forward + Native Share) açar.
+  /// Fırsat Paylaşımını doğrudan telefonun kendi natif paylaşım ekranında (WhatsApp, Telegram vb.) açar.
   static Future<void> showShareOptions(BuildContext context, Deal deal) async {
-    await DealForwardBottomSheet.show(context, deal);
+    await shareToNativeApps(context, deal);
   }
 
   /// Doğrudan uygulama içi mesajlaşma iletme ekranını açar.
