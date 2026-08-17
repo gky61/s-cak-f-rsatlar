@@ -107,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _checkBlockedStatus();
     _notificationService.requestPermission();
     _notificationService.setupNotificationListeners();
+    _notificationService.saveFCMToken(); // Otomatik FCM token doğrulama ve iyileştirme
     _cleanupExpiredDeals();
     _loadFollowedCategories();
     _loadFollowedKeywords();
@@ -124,6 +125,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _loadFollowedCategories();
         _loadFollowedKeywords();
         _loadUnreadMessageCounts();
+        if (user != null) {
+          _notificationService.saveFCMToken(userId: user.uid);
+        }
         setState(() {});
       }
     });

@@ -46,6 +46,8 @@ class NotificationService {
   final Set<String> _notifiedFollowDealIds = <String>{};
   bool _keywordListenerAttached = false;
 
+  StreamSubscription<String>? _tokenRefreshSub;
+
   // Topic adını geçerli formata çevir (Firebase Cloud Messaging kurallarına uygun)
   String _sanitizeTopicName(String name) {
     // Türkçe karakterleri İngilizce karşılıklarına çevir
@@ -289,8 +291,18 @@ class NotificationService {
         await docRef.update({
           'active': false,
           'updatedAt': FieldValue.serverTimestamp(),
-        });
+        }).catchError((_) {});
         _log('✅ Device token marked inactive on logout');
+      }
+      _tokenRefreshSub?.cancel();
+      _tokenRefreshSub = null;
+      if (!kIsWeb) {
+        try {
+          await _messaging.deleteToken();
+          _log('🧹 FCM yerel token önbelleği temizlendi');
+        } catch (e) {
+          _log('⚠️ deleteToken hatası (devam ediliyor): $e');
+        }
       }
     } catch (e) {
       _log('⚠️ Error clearing device token: $e');
@@ -454,10 +466,25 @@ class NotificationService {
     }
   }
 
-  // --- FCM Token Kaydetme ---
-  Future<void> saveFCMToken({String? userId}) async {
+  // --- FCM Token Kaydetme (Otomatik İyileştirme & Taze Token Garantisi) ---
+  Future<void> saveFCMToken({String? userId, bool forceRefresh = false}) async {
     try {
-      final token = await _messaging.getToken(vapidKey: kIsWeb ? null : null);
+      if (forceRefresh && !kIsWeb) {
+        try {
+          await _messaging.deleteToken();
+        } catch (_) {}
+      }
+
+      String? token = await _messaging.getToken(vapidKey: kIsWeb ? null : null);
+
+      // Token boş geldiyse önbelleği silip tekrar almayı dene
+      if (token == null && !kIsWeb) {
+        try {
+          await _messaging.deleteToken();
+          token = await _messaging.getToken();
+        } catch (_) {}
+      }
+
       final resolvedUserId = userId ?? _auth.currentUser?.uid;
       
       if (token != null && resolvedUserId != null) {
@@ -502,15 +529,16 @@ class NotificationService {
         
         _log('✅ User device / FCM Token registered in userDevices: $deviceIdDoc');
         
-        _messaging.onTokenRefresh.listen((newToken) async {
-          final currentUserId = resolvedUserId;
-          if (currentUserId != null) {
-            await _firestore.collection('userDevices').doc('${currentUserId}_$deviceId').set({
-              'fcmToken': newToken,
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-            _log('✅ User device FCM Token refreshed');
-          }
+        // Tekil token refresh dinleyicisi
+        _tokenRefreshSub?.cancel();
+        _tokenRefreshSub = _messaging.onTokenRefresh.listen((newToken) async {
+          final currentUserId = _auth.currentUser?.uid ?? resolvedUserId;
+          await _firestore.collection('userDevices').doc('${currentUserId}_$deviceId').set({
+            'fcmToken': newToken,
+            'active': true,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+          _log('✅ User device FCM Token refreshed & re-activated in Firestore');
         });
       }
     } catch (e) {
