@@ -37,18 +37,34 @@ class KatalogShareService {
         return 'Happy Center';
       case 'hakmar':
         return 'Hakmar';
+      case 'hakmarexpress':
+        return 'Hakmar Express';
       case 'cagri':
         return 'Çağrı Hipermarket';
       case 'kooperatifmarket':
+      case 'kooperatif':
+      case 'tarimkredi':
         return 'Kooperatif Market';
       case 'watsons':
         return 'Watsons';
       case 'gratis':
         return 'Gratis';
+      case 'rossmann':
+        return 'Rossmann';
+      case 'cetinkaya':
+        return 'Çetinkaya';
+      case 'civil':
+        return 'Civil';
+      case 'evkur':
+        return 'Evkur';
+      case 'mrdiy':
+        return 'MR.DIY';
       case 'teknosa':
         return 'Teknosa';
       case 'vatan':
         return 'Vatan Bilgisayar';
+      case 'vestel':
+        return 'Vestel';
       default:
         return 'Aktüel Mağaza';
     }

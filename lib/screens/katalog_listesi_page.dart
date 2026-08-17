@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../models/katalog.dart';
 import '../theme/app_theme.dart';
+import '../utils/store_asset_helper.dart';
 import 'katalog_detay_page.dart';
 
 enum KatalogSortOption {
@@ -45,37 +46,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
     }
   }
 
-  String _getStoreAsset(String storeName) {
-    final lower = storeName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-    final map = {
-      'bim': 'assets/bim.webp',
-      'a101': 'assets/a101.webp',
-      'sok': 'assets/sok.webp',
-      'migros': 'assets/migros.webp',
-      'carrefoursa': 'assets/carrefoursa.webp',
-      'metro': 'assets/metro.webp',
-      'macrocenter': 'assets/macrocenter.webp',
-      'getirbuyuk': 'assets/getirbuyuk.webp',
-      'bizim': 'assets/bizim.webp',
-      'file': 'assets/file.webp',
-      'happycenter': 'assets/happycenter.webp',
-      'hakmarexpress': 'assets/hakmar-express.webp',
-      'hakmar': 'assets/hakmar.webp',
-      'cagri': 'assets/cagri.webp',
-      'kooperatifmarket': 'assets/kooperatif.webp',
-      'watsons': 'assets/watsons.webp',
-      'gratis': 'assets/gratis.webp',
-      'rossmann': 'assets/rossmann.webp',
-      'cetinkaya': 'assets/cetinkaya.webp',
-      'civil': 'assets/civil.webp',
-      'evkur': 'assets/evkur.webp',
-      'mrdiy': 'assets/mrdiy.webp',
-      'teknosa': 'assets/teknosa.webp',
-      'vatan': 'assets/vatan.webp',
-      'vestel': 'assets/vestel.webp',
-    };
-    return map[lower] ?? 'assets/store-icon.png';
-  }
+
 
   Widget _buildValidityBadge(Katalog catalog, bool isDark) {
     final now = DateTime.now();
@@ -307,7 +278,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                 ),
               ),
               child: Image.asset(
-                _getStoreAsset(widget.magazaAdi),
+                StoreAssetHelper.getStoreAsset(widget.magazaKodu, widget.magazaAdi),
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => const Icon(Icons.storefront_rounded, size: 28, color: AppTheme.primary),
               ),

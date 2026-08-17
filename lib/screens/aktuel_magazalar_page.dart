@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import '../theme/app_theme.dart';
+import '../utils/store_asset_helper.dart';
 import 'katalog_listesi_page.dart';
 
 enum MagazaKategori {
@@ -555,7 +556,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
                           ],
                         ),
                         child: Image.asset(
-                          magaza.logoAsset,
+                          StoreAssetHelper.getStoreAsset(magaza.code, magaza.logoAsset),
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
                             return Icon(

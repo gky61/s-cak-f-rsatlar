@@ -15,6 +15,7 @@ import '../models/category.dart';
 import '../models/deal.dart';
 import '../widgets/category_selector_widget.dart';
 import '../theme/app_theme.dart';
+import '../utils/store_asset_helper.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import 'deal_detail_screen.dart';
 
@@ -74,52 +75,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   ];
 
   String _getStoreAsset(String storeName) {
-    switch (storeName) {
-      case 'Trendyol':
-        return 'assets/trendyol.webp';
-      case 'Hepsiburada':
-        return 'assets/hepsiburada.webp';
-      case 'N11':
-        return 'assets/n11.webp';
-      case 'Amazon':
-        return 'assets/amazon.webp';
-      case 'Pazarama':
-        return 'assets/pazarama.webp';
-      case 'Vatan Bilgisayar':
-        return 'assets/vatan.webp';
-      case 'MediaMarkt':
-        return 'assets/mediamarkt.webp';
-      case 'İtopya':
-        return 'assets/itopya.webp';
-      case 'İdefix':
-        return 'assets/idefix.webp';
-      case 'Teknosa':
-        return 'assets/teknosa.webp';
-      case 'Mavi':
-        return 'assets/mavi.webp';
-      case 'DeFacto':
-        return 'assets/defacto.webp';
-      case 'Zara':
-        return 'assets/zara.webp';
-      case 'Mango':
-        return 'assets/mango.webp';
-      case 'Beymen':
-        return 'assets/beymen.webp';
-      case 'PttAVM':
-        return 'assets/pttavm.webp';
-      case 'İncehesap':
-        return 'assets/incehesap.webp';
-      case 'Havit':
-        return 'assets/havit.webp';
-      case 'Migros':
-        return 'assets/migros.webp';
-      case 'Getir':
-        return 'assets/getir.webp';
-      case 'Boyner':
-        return 'assets/boyner.webp';
-      default:
-        return 'assets/store-icon.png';
-    }
+    return StoreAssetHelper.getStoreAsset(storeName);
   }
 
   void _updateStoreSelection(String storeName) {
@@ -1190,7 +1146,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             key: _formKey,
             child: ListView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 36),
               children: [
                 // 1. Paylaşım Durduruldu Bildirimi
                 if (!isEnabled) _buildSharingDisabledAlert(isDark),
@@ -1198,12 +1154,12 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 // 2. Sihirli Link & Otomatik Tarama Alanı
                 _buildMagicLinkSection(isDark),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
 
                 // 3. Canlı Fırsat Vitrini (Hero Live Preview)
                 _buildLiveHeroPreviewCard(isDark),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
 
                 // 4. Form Alanları (Skeleton Loader veya Kartlar - Akıcı Geçiş)
                 AnimatedSwitcher(
@@ -1376,54 +1332,183 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     );
   }
 
-  // --- SECTION 1: MAGIC LINK & BOTKOLIK BAR ---
+  // --- SECTION 1: MAGIC LINK & BOTKOLIK BAR (SPACIOUS NOTCHED BORDER DESIGN) ---
   Widget _buildMagicLinkSection(bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+    final isUrlFilled = _urlController.text.isNotEmpty;
+    final pageBgColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
+    final borderColor = isUrlFilled
+        ? AppTheme.primary.withValues(alpha: 0.6)
+        : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0));
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 14),
+          padding: const EdgeInsets.fromLTRB(16, 26, 16, 18),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkSurface : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            border: Border.all(
+              color: borderColor,
+              width: 1.2,
+            ),
           ),
-        ],
-        border: Border.all(
-          color: _urlController.text.isNotEmpty
-              ? AppTheme.primary.withValues(alpha: 0.5)
-              : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-          width: 1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _urlController,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                style: TextStyle(
+                  color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                minLines: 1,
+                decoration: InputDecoration(
+                  hintText: 'https://www.trendyol.com/... veya https://ty.gl/...',
+                  hintStyle: TextStyle(
+                    color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                    fontSize: 12.5,
+                  ),
+                  filled: true,
+                  fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: isDark ? AppTheme.darkBorder : Colors.transparent,
+                      width: 1,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: isDark ? AppTheme.darkBorder : Colors.transparent,
+                      width: 1,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                  ),
+                  suffixIcon: _urlController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.cancel_rounded, size: 18),
+                          color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                          onPressed: () {
+                            HapticFeedback.lightImpact();
+                            _urlController.clear();
+                            _formKey.currentState?.validate();
+                          },
+                          tooltip: 'Temizle',
+                        )
+                      : null,
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Ürün linki boş bırakılamaz';
+                  }
+                  if (!value.trim().startsWith('http')) {
+                    return 'Geçerli bir web linki (http/https) giriniz';
+                  }
+                  return null;
+                },
+              ),
+              if (_showInfoBanner) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? AppTheme.primary.withValues(alpha: 0.25) : const Color(0xFFBFDBFE),
+                      width: 0.9,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 22,
+                        height: 22,
+                        decoration: const BoxDecoration(shape: BoxShape.circle),
+                        child: ClipOval(
+                          child: Image.asset('assets/botkolik.webp', fit: BoxFit.cover),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Linki yapıştırdığınızda Botkolik ürün bilgilerini otomatik çeker. İnceleyip eksikleri tamamlayabilirsiniz.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            height: 1.35,
+                            color: isDark ? const Color(0xFFE4E4E7) : const Color(0xFF1E3A8A),
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => setState(() => _showInfoBanner = false),
+                        child: Padding(
+                          padding: const EdgeInsets.all(3.0),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+
+        // Embedded Notched Title on top border line
+        Positioned(
+          top: 0,
+          left: 16,
+          right: 16,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF8C42), AppTheme.primary],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  color: pageBgColor,
                   borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.link_rounded, color: Colors.white, size: 16),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Ürün Linki (URL)',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                    letterSpacing: -0.2,
+                  border: Border.all(
+                    color: borderColor.withValues(alpha: 0.85),
+                    width: 1,
                   ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.link_rounded, size: 14, color: AppTheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Ürün Linki (URL)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E293B),
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (_urlController.text.isEmpty)
@@ -1431,21 +1516,25 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   onTap: _pasteFromClipboard,
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08),
+                      color: pageBgColor,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: borderColor.withValues(alpha: 0.85),
+                        width: 1,
+                      ),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.content_paste_rounded, size: 13, color: AppTheme.primary),
-                        SizedBox(width: 4),
+                        SizedBox(width: 5),
                         Text(
                           'Yapıştır',
                           style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11.5,
                             color: AppTheme.primary,
                           ),
                         ),
@@ -1455,121 +1544,12 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 ),
             ],
           ),
-          const SizedBox(height: 10),
-          TextFormField(
-            controller: _urlController,
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            style: TextStyle(
-              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 2,
-            minLines: 1,
-            decoration: InputDecoration(
-              hintText: 'https://www.trendyol.com/... veya https://ty.gl/...',
-              hintStyle: TextStyle(
-                color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                fontSize: 12,
-              ),
-              filled: true,
-              fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                  color: isDark ? AppTheme.darkBorder : Colors.transparent,
-                  width: 1,
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(
-                  color: isDark ? AppTheme.darkBorder : Colors.transparent,
-                  width: 1,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-              ),
-              suffixIcon: _urlController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.cancel_rounded, size: 18),
-                      color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                      onPressed: () {
-                        HapticFeedback.lightImpact();
-                        _urlController.clear();
-                        _formKey.currentState?.validate();
-                      },
-                      tooltip: 'Temizle',
-                    )
-                  : null,
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Ürün linki boş bırakılamaz';
-              }
-              if (!value.trim().startsWith('http')) {
-                return 'Geçerli bir web linki (http/https) giriniz';
-              }
-              return null;
-            },
-          ),
-          if (_showInfoBanner) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isDark ? AppTheme.primary.withValues(alpha: 0.25) : const Color(0xFFBFDBFE),
-                  width: 0.8,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 20,
-                    height: 20,
-                    decoration: const BoxDecoration(shape: BoxShape.circle),
-                    child: ClipOval(
-                      child: Image.asset('assets/botkolik.webp', fit: BoxFit.cover),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Linki yapıştırdığınızda **Botkolik** ürün bilgilerini otomatik çeker. Tarama sonrası doğrulama yapabilir veya eksikleri kendiniz tamamlayabilirsiniz.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        height: 1.3,
-                        color: isDark ? const Color(0xFFE4E4E7) : const Color(0xFF1E3A8A),
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () => setState(() => _showInfoBanner = false),
-                    child: Padding(
-                      padding: const EdgeInsets.all(2.0),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 15,
-                        color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  // --- SECTION 2: HERO LIVE DEAL PREVIEW CARD (SMOOTH ANIMATED TRANSITION & SHIMMER LOADING) ---
+  // --- SECTION 2: HERO LIVE DEAL PREVIEW CARD (SPACIOUS NOTCHED BORDER & ANIMATED TRANSITIONS) ---
   Widget _buildLiveHeroPreviewCard(bool isDark) {
     final title = _titleController.text.trim();
     final priceText = _priceController.text.trim();
@@ -1585,40 +1565,122 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
     final shimmerBase = isDark ? const Color(0xFF1C1C1C) : const Color(0xFFE2E8F0);
     final shimmerHighlight = isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF8FAFC);
+    final pageBgColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 14),
+          padding: const EdgeInsets.fromLTRB(14, 26, 14, 14),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkSurface : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.035),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            border: Border.all(
+              color: borderColor,
+              width: 1.2,
+            ),
           ),
-        ],
-        border: Border.all(
-          color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-          width: 1,
-        ),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header Bar with Animated Tag
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.remove_red_eye_rounded, size: 15, color: AppTheme.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Canlı Fırsat Önizlemesi',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? const Color(0xFFA1A1AA) : const Color(0xFF475569),
+              // Product Content with Fluid Animated Switcher
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                reverseDuration: const Duration(milliseconds: 250),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.04),
+                        end: Offset.zero,
+                      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                      child: child,
+                    ),
+                  );
+                },
+                child: _isAutoDetecting
+                    ? _buildPreviewShimmerBody(isDark, shimmerBase, shimmerHighlight)
+                    : _buildPreviewLoadedBody(isDark, title, price, store, category),
+              ),
+
+              // Expandable Image URL editing bar
+              if (_showManualImageInput) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _imageUrlController,
+                  style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A), fontSize: 12),
+                  decoration: InputDecoration(
+                    labelText: 'Görsel URL Bağlantısı',
+                    hintText: 'https://.../resim.jpg',
+                    isDense: true,
+                    filled: true,
+                    fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                    ),
+                    prefixIcon: const Icon(Icons.image_outlined, size: 16),
                   ),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // Embedded Notched Title on top border line
+        Positioned(
+          top: 0,
+          left: 16,
+          right: 16,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: pageBgColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: borderColor.withValues(alpha: 0.85),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.remove_red_eye_rounded, size: 14, color: AppTheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Canlı Fırsat Önizlemesi',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E293B),
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               AnimatedSwitcher(
@@ -1632,21 +1694,21 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 child: _isAutoDetecting
                     ? Container(
                         key: const ValueKey('scanning_tag'),
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                         decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08),
-                          borderRadius: BorderRadius.circular(20),
+                          color: pageBgColor,
+                          borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: AppTheme.primary.withValues(alpha: 0.35),
-                            width: 0.8,
+                            color: AppTheme.primary.withValues(alpha: 0.6),
+                            width: 1,
                           ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
-                              width: 16,
-                              height: 16,
+                              width: 14,
+                              height: 14,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(color: AppTheme.primary, width: 1),
@@ -1670,22 +1732,22 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                     : (title.isNotEmpty || price > 0)
                         ? Container(
                             key: const ValueKey('ready_tag'),
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.18 : 0.08),
-                              borderRadius: BorderRadius.circular(20),
+                              color: pageBgColor,
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: const Color(0xFF16A34A).withValues(alpha: 0.35),
-                                width: 0.8,
+                                color: const Color(0xFF16A34A).withValues(alpha: 0.6),
+                                width: 1,
                               ),
                             ),
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(Icons.check_circle_rounded, size: 13, color: Color(0xFF16A34A)),
-                                SizedBox(width: 4),
+                                SizedBox(width: 5),
                                 Text(
-                                  'Bilgiler Dolduruldu',
+                                  'Bilgiler Hazır',
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w800,
@@ -1699,62 +1761,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-
-          // Product Content with Fluid Animated Switcher
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            reverseDuration: const Duration(milliseconds: 250),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, animation) {
-              return FadeTransition(
-                opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.04),
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-                  child: child,
-                ),
-              );
-            },
-            child: _isAutoDetecting
-                ? _buildPreviewShimmerBody(isDark, shimmerBase, shimmerHighlight)
-                : _buildPreviewLoadedBody(isDark, title, price, store, category),
-          ),
-
-          // Expandable Image URL editing bar
-          if (_showManualImageInput) ...[
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _imageUrlController,
-              style: TextStyle(color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A), fontSize: 12),
-              decoration: InputDecoration(
-                labelText: 'Görsel URL Bağlantısı',
-                hintText: 'https://.../resim.jpg',
-                isDense: true,
-                filled: true,
-                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-                ),
-                prefixIcon: const Icon(Icons.image_outlined, size: 16),
-              ),
-            ),
-          ],
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1770,8 +1778,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             baseColor: shimmerBase,
             highlightColor: shimmerHighlight,
             child: Container(
-              width: 80,
-              height: 80,
+              width: 82,
+              height: 82,
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
                 borderRadius: BorderRadius.circular(12),
@@ -1785,7 +1793,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
 
           // Text Shimmers
           Expanded(
@@ -1806,7 +1814,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
-                      const SizedBox(width: 5),
+                      const SizedBox(width: 6),
                       Container(
                         height: 16,
                         width: 55,
@@ -1818,7 +1826,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 8),
 
                 // Title Shimmer
                 Shimmer.fromColors(
@@ -1828,7 +1836,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        height: 11,
+                        height: 12,
                         width: double.infinity,
                         decoration: BoxDecoration(
                           color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -1837,7 +1845,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                       ),
                       const SizedBox(height: 5),
                       Container(
-                        height: 11,
+                        height: 12,
                         width: 110,
                         decoration: BoxDecoration(
                           color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -1847,7 +1855,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
 
                 // Price Shimmer
                 Shimmer.fromColors(
@@ -1855,7 +1863,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   highlightColor: shimmerHighlight,
                   child: Container(
                     height: 15,
-                    width: 55,
+                    width: 75,
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
                       borderRadius: BorderRadius.circular(4),
@@ -1870,34 +1878,40 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     );
   }
 
-  // Preview Loaded Body
-  Widget _buildPreviewLoadedBody(bool isDark, String title, double price, String store, Category category) {
+  // Loaded Preview Body
+  Widget _buildPreviewLoadedBody(
+    bool isDark,
+    String title,
+    double price,
+    String store,
+    Category category,
+  ) {
     return KeyedSubtree(
-      key: ValueKey('preview_loaded_${_previewImageUrl}_${title}_$price'),
+      key: const ValueKey('preview_loaded_body'),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Product Image
+          // Image Box with Tap-to-edit
           GestureDetector(
             onTap: () {
-              setState(() {
-                _showManualImageInput = !_showManualImageInput;
-              });
+              HapticFeedback.selectionClick();
+              setState(() => _showManualImageInput = !_showManualImageInput);
             },
             child: Stack(
               children: [
                 Container(
-                  width: 80,
-                  height: 80,
+                  width: 82,
+                  height: 82,
                   decoration: BoxDecoration(
                     color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                      width: 1,
                     ),
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: BorderRadius.circular(13),
                     child: (_previewImageUrl != null && _previewImageUrl!.isNotEmpty)
                         ? CachedNetworkImage(
                             imageUrl: _previewImageUrl!,
@@ -1911,7 +1925,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                         : Center(
                             child: Icon(
                               Icons.add_photo_alternate_rounded,
-                              size: 26,
+                              size: 28,
                               color: isDark ? const Color(0xFF64748B) : const Color(0xFFCBD5E1),
                             ),
                           ),
@@ -1921,19 +1935,19 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   bottom: 2,
                   right: 2,
                   child: Container(
-                    padding: const EdgeInsets.all(3),
+                    padding: const EdgeInsets.all(3.5),
                     decoration: BoxDecoration(
                       color: isDark ? AppTheme.darkSurface : Colors.white,
                       shape: BoxShape.circle,
                       boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3)],
                     ),
-                    child: const Icon(Icons.edit_rounded, size: 9, color: AppTheme.primary),
+                    child: const Icon(Icons.edit_rounded, size: 9.5, color: AppTheme.primary),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
 
           // Product Info Column
           Expanded(
@@ -1947,10 +1961,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   children: [
                     if (store.isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                         decoration: BoxDecoration(
                           color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(5),
+                          borderRadius: BorderRadius.circular(6),
                           border: Border.all(
                             color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
                             width: 0.8,
@@ -1961,15 +1975,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                           children: [
                             Image.asset(
                               _getStoreAsset(store),
-                              width: 12,
-                              height: 12,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 12),
+                              width: 13,
+                              height: 13,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 13),
                             ),
                             const SizedBox(width: 4),
                             Text(
                               store,
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
                                 color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                               ),
@@ -1978,15 +1992,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                         ),
                       ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                       decoration: BoxDecoration(
                         color: AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08),
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         '${category.icon} ${category.name}',
                         style: const TextStyle(
-                          fontSize: 10,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.primary,
                         ),
@@ -1994,15 +2008,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                     ),
                     if (_scrapedBrand != null && _scrapedBrand!.isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                         decoration: BoxDecoration(
                           color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFE2E8F0),
-                          borderRadius: BorderRadius.circular(5),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           _scrapedBrand!,
                           style: TextStyle(
-                            fontSize: 9.5,
+                            fontSize: 10,
                             fontWeight: FontWeight.w700,
                             color: isDark ? Colors.white70 : Colors.black87,
                           ),
@@ -2010,15 +2024,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                       ),
                     if (_isAmazonWarehouse)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                         decoration: BoxDecoration(
                           color: const Color(0xFFD97706).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(5),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
                           '📦 Amazon Depo',
                           style: TextStyle(
-                            fontSize: 9.5,
+                            fontSize: 10,
                             fontWeight: FontWeight.w800,
                             color: Color(0xFFD97706),
                           ),
@@ -2026,7 +2040,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 6),
 
                 // Title
                 Text(
@@ -2034,37 +2048,37 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w800,
                     color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                    height: 1.2,
+                    height: 1.25,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
 
                 // Price Wrap
                 Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 5,
-                  runSpacing: 2,
+                  spacing: 6,
+                  runSpacing: 3,
                   children: [
                     if (_hidePrice)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                         decoration: BoxDecoration(
                           color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFE2E8F0),
-                          borderRadius: BorderRadius.circular(5),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
                           'Fiyatsız Kampanya',
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
                         ),
                       )
                     else ...[
                       Text(
                         price > 0 ? '${price.toStringAsFixed(price.truncateToDouble() == price ? 0 : 2)} ₺' : '0 ₺',
                         style: const TextStyle(
-                          fontSize: 15,
+                          fontSize: 15.5,
                           fontWeight: FontWeight.w900,
                           color: AppTheme.primary,
                           letterSpacing: -0.4,
@@ -2074,21 +2088,21 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                         Text(
                           '${_scrapedOriginalPrice!.toStringAsFixed(0)} ₺',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 11.5,
                             color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
                             decoration: TextDecoration.lineThrough,
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                           decoration: BoxDecoration(
                             color: const Color(0xFFDC2626).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(5),
                           ),
                           child: Text(
                             '%${(((_scrapedOriginalPrice! - price) / _scrapedOriginalPrice!) * 100).round()} İndirim',
                             style: const TextStyle(
-                              fontSize: 8.5,
+                              fontSize: 9,
                               fontWeight: FontWeight.w800,
                               color: Color(0xFFDC2626),
                             ),
@@ -2117,26 +2131,26 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       child: Column(
         children: [
           Container(
-            height: 90,
+            height: 120,
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           Container(
             height: 130,
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           Container(
             height: 100,
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
             ),
           ),
         ],
@@ -2144,272 +2158,63 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     );
   }
 
-  // --- SECTION 4: FORM FIELDS CONTAINER (100% OVERFLOW PROOF) ---
+  // --- SECTION 4: FORM FIELDS CONTAINER (SPACIOUS & REORDERED LAYOUT) ---
   Widget _buildFormSections(bool isDark) {
     final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // CARD 1: FİYAT VE MAĞAZA
-        _buildCardContainer(
-          isDark: isDark,
-          title: 'Fiyat ve Mağaza Bilgileri',
-          icon: Icons.payments_rounded,
-          children: [
-            // Fiyat Girişi
-            TextFormField(
-              controller: _priceController,
-              enabled: !_hidePrice,
-              style: TextStyle(color: textColor, fontWeight: FontWeight.w700, fontSize: 15),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'Fiyat (₺) *',
-                hintText: '0.00',
-                filled: true,
-                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    '₺',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: AppTheme.primary),
-                  ),
-                ),
-                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              ),
-              validator: (value) {
-                if (_hidePrice) return null;
-                if (value == null || value.trim().isEmpty) {
-                  return 'Lütfen bir fiyat giriniz';
-                }
-                if (double.tryParse(value.trim()) == null) {
-                  return 'Geçerli bir sayı giriniz';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 12),
-
-            // Mağaza Seçimi
-            DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use
-              value: _selectedStore,
-              menuMaxHeight: 300,
-              isExpanded: true,
-              dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,
-              style: TextStyle(color: textColor, fontSize: 13.5, fontWeight: FontWeight.w600),
-              decoration: InputDecoration(
-                labelText: 'Satıcı / Mağaza *',
-                filled: true,
-                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                prefixIcon: const Icon(Icons.storefront_rounded, size: 20),
-              ),
-              items: _stores.map((store) {
-                return DropdownMenuItem<String>(
-                  value: store,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Image.asset(
-                        _getStoreAsset(store),
-                        width: 18,
-                        height: 18,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 18),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        store,
-                        style: TextStyle(color: textColor, fontSize: 13.5),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedStore = value;
-                  if (value != 'Diğer') {
-                    _storeController.text = value ?? '';
-                  } else {
-                    _storeController.text = _customStoreController.text;
-                  }
-                });
-              },
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Lütfen mağaza seçiniz';
-                }
-                return null;
-              },
-            ),
-
-            if (_selectedStore == 'Diğer') ...[
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _customStoreController,
-                style: TextStyle(color: textColor),
-                decoration: InputDecoration(
-                  labelText: 'Özel Mağaza Adı *',
-                  hintText: 'Örn: CarrefourSA, MediaMarkt vb.',
-                  filled: true,
-                  fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-                  ),
-                  prefixIcon: const Icon(Icons.edit_note_rounded),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                ),
-                onChanged: (val) => _storeController.text = val.trim(),
-                validator: (val) {
-                  if (_selectedStore == 'Diğer' && (val == null || val.trim().isEmpty)) {
-                    return 'Mağaza adını giriniz';
-                  }
-                  return null;
-                },
-              ),
-            ],
-
-            const SizedBox(height: 10),
-
-            // Fiyatı Gizle Toggle
-            InkWell(
-              onTap: () => setState(() => _hidePrice = !_hidePrice),
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _hidePrice
-                      ? AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08)
-                      : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC)),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _hidePrice
-                        ? AppTheme.primary.withValues(alpha: 0.5)
-                        : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _hidePrice ? Icons.visibility_off_rounded : Icons.visibility_off_outlined,
-                      size: 17,
-                      color: _hidePrice ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Fiyatsız kampanya / duyuru',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: _hidePrice ? FontWeight.w700 : FontWeight.w500,
-                          color: _hidePrice ? (isDark ? Colors.white : AppTheme.primary) : textColor,
-                        ),
-                      ),
-                    ),
-                    Switch(
-                      value: _hidePrice,
-                      activeTrackColor: AppTheme.primary,
-                      onChanged: (val) => setState(() => _hidePrice = val),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            if (_selectedStore == 'Amazon') ...[
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () => setState(() => _isAmazonWarehouse = !_isAmazonWarehouse),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _isAmazonWarehouse
-                        ? const Color(0xFFD97706).withValues(alpha: isDark ? 0.18 : 0.08)
-                        : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFFFFBEB)),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: const Color(0xFFD97706).withValues(alpha: _isAmazonWarehouse ? 0.6 : 0.25),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.inventory_2_rounded, size: 17, color: Color(0xFFD97706)),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Amazon Depo Ürünü (2. El / Açık Kutu)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFD97706),
-                          ),
-                        ),
-                      ),
-                      Checkbox(
-                        value: _isAmazonWarehouse,
-                        activeColor: const Color(0xFFD97706),
-                        onChanged: (val) => setState(() => _isAmazonWarehouse = val ?? false),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-
-        const SizedBox(height: 14),
-
-        // CARD 2: BAŞLIK VE KATEGORİ
-        _buildCardContainer(
+        // 1. KART: ÜRÜN VE KATEGORİ BİLGİLERİ (ÖNEMLİ BİLGİLER EN ÜSTTE)
+        _buildNotchedCardContainer(
           isDark: isDark,
           title: 'Ürün ve Kategori Bilgileri',
           icon: Icons.category_rounded,
           children: [
+            // Başlık
+            TextFormField(
+              controller: _titleController,
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 13.5),
+              decoration: InputDecoration(
+                labelText: 'Fırsat Başlığı *',
+                hintText: 'Örn: Sony WH-1000XM5 Kablosuz Kulaklık',
+                filled: true,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              ),
+              maxLines: 2,
+              minLines: 1,
+              validator: (val) {
+                if (val == null || val.trim().isEmpty) {
+                  return 'Başlık zorunludur';
+                }
+                if (val.trim().length < 5) {
+                  return 'Başlık en az 5 karakter olmalıdır';
+                }
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 16),
+
             // Kategori Seçici
             InkWell(
               onTap: _showCategorySelector,
               borderRadius: BorderRadius.circular(12),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                 decoration: BoxDecoration(
                   color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(12),
@@ -2454,16 +2259,74 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 ),
               ),
             ),
+          ],
+        ),
 
-            const SizedBox(height: 12),
+        const SizedBox(height: 20),
 
-            // Başlık
+        // 2. KART: FİYAT VE MAĞAZA BİLGİLERİ
+        _buildNotchedCardContainer(
+          isDark: isDark,
+          title: 'Fiyat ve Mağaza Bilgileri',
+          icon: Icons.payments_rounded,
+          children: [
+            // Fiyat Girişi
             TextFormField(
-              controller: _titleController,
-              style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 13.5),
+              controller: _priceController,
+              enabled: !_hidePrice,
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w700, fontSize: 15),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: 'Fırsat Başlığı *',
-                hintText: 'Örn: Sony WH-1000XM5 Kablosuz Kulaklık',
+                labelText: 'Fiyat (₺) *',
+                hintText: '0.00',
+                filled: true,
+                fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    '₺',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: AppTheme.primary),
+                  ),
+                ),
+                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              ),
+              validator: (value) {
+                if (_hidePrice) return null;
+                if (value == null || value.trim().isEmpty) {
+                  return 'Lütfen bir fiyat giriniz';
+                }
+                if (double.tryParse(value.trim()) == null) {
+                  return 'Geçerli bir sayı giriniz';
+                }
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 16),
+
+            // Mağaza Seçimi
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: _selectedStore,
+              menuMaxHeight: 300,
+              isExpanded: true,
+              dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,
+              style: TextStyle(color: textColor, fontSize: 13.5, fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                labelText: 'Satıcı / Mağaza *',
                 filled: true,
                 fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
                 border: OutlineInputBorder(
@@ -2478,34 +2341,129 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                prefixIcon: const Icon(Icons.storefront_rounded, size: 20),
               ),
-              maxLines: 2,
-              minLines: 1,
-              validator: (val) {
-                if (val == null || val.trim().isEmpty) {
-                  return 'Başlık zorunludur';
-                }
-                if (val.trim().length < 5) {
-                  return 'Başlık en az 5 karakter olmalıdır';
+              items: _stores.map((store) {
+                return DropdownMenuItem<String>(
+                  value: store,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        _getStoreAsset(store),
+                        width: 18,
+                        height: 18,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        store,
+                        style: TextStyle(color: textColor, fontSize: 13.5),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedStore = value;
+                  if (value != 'Diğer') {
+                    _storeController.text = value ?? '';
+                  } else {
+                    _storeController.text = _customStoreController.text;
+                  }
+                });
+              },
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Lütfen mağaza seçiniz';
                 }
                 return null;
               },
             ),
+
+            if (_selectedStore == 'Diğer') ...[
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _customStoreController,
+                style: TextStyle(color: textColor),
+                decoration: InputDecoration(
+                  labelText: 'Özel Mağaza Adı *',
+                  hintText: 'Örn: CarrefourSA, MediaMarkt vb.',
+                  filled: true,
+                  fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                  ),
+                  prefixIcon: const Icon(Icons.edit_note_rounded),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                ),
+                onChanged: (val) => _storeController.text = val.trim(),
+                validator: (val) {
+                  if (_selectedStore == 'Diğer' && (val == null || val.trim().isEmpty)) {
+                    return 'Mağaza adını giriniz';
+                  }
+                  return null;
+                },
+              ),
+            ],
+
+            const SizedBox(height: 12),
+
+            // Minimalist Ayırıcı & İkincil Seçenekler
+            Divider(
+              height: 1,
+              thickness: 0.8,
+              color: isDark ? AppTheme.darkBorder.withValues(alpha: 0.6) : const Color(0xFFE2E8F0),
+            ),
+
+            const SizedBox(height: 6),
+
+            // 1. Fiyatı Gizle (Fiyatsız Kampanya)
+            _buildMinimalToggleRow(
+              isDark: isDark,
+              icon: Icons.visibility_off_outlined,
+              title: 'Fiyatsız kampanya veya duyuru',
+              value: _hidePrice,
+              onChanged: (val) => setState(() => _hidePrice = val),
+            ),
+
+            // 2. Amazon Depo Ürünü (Yalnızca Amazon Seçildiğinde)
+            if (_selectedStore == 'Amazon') ...[
+              _buildMinimalToggleRow(
+                isDark: isDark,
+                icon: Icons.inventory_2_outlined,
+                title: 'Amazon Depo ürünü (2. El / Açık kutu)',
+                value: _isAmazonWarehouse,
+                activeColor: const Color(0xFFD97706),
+                onChanged: (val) => setState(() => _isAmazonWarehouse = val),
+              ),
+            ],
           ],
         ),
 
-        const SizedBox(height: 14),
+        const SizedBox(height: 20),
 
-        // CARD 3: AÇIKLAMA
-        _buildCardContainer(
+        // 3. KART: FIRSAT DETAYLARI & NOTLAR (EN ALTTA)
+        _buildNotchedCardContainer(
           isDark: isDark,
-          title: 'Detaylı Açıklama & Notlar',
+          title: 'Fırsat Detayları & Notlar',
           icon: Icons.notes_rounded,
           children: [
             TextFormField(
               controller: _descriptionController,
-              style: TextStyle(color: textColor, fontSize: 13, height: 1.4),
+              style: TextStyle(color: textColor, fontSize: 13, height: 1.45),
               maxLines: 4,
               minLines: 3,
               decoration: InputDecoration(
@@ -2526,7 +2484,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
                 ),
-                contentPadding: const EdgeInsets.all(12),
+                contentPadding: const EdgeInsets.all(14),
               ),
               validator: (val) {
                 if (val == null || val.trim().isEmpty) {
@@ -2541,53 +2499,143 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     );
   }
 
-  // Helper container card builder
-  Widget _buildCardContainer({
+  // Helper notched card container builder (Fieldset / Legend style with generous breathing room)
+  Widget _buildNotchedCardContainer({
     required bool isDark,
     required String title,
     required IconData icon,
     required List<Widget> children,
+    Widget? trailing,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-        border: Border.all(
-          color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-          width: 1,
-        ),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: AppTheme.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E293B),
-                    letterSpacing: -0.2,
-                  ),
-                ),
+    final bgColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
+    final pageBgColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Main Outlined Box
+        Container(
+          margin: const EdgeInsets.only(top: 14),
+          padding: const EdgeInsets.fromLTRB(16, 26, 16, 18),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: borderColor,
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.025),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          ...children,
-        ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
+        ),
+
+        // Notched Title Badge (Embedded directly on top border line with crisp border & padding)
+        Positioned(
+          top: 0,
+          left: 16,
+          right: trailing != null ? 16 : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: pageBgColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: borderColor.withValues(alpha: 0.85),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 14, color: AppTheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E293B),
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (trailing != null) trailing,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Helper minimalist toggle row for secondary options (consistent switch/label layout)
+  Widget _buildMinimalToggleRow({
+    required bool isDark,
+    required IconData icon,
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    Color? activeColor,
+  }) {
+    final effectiveActiveColor = activeColor ?? AppTheme.primary;
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    return InkWell(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onChanged(!value);
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 17,
+              color: value ? effectiveActiveColor : secondaryTextColor,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: value ? FontWeight.w700 : FontWeight.w500,
+                  color: value ? (isDark ? Colors.white : const Color(0xFF0F172A)) : textColor.withValues(alpha: 0.85),
+                ),
+              ),
+            ),
+            Transform.scale(
+              scale: 0.78,
+              child: Switch(
+                value: value,
+                activeTrackColor: effectiveActiveColor,
+                activeThumbColor: Colors.white,
+                onChanged: (val) {
+                  HapticFeedback.selectionClick();
+                  onChanged(val);
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
