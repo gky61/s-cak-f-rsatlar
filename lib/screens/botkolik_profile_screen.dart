@@ -798,7 +798,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
   }) {
     final features = [
       {
-        'title': 'Akıllı Link Analizi & Otomatik Doldurma',
+        'title': 'Akıllı Link Analizi',
         'desc': 'Fırsat paylaşırken linki yapıştırdığınız anda devreye girer; ürün başlığı, görsel, güncel fiyat ve mağaza bilgilerini otomatik doldurur.',
         'icon': Icons.auto_awesome_rounded,
         'color': const Color(0xFF00F0FF),
@@ -810,23 +810,23 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
         'color': const Color(0xFFF59E0B),
       },
       {
-        'title': 'Sepet & Özel İndirim Hesaplama',
-        'desc': 'Mağazaya özel sepetteki indirimleri, kuponları ve ek avantajları anında tespit ederek gerçek indirim oranını hesaplar.',
-        'icon': Icons.shopping_bag_rounded,
-        'color': const Color(0xFF6366F1),
+        'title': 'Aktüel Katalog Radarı',
+        'desc': 'Popüler zincir market ve mağazaların aktüel ürün kataloglarını düzenli otomatik tarar ve Aktüel sekmesinde topluluğa sunar.',
+        'icon': Icons.auto_stories_rounded,
+        'color': const Color(0xFFEC4899),
       },
-      {
+       {
         'title': 'Fiyat Anomalisi Tespiti',
-        'desc': 'İnternet üzerindeki milisaniyelik fiyat dalgalanmalarını ve hatalı fiyat indirimlerini anında yakalar.',
+        'desc': 'İnternet üzerindeki ani fiyat dalgalanmalarını, hatalı fiyatları ve kısa süreli flaş indirimleri tükenmeden önce anında yakalar.',
         'icon': Icons.candlestick_chart_rounded,
         'color': const Color(0xFF10B981),
       },
       {
-        'title': 'Flaş İndirim & Stok Radarı',
-        'desc': 'Çok kısa süreli flaş indirimleri ve sınırlı stok seviyelerini takip eder, tükenmeden önce fırsat akışına taşır.',
-        'icon': Icons.flash_on_rounded,
-        'color': AppTheme.primary,
-      },
+        'title': 'Sepete Özel İndirim Hesaplama',
+        'desc': 'Mağazaya özel sepetteki indirimleri, anında tespit ederek gerçek indirim oranını hesaplar.',
+        'icon': Icons.shopping_bag_rounded,
+        'color': const Color(0xFF6366F1),
+      }
     ];
 
     return Container(
@@ -951,7 +951,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
                       firstChild: Padding(
                         padding: const EdgeInsets.only(top: 8.0, left: 2.0),
                         child: Text(
-                          'Otomatik link analizi, kupon radarı, fiyat anomalisi ve flaş indirim yeteneklerini keşfedin.',
+                          'Otomatik link analizi, kupon ve aktüel radarı, sepet hesaplama ve fiyat anomalisi yeteneklerini keşfedin.',
                           style: TextStyle(
                             fontSize: 11.5,
                             color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),

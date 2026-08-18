@@ -65,15 +65,18 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
     Magaza(code: 'hakmar', name: 'Hakmar', logoAsset: 'assets/hakmar.webp', brandColor: Color(0xFFD32F2F), kategori: MagazaKategori.market),
     Magaza(code: 'cagri', name: 'Çağrı Hipermarket', logoAsset: 'assets/cagri.webp', brandColor: Color(0xFFE31B23), kategori: MagazaKategori.market),
     Magaza(code: 'kooperatifmarket', name: 'Kooperatif Market', logoAsset: 'assets/kooperatif.webp', brandColor: Color(0xFF00755F), kategori: MagazaKategori.market),
+
     // 2. Öncelik – Makyaj / Kişisel Bakım
     Magaza(code: 'watsons', name: 'Watsons', logoAsset: 'assets/watsons.webp', brandColor: Color(0xFF00A19B), kategori: MagazaKategori.kozmetik),
     Magaza(code: 'gratis', name: 'Gratis', logoAsset: 'assets/gratis.webp', brandColor: Color(0xFF8B1E87), kategori: MagazaKategori.kozmetik),
     Magaza(code: 'rossmann', name: 'Rossmann', logoAsset: 'assets/rossmann.webp', brandColor: Color(0xFFE2001A), kategori: MagazaKategori.kozmetik),
+
     // 3. Öncelik – Giyim / Ev / Yaşam / Anne & Bebek
     Magaza(code: 'cetinkaya', name: 'Çetinkaya', logoAsset: 'assets/cetinkaya.webp', brandColor: Color(0xFFE31E24), kategori: MagazaKategori.giyimYasam),
     Magaza(code: 'civil', name: 'Civil', logoAsset: 'assets/civil.webp', brandColor: Color(0xFFFF6600), kategori: MagazaKategori.giyimYasam),
     Magaza(code: 'evkur', name: 'Evkur', logoAsset: 'assets/evkur.webp', brandColor: Color(0xFF003399), kategori: MagazaKategori.giyimYasam),
     Magaza(code: 'mrdiy', name: 'MR.DIY', logoAsset: 'assets/mrdiy.webp', brandColor: Color(0xFFFFD100), kategori: MagazaKategori.giyimYasam),
+
     // 4. Öncelik – Teknoloji & Elektronik
     Magaza(code: 'teknosa', name: 'Teknosa', logoAsset: 'assets/teknosa.webp', brandColor: Color(0xFFFF5F00), kategori: MagazaKategori.teknoloji),
     Magaza(code: 'vatan', name: 'Vatan Bilgisayar', logoAsset: 'assets/vatan.webp', brandColor: Color(0xFF005691), kategori: MagazaKategori.teknoloji),
@@ -144,113 +147,119 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
           tooltip: 'Geri',
         ),
       ),
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          // 1. HERO BANNER (Kullanıcı dilerse kapatabilir)
-          if (!_hideHeroBanner)
-            SliverToBoxAdapter(
-              child: _buildHeroBanner(isDark),
-            ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('kataloglar').snapshots(),
+        builder: (context, snapshot) {
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final activeStoreCatalogCounts = <String, int>{};
+          int totalActiveCatalogs = 0;
 
-          // 2. SEARCH BAR & CATEGORY FILTER CHIPS
-          SliverToBoxAdapter(
-            child: _buildSearchAndCategoryFilters(isDark),
-          ),
-
-          // 3. STORE GRID (Dinamik Aktif Katalog Sayımı ve Filtreleme)
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('kataloglar').snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return SliverToBoxAdapter(
-                  child: _buildShimmerStoreGrid(isDark),
-                );
-              }
-
-              final now = DateTime.now();
-              final today = DateTime(now.year, now.month, now.day);
-              final activeStoreCatalogCounts = <String, int>{};
-
-              if (snapshot.hasData) {
-                for (var doc in snapshot.data!.docs) {
-                  try {
-                    final data = doc.data() as Map<String, dynamic>;
-                    final bitisTimestamp = data['bitisTarihi'] as Timestamp?;
-                    if (bitisTimestamp != null) {
-                      final bitis = bitisTimestamp.toDate();
-                      final expiryDay = DateTime(bitis.year, bitis.month, bitis.day);
-                      if (!expiryDay.isBefore(today)) {
-                        final magazaKodu = data['magazaKodu'] as String?;
-                        if (magazaKodu != null && magazaKodu.isNotEmpty) {
-                          final codeLower = magazaKodu.toLowerCase();
-                          activeStoreCatalogCounts[codeLower] = (activeStoreCatalogCounts[codeLower] ?? 0) + 1;
-                        }
-                      }
+          if (snapshot.hasData) {
+            for (var doc in snapshot.data!.docs) {
+              try {
+                final data = doc.data() as Map<String, dynamic>;
+                final bitisTimestamp = data['bitisTarihi'] as Timestamp?;
+                if (bitisTimestamp != null) {
+                  final bitis = bitisTimestamp.toDate();
+                  final expiryDay = DateTime(bitis.year, bitis.month, bitis.day);
+                  if (!expiryDay.isBefore(today)) {
+                    final magazaKodu = data['magazaKodu'] as String?;
+                    if (magazaKodu != null && magazaKodu.isNotEmpty) {
+                      final codeLower = magazaKodu.toLowerCase();
+                      activeStoreCatalogCounts[codeLower] = (activeStoreCatalogCounts[codeLower] ?? 0) + 1;
+                      totalActiveCatalogs++;
                     }
-                  } catch (_) {}
+                  }
                 }
-              }
+              } catch (_) {}
+            }
+          }
 
-              // Filter by Active Catalogs
-              var visibleStores = _magazalar.where((m) => activeStoreCatalogCounts.containsKey(m.code.toLowerCase())).toList();
+          final isLoading = snapshot.connectionState == ConnectionState.waiting;
 
-              // Filter by Category
-              if (_selectedCategory != MagazaKategori.tumu) {
-                visibleStores = visibleStores.where((m) => m.kategori == _selectedCategory).toList();
-              }
+          // Filter by Active Catalogs
+          var visibleStores = _magazalar.where((m) => activeStoreCatalogCounts.containsKey(m.code.toLowerCase())).toList();
 
-              // Filter by Search Query
-              if (_searchQuery.trim().isNotEmpty) {
-                final q = _searchQuery.trim().toLowerCase();
-                visibleStores = visibleStores.where((m) => m.name.toLowerCase().contains(q) || m.code.toLowerCase().contains(q)).toList();
-              }
+          // Filter by Category
+          if (_selectedCategory != MagazaKategori.tumu) {
+            visibleStores = visibleStores.where((m) => m.kategori == _selectedCategory).toList();
+          }
 
-              if (visibleStores.isEmpty) {
-                return SliverFillRemaining(
+          // Filter by Search Query
+          if (_searchQuery.trim().isNotEmpty) {
+            final q = _searchQuery.trim().toLowerCase();
+            visibleStores = visibleStores.where((m) => m.name.toLowerCase().contains(q) || m.code.toLowerCase().contains(q)).toList();
+          }
+
+          return CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              // 1. HERO BANNER
+              if (!_hideHeroBanner)
+                SliverToBoxAdapter(
+                  child: _buildHeroBanner(isDark, totalActiveCatalogs),
+                ),
+
+              // 2. SEARCH BAR & CATEGORY FILTER CHIPS
+              SliverToBoxAdapter(
+                child: _buildSearchAndCategoryFilters(isDark),
+              ),
+
+              // 3. SECTION HEADER
+              if (!isLoading && visibleStores.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _buildSectionHeader(visibleStores.length, isDark),
+                ),
+
+              // 4. STORE GRID OR SHIMMER OR EMPTY STATE
+              if (isLoading)
+                SliverToBoxAdapter(
+                  child: _buildShimmerStoreGrid(isDark),
+                )
+              else if (visibleStores.isEmpty)
+                SliverFillRemaining(
                   hasScrollBody: false,
                   child: _buildEmptyState(isDark),
-                );
-              }
-
-              return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.80,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final magaza = visibleStores[index];
-                      final catalogCount = activeStoreCatalogCounts[magaza.code.toLowerCase()] ?? 1;
-                      return _buildMagazaCard(context, magaza, catalogCount, isDark);
-                    },
-                    childCount: visibleStores.length,
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 36),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 0.86,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final magaza = visibleStores[index];
+                        return _buildMagazaCard(context, magaza, isDark);
+                      },
+                      childCount: visibleStores.length,
+                    ),
                   ),
                 ),
-              );
-            },
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
 
-  // --- HERO BANNER ---
-  Widget _buildHeroBanner(bool isDark) {
+  // --- 1. HERO BANNER ---
+  Widget _buildHeroBanner(bool isDark, int totalActiveCatalogs) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.04),
+              color: AppTheme.primary.withValues(alpha: isDark ? 0.15 : 0.05),
               blurRadius: 12,
               offset: const Offset(0, 3),
             ),
@@ -262,21 +271,22 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
         ),
         child: Row(
           children: [
+            // Glowing Gradient Icon Badge
             Container(
-              width: 46,
-              height: 46,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFFF8C42), AppTheme.primary],
+                  colors: [Color(0xFFFF7A00), Color(0xFFFF5000)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: const Color(0xFFFF6B00).withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
@@ -296,18 +306,18 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
                       Text(
                         'Haftalık Aktüel Broşürleri',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.w800,
                           color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                           letterSpacing: -0.2,
                         ),
                       ),
-                      const SizedBox(width: 5),
+                      const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.1),
-                          borderRadius: BorderRadius.circular(4),
+                          color: AppTheme.primary.withValues(alpha: isDark ? 0.22 : 0.12),
+                          borderRadius: BorderRadius.circular(5),
                         ),
                         child: const Text(
                           'YENİ',
@@ -322,7 +332,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    'En güncel market ve mağaza indirim kataloglarını tek tıkla incele.',
+                    'Popüler mağazalardaki ürün katalogları ve broşürleri günlük düzenli taranarak yayına alınmaktadır.',
                     style: TextStyle(
                       fontSize: 11.5,
                       color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
@@ -332,15 +342,15 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            // Sleek Dismiss / Close Button
+            const SizedBox(width: 6),
+            // Dismiss Button
             Material(
               color: Colors.transparent,
               child: InkWell(
                 onTap: _dismissBanner,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(20),
                 child: Container(
-                  padding: const EdgeInsets.all(5),
+                  padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
                     shape: BoxShape.circle,
@@ -359,27 +369,27 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
     );
   }
 
-  // --- SEARCH & CATEGORY FILTERS ---
+  // --- 2. SEARCH & CATEGORY FILTERS ---
   Widget _buildSearchAndCategoryFilters(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 1. Search Bar
+        // Search Bar
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Container(
-            height: 42,
+            height: 44,
             decoration: BoxDecoration(
               color: isDark ? AppTheme.darkSurface : Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
-                  blurRadius: 6,
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
+                  blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
               ],
@@ -395,13 +405,13 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
               decoration: InputDecoration(
                 hintText: 'Mağaza veya market ara... (Örn: BİM, Gratis)',
                 hintStyle: TextStyle(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
                 ),
-                prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppTheme.primary),
+                prefixIcon: const Icon(Icons.search_rounded, size: 19, color: AppTheme.primary),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.cancel_rounded, size: 16),
+                        icon: const Icon(Icons.cancel_rounded, size: 17),
                         color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
                         onPressed: () {
                           _searchController.clear();
@@ -409,7 +419,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
                         },
                       )
                     : null,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(vertical: 11),
                 border: InputBorder.none,
                 isDense: true,
               ),
@@ -419,9 +429,9 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
 
         const SizedBox(height: 10),
 
-        // 2. Horizontal Category Filter Chips
+        // Category Filter Chips
         SizedBox(
-          height: 36,
+          height: 38,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -432,7 +442,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
               final isSelected = _selectedCategory == cat;
 
               return Padding(
-                padding: const EdgeInsets.only(right: 6.0),
+                padding: const EdgeInsets.only(right: 8.0),
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -440,39 +450,55 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
                       HapticFeedback.selectionClick();
                       setState(() => _selectedCategory = cat);
                     },
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppTheme.primary.withValues(alpha: isDark ? 0.22 : 0.12)
+                            ? AppTheme.primary
                             : (isDark ? AppTheme.darkSurface : Colors.white),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isSelected
                               ? AppTheme.primary
                               : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
                           width: isSelected ? 1.2 : 0.9,
                         ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: AppTheme.primary.withValues(alpha: 0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             cat.icon,
-                            size: 13.5,
-                            color: isSelected ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                            size: 14,
+                            color: isSelected ? Colors.white : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
                           ),
-                          const SizedBox(width: 5),
+                          const SizedBox(width: 6),
                           Text(
                             cat.label,
                             style: TextStyle(
                               color: isSelected
-                                  ? (isDark ? Colors.white : AppTheme.primary)
-                                  : (isDark ? const Color(0xFFD4D4D8) : const Color(0xFF475569)),
+                                  ? Colors.white
+                                  : (isDark ? const Color(0xFFE4E4E7) : const Color(0xFF334155)),
                               fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                              fontSize: 11.5,
+                              fontSize: 12,
                             ),
                           ),
                         ],
@@ -485,13 +511,68 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
           ),
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
       ],
     );
   }
 
-  // --- MODERN STORE CARD ---
-  Widget _buildMagazaCard(BuildContext context, Magaza magaza, int catalogCount, bool isDark) {
+  // --- 3. SECTION HEADER STRIP ---
+  Widget _buildSectionHeader(int count, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 3.5,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _selectedCategory == MagazaKategori.tumu
+                    ? 'Popüler Mağazalar'
+                    : _selectedCategory.label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ],
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                width: 0.8,
+              ),
+            ),
+            child: Text(
+              '$count Mağaza',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- 4. MODERN STORE CARD ---
+  Widget _buildMagazaCard(BuildContext context, Magaza magaza, bool isDark) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -519,9 +600,14 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.04),
-                blurRadius: 8,
+                color: magaza.brandColor.withValues(alpha: isDark ? 0.08 : 0.05),
+                blurRadius: 10,
                 offset: const Offset(0, 3),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.025),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
@@ -529,29 +615,37 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
             borderRadius: BorderRadius.circular(18),
             child: Column(
               children: [
-                // 1. Top Brand Color Accent Line
+                // Brand Color Accent Indicator
                 Container(
                   height: 3.5,
-                  color: magaza.brandColor,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        magaza.brandColor,
+                        magaza.brandColor.withValues(alpha: 0.7),
+                      ],
+                    ),
+                  ),
                 ),
 
-                // 2. Store Logo Box
+                // Store Logo Tile
                 Expanded(
                   flex: 5,
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
                     color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFFAFAFA),
                     child: Center(
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: const [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 4,
+                              color: Colors.black12,
+                              blurRadius: 5,
+                              offset: Offset(0, 1.5),
                             ),
                           ],
                         ),
@@ -561,7 +655,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
                           errorBuilder: (context, error, stackTrace) {
                             return Icon(
                               Icons.storefront_rounded,
-                              size: 28,
+                              size: 26,
                               color: magaza.brandColor,
                             );
                           },
@@ -571,43 +665,24 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
                   ),
                 ),
 
-                // 3. Store Name & Catalog Count Badge
+                // Store Name
                 Expanded(
-                  flex: 4,
+                  flex: 2,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          magaza.name,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                            letterSpacing: -0.2,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Center(
+                      child: Text(
+                        magaza.name,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                          letterSpacing: -0.2,
                         ),
-                        const SizedBox(height: 3),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Text(
-                            '$catalogCount Broşür',
-                            style: const TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.primary,
-                            ),
-                          ),
-                        ),
-                      ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ),
@@ -619,7 +694,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
     );
   }
 
-  // --- SKELETON SHIMMER STORE GRID ---
+  // --- 5. SKELETON SHIMMER STORE GRID ---
   Widget _buildShimmerStoreGrid(bool isDark) {
     final shimmerBase = isDark ? const Color(0xFF1C1C1C) : const Color(0xFFE2E8F0);
     final shimmerHighlight = isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF8FAFC);
@@ -636,7 +711,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
             crossAxisCount: 3,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 0.80,
+            childAspectRatio: 0.86,
           ),
           itemCount: 9,
           itemBuilder: (_, __) => Container(
@@ -650,7 +725,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
     );
   }
 
-  // --- EMPTY STATE ---
+  // --- 6. EMPTY STATE ---
   Widget _buildEmptyState(bool isDark) {
     return Center(
       child: Padding(
@@ -659,15 +734,15 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 70,
-              height: 70,
+              width: 68,
+              height: 68,
               decoration: BoxDecoration(
                 color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.search_off_rounded,
-                size: 36,
+                size: 34,
                 color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
               ),
             ),
@@ -675,7 +750,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
             Text(
               'Aradığınız Mağaza Bulunamadı',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w800,
                 color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
               ),
@@ -685,32 +760,36 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
               'Filtreleri değiştirerek veya arama terimini temizleyerek tekrar deneyebilirsiniz.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 12,
                 color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
                 height: 1.4,
               ),
             ),
-            const SizedBox(height: 16),
-            if (_searchQuery.isNotEmpty || _selectedCategory != MagazaKategori.tumu)
-              TextButton.icon(
+            if (_searchQuery.isNotEmpty || _selectedCategory != MagazaKategori.tumu) ...[
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
                 onPressed: () {
-                  _searchController.clear();
+                  HapticFeedback.lightImpact();
                   setState(() {
+                    _searchController.clear();
                     _searchQuery = '';
                     _selectedCategory = MagazaKategori.tumu;
                   });
                 },
                 icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Filtreleri Sıfırla'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.primary,
-                  textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                label: const Text('Filtreleri Sıfırla', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                  elevation: 0,
                 ),
               ),
+            ],
           ],
         ),
       ),
     );
   }
 }
-

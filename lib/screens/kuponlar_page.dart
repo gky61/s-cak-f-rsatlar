@@ -34,6 +34,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   final Set<String> _votingInProgress = {};
   bool _isAdmin = false;
   bool _hideRadarBanner = false;
+  bool _hideHeroBanner = false;
   late Stream<List<Kupon>> _kuponlarStream;
   late TabController _tabController;
   String _selectedStoreFilter = 'Tümü';
@@ -61,6 +62,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     _kuponlarStream = _kuponService.getKuponlarStream();
     _checkAdminStatus();
     _loadHiddenCoupons();
+    _loadHeroBannerPreference();
     _authSub = AuthService().authStateChanges.listen((user) {
       if (mounted) {
         _checkAdminStatus();
@@ -218,6 +220,28 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     return (uid != null && uid.isNotEmpty)
         ? 'hidden_kupon_ids_$uid'
         : 'hidden_kupon_ids_guest';
+  }
+
+  Future<void> _loadHeroBannerPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(() {
+          _hideHeroBanner = prefs.getBool('hide_kuponlar_hero_banner') ?? false;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _dismissHeroBanner() async {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _hideHeroBanner = true;
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hide_kuponlar_hero_banner', true);
+    } catch (_) {}
   }
 
   Future<void> _loadHiddenCoupons() async {
@@ -518,6 +542,182 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     }
   }
 
+  // --- 1. HERO BANNER ---
+  Widget _buildHeroBanner(bool isDark, int totalActiveCoupons) {
+    if (_hideHeroBanner) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primary.withValues(alpha: isDark ? 0.12 : 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+          border: Border.all(
+            color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Glowing Gradient Icon Badge
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFF7A00), Color(0xFFFF5000)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF6B00).withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.confirmation_number_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Güncel İndirim Kuponları',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: isDark ? 0.22 : 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'YENİ',
+                          style: TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w900,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Popüler mağazalardaki indirim kodları düzenli taranarak en güncel kuponlar kullanıma sunulmaktadır.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            // Dismiss Button
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _dismissHeroBanner,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- 2. SECTION HEADER STRIP ---
+  Widget _buildSectionHeader(int count, String title, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 13,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ],
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                width: 0.8,
+              ),
+            ),
+            child: Text(
+              '$count Kupon',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildVoteButton({
     required String label,
     required bool isSelected,
@@ -529,26 +729,26 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 4),
           decoration: BoxDecoration(
             color: isSelected
                 ? selectedColor.withValues(alpha: isDark ? 0.22 : 0.12)
                 : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9)),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isSelected
                   ? selectedColor.withValues(alpha: 0.8)
                   : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-              width: isSelected ? 1.2 : 0.9,
+              width: isSelected ? 1.1 : 0.8,
             ),
           ),
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: 11,
               fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
               color: isSelected
                   ? selectedColor
@@ -580,24 +780,24 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
       decoration: BoxDecoration(
         color: badgeColor.withValues(alpha: isDark ? 0.18 : 0.1),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: badgeColor.withValues(alpha: 0.35),
-          width: 0.9,
+          width: 0.8,
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: badgeColor),
-          const SizedBox(width: 4),
+          Icon(icon, size: 11, color: badgeColor),
+          const SizedBox(width: 3.5),
           Text(
             badgeText,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10.5,
               fontWeight: FontWeight.w800,
               color: badgeColor,
               letterSpacing: -0.2,
@@ -654,18 +854,18 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeOutCubic,
-        margin: const EdgeInsets.only(bottom: 14),
+        margin: const EdgeInsets.only(bottom: 11),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: isRecentlyRestored
                   ? AppTheme.primary.withValues(alpha: isDark ? 0.45 : 0.25)
-                  : Colors.black.withValues(alpha: isDark ? 0.35 : 0.035),
-              blurRadius: isRecentlyRestored ? 18 : 12,
+                  : Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
+              blurRadius: isRecentlyRestored ? 16 : 10,
               spreadRadius: isRecentlyRestored ? 1.5 : 0,
-              offset: const Offset(0, 3),
+              offset: const Offset(0, 2),
             ),
           ],
           border: Border.all(
@@ -675,7 +875,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
             width: isRecentlyRestored ? 1.8 : 1.0,
           ),
         ),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -686,29 +886,33 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
               children: [
                 // Store Logo
                 Container(
-                  width: 48,
-                  height: 48,
-                  padding: const EdgeInsets.all(5),
+                  width: 44,
+                  height: 44,
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, 1.5),
+                      ),
+                    ],
                     border: Border.all(
                       color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
                       width: 1,
                     ),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      _getStoreAsset(kupon.magazaAdi),
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Image.asset('assets/store-icon.png', fit: BoxFit.contain);
-                      },
-                    ),
+                  child: Image.asset(
+                    _getStoreAsset(kupon.magazaAdi),
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Image.asset('assets/store-icon.png', fit: BoxFit.contain);
+                    },
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
 
                 // Center: Store Badge + Title + Description
                 Expanded(
@@ -719,15 +923,15 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08),
-                              borderRadius: BorderRadius.circular(6),
+                              color: AppTheme.primary.withValues(alpha: isDark ? 0.22 : 0.12),
+                              borderRadius: BorderRadius.circular(5),
                             ),
                             child: Text(
                               kupon.magazaAdi,
                               style: const TextStyle(
-                                fontSize: 11,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w800,
                                 color: AppTheme.primary,
                                 letterSpacing: -0.2,
@@ -752,23 +956,23 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           ],
                         ],
                       ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 4),
 
                       // Title
                       Text(
                         kupon.baslik,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.w800,
                           color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                           height: 1.25,
-                          letterSpacing: -0.3,
+                          letterSpacing: -0.2,
                         ),
                       ),
 
                       // Description
                       if (kupon.aciklama.isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         Builder(
                           builder: (context) {
                             final isExpanded = _expandedKuponIds.contains(kupon.id);
@@ -840,7 +1044,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
 
                 // Right: Voucher Code Box + Store Button
                 Column(
@@ -866,15 +1070,15 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           _copyToClipboard(kupon.id, kupon.kuponKodu);
                         }
                       },
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(9),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
                         decoration: BoxDecoration(
                           color: isCopied
                               ? const Color(0xFF16A34A).withValues(alpha: isDark ? 0.25 : 0.12)
                               : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9)),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(9),
                           border: Border.all(
                             color: isCopied
                                 ? const Color(0xFF16A34A)
@@ -892,14 +1096,14 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                       kupon.kuponKodu.isNotEmpty ? kupon.kuponKodu : 'KUPON100',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w900,
-                                        fontSize: 12,
+                                        fontSize: 11.5,
                                         letterSpacing: 0.5,
                                         color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 5),
-                                  const Icon(Icons.lock_rounded, size: 14, color: AppTheme.primary),
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.lock_rounded, size: 13, color: AppTheme.primary),
                                 ],
                               )
                             : Row(
@@ -909,20 +1113,20 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                     kupon.kuponKodu,
                                     style: TextStyle(
                                       fontWeight: FontWeight.w900,
-                                      fontSize: 12.5,
+                                      fontSize: 12,
                                       letterSpacing: 0.5,
                                       color: isCopied
                                           ? const Color(0xFF16A34A)
                                           : (isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A)),
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 5),
                                   AnimatedSwitcher(
                                     duration: const Duration(milliseconds: 200),
                                     child: Icon(
                                       isCopied ? Icons.check_circle_rounded : Icons.copy_rounded,
                                       key: ValueKey<bool>(isCopied),
-                                      size: 14,
+                                      size: 13,
                                       color: isCopied
                                           ? const Color(0xFF16A34A)
                                           : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
@@ -933,19 +1137,19 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                       ),
                     ),
 
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 5),
 
                     // "Mağazaya Git" Button
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () => _openStore(kupon.magazaAdi),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(7),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                           decoration: BoxDecoration(
                             color: AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.06),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(7),
                             border: Border.all(
                               color: AppTheme.primary.withValues(alpha: isDark ? 0.35 : 0.2),
                               width: 0.8,
@@ -957,14 +1161,14 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                               Text(
                                 'Mağazaya Git',
                                 style: TextStyle(
-                                  fontSize: 10.5,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   color: AppTheme.primary,
                                   letterSpacing: -0.2,
                                 ),
                               ),
                               SizedBox(width: 3),
-                              Icon(Icons.open_in_new_rounded, size: 11, color: AppTheme.primary),
+                              Icon(Icons.open_in_new_rounded, size: 10.5, color: AppTheme.primary),
                             ],
                           ),
                         ),
@@ -975,7 +1179,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
               ],
             ),
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
             // BOTTOM ROW: VOTES + TRUST BADGE + HIDE + MANAGEMENT
             Row(
@@ -985,7 +1189,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                 Expanded(
                   child: Wrap(
                     crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 6,
+                    spacing: 5,
                     runSpacing: 4,
                     children: [
                       _buildVoteButton(
@@ -1010,15 +1214,15 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                         color: Colors.transparent,
                         child: InkWell(
                           onTap: () => _hideCoupon(kupon.id, reason: 'İlgilenmiyorum'),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(8),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                             decoration: BoxDecoration(
                               color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-                                width: 0.9,
+                                width: 0.8,
                               ),
                             ),
                             child: Row(
@@ -1026,14 +1230,14 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                               children: [
                                 Icon(
                                   Icons.visibility_off_outlined,
-                                  size: 12,
+                                  size: 11.5,
                                   color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 3.5),
                                 Text(
                                   'Gizle',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 10.5,
                                     color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -1129,17 +1333,17 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
         : const Color(0xFFBFDBFE);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       decoration: BoxDecoration(
         color: bannerBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: 1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 0.9),
         boxShadow: [
           BoxShadow(
             color: AppTheme.primary.withValues(alpha: isDark ? 0.15 : 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            blurRadius: 8,
+            offset: const Offset(0, 1.5),
           ),
         ],
       ),
@@ -1147,20 +1351,20 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            margin: const EdgeInsets.only(top: 2),
-            width: 32,
-            height: 32,
+            margin: const EdgeInsets.only(top: 1),
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
                 color: AppTheme.primary.withValues(alpha: 0.6),
-                width: 1.5,
+                width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
                   color: AppTheme.primary.withValues(alpha: 0.2),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+                  blurRadius: 5,
+                  offset: const Offset(0, 1.5),
                 ),
               ],
             ),
@@ -1168,7 +1372,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
               child: Image.asset('assets/botkolik.webp', fit: BoxFit.cover),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 9),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1182,7 +1386,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           TextSpan(
                             text: 'Bot',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w900,
                               color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                               letterSpacing: -0.2,
@@ -1191,16 +1395,16 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           const TextSpan(
                             text: 'kolik',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w900,
                               color: AppTheme.primary,
                               letterSpacing: -0.2,
                             ),
                           ),
                           TextSpan(
-                            text: ' Radar & Topluluk Doğrulaması',
+                            text: ' Radar Doğrulaması',
                             style: TextStyle(
-                              fontSize: 12.5,
+                              fontSize: 12,
                               fontWeight: FontWeight.w800,
                               color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E3A8A),
                             ),
@@ -1214,32 +1418,28 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                         setState(() => _hideRadarBanner = true);
                       },
                       borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(2.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                          shape: BoxShape.circle,
+                        ),
                         child: Icon(
                           Icons.close_rounded,
-                          size: 16,
-                          color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                          size: 13,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                RichText(
-                  text: TextSpan(
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      height: 1.4,
-                      color: isDark ? const Color(0xFFE4E4E7) : const Color(0xFF1E40AF),
-                    ),
-                    children: const [
-                      TextSpan(text: 'Bu sayfadaki kuponlar Botkolik radarıyla otomatik yakalanır. Kuponları '),
-                      TextSpan(text: '🔥', style: TextStyle(fontWeight: FontWeight.bold)),
-                      TextSpan(text: ' veya '),
-                      TextSpan(text: '❄️', style: TextStyle(fontWeight: FontWeight.bold)),
-                      TextSpan(text: ' butonlarıyla oylayarak topluluğa rehberlik edebilirsiniz.'),
-                    ],
+                const SizedBox(height: 2),
+                Text(
+                  'Bu sekmedeki kuponlar Botkolik Radarı tarafından e-ticaret sitelerinden taranır. Çalışıp çalışmadığını oylayarak topluluğa destek olabilirsiniz.',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF475569),
+                    height: 1.25,
                   ),
                 ),
               ],
@@ -1355,19 +1555,28 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      width: 64,
-                      height: 64,
+                      width: 68,
+                      height: 68,
                       decoration: BoxDecoration(
                         color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.search_off_rounded,
-                        size: 32,
+                        size: 34,
                         color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
+                    Text(
+                      hasHidden ? 'Gizlenen Kuponlar Mevcut' : 'Kupon Bulunamadı',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
                     Text(
                       hasHidden
                           ? 'Gizlediğiniz kuponlar nedeniyle bu sekmede görünür kupon bulunmuyor.'
@@ -1375,8 +1584,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                        height: 1.4,
                       ),
                     ),
                     if (hasHidden) ...[
@@ -1406,7 +1615,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
 
     return ListView.builder(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 75),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 75),
       itemCount: list.length + headerCount,
       itemBuilder: (context, index) {
         int currentIndex = 0;
@@ -1459,7 +1668,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(
-          'Kuponlar',
+          'İndirim Kuponları',
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 18,
@@ -1468,9 +1677,18 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           ),
         ),
         centerTitle: true,
-        elevation: 0,
         backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+        elevation: 0,
         surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 19,
+            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Geri',
+        ),
       ),
       body: Stack(
         children: [
@@ -1516,20 +1734,27 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
               final radarKuponlar = visibleKuponlar.where((k) => k.kaynakTipi == 'web' && k.durum == 'aktif').toList();
               radarKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank));
 
+              final currentTabCount = _tabController.index == 0 ? toplulukKuponlar.length : radarKuponlar.length;
+              final currentTabTitle = _tabController.index == 0 ? 'Topluluk Kuponları' : 'Kupon Radarı';
+
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. MODERN PILL-SHAPED TAB BAR
+                  // 1. HERO BANNER
+                  _buildHeroBanner(isDark, visibleKuponlar.length),
+
+                  // 2. MODERN MINIMALIST PILL-SHAPED TAB BAR
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                     child: Container(
-                      height: 42,
+                      height: 36,
+                      padding: const EdgeInsets.all(2.5),
                       decoration: BoxDecoration(
                         color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-                          width: 1,
+                          width: 0.8,
                         ),
                       ),
                       child: TabBar(
@@ -1538,32 +1763,52 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                         dividerColor: Colors.transparent,
                         indicator: BoxDecoration(
                           color: AppTheme.primary,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(8),
                           boxShadow: [
                             BoxShadow(
-                              color: AppTheme.primary.withValues(alpha: 0.3),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
+                              color: AppTheme.primary.withValues(alpha: 0.28),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1.5),
                             ),
                           ],
                         ),
                         labelColor: Colors.white,
                         unselectedLabelColor: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                        labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: -0.2),
+                        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                         tabs: const [
-                          Tab(text: 'Topluluk Kuponları'),
-                          Tab(text: 'Kupon Radarı'),
+                          Tab(
+                            height: 30,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.groups_rounded, size: 14),
+                                SizedBox(width: 5),
+                                Text('Topluluk Kuponları'),
+                              ],
+                            ),
+                          ),
+                          Tab(
+                            height: 30,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.radar_rounded, size: 14),
+                                SizedBox(width: 5),
+                                Text('Kupon Radarı'),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
 
-                  // 2. HORIZONTAL STORE FILTER CHIPS
+                  // 3. HORIZONTAL STORE FILTER CHIPS
                   if (stores.isNotEmpty) ...[
                     Container(
-                      height: 38,
-                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      height: 33,
+                      margin: const EdgeInsets.only(top: 6, bottom: 2),
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
                         physics: const BouncingScrollPhysics(),
@@ -1584,21 +1829,36 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                     _selectedStoreFilter = store;
                                   });
                                 },
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(9),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                   decoration: BoxDecoration(
                                     color: isSelected
-                                        ? AppTheme.primary.withValues(alpha: isDark ? 0.22 : 0.12)
+                                        ? AppTheme.primary
                                         : (isDark ? AppTheme.darkSurface : Colors.white),
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(9),
                                     border: Border.all(
                                       color: isSelected
                                           ? AppTheme.primary
                                           : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-                                      width: isSelected ? 1.2 : 0.9,
+                                      width: isSelected ? 1.1 : 0.8,
                                     ),
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
+                                              color: AppTheme.primary.withValues(alpha: 0.25),
+                                              blurRadius: 5,
+                                              offset: const Offset(0, 1.5),
+                                            ),
+                                          ]
+                                        : [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.015),
+                                              blurRadius: 3,
+                                              offset: const Offset(0, 1),
+                                            ),
+                                          ],
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -1606,20 +1866,20 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                       if (store != 'Tümü') ...[
                                         Image.asset(
                                           _getStoreAsset(store),
-                                          width: 14,
-                                          height: 14,
-                                          errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 14),
+                                          width: 13,
+                                          height: 13,
+                                          errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 13),
                                         ),
-                                        const SizedBox(width: 5),
+                                        const SizedBox(width: 4),
                                       ],
                                       Text(
                                         store,
                                         style: TextStyle(
                                           color: isSelected
-                                              ? (isDark ? Colors.white : AppTheme.primary)
+                                              ? Colors.white
                                               : (isDark ? const Color(0xFFD4D4D8) : const Color(0xFF475569)),
                                           fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                                          fontSize: 12,
+                                          fontSize: 11.5,
                                         ),
                                       ),
                                     ],
@@ -1633,7 +1893,11 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                     ),
                   ],
 
-                  // 3. TAB CONTENT
+                  // 4. SECTION HEADER STRIP
+                  if (visibleKuponlar.isNotEmpty)
+                    _buildSectionHeader(currentTabCount, currentTabTitle, isDark),
+
+                  // 5. TAB CONTENT
                   Expanded(
                     child: TabBarView(
                       controller: _tabController,
