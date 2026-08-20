@@ -5,6 +5,7 @@ import '../services/report_service.dart';
 import '../services/firestore_service.dart';
 import '../screens/deal_detail_screen.dart';
 import '../screens/profile_screen.dart';
+import 'skeletons/notification_list_skeleton.dart';
 
 class AdminReportsList extends StatefulWidget {
   final String status; // 'pending' veya 'dismissed'/'action_taken'
@@ -57,7 +58,7 @@ class _AdminReportsListState extends State<AdminReportsList> {
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const NotificationListSkeleton();
         }
 
         final reports = snapshot.data ?? [];

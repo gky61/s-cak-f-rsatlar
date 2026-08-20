@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/skeletons/settings_skeleton.dart';
 import 'home_screen.dart';
 
 void _log(String message) {
@@ -211,7 +212,7 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
         scrolledUnderElevation: 0.5,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const KeywordTrackingSkeleton()
           : SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),

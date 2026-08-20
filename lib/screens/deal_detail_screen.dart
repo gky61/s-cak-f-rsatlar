@@ -28,6 +28,7 @@ import 'deal_detail/deal_detail_helpers.dart';
 import 'deal_detail/deal_detail_image.dart';
 import 'deal_detail/deal_share_sheet.dart';
 import 'deal_detail/deal_admin_dialogs.dart';
+import '../widgets/skeletons/deal_detail_skeleton.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -625,11 +626,25 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       );
     }
     
-    // _currentDeal null ise loading göster
+    // _currentDeal null ise skeleton loading göster
     if (_currentDeal == null) {
       return Scaffold(
         backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
-        body: const Center(child: CircularProgressIndicator()),
+        appBar: AppBar(
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+          foregroundColor: isDark ? Colors.white : AppTheme.textPrimary,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: const Text(
+            'Fırsat Detayı',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+          ),
+          centerTitle: true,
+        ),
+        body: const DealDetailSkeleton(),
       );
     }
     

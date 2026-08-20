@@ -15,6 +15,7 @@ import '../services/link_preview_service.dart';
 import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_dialog.dart';
+import '../widgets/skeletons/chat_messages_skeleton.dart';
 import 'profile_screen.dart';
 import 'deal_detail_screen.dart';
 import 'botkolik_profile_screen.dart';
@@ -965,7 +966,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                   stream: _messagesStream,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting && _lastKnownMessageCount == 0) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const ChatMessagesSkeleton();
                     }
 
                     final serverMessages = snapshot.data ?? [];

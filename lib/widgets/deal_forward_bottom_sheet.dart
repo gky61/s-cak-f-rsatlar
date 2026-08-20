@@ -13,6 +13,7 @@ import '../utils/asset_path_migration.dart';
 import '../screens/message_screen.dart';
 import '../screens/deal_detail/deal_share_sheet.dart';
 import 'guest_login_bottom_sheet.dart';
+import 'skeletons/chat_list_skeleton.dart';
 
 /// Kullanıcının bir fırsatı uygulama içi sohbet üzerinden istediği kişiye veya Botkolik'e
 /// iletmesini sağlayan ultra-modern ve akışkan paylaşım Bottom Sheet'i.
@@ -530,7 +531,7 @@ class _DealForwardBottomSheetState extends State<DealForwardBottomSheet> {
                       stream: _firestoreService.getUserMessagesStream(currentUserId),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting && _searchedUsers.isEmpty) {
-                          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                          return const ChatListSkeleton(itemCount: 5, padding: EdgeInsets.zero);
                         }
 
                         final messages = snapshot.data ?? [];

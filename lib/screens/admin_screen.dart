@@ -15,6 +15,7 @@ import '../models/user.dart';
 import '../models/message.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
+import '../services/theme_service.dart';
 import '../utils/badge_helper.dart';
 import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
@@ -22,6 +23,9 @@ import 'deal_detail_screen.dart';
 import 'deal_detail/admin_dialogs/admin_edit_sheet.dart';
 import 'profile_screen.dart';
 import 'message_screen.dart';
+import '../widgets/deal_card_skeleton.dart';
+import '../widgets/skeletons/user_list_skeleton.dart';
+import '../widgets/skeletons/chat_list_skeleton.dart';
 import '../widgets/admin_reports_list.dart';
 import 'notification_debug_screen.dart';
 import '../widgets/test_automation_widget.dart';
@@ -365,7 +369,12 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       builder: (context, snapshot) {
         final primaryColor = Theme.of(context).colorScheme.primary;
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: 4,
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            itemBuilder: (context, index) => const DealCardSkeleton(viewMode: CardViewMode.horizontal),
+          );
         }
 
         final deals = snapshot.data ?? [];
@@ -1373,7 +1382,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+                return const UserListSkeleton(itemCount: 6, padding: EdgeInsets.all(16));
               }
 
               if (snapshot.hasError) {
@@ -1933,7 +1942,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       stream: _firestoreService.getAllMessagesStream(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const ChatListSkeleton(itemCount: 6, padding: EdgeInsets.all(16));
         }
 
         if (snapshot.hasError) {

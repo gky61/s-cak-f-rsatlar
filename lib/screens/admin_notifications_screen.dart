@@ -5,6 +5,7 @@ import 'dart:async';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/skeletons/notification_list_skeleton.dart';
 import 'deal_detail_screen.dart';
 import 'message_screen.dart';
 
@@ -220,7 +221,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       stream: _firestoreService.getUserNotificationsStream(currentUserId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const NotificationListSkeleton();
         }
         if (snapshot.hasError) {
           return Center(child: Text('Hata: ${snapshot.error}'));

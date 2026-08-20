@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import '../models/category.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/skeletons/settings_skeleton.dart';
 import 'notification_settings_screen.dart';
 
 void _log(String message) {
@@ -309,7 +310,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          ? const CategoryPreferencesSkeleton()
           : ListView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

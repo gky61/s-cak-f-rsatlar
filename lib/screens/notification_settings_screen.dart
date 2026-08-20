@@ -6,6 +6,7 @@ import '../models/notification_preferences.dart';
 import 'category_preferences_screen.dart';
 import 'keyword_tracking_screen.dart';
 import '../theme/app_theme.dart';
+import '../widgets/skeletons/settings_skeleton.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -353,7 +354,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         centerTitle: true,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const NotificationSettingsSkeleton()
           : SingleChildScrollView(
               controller: _scrollController,
               padding: const EdgeInsets.all(16),

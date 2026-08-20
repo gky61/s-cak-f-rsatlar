@@ -6,6 +6,7 @@ import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/skeletons/user_list_skeleton.dart';
 import 'profile_screen.dart';
 
 void _log(String message) {
@@ -83,7 +84,7 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
         stream: _followingStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const UserListSkeleton();
           }
 
           if (snapshot.hasError) {

@@ -12,6 +12,7 @@ import '../utils/badge_helper.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_dialog.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
+import '../widgets/skeletons/comments_skeleton.dart';
 import '../screens/profile_screen.dart';
 
 void _log(String message) {
@@ -262,9 +263,9 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                 child: StreamBuilder<List<Comment>>(
                   stream: _firestoreService.getCommentsStream(widget.deal.id),
                   builder: (context, snapshot) {
-                    // İlk yükleme sırasında loading göster
+                    // İlk yükleme sırasında skeleton göster
                     if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const CommentsSkeleton();
                     }
 
                     // Hata durumu

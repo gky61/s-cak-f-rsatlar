@@ -9,6 +9,7 @@ import '../services/firestore_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
+import '../widgets/deal_card_skeleton.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import 'deal_detail_screen.dart';
 import 'message_screen.dart';
@@ -1200,11 +1201,17 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
       ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 40.0),
-              child: Center(
-                child: CircularProgressIndicator(),
+          return SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  return const Padding(
+                    padding: EdgeInsets.only(bottom: 12.0),
+                    child: DealCardSkeleton(viewMode: CardViewMode.horizontal),
+                  );
+                },
+                childCount: 4,
               ),
             ),
           );

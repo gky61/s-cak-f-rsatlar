@@ -26,6 +26,8 @@ import 'user_deals_screen.dart';
 import 'botkolik_profile_screen.dart';
 import '../models/deal.dart';
 import '../widgets/deal_card.dart';
+import '../widgets/deal_card_skeleton.dart';
+import '../widgets/skeletons/profile_skeleton.dart';
 import 'deal_detail_screen.dart';
 import 'package:flutter/services.dart';
 import '../utils/circular_theme_transition.dart';
@@ -795,8 +797,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_isLoading && _user == null) {
       return Scaffold(
         backgroundColor: backgroundColor,
-        body: Center(
-          child: CircularProgressIndicator(color: primaryColor),
+        body: const SafeArea(
+          child: ProfileSkeleton(),
         ),
       );
     }
@@ -1812,19 +1814,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           stream: _userDealsStream ?? _firestoreService.getUserDealsStream(userId, limit: 5),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: surfaceColor,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
-                  ),
-                ),
-                child: Center(
-                  child: CircularProgressIndicator(color: primaryColor, strokeWidth: 2.5),
-                ),
+              return const Column(
+                children: [
+                  DealCardSkeleton(viewMode: CardViewMode.horizontal),
+                  SizedBox(height: 12),
+                  DealCardSkeleton(viewMode: CardViewMode.horizontal),
+                ],
               );
             }
 

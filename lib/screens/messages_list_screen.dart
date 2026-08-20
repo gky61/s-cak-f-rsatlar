@@ -10,6 +10,7 @@ import '../services/auth_service.dart';
 import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
+import '../widgets/skeletons/chat_list_skeleton.dart';
 import 'message_screen.dart';
 
 class MessagesListScreen extends StatefulWidget {
@@ -154,7 +155,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
         stream: _messagesStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const ChatListSkeleton();
           }
 
           if (snapshot.hasError) {
