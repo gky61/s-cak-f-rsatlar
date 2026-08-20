@@ -1895,12 +1895,15 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       floatingActionButton: _showScrollToTop
-          ? FloatingActionButton(
+          ? FloatingActionButton.small(
               heroTag: 'scroll_to_top',
-              mini: true,
-              onPressed: _scrollToTop,
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                _scrollToTop();
+              },
               backgroundColor: primaryColor,
-              child: const Icon(Icons.keyboard_arrow_up, color: Colors.black),
+              elevation: 4,
+              child: const Icon(Icons.keyboard_arrow_up_rounded, color: Colors.white, size: 20),
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

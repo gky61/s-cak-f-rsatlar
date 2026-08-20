@@ -9,6 +9,7 @@ import '../../screens/botkolik_profile_screen.dart';
 import '../money_badge.dart';
 import 'deal_card_helpers.dart';
 import 'deal_card_badge.dart';
+import '../skeletons/shimmer_box.dart';
 
 class VerticalDealCard extends StatefulWidget {
   final Deal deal;
@@ -176,9 +177,10 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                       maxWidthDiskCache: 800,
                                       fadeInDuration: const Duration(milliseconds: 250),
                                       fadeOutDuration: const Duration(milliseconds: 100),
-                                      placeholder: (context, url) => Container(
-                                        color: Colors.grey[50],
-                                        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                      placeholder: (context, url) => const ShimmerBox(
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        borderRadius: 0,
                                       ),
                                       errorWidget: (context, url, error) => Image.asset(
                                         getStoreAsset(deal.store),
