@@ -54,6 +54,9 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        HapticFeedback.selectionClick();
+      }
       if (_tabController.indexIsChanging) {
         _hideToast();
       }
@@ -547,22 +550,22 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     if (_hideHeroBanner) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.all(13),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.primary.withValues(alpha: isDark ? 0.12 : 0.04),
+              color: AppTheme.primary.withValues(alpha: isDark ? 0.15 : 0.04),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
           ],
           border: Border.all(
             color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-            width: 1,
+            width: 1.2,
           ),
         ),
         child: Row(
@@ -854,10 +857,10 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeOutCubic,
-        margin: const EdgeInsets.only(bottom: 11),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
               color: isRecentlyRestored
@@ -872,10 +875,10 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
             color: isRecentlyRestored
                 ? AppTheme.primary
                 : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-            width: isRecentlyRestored ? 1.8 : 1.0,
+            width: isRecentlyRestored ? 1.8 : 1.2,
           ),
         ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(13),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -1689,6 +1692,97 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Geri',
         ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(46),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                  width: 1.0,
+                ),
+              ),
+            ),
+            child: AnimatedBuilder(
+              animation: _tabController,
+              builder: (context, _) {
+                final isFirst = _tabController.index == 0;
+                return TabBar(
+                  controller: _tabController,
+                  indicatorColor: AppTheme.primary,
+                  indicatorWeight: 3,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  dividerColor: Colors.transparent,
+                  labelColor: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                  unselectedLabelColor: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    letterSpacing: -0.2,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  tabs: [
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.groups_rounded,
+                            size: 16,
+                            color: isFirst
+                                ? AppTheme.primary
+                                : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Topluluk Kuponları',
+                            style: TextStyle(
+                              color: isFirst
+                                  ? (isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A))
+                                  : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                              fontWeight: isFirst ? FontWeight.w800 : FontWeight.w600,
+                              fontSize: 13,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.radar_rounded,
+                            size: 16,
+                            color: !isFirst
+                                ? AppTheme.primary
+                                : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Kupon Radarı',
+                            style: TextStyle(
+                              color: !isFirst
+                                  ? (isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A))
+                                  : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                              fontWeight: !isFirst ? FontWeight.w800 : FontWeight.w600,
+                              fontSize: 13,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
       ),
       body: Stack(
         children: [
@@ -1743,67 +1837,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                   // 1. HERO BANNER
                   _buildHeroBanner(isDark, visibleKuponlar.length),
 
-                  // 2. MODERN MINIMALIST PILL-SHAPED TAB BAR
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    child: Container(
-                      height: 36,
-                      padding: const EdgeInsets.all(2.5),
-                      decoration: BoxDecoration(
-                        color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: TabBar(
-                        controller: _tabController,
-                        indicatorSize: TabBarIndicatorSize.tab,
-                        dividerColor: Colors.transparent,
-                        indicator: BoxDecoration(
-                          color: AppTheme.primary,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.primary.withValues(alpha: 0.28),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1.5),
-                            ),
-                          ],
-                        ),
-                        labelColor: Colors.white,
-                        unselectedLabelColor: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                        labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: -0.2),
-                        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                        tabs: const [
-                          Tab(
-                            height: 30,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.groups_rounded, size: 14),
-                                SizedBox(width: 5),
-                                Text('Topluluk Kuponları'),
-                              ],
-                            ),
-                          ),
-                          Tab(
-                            height: 30,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.radar_rounded, size: 14),
-                                SizedBox(width: 5),
-                                Text('Kupon Radarı'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
                   // 3. HORIZONTAL STORE FILTER CHIPS
                   if (stores.isNotEmpty) ...[
                     Container(
@@ -1831,31 +1864,32 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                 },
                                 borderRadius: BorderRadius.circular(9),
                                 child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: isSelected
                                         ? AppTheme.primary
                                         : (isDark ? AppTheme.darkSurface : Colors.white),
-                                    borderRadius: BorderRadius.circular(9),
+                                    borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
                                       color: isSelected
                                           ? AppTheme.primary
                                           : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-                                      width: isSelected ? 1.1 : 0.8,
+                                      width: isSelected ? 1.2 : 0.9,
                                     ),
                                     boxShadow: isSelected
                                         ? [
                                             BoxShadow(
-                                              color: AppTheme.primary.withValues(alpha: 0.25),
-                                              blurRadius: 5,
-                                              offset: const Offset(0, 1.5),
+                                              color: AppTheme.primary.withValues(alpha: 0.3),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
                                             ),
                                           ]
                                         : [
                                             BoxShadow(
-                                              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.015),
-                                              blurRadius: 3,
+                                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                                              blurRadius: 4,
                                               offset: const Offset(0, 1),
                                             ),
                                           ],
@@ -1863,23 +1897,32 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      if (store != 'Tümü') ...[
+                                      if (store == 'Tümü') ...[
+                                        Icon(
+                                          Icons.apps_rounded,
+                                          size: 14,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                                        ),
+                                        const SizedBox(width: 6),
+                                      ] else ...[
                                         Image.asset(
                                           _getStoreAsset(store),
-                                          width: 13,
-                                          height: 13,
-                                          errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 13),
+                                          width: 14,
+                                          height: 14,
+                                          errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 14),
                                         ),
-                                        const SizedBox(width: 4),
+                                        const SizedBox(width: 6),
                                       ],
                                       Text(
                                         store,
                                         style: TextStyle(
                                           color: isSelected
                                               ? Colors.white
-                                              : (isDark ? const Color(0xFFD4D4D8) : const Color(0xFF475569)),
+                                              : (isDark ? const Color(0xFFE4E4E7) : const Color(0xFF334155)),
                                           fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                                          fontSize: 11.5,
+                                          fontSize: 12,
                                         ),
                                       ),
                                     ],

@@ -1,5 +1,4 @@
 import '../utils/test_logger.dart';
-import '../models/category.dart';
 import 'category_keywords.dart';
 
 void _log(String message) {
@@ -250,6 +249,66 @@ class CategoryDetectionService {
     String? finalCategoryId = categoryId;
     String? finalSubCategory = subCategory;
 
+    final words = normalizedText.split(RegExp(r'[^\w]+'));
+    final isExplicitInvestmentGold = 
+        normalizedText.contains('kulce') ||
+        normalizedText.contains('külçe') ||
+        normalizedText.contains('yatirimlik altin') ||
+        normalizedText.contains('yatırımlık altın') ||
+        normalizedText.contains('yatirimlik gumus') ||
+        normalizedText.contains('yatırımlık gümüş') ||
+        normalizedText.contains('sarrafiye') ||
+        normalizedText.contains('ziynet') ||
+        normalizedText.contains('gram altin') ||
+        normalizedText.contains('gram altın') ||
+        normalizedText.contains('gr altin') ||
+        normalizedText.contains('gr altın') ||
+        normalizedText.contains('ceyrek altin') ||
+        normalizedText.contains('çeyrek altın') ||
+        normalizedText.contains('yarim altin') ||
+        normalizedText.contains('yarım altın') ||
+        normalizedText.contains('tam altin') ||
+        normalizedText.contains('tam altın') ||
+        normalizedText.contains('cumhuriyet altin') ||
+        normalizedText.contains('cumhuriyet altın') ||
+        normalizedText.contains('ata altin') ||
+        normalizedText.contains('ata altın') ||
+        normalizedText.contains('ata lira') ||
+        normalizedText.contains('has altin') ||
+        normalizedText.contains('has altın') ||
+        normalizedText.contains('resat altin') ||
+        normalizedText.contains('reşat altın') ||
+        normalizedText.contains('hamit altin') ||
+        normalizedText.contains('hamit altın') ||
+        normalizedText.contains('gremse') ||
+        normalizedText.contains('24 ayar') ||
+        (normalizedText.contains('22 ayar') && !normalizedText.contains('bilezik') && !normalizedText.contains('kolye') && !normalizedText.contains('kupe') && !normalizedText.contains('yuzuk')) ||
+        (normalizedText.contains('altin') && (normalizedText.contains('nadir gold') || normalizedText.contains('iar') || normalizedText.contains('ahlatci') || normalizedText.contains('ahlatçı') || normalizedText.contains('harem altin') || normalizedText.contains('harem altın') || normalizedText.contains('aga gold') || normalizedText.contains('darphane') || normalizedText.contains('vekgold'))) ||
+        RegExp(r'\b\d+\s*(gram|gr|kg|kilo)\s*.*(altin|altın|gumus|gümüş|gold|silver|kulce|külçe)\b').hasMatch(normalizedText) ||
+        RegExp(r'\b(altin|altın|gumus|gümüş|gold|silver|kulce|külçe)\s*.*(\d+\s*(gram|gr|kg|kilo))\b').hasMatch(normalizedText);
+
+    final isFinishedJewelry = 
+        normalizedText.contains('kolye') ||
+        normalizedText.contains('kupe') ||
+        normalizedText.contains('küpe') ||
+        normalizedText.contains('yuzuk') ||
+        normalizedText.contains('yüzük') ||
+        normalizedText.contains('alyans') ||
+        normalizedText.contains('tektas') ||
+        normalizedText.contains('tektaş') ||
+        normalizedText.contains('bestas') ||
+        normalizedText.contains('beştaş') ||
+        normalizedText.contains('pirlanta') ||
+        normalizedText.contains('pırlanta') ||
+        normalizedText.contains('halhal') ||
+        normalizedText.contains('sahmeran') ||
+        normalizedText.contains('şahmeran') ||
+        normalizedText.contains('bros') ||
+        normalizedText.contains('broş') ||
+        normalizedText.contains('toka') ||
+        (normalizedText.contains('bileklik') && !isExplicitInvestmentGold) ||
+        (normalizedText.contains('zincir') && !isExplicitInvestmentGold && !normalizedText.contains('kulce') && !normalizedText.contains('külçe'));
+
     // 0. Termos Yönlendirmesi (Sağlık/gıda veya takı yerine Mutfak Gereçleri veya Kamp Malzemelerine gitmeli)
     if (normalizedText.contains('termos') || normalizedText.contains('thermos')) {
       final isOutdoor = normalizedText.contains('kamp') || 
@@ -388,23 +447,11 @@ class CategoryDetectionService {
     }
 
     // 7. Yatırım Altın vs. Takı/Mücevher Ayrımı
-    // Eğer başlıkta kolye, bileklik gibi takı ifadeleri geçiyorsa Moda -> Saat, Aksesuar & Takı olmalı
-    final words = normalizedText.split(RegExp(r'[^\w]+'));
-    final isJewelry = normalizedText.contains('kolye') ||
-                      normalizedText.contains('bileklik') ||
-                      normalizedText.contains('kupe') ||
-                      normalizedText.contains('yuzuk') ||
-                      words.contains('taki') ||
-                      words.contains('takilar') ||
-                      normalizedText.contains('zincir') ||
-                      normalizedText.contains('halka kupe') ||
-                      normalizedText.contains('halka küpe') ||
-                      normalizedText.contains('tasli') ||
-                      normalizedText.contains('pirlanta') ||
-                      normalizedText.contains('tektas');
-                      
-    if (isJewelry) {
-      // Akıllı saat / bileklik bağlamı varsa jewelry kuralı uygulanmaz
+
+    if (isExplicitInvestmentGold && !isFinishedJewelry) {
+      finalCategoryId = 'finans_kampanyalar';
+      finalSubCategory = 'Yatırım & Değerli Metaller';
+    } else if (isFinishedJewelry || words.contains('taki') || words.contains('takilar') || words.contains('mucevher')) {
       final isSmartWearable = normalizedText.contains('akilli saat') ||
                               normalizedText.contains('akilli bileklik') ||
                               normalizedText.contains('smartwatch') ||
@@ -417,26 +464,6 @@ class CategoryDetectionService {
       if (!isSmartWearable) {
         finalCategoryId = 'moda';
         finalSubCategory = 'Saat, Aksesuar & Takı';
-      }
-    } else {
-      // Eğer takı değilse ve gram altın, çeyrek altın gibi kelimeler geçiyorsa Finans -> Yatırım olmalı
-      final isInvestmentGold = normalizedText.contains('gram altin') ||
-                               normalizedText.contains('ceyrek altin') ||
-                               normalizedText.contains('yarim altin') ||
-                               normalizedText.contains('tam altin') ||
-                               normalizedText.contains('cumhuriyet altin') ||
-                               normalizedText.contains('ata altin') ||
-                               normalizedText.contains('has altin') ||
-                               normalizedText.contains('kulce altin') ||
-                               normalizedText.contains('külçe altin') ||
-                               normalizedText.contains('24 ayar') ||
-                               normalizedText.contains('22 ayar') ||
-                               normalizedText.contains('kulce gumus') ||
-                               normalizedText.contains('külçe gümüş');
-                               
-      if (isInvestmentGold) {
-        finalCategoryId = 'finans_kampanyalar';
-        finalSubCategory = 'Yatırım & Değerli Metaller';
       }
     }
 
@@ -586,7 +613,7 @@ class CategoryDetectionService {
     }
 
     // 13. Ayakkabı / Terlik / Sandalet Yönlendirmesi (Moda altında ise her zaman Ayakkabı & Çanta olmalı)
-    if (finalCategoryId == 'moda') {
+    if (finalCategoryId == 'moda' && !isExplicitInvestmentGold) {
       final isFootwear = normalizedText.contains('ayakkabi') ||
                           normalizedText.contains('ayakkabı') ||
                           normalizedText.contains('bot') ||

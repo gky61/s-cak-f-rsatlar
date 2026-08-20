@@ -497,11 +497,14 @@ const _categoryKeywords = {
       'halkbank', 'ziraat', 'taksit', 'faizsiz', 'masrafsız', 'masrafsiz'
     ],
     'Yatırım & Değerli Metaller': [
-      'altın', 'altin', 'gold', 'gram altın', 'gram altin', 'çeyrek altın', 'ceyrek altin', 'yarım altın',
-      'yarim altin', 'tam altın', 'tam altin', 'cumhuriyet altını', 'cumhuriyet altini', 'ata altın',
-      'ata altin', 'has altın', 'has altin', 'külçe altın', 'kulce altin', 'ayar altın', 'ayar altin',
-      '24 ayar', '22 ayar', 'gümüş', 'gumus', 'silver', 'külçe gümüş', 'kulce gumus', 'sarrafiye',
-      'ziynet'
+      'altın', 'altin', 'gold', 'külçe', 'kulce', 'külçe altın', 'kulce altin', 'gram altın', 'gram altin',
+      'çeyrek altın', 'ceyrek altin', 'yarım altın', 'yarim altin', 'tam altın', 'tam altin',
+      'cumhuriyet altını', 'cumhuriyet altini', 'ata altın', 'ata altin', 'ata lira', 'has altın', 'has altin',
+      'ayar altın', 'ayar altin', '24 ayar', '22 ayar', 'gümüş', 'gumus', 'silver', 'külçe gümüş', 'kulce gumus',
+      'külçe platin', 'kulce platin', 'sarrafiye', 'ziynet', 'ziynet altını', 'ziynet altini',
+      'reşat altın', 'resat altin', 'hamit altın', 'hamit altin', 'gremse', 'gremse altın', 'gremse altin',
+      'yatırımlık altın', 'yatirimlik altin', 'yatırımlık gümüş', 'yatirimlik gumus', 'darphane',
+      'ahlatcı', 'ahlatci', 'nadir gold', 'iar', 'aga gold', 'vekgold', 'harem altın', 'harem altin'
     ]
   }
 };
@@ -515,8 +518,10 @@ const _strongKeywords = [
   'tava', 'tencere', 'akülü', 'akulu', 'matkap', 'testere', 'kedi maması', 'kedi mamasi',
   'köpek maması', 'kopek mamasi', 'kedi kumu', 'kedi kumu',
   'netflix', 'spotify', 'youtube premium', 'yemeksepeti', 'getiryemek', 'steam', 'valorant',
-  'nays', 'chip-para', 'chippara', 'faizsiz', 'gram altin', 'ceyrek altin', 'külçe altın',
-  'kulce altin', 'ucak bileti', 'otobüs bileti', 'tıraş makinesi', 'tiras makinesi', 'epilatör',
+  'nays', 'chip-para', 'chippara', 'faizsiz', 'külçe', 'kulce', 'külçe altın', 'kulce altin',
+  'gram altin', 'gram altın', 'ceyrek altin', 'çeyrek altın', 'has altın', 'has altin', 'sarrafiye',
+  'ziynet', 'cumhuriyet altını', 'cumhuriyet altini', 'ata altın', 'ata altin', 'reşat altın', 'resat altin',
+  'gremse', '24 ayar', 'yatırımlık altın', 'yatirimlik altin', 'ucak bileti', 'otobüs bileti', 'tıraş makinesi', 'tiras makinesi', 'epilatör',
   'epilator', 'saç kurutma', 'sac kurutma', 'fön makinesi', 'fon makinesi', 'düzleştirici',
   'duzlestirici', 'akıllı priz', 'akilli priz', 'akıllı ampul', 'akilli ampul', 'lego', 'emzirme',
   'monopoly', 'tabu', 'jenga', 'catan', 'hava temizleyici', 'vantilatör', 'vantilator', 'prezervatif', 'durex',
@@ -578,6 +583,66 @@ function _stem(word) {
 function _applyNegativeExclusions(normalizedText, categoryId, subCategory) {
   let finalCategoryId = categoryId;
   let finalSubCategory = subCategory;
+
+  const words = normalizedText.split(/[^\w]+/);
+  const isExplicitInvestmentGold = 
+      normalizedText.includes('kulce') ||
+      normalizedText.includes('külçe') ||
+      normalizedText.includes('yatirimlik altin') ||
+      normalizedText.includes('yatırımlık altın') ||
+      normalizedText.includes('yatirimlik gumus') ||
+      normalizedText.includes('yatırımlık gümüş') ||
+      normalizedText.includes('sarrafiye') ||
+      normalizedText.includes('ziynet') ||
+      normalizedText.includes('gram altin') ||
+      normalizedText.includes('gram altın') ||
+      normalizedText.includes('gr altin') ||
+      normalizedText.includes('gr altın') ||
+      normalizedText.includes('ceyrek altin') ||
+      normalizedText.includes('çeyrek altın') ||
+      normalizedText.includes('yarim altin') ||
+      normalizedText.includes('yarım altın') ||
+      normalizedText.includes('tam altin') ||
+      normalizedText.includes('tam altın') ||
+      normalizedText.includes('cumhuriyet altin') ||
+      normalizedText.includes('cumhuriyet altın') ||
+      normalizedText.includes('ata altin') ||
+      normalizedText.includes('ata altın') ||
+      normalizedText.includes('ata lira') ||
+      normalizedText.includes('has altin') ||
+      normalizedText.includes('has altın') ||
+      normalizedText.includes('resat altin') ||
+      normalizedText.includes('reşat altın') ||
+      normalizedText.includes('hamit altin') ||
+      normalizedText.includes('hamit altın') ||
+      normalizedText.includes('gremse') ||
+      normalizedText.includes('24 ayar') ||
+      (normalizedText.includes('22 ayar') && !normalizedText.includes('bilezik') && !normalizedText.includes('kolye') && !normalizedText.includes('kupe') && !normalizedText.includes('yuzuk')) ||
+      (normalizedText.includes('altin') && (normalizedText.includes('nadir gold') || normalizedText.includes('iar') || normalizedText.includes('ahlatci') || normalizedText.includes('ahlatçı') || normalizedText.includes('harem altin') || normalizedText.includes('harem altın') || normalizedText.includes('aga gold') || normalizedText.includes('darphane') || normalizedText.includes('vekgold'))) ||
+      /\b\d+\s*(gram|gr|kg|kilo)\s*.*(altin|altın|gumus|gümüş|gold|silver|kulce|külçe)\b/.test(normalizedText) ||
+      /\b(altin|altın|gumus|gümüş|gold|silver|kulce|külçe)\s*.*(\d+\s*(gram|gr|kg|kilo))\b/.test(normalizedText);
+
+  const isFinishedJewelry = 
+      normalizedText.includes('kolye') ||
+      normalizedText.includes('kupe') ||
+      normalizedText.includes('küpe') ||
+      normalizedText.includes('yuzuk') ||
+      normalizedText.includes('yüzük') ||
+      normalizedText.includes('alyans') ||
+      normalizedText.includes('tektas') ||
+      normalizedText.includes('tektaş') ||
+      normalizedText.includes('bestas') ||
+      normalizedText.includes('beştaş') ||
+      normalizedText.includes('pirlanta') ||
+      normalizedText.includes('pırlanta') ||
+      normalizedText.includes('halhal') ||
+      normalizedText.includes('sahmeran') ||
+      normalizedText.includes('şahmeran') ||
+      normalizedText.includes('bros') ||
+      normalizedText.includes('broş') ||
+      normalizedText.includes('toka') ||
+      (normalizedText.includes('bileklik') && !isExplicitInvestmentGold) ||
+      (normalizedText.includes('zincir') && !isExplicitInvestmentGold && !normalizedText.includes('kulce') && !normalizedText.includes('külçe'));
 
   // 0. Termos Yönlendirmesi (Sağlık/gıda veya takı yerine Mutfak Gereçleri veya Kamp Malzemelerine gitmeli)
   if (normalizedText.includes('termos') || normalizedText.includes('thermos')) {
@@ -715,21 +780,10 @@ function _applyNegativeExclusions(normalizedText, categoryId, subCategory) {
   }
 
   // 7. Yatırım Altın vs. Takı/Mücevher
-  const words = normalizedText.split(/[^\w]+/);
-  const isJewelry = normalizedText.includes('kolye') ||
-                    normalizedText.includes('bileklik') ||
-                    normalizedText.includes('kupe') ||
-                    normalizedText.includes('yuzuk') ||
-                    words.includes('taki') ||
-                    words.includes('takilar') ||
-                    normalizedText.includes('zincir') ||
-                    normalizedText.includes('halka kupe') ||
-                    normalizedText.includes('halka küpe') ||
-                    normalizedText.includes('tasli') ||
-                    normalizedText.includes('pirlanta') ||
-                    normalizedText.includes('tektas');
-
-  if (isJewelry) {
+  if (isExplicitInvestmentGold && !isFinishedJewelry) {
+    finalCategoryId = 'finans_kampanyalar';
+    finalSubCategory = 'Yatırım & Değerli Metaller';
+  } else if (isFinishedJewelry || words.includes('taki') || words.includes('takilar') || words.includes('mucevher')) {
     const isSmartWearable = normalizedText.includes('akilli saat') ||
                             normalizedText.includes('akilli bileklik') ||
                             normalizedText.includes('smartwatch') ||
@@ -742,24 +796,6 @@ function _applyNegativeExclusions(normalizedText, categoryId, subCategory) {
     if (!isSmartWearable) {
       finalCategoryId = 'moda';
       finalSubCategory = 'Saat, Aksesuar & Takı';
-    }
-  } else {
-    const isInvestmentGold = normalizedText.includes('gram altin') ||
-                             normalizedText.includes('ceyrek altin') ||
-                             normalizedText.includes('yarim altin') ||
-                             normalizedText.includes('tam altin') ||
-                             normalizedText.includes('cumhuriyet altin') ||
-                             normalizedText.includes('ata altin') ||
-                             normalizedText.includes('has altin') ||
-                             normalizedText.includes('kulce altin') ||
-                             normalizedText.includes('külçe altin') ||
-                             normalizedText.includes('24 ayar') ||
-                             normalizedText.includes('22 ayar') ||
-                             normalizedText.includes('kulce gumus') ||
-                             normalizedText.includes('külçe gümüş');
-    if (isInvestmentGold) {
-      finalCategoryId = 'finans_kampanyalar';
-      finalSubCategory = 'Yatırım & Değerli Metaller';
     }
   }
 
@@ -903,7 +939,7 @@ function _applyNegativeExclusions(normalizedText, categoryId, subCategory) {
   }
 
   // 13. Ayakkabı / Terlik sandalet
-  if (finalCategoryId === 'moda') {
+  if (finalCategoryId === 'moda' && !isExplicitInvestmentGold) {
     const isFootwear = normalizedText.includes('ayakkabi') ||
                         normalizedText.includes('ayakkabı') ||
                         normalizedText.includes('bot') ||

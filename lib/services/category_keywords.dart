@@ -493,11 +493,14 @@ final Map<String, Map<String, List<String>>> categoryKeywords = {
       'halkbank', 'ziraat', 'taksit', 'faizsiz', 'masrafsız', 'masrafsiz'
     ],
     'Yatırım & Değerli Metaller': [
-      'altın', 'altin', 'gold', 'gram altın', 'gram altin', 'çeyrek altın', 'ceyrek altin', 'yarım altın',
-      'yarim altin', 'tam altın', 'tam altin', 'cumhuriyet altını', 'cumhuriyet altini', 'ata altın',
-      'ata altin', 'has altın', 'has altin', 'külçe altın', 'kulce altin', 'ayar altın', 'ayar altin',
-      '24 ayar', '22 ayar', 'gümüş', 'gumus', 'silver', 'külçe gümüş', 'kulce gumus', 'sarrafiye',
-      'ziynet'
+      'altın', 'altin', 'gold', 'külçe', 'kulce', 'külçe altın', 'kulce altin', 'gram altın', 'gram altin',
+      'çeyrek altın', 'ceyrek altin', 'yarım altın', 'yarim altin', 'tam altın', 'tam altin',
+      'cumhuriyet altını', 'cumhuriyet altini', 'ata altın', 'ata altin', 'ata lira', 'has altın', 'has altin',
+      'ayar altın', 'ayar altin', '24 ayar', '22 ayar', 'gümüş', 'gumus', 'silver', 'külçe gümüş', 'kulce gumus',
+      'külçe platin', 'kulce platin', 'sarrafiye', 'ziynet', 'ziynet altını', 'ziynet altini',
+      'reşat altın', 'resat altin', 'hamit altın', 'hamit altin', 'gremse', 'gremse altın', 'gremse altin',
+      'yatırımlık altın', 'yatirimlik altin', 'yatırımlık gümüş', 'yatirimlik gumus', 'darphane',
+      'ahlatcı', 'ahlatci', 'nadir gold', 'iar', 'aga gold', 'vekgold', 'harem altın', 'harem altin'
     ]
   }
 };
@@ -511,8 +514,10 @@ final List<String> strongKeywords = [
   'tava', 'tencere', 'akülü', 'akulu', 'matkap', 'testere', 'kedi maması', 'kedi mamasi',
   'köpek maması', 'kopek mamasi', 'kedi kumu', 'kedi kumu',
   'netflix', 'spotify', 'youtube premium', 'yemeksepeti', 'getiryemek', 'steam', 'valorant',
-  'nays', 'chip-para', 'chippara', 'faizsiz', 'gram altin', 'ceyrek altin', 'külçe altın',
-  'kulce altin', 'ucak bileti', 'otobüs bileti', 'tıraş makinesi', 'tiras makinesi', 'epilatör',
+  'nays', 'chip-para', 'chippara', 'faizsiz', 'külçe', 'kulce', 'külçe altın', 'kulce altin',
+  'gram altin', 'gram altın', 'ceyrek altin', 'çeyrek altın', 'has altın', 'has altin', 'sarrafiye',
+  'ziynet', 'cumhuriyet altını', 'cumhuriyet altini', 'ata altın', 'ata altin', 'reşat altın', 'resat altin',
+  'gremse', '24 ayar', 'yatırımlık altın', 'yatirimlik altin', 'ucak bileti', 'otobüs bileti', 'tıraş makinesi', 'tiras makinesi', 'epilatör',
   'epilator', 'saç kurutma', 'sac kurutma', 'fön makinesi', 'fon makinesi', 'düzleştirici',
   'duzlestirici', 'akıllı priz', 'akilli priz', 'akıllı ampul', 'akilli ampul', 'lego', 'emzirme',
   'monopoly', 'tabu', 'jenga', 'catan', 'hava temizleyici', 'vantilatör', 'vantilator', 'prezervatif', 'durex',

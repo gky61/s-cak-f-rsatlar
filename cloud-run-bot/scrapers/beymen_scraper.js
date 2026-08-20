@@ -77,14 +77,21 @@ class BeymenScraper extends BaseProductScraper {
       if (val && val > 0) return val;
     }
 
-    // 2. DOM New price
+    // 2. DOM Last Price (Son İndirimli / Ek İndirimli Fiyat - Örn: Dolce & Gabbana 44.195 TL)
+    const lastPriceEl = $('.m-price__lastPrice').first();
+    if (lastPriceEl.length) {
+      const val = this.parsePriceText(lastPriceEl.text());
+      if (val && val > 0) return val;
+    }
+
+    // 3. DOM New price
     const newPriceEl = $('ins.m-price__new, .m-price__new, [id="priceNew"]').first();
     if (newPriceEl.length) {
       const val = this.parsePriceText(newPriceEl.text());
       if (val && val > 0) return val;
     }
 
-    // 3. Script BEYMEN.productMain promotedOrActualPrice
+    // 4. Script BEYMEN.productMain promotedOrActualPrice
     const scripts = $('script');
     for (let i = 0; i < scripts.length; i++) {
       const text = $(scripts[i]).text() || '';
@@ -98,16 +105,17 @@ class BeymenScraper extends BaseProductScraper {
       }
     }
 
-    // 4. JSON-LD
+    // 5. JSON-LD
     const product = this.findProductJsonLd($);
     if (product) {
       const p = this.extractPriceFromProductJson(product);
       if (p && p > 0) return p;
     }
 
-    // 5. DOM campaign/discount/Visa prices fallback
+    // 6. DOM campaign/discount/Visa prices fallback
     const priceSelectors = [
       '.m-price__campaignPrice',
+      '.m-price__lastPrice',
       'ins.m-price__new',
       '.m-price__new',
       '.m-productDetail__newPrice',
@@ -139,14 +147,21 @@ class BeymenScraper extends BaseProductScraper {
       if (val && val > currentPrice) return val;
     }
 
-    // 2. DOM .m-price__new (Eğer kampanya fiyatı varsa, normal satış fiyatı .m-price__new üzerindedir)
+    // 2. DOM .m-price__new (Eğer kampanya veya lastPrice varsa, normal satış fiyatı .m-price__new üzerindedir)
     const newPriceEl = $('ins.m-price__new, .m-price__new, [id="priceNew"]').first();
     if (newPriceEl.length) {
       const val = this.parsePriceText(newPriceEl.text());
       if (val && val > currentPrice) return val;
     }
 
-    // 3. Script BEYMEN.productMain strikeThroughPrice veya actualPrice
+    // 3. DOM .m-price__lastPrice (Eğer kampanya fiyatı varsa, ara indirimli fiyat .m-price__lastPrice üzerindedir)
+    const lastPriceEl = $('.m-price__lastPrice').first();
+    if (lastPriceEl.length) {
+      const val = this.parsePriceText(lastPriceEl.text());
+      if (val && val > currentPrice) return val;
+    }
+
+    // 4. Script BEYMEN.productMain strikeThroughPrice veya actualPrice
     const scripts = $('script');
     for (let i = 0; i < scripts.length; i++) {
       const text = $(scripts[i]).text() || '';
@@ -165,11 +180,12 @@ class BeymenScraper extends BaseProductScraper {
       }
     }
 
-    // 4. Fallback selectors
+    // 5. Fallback selectors
     let candidates = [];
     const selectors = [
       '.m-price__old',
       '.m-price__new',
+      '.m-price__lastPrice',
       'del',
       's',
       '.old-price',

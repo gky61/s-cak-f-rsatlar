@@ -34,10 +34,14 @@ void main() {
       verifyMapping('Garanti Bonus Fırsat Kampanyası Taksit', 'finans_kampanyalar', 'Banka Kampanyaları');
       verifyMapping('Faizsiz Masrafsız Nakit Avans Kampanyası', 'finans_kampanyalar', 'Banka Kampanyaları');
       
+      verifyMapping('1000 Gram 24 Ayar Külçe Altın – Yatırımlık Altın', 'finans_kampanyalar', 'Yatırım & Değerli Metaller');
+      verifyMapping('Vekgold 1000 Gram 24 Ayar Külçe Altın – Yatırımlık Altın', 'finans_kampanyalar', 'Yatırım & Değerli Metaller');
+      verifyMapping('Pazarama > Moda > Ayakkabı, Çanta & Aksesuar > Takı & Mücevher > Külçe Altın - 1000 Gram 24 Ayar Külçe Altın', 'finans_kampanyalar', 'Yatırım & Değerli Metaller');
       verifyMapping('24 Ayar Has Külçe Altın Sarrafiye', 'finans_kampanyalar', 'Yatırım & Değerli Metaller');
       verifyMapping('Yeni Tarihli Ata Çeyrek Altın Ziynet', 'finans_kampanyalar', 'Yatırım & Değerli Metaller');
       verifyMapping('1 Gram Altın Harem Altın 22 Ayar', 'finans_kampanyalar', 'Yatırım & Değerli Metaller');
       verifyMapping('Külçe Gümüş 1000 Gr Yatırım', 'finans_kampanyalar', 'Yatırım & Değerli Metaller');
+      verifyMapping('Külçe Altın 1000 gr', 'finans_kampanyalar', 'Yatırım & Değerli Metaller');
     });
 
     test('3. New Subcategories & Updated Keywords Mappings', () {

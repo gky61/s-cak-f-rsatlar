@@ -17,7 +17,6 @@ import 'profile_screen.dart';
 import 'botkolik_profile_screen.dart';
 import 'message_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../main.dart'; // navigatorKey için
 
 import '../widgets/report_dialog.dart';
 import '../widgets/comments_bottom_sheet.dart';
@@ -520,15 +519,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         if (widget.scrollToCommentId != null && !_hasAutoOpenedComments && mounted) {
           _hasAutoOpenedComments = true;
           Future.delayed(const Duration(milliseconds: 400), () {
-            if (mounted && _currentDeal != null) {
-              final navigatorContext = navigatorKey.currentContext;
-              if (navigatorContext != null) {
-                _showCommentsBottomSheet(
-                  navigatorContext,
-                  _currentDeal!,
-                  scrollToCommentId: widget.scrollToCommentId,
-                );
-              }
+            if (mounted && context.mounted && _currentDeal != null) {
+              _showCommentsBottomSheet(
+                context,
+                _currentDeal!,
+                scrollToCommentId: widget.scrollToCommentId,
+              );
             }
           });
         }
@@ -632,7 +628,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     // _currentDeal null ise loading göster
     if (_currentDeal == null) {
       return Scaffold(
-        backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
+        backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -663,11 +659,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     return SelectionArea(
       child: PopScope(
         canPop: true,
-        onPopInvoked: (bool didPop) {
+        onPopInvokedWithResult: (bool didPop, dynamic result) {
           if (didPop) return;
         },
         child: Scaffold(
-          backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
+          backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
           body: Stack(
           children: [
             // Main CustomScrollView
@@ -680,7 +676,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   pinned: false,
                   floating: false,
                   elevation: 0,
-                  backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
+                  backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
                   automaticallyImplyLeading: false,
                   flexibleSpace: FlexibleSpaceBar(
                     background: Stack(
@@ -801,7 +797,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             width: 40,
                             height: 4,
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.grey[700] : const Color(0xFFE2E8F0),
+                              color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
@@ -827,14 +823,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           padding: const EdgeInsets.symmetric(horizontal: 9),
                                           decoration: BoxDecoration(
                                             color: isDark 
-                                                ? Colors.white.withValues(alpha: 0.04) 
-                                                : const Color(0xFFF8FAFC),
+                                                ? AppTheme.darkSurfaceElevated 
+                                                : const Color(0xFFF1F5F9),
                                             borderRadius: BorderRadius.circular(10),
                                             border: Border.all(
                                               color: isDark 
-                                                  ? Colors.white.withValues(alpha: 0.08) 
+                                                  ? AppTheme.darkBorder 
                                                   : const Color(0xFFE2E8F0),
-                                              width: 0.85,
+                                              width: 1.0,
                                             ),
                                           ),
                                           child: Row(
@@ -896,14 +892,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             padding: const EdgeInsets.symmetric(horizontal: 9),
                                             decoration: BoxDecoration(
                                               color: isDark 
-                                                  ? Colors.white.withValues(alpha: 0.04) 
-                                                  : const Color(0xFFF8FAFC),
+                                                  ? AppTheme.darkSurfaceElevated 
+                                                  : const Color(0xFFF1F5F9),
                                               borderRadius: BorderRadius.circular(10),
                                               border: Border.all(
                                                 color: isDark 
-                                                    ? Colors.white.withValues(alpha: 0.08) 
+                                                    ? AppTheme.darkBorder 
                                                     : const Color(0xFFE2E8F0),
-                                                width: 0.85,
+                                                width: 1.0,
                                               ),
                                             ),
                                             child: Row(
@@ -958,14 +954,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           padding: const EdgeInsets.symmetric(horizontal: 10),
                                           decoration: BoxDecoration(
                                             color: isDark 
-                                                ? Colors.white.withValues(alpha: 0.04) 
-                                                : const Color(0xFFF8FAFC),
+                                                ? AppTheme.darkSurfaceElevated 
+                                                : const Color(0xFFF1F5F9),
                                             borderRadius: BorderRadius.circular(10),
                                             border: Border.all(
                                               color: isDark 
-                                                  ? Colors.white.withValues(alpha: 0.08) 
+                                                  ? AppTheme.darkBorder 
                                                   : const Color(0xFFE2E8F0),
-                                              width: 0.85,
+                                              width: 1.0,
                                             ),
                                           ),
                                           child: Row(
@@ -1039,7 +1035,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 style: TextStyle(
                                   fontSize: 18.5,
                                   fontWeight: FontWeight.w800,
-                                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                  color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                                   height: 1.35,
                                   letterSpacing: -0.3,
                                 ),
@@ -1056,7 +1052,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                         borderRadius: BorderRadius.circular(9),
                                         border: Border.all(
                                           color: const Color(0xFFFDE68A).withValues(alpha: isDark ? 0.35 : 0.85),
-                                          width: 0.85,
+                                          width: 1.0,
                                         ),
                                       ),
                                       child: Row(
@@ -1185,7 +1181,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     style: TextStyle(
                                       fontSize: 12.5,
                                       fontWeight: FontWeight.w800,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                      color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                                       letterSpacing: 1.1,
                                     ),
                                   ),
@@ -1195,14 +1191,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
                                     decoration: BoxDecoration(
                                       color: isDark 
-                                          ? Colors.white.withValues(alpha: 0.04) 
-                                          : const Color(0xFFF8FAFC),
+                                          ? AppTheme.darkSurfaceElevated 
+                                          : const Color(0xFFF1F5F9),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                         color: isDark 
-                                            ? Colors.white.withValues(alpha: 0.08) 
+                                            ? AppTheme.darkBorder 
                                             : const Color(0xFFE2E8F0),
-                                        width: 0.85,
+                                        width: 1.0,
                                       ),
                                     ),
                                     child: Row(
@@ -1236,12 +1232,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   padding: const EdgeInsets.all(14),
                                   decoration: BoxDecoration(
                                     color: isDark 
-                                        ? const Color(0xFF282008) 
+                                        ? const Color(0xFF451A03).withValues(alpha: 0.35) 
                                         : const Color(0xFFFFFBEB),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: const Color(0xFFFCD34D).withValues(alpha: isDark ? 0.4 : 0.85),
-                                      width: 0.85,
+                                      color: isDark 
+                                          ? const Color(0xFFB45309).withValues(alpha: 0.5) 
+                                          : const Color(0xFFFDE68A),
+                                      width: 1.0,
                                     ),
                                   ),
                                   child: Row(
@@ -1299,14 +1297,14 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
                                       color: isDark 
-                                          ? Colors.white.withValues(alpha: 0.035) 
+                                          ? AppTheme.darkSurfaceElevated 
                                           : const Color(0xFFF8FAFC),
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(
                                         color: isDark 
-                                            ? Colors.white.withValues(alpha: 0.08) 
+                                            ? AppTheme.darkBorder 
                                             : const Color(0xFFE2E8F0),
-                                        width: 0.85,
+                                        width: 1.0,
                                       ),
                                     ),
                                     child: Row(
@@ -1352,11 +1350,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                       bottom: MediaQuery.of(context).padding.bottom + 14,
                     ),
                     decoration: BoxDecoration(
-                      color: (isDark ? AppTheme.darkSurface : Colors.white).withValues(alpha: 0.90),
+                      color: (isDark ? AppTheme.darkSurface : Colors.white).withValues(alpha: 0.95),
                       border: Border(
                         top: BorderSide(
-                          color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
-                          width: 0.85,
+                          color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                          width: 1.0,
                         ),
                       ),
                       boxShadow: [
@@ -1501,7 +1499,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ],
                               ),
                               child: ElevatedButton.icon(
-                                onPressed: () => _openLink(context, deal.link),
+                                onPressed: () {
+                                  HapticFeedback.mediumImpact();
+                                  _openLink(context, deal.link);
+                                },
                                 icon: const Icon(Icons.open_in_new_rounded, size: 18, color: Colors.white),
                                 label: FittedBox(
                                   fit: BoxFit.scaleDown,
@@ -1618,12 +1619,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             height: 42,
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? Colors.black.withValues(alpha: 0.45)
-                                  : Colors.black.withValues(alpha: 0.28),
+                                  ? AppTheme.darkSurface.withValues(alpha: 0.85)
+                                  : Colors.black.withValues(alpha: 0.35),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.25),
-                                width: 0.85,
+                                color: isDark ? AppTheme.darkBorder : Colors.white.withValues(alpha: 0.25),
+                                width: 1.0,
                               ),
                               boxShadow: [
                                 BoxShadow(
@@ -1784,12 +1785,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           height: 42,
           decoration: BoxDecoration(
             color: isDark
-                ? Colors.black.withValues(alpha: 0.45)
-                : Colors.black.withValues(alpha: 0.28),
+                ? AppTheme.darkSurface.withValues(alpha: 0.85)
+                : Colors.black.withValues(alpha: 0.35),
             shape: BoxShape.circle,
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.25),
-              width: 0.85,
+              color: isDark ? AppTheme.darkBorder : Colors.white.withValues(alpha: 0.25),
+              width: 1.0,
             ),
             boxShadow: [
               BoxShadow(
@@ -1803,7 +1804,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(22),
-              onTap: onTap,
+              onTap: () {
+                HapticFeedback.lightImpact();
+                onTap();
+              },
               child: Center(
                 child: Icon(
                   icon,
@@ -2085,8 +2089,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   }
 
   Widget _buildCompactBotkolikCard(Deal deal, bool isDark, Color primaryColor) {
-    final pillBgColor = isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC);
-    final pillBorderColor = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0);
+    final pillBgColor = isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9);
+    final pillBorderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
 
     return StreamBuilder<bool>(
       stream: _firestoreService.botkolikChatEnabledStream(),
@@ -2101,7 +2105,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: pillBorderColor,
-              width: 0.85,
+              width: 1.0,
             ),
           ),
           child: Row(
@@ -2285,8 +2289,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         final currentUid = _authService.currentUser?.uid;
         final isOwnDeal = currentUid != null && currentUid == deal.postedBy;
 
-        final pillBgColor = isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC);
-        final pillBorderColor = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0);
+        final pillBgColor = isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9);
+        final pillBorderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
 
         return Container(
           height: 32,
@@ -2296,7 +2300,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: pillBorderColor,
-              width: 0.85,
+              width: 1.0,
             ),
           ),
           child: Row(

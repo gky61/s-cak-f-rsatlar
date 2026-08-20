@@ -44,6 +44,7 @@ class AktuelMagazalarPage extends StatefulWidget {
 
 class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
   final TextEditingController _searchController = TextEditingController();
+  late final Stream<QuerySnapshot> _kataloglarStream;
   String _searchQuery = '';
   MagazaKategori _selectedCategory = MagazaKategori.tumu;
   bool _hideHeroBanner = false;
@@ -86,6 +87,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
   @override
   void initState() {
     super.initState();
+    _kataloglarStream = FirebaseFirestore.instance.collection('kataloglar').snapshots();
     _loadBannerPreference();
   }
 
@@ -148,7 +150,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('kataloglar').snapshots(),
+        stream: _kataloglarStream,
         builder: (context, snapshot) {
           final now = DateTime.now();
           final today = DateTime(now.year, now.month, now.day);
@@ -235,7 +237,10 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
                         final magaza = visibleStores[index];
-                        return _buildMagazaCard(context, magaza, isDark);
+                        return KeyedSubtree(
+                          key: ValueKey(magaza.code),
+                          child: _buildMagazaCard(context, magaza, isDark),
+                        );
                       },
                       childCount: visibleStores.length,
                     ),
@@ -266,7 +271,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
           ],
           border: Border.all(
             color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-            width: 1,
+            width: 1.2,
           ),
         ),
         child: Row(
@@ -384,7 +389,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-                width: 1,
+                width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
@@ -596,7 +601,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-              width: 1,
+              width: 1.2,
             ),
             boxShadow: [
               BoxShadow(

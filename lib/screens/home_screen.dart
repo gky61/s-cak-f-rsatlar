@@ -81,6 +81,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingMore = false;
   bool _hasMore = true;
   bool _hasServerData = false;
+  bool _initialLoadingTimedOut = false;
+  Timer? _initialLoadingTimeoutTimer;
   List<Deal> _rawDeals = [];
   
   late Stream<DealsSnapshot> _dealsStream;
@@ -101,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _startInitialLoadingTimeout();
     _dealsStream = _firestoreService.getDealsStream();
     _viewMode = _themeService.viewMode;
     _checkAdminStatus();
@@ -156,6 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   @override
   void dispose() {
+    _initialLoadingTimeoutTimer?.cancel();
     _authSub?.cancel();
     _blockedUserListener?.cancel();
     _messageCountSubscription?.cancel();
@@ -219,6 +223,49 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     final match = urlRegex.firstMatch(text);
     return match?.group(0);
+  }
+
+  void _startInitialLoadingTimeout() {
+    _initialLoadingTimeoutTimer?.cancel();
+    _initialLoadingTimedOut = false;
+    _initialLoadingTimeoutTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted && !_hasServerData) {
+        setState(() {
+          _initialLoadingTimedOut = true;
+        });
+      }
+    });
+  }
+
+  Widget _buildLoadingSkeleton() {
+    if (_viewMode == CardViewMode.vertical) {
+      return GridView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.61,
+        ),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return DealCardSkeleton(viewMode: _viewMode);
+        },
+      );
+    } else {
+      return ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: DealCardSkeleton(viewMode: _viewMode),
+          );
+        },
+      );
+    }
   }
   
   // Okunmamış mesaj sayılarını yükle
@@ -770,26 +817,32 @@ class _HomeScreenState extends State<HomeScreen> {
     final primaryColor = Theme.of(context).colorScheme.primary;
     return PopScope(
       canPop: !_isSearchMode,
-      onPopInvoked: (bool didPop) {
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
         if (!didPop && _isSearchMode) {
           // Arama modu açıksa geri tuşuna basıldığında arama modunu kapat
           _toggleSearchMode();
         }
       },
       child: Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
+      backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(
           MediaQuery.of(context).padding.top +
-          (_isSearchMode ? 52 : 100),
+          (_isSearchMode ? 56 : 132),
         ),
         child: Container(
           decoration: BoxDecoration(
-            color: isDark ? AppTheme.darkBackground : Colors.white,
+            color: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+            border: Border(
+              bottom: BorderSide(
+                color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                width: 1.0,
+              ),
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
-                blurRadius: 8,
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
+                blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
             ],
@@ -802,57 +855,57 @@ class _HomeScreenState extends State<HomeScreen> {
                 // ─── ARAMA MODU ────────────────────────────────────────
                 if (_isSearchMode)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 8, 12, 10),
+                    padding: const EdgeInsets.fromLTRB(14, 6, 12, 8),
                     child: Row(
                       children: [
                         Expanded(
                           child: Container(
-                            height: 44,
+                            height: 42,
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? const Color(0xFF1E1E1E)
-                                  : const Color(0xFFF1F3F5),
-                              borderRadius: BorderRadius.circular(14),
+                                  ? AppTheme.darkSurface
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: _searchQuery.isNotEmpty
-                                    ? primaryColor.withValues(alpha: 0.6)
-                                    : (isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06)),
-                                width: _searchQuery.isNotEmpty ? 1.5 : 1,
+                                    ? primaryColor
+                                    : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                                width: _searchQuery.isNotEmpty ? 1.4 : 1.0,
                               ),
-                              boxShadow: _searchQuery.isNotEmpty
-                                  ? [
-                                      BoxShadow(
-                                        color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.08),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 2),
-                                      )
-                                    ]
-                                  : null,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _searchQuery.isNotEmpty
+                                      ? primaryColor.withValues(alpha: isDark ? 0.25 : 0.1)
+                                      : Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
                             child: TextField(
                               controller: _searchController,
                               autofocus: true,
                               onChanged: _onSearchChanged,
                               style: TextStyle(
-                                color: isDark ? Colors.white : AppTheme.textPrimary,
-                                fontSize: 14,
+                                color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w600,
                               ),
                               decoration: InputDecoration(
                                 hintText: 'Fırsat, marka, mağaza veya kupon ara...',
                                 hintStyle: TextStyle(
                                   color: isDark
-                                      ? Colors.white.withValues(alpha: 0.35)
-                                      : const Color(0xFF9CA3AF),
-                                  fontSize: 13.5,
+                                      ? AppTheme.darkTextSecondary
+                                      : const Color(0xFF94A3B8),
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w400,
                                 ),
                                 prefixIcon: Icon(
                                   Icons.search_rounded,
                                   color: _searchQuery.isNotEmpty
                                       ? primaryColor
-                                      : (isDark ? Colors.white54 : const Color(0xFF9CA3AF)),
-                                  size: 20,
+                                      : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8)),
+                                  size: 19,
                                 ),
                                 suffixIcon: _searchQuery.isNotEmpty
                                     ? IconButton(
@@ -860,28 +913,31 @@ class _HomeScreenState extends State<HomeScreen> {
                                         icon: const Icon(
                                           Icons.cancel_rounded,
                                           size: 18,
-                                          color: Colors.grey,
+                                          color: Color(0xFF94A3B8),
                                         ),
                                         splashRadius: 18,
                                       )
                                     : null,
                                 border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 12),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         GestureDetector(
-                          onTap: _toggleSearchMode,
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            _toggleSearchMode();
+                          },
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             child: Text(
                               'Vazgeç',
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
-                                color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
                               ),
                             ),
                           ),
@@ -892,7 +948,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 else ...[
                   // ─── SATIR 1: Wordmark + İkonlar ─────────────────────
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 12, 2),
+                    padding: const EdgeInsets.fromLTRB(16, 6, 12, 4),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -905,13 +961,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w800,
-                                  color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
                                   letterSpacing: -0.8,
                                 ),
                               ),
                               TextSpan(
                                 text: 'kolik',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w800,
                                   color: AppTheme.primary,
@@ -928,7 +984,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: _toggleSearchMode,
                           isDark: isDark,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         // Bildirim zili
                         Stack(
                           clipBehavior: Clip.none,
@@ -956,8 +1012,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             if (_unreadNotificationCount > 0)
                               Positioned(
-                                top: -6,
-                                right: -6,
+                                top: -4,
+                                right: -4,
                                 child: Container(
                                   padding: _unreadNotificationCount < 10
                                       ? const EdgeInsets.all(3)
@@ -967,12 +1023,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                     minHeight: 18,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFE57373),
+                                    color: const Color(0xFFEF4444),
                                     shape: _unreadNotificationCount < 10 ? BoxShape.circle : BoxShape.rectangle,
                                     borderRadius: _unreadNotificationCount < 10 ? null : BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: isDark ? AppTheme.darkBackground : const Color(0xFFF2F3F5),
-                                      width: 2.5,
+                                      color: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+                                      width: 2.0,
                                     ),
                                   ),
                                   child: Center(
@@ -992,7 +1048,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                         if (_isAdmin) ...[
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 6),
                           _buildHeaderAction(
                             icon: Icons.settings_rounded,
                             onTap: () => Navigator.push(
@@ -1052,12 +1108,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         // Grid / List toggle
                         Container(
                           height: 32,
-                          padding: const EdgeInsets.all(2),
+                          padding: const EdgeInsets.all(2.5),
                           decoration: BoxDecoration(
                             color: isDark
-                                ? Colors.white.withValues(alpha: 0.06)
-                                : const Color(0xFFF2F3F5),
-                            borderRadius: BorderRadius.circular(8),
+                                ? AppTheme.darkSurface
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                              width: 1.0,
+                            ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -1085,9 +1145,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   // ─── SATIR 3: Kategori Filtreleri ─────────────────────
                   SizedBox(
-                    height: 34,
+                    height: 36,
                     child: ListView.separated(
                       controller: _categoryScrollController,
+                      physics: const BouncingScrollPhysics(),
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: Category.categories.length,
@@ -1098,45 +1159,82 @@ class _HomeScreenState extends State<HomeScreen> {
                             _selectedCategory == category.id &&
                                 _selectedSubCategory == null;
                         return GestureDetector(
-                          onTap: () => setState(() {
-                            _selectedCategory = category.id;
-                            _selectedSubCategory = null;
-                            _displayLimit = 20;
-                          }),
-                          child: Container(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() {
+                              _selectedCategory = category.id;
+                              _selectedSubCategory = null;
+                              _displayLimit = 20;
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOutCubic,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 6),
+                                horizontal: 12, vertical: 7),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? (isDark
-                                      ? AppTheme.primary.withValues(alpha: 0.2)
-                                      : AppTheme.primary.withValues(alpha: 0.1))
-                                  : (isDark
-                                      ? Colors.white.withValues(alpha: 0.06)
-                                      : const Color(0xFFF5F5F5)),
-                              borderRadius: BorderRadius.circular(999),
+                                  ? AppTheme.primary
+                                  : (isDark ? AppTheme.darkSurface : Colors.white),
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: isSelected
-                                    ? AppTheme.primary.withValues(alpha: 0.4)
-                                    : Colors.transparent,
-                                width: 1,
+                                    ? AppTheme.primary
+                                    : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                                width: isSelected ? 1.2 : 0.9,
                               ),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: AppTheme.primary.withValues(alpha: 0.3),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ]
+                                  : [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
                             ),
-                            child: Center(
-                              child: Text(
-                                category.name,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isSelected
-                                      ? AppTheme.primary
-                                      : (isDark
-                                          ? Colors.white.withValues(alpha: 0.7)
-                                          : const Color(0xFF6B7280)),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (category.id == 'tumu') ...[
+                                  Icon(
+                                    Icons.apps_rounded,
+                                    size: 14,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : (isDark
+                                            ? AppTheme.darkTextSecondary
+                                            : const Color(0xFF64748B)),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ] else if (category.icon.isNotEmpty) ...[
+                                  Text(
+                                    category.icon,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                                Text(
+                                  category.name,
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : (isDark
+                                            ? const Color(0xFFE4E4E7)
+                                            : const Color(0xFF334155)),
+                                    fontWeight: isSelected
+                                        ? FontWeight.w800
+                                        : FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
                           ),
                         );
@@ -1182,43 +1280,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
 
-                // Yükleniyor durumu - Skeleton Loading
-                if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                  if (_viewMode == CardViewMode.vertical) {
-                    return GridView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 0.61,
-                      ),
-                      itemCount: 6,
-                      itemBuilder: (context, index) {
-                        return DealCardSkeleton(viewMode: _viewMode);
-                      },
-                    );
-                  } else {
-                    return ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
-                      itemCount: 6,
-                      itemBuilder: (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: DealCardSkeleton(viewMode: _viewMode),
-                        );
-                      },
-                    );
-                  }
-                }
-
-                // Veri yoksa boş liste kullan
+                // Veri kaynağını kontrol et
                 if (snapshot.hasData) {
                   final isFromCache = snapshot.data!.isFromCache;
                   if (!isFromCache) {
                     _hasServerData = true;
+                    _initialLoadingTimeoutTimer?.cancel();
                   }
                 }
 
@@ -1229,8 +1296,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 // hafızadaki son güncel listeyi (_rawDeals) koruyoruz.
                 if (snapshot.hasData && snapshot.data!.isFromCache && _hasServerData && _rawDeals.isNotEmpty && ConnectivityService().isConnected) {
                   deals = _rawDeals;
-                } else {
+                } else if (deals.isNotEmpty) {
                   _rawDeals = deals;
+                }
+
+                // İlk yükleme durumu (Skeleton Loading):
+                // 1) Stream ilk bağlanırken henüz veri gelmemişse, VEYA
+                // 2) Henüz sunucu verisi gelmemişken (_hasServerData == false), hafızada/cache'te fırsat yoksa (deals.isEmpty),
+                //    internete bağlıysak ve timeout süresi dolmamışsa (!_initialLoadingTimedOut).
+                final bool isInitialLoading = (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) ||
+                    (!_hasServerData && deals.isEmpty && ConnectivityService().isConnected && !_initialLoadingTimedOut);
+
+                if (isInitialLoading) {
+                  return _buildLoadingSkeleton();
                 }
                 
                 // Filtreleme (İstemci tarafında) - Optimize edildi
@@ -1439,6 +1517,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     // Reset server data indicators to force fresh server retrieval
                     _hasServerData = false;
                     _rawDeals = [];
+                    _startInitialLoadingTimeout();
                     
                     if (mounted) {
                       setState(() {
@@ -1690,13 +1769,20 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkSurface : Colors.white,
+          color: (isDark ? AppTheme.darkSurface : Colors.white).withValues(alpha: 0.95),
           border: Border(
             top: BorderSide(
-              color: Colors.black.withOpacity(isDark ? 0.1 : 0.05),
-              width: 2,
+              color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+              width: 1.0,
             ),
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
         ),
         padding: const EdgeInsets.only(bottom: 8, top: 4),
         child: SafeArea(
@@ -1830,10 +1916,12 @@ class _HomeScreenState extends State<HomeScreen> {
     int badgeCount = 0,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).colorScheme.primary;
     return Expanded(
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1844,19 +1932,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 clipBehavior: Clip.none,
                 children: [
                   Container(
-                    width: 36,
+                    width: 38,
                     height: 24,
                     decoration: BoxDecoration(
                       color: isSelected 
-                          ? primaryColor.withValues(alpha: isDark ? 0.1 : 0.2)
+                          ? AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.12)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Icon(
                       icon,
                       color: isSelected 
-                          ? (isDark ? primaryColor : Colors.black)
-                          : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+                          ? AppTheme.primary
+                          : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
                       size: 18,
                     ),
                   ),
@@ -1866,29 +1954,30 @@ class _HomeScreenState extends State<HomeScreen> {
                       right: -2,
                       bottom: -2,
                       child: Container(
-                        width: 10,
-                        height: 10,
+                        width: 9,
+                        height: 9,
                         decoration: BoxDecoration(
-                          color: Colors.red,
+                          color: const Color(0xFFEF4444),
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: isDark ? AppTheme.darkSurface : Colors.white,
-                            width: 2,
+                            width: 1.8,
                           ),
                         ),
                       ),
                     ),
                 ],
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 2.5),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 9.5,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                   color: isSelected 
-                      ? (isDark ? primaryColor : Colors.black)
-                      : (isDark ? Colors.grey[400] : AppTheme.textSecondary),
+                      ? AppTheme.primary
+                      : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                  letterSpacing: -0.1,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1908,21 +1997,24 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isDark,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         width: 28,
-        height: 28,
+        height: 26,
         decoration: BoxDecoration(
           color: isSelected
-              ? (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white)
+              ? (isDark ? AppTheme.darkSurfaceElevated : Colors.white)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(7),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 2,
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                    blurRadius: 3,
                     offset: const Offset(0, 1),
                   ),
                 ]
@@ -1930,12 +2022,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Icon(
           icon,
-          size: 16,
+          size: 15,
           color: isSelected
-              ? (isDark ? Colors.white : const Color(0xFF1A1A2E))
+              ? AppTheme.primary
               : (isDark
-                  ? Colors.white.withValues(alpha: 0.35)
-                  : const Color(0xFFB0B0B0)),
+                  ? const Color(0xFF71717A)
+                  : const Color(0xFF94A3B8)),
         ),
       ),
     );
@@ -1947,23 +2039,35 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isDark,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
       child: Container(
         width: 36,
         height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : const Color(0xFFF2F3F5),
-          borderRadius: BorderRadius.circular(10),
+          color: isDark ? AppTheme.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+            width: 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
         ),
         child: Icon(
           icon,
-          size: 20,
+          size: 19,
           color: isDark
-              ? Colors.white.withValues(alpha: 0.7)
-              : const Color(0xFF4B5563),
+              ? AppTheme.darkTextPrimary
+              : const Color(0xFF0F172A),
         ),
       ),
     );
@@ -1976,35 +2080,47 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isDark,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
       child: Container(
-        height: 34,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : const Color(0xFFF2F3F5),
+          color: isDark ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+            width: 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              size: 16,
+              size: 15,
               color: isDark
-                  ? Colors.white.withValues(alpha: 0.6)
-                  : const Color(0xFF6B7280),
+                  ? AppTheme.darkTextPrimary
+                  : const Color(0xFF0F172A),
             ),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
                 color: isDark
-                    ? Colors.white.withValues(alpha: 0.8)
-                    : const Color(0xFF374151),
+                    ? AppTheme.darkTextPrimary
+                    : const Color(0xFF0F172A),
                 letterSpacing: -0.2,
               ),
             ),

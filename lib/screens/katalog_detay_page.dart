@@ -426,11 +426,11 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
                             (index) => AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               margin: const EdgeInsets.symmetric(horizontal: 3),
-                              width: _currentPage == index ? 16 : 5,
+                              width: _currentPage == index ? 18 : 5,
                               height: 5,
                               decoration: BoxDecoration(
                                 color: _currentPage == index
-                                    ? Colors.white
+                                    ? const Color(0xFFFF6B35)
                                     : Colors.white.withValues(alpha: 0.35),
                                 borderRadius: BorderRadius.circular(999),
                               ),

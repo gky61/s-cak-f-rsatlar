@@ -101,8 +101,6 @@ void main() {
 
       final title = scraper.scrapeTitle(doc);
       expect(title, equals('Playstation 5 Slim Standart Dijital Edition 1 TB Oyun Konsolu + 2. Beyaz Dualsense + Şarj  İstasyonu'));
-
-      final brand = doc.querySelector('meta[property="og:brand"]')?.attributes['content'];
       // brand is Sony, but title from JSON-LD should be the full name:
       expect(title, isNot(equals('Sony')));
     });
@@ -188,6 +186,53 @@ void main() {
       expect(title, equals('Lacivert Etnik Desenli Gömlek'));
       final price = await scraper.scrapePrice(doc);
       expect(price, equals(30450.0));
+    });
+
+    test('should scrape correct final price and original price for multi-discount Beymen product (Dolce & Gabbana)', () async {
+      final html = '''
+      <div class="m-price">
+        <div class="m-price__list">
+          <del id="priceOld" class="m-price__old">70.950 TL</del>
+          <ins id="priceNew" class="m-price__new -discnt">51.995 TL</ins>
+        </div>
+        <div class="m-price__lastPrice">
+          44.195 TL
+        </div>
+      </div>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(44195.0));
+
+      final originalPrice = scraper.scrapeOriginalPrice(doc, price);
+      expect(originalPrice, equals(70950.0));
+    });
+
+    test('should scrape correct campaign price and original price for multi-discount + campaign Beymen product (AMI Paris)', () async {
+      final html = '''
+      <div class="m-price">
+        <div class="m-price__list">
+          <del id="priceOld" class="m-price__old">27.450 TL</del>
+          <ins id="priceNew" class="m-price__new -discnt">14.495 TL</ins>
+        </div>
+        <div class="m-price__lastPrice">
+          13.195 TL
+        </div>
+        <div class="m-price__campaign">
+          <span class="m-price__campaignPrice">
+            10.556 TL
+          </span>
+        </div>
+      </div>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(10556.0));
+
+      final originalPrice = scraper.scrapeOriginalPrice(doc, price);
+      expect(originalPrice, equals(27450.0));
     });
   });
 }

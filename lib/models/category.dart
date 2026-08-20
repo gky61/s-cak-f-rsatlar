@@ -12,7 +12,7 @@ class Category {
   });
 
   static const List<Category> categories = [
-    Category(id: 'tumu', name: 'Tümü', icon: '🔥'),
+    Category(id: 'tumu', name: 'Tümü', icon: ''),
     Category(
       id: 'elektronik',
       name: 'Elektronik',

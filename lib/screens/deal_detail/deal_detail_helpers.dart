@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/deal.dart';
@@ -22,24 +23,27 @@ class DealDetailHelpers {
   }) {
     // Harmonious modern palette
     final unselectedBg = isDark
-        ? Colors.white.withValues(alpha: 0.04)
-        : const Color(0xFFF8FAFC);
+        ? AppTheme.darkSurfaceElevated
+        : const Color(0xFFF1F5F9);
     final unselectedBorder = isDark
-        ? Colors.white.withValues(alpha: 0.08)
+        ? AppTheme.darkBorder
         : const Color(0xFFE2E8F0);
 
     final selectedBg = isDark
         ? color.withValues(alpha: 0.18)
         : color.withValues(alpha: 0.08);
-    final selectedBorder = color.withValues(alpha: isDark ? 0.65 : 0.45);
+    final selectedBorder = color.withValues(alpha: isDark ? 0.65 : 0.55);
 
-    final effectiveColor = isSelected ? color : (isDark ? Colors.grey[300]! : const Color(0xFF475569));
-    final effectiveLabelColor = isSelected ? color : (isDark ? Colors.grey[400]! : const Color(0xFF64748B));
+    final effectiveColor = isSelected ? color : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B));
+    final effectiveLabelColor = isSelected ? color : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B));
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(14),
         splashColor: color.withValues(alpha: 0.1),
         highlightColor: color.withValues(alpha: 0.05),
@@ -53,7 +57,7 @@ class DealDetailHelpers {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isSelected ? selectedBorder : unselectedBorder,
-              width: isSelected ? 1.2 : 0.85,
+              width: isSelected ? 1.2 : 1.0,
             ),
             boxShadow: isSelected
                 ? [
@@ -65,7 +69,7 @@ class DealDetailHelpers {
                   ]
                 : [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
+                      color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
                       blurRadius: 4,
                       offset: const Offset(0, 1),
                     ),
@@ -300,9 +304,9 @@ class DealDetailHelpers {
         children: [
           Icon(Icons.star_rounded, color: primaryColor, size: 20),
           const SizedBox(width: 6),
-          Text(
+          const Text(
             'Editörün Seçimi',
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w700,
               color: AppTheme.accent,
             ),
@@ -352,7 +356,7 @@ class DealDetailHelpers {
               const SizedBox(height: 2),
               Text(
                 value,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.accent,
@@ -439,7 +443,7 @@ class DealDetailHelpers {
               const SizedBox(height: 4),
               Text(
                 '$count',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.accent,

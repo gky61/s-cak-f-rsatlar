@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -44,12 +45,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
     _myFavoritesScrollController = ScrollController();
     _followedCategoriesScrollController = ScrollController();
-    
+
     _myFavoritesScrollController.addListener(_scrollListener);
     _followedCategoriesScrollController.addListener(_scrollListener);
-    
+
     _tabController.addListener(_tabListener);
-    
+
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (mounted) {
         _initializeStreams(user?.uid);
@@ -65,14 +66,14 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     } else if (_tabController.index == 1 && _followedCategoriesScrollController.hasClients) {
       offset = _followedCategoriesScrollController.offset;
     }
-    
+
     // 15px scroll sonrası banner ve temizle butonu durum kontrolü
     bool showBannerNow = _showBanner;
     if (offset > 15) {
       showBannerNow = false;
     }
     bool showCleanupNow = offset <= 15;
-    
+
     // 800px scroll sonrası yukarı fırlatma butonu kontrolü
     bool showScrollToTopNow = offset > 800;
 
@@ -87,13 +88,14 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   void _tabListener() {
     if (!_tabController.indexIsChanging) {
+      HapticFeedback.selectionClick();
       double offset = 0;
       if (_tabController.index == 0 && _myFavoritesScrollController.hasClients) {
         offset = _myFavoritesScrollController.offset;
       } else if (_tabController.index == 1 && _followedCategoriesScrollController.hasClients) {
         offset = _followedCategoriesScrollController.offset;
       }
-      
+
       setState(() {
         _showBanner = true;
         _showCleanupButton = offset <= 15;
@@ -128,63 +130,161 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     super.dispose();
   }
 
+  void _showCustomSnackBar({
+    required String message,
+    required IconData icon,
+    required Color backgroundColor,
+    Duration duration = const Duration(seconds: 2),
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: backgroundColor,
+        duration: duration,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        elevation: 6,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = _themeService.isDarkMode;
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
     final currentUser = FirebaseAuth.instance.currentUser;
 
     _initializeStreams(currentUser?.uid);
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
+      backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: Text(
           'Kaydedilenler',
           style: TextStyle(
-            color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+            color: textColor,
             fontWeight: FontWeight.w800,
-            fontSize: 20,
+            fontSize: 18,
+            letterSpacing: -0.3,
           ),
         ),
         centerTitle: true,
         iconTheme: IconThemeData(
-          color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+          color: textColor,
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
+          preferredSize: const Size.fromHeight(46),
           child: Container(
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: isDark 
-                      ? Colors.white.withValues(alpha: 0.05) 
-                      : Colors.black.withValues(alpha: 0.05),
-                  width: 2,
+                  color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                  width: 1.0,
                 ),
               ),
             ),
-            child: TabBar(
-              controller: _tabController,
-              indicatorColor: primaryColor,
-              indicatorWeight: 3,
-              labelColor: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-              unselectedLabelColor: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-              labelStyle: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-              unselectedLabelStyle: const TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 12,
-              ),
-              isScrollable: false,
-              tabs: const [
-                Tab(text: 'Kaydettiklerim'),
-                Tab(text: 'Favori Kategorilerim'),
-              ],
+            child: AnimatedBuilder(
+              animation: _tabController,
+              builder: (context, _) {
+                final isFirst = _tabController.index == 0;
+                return TabBar(
+                  controller: _tabController,
+                  indicatorColor: AppTheme.primary,
+                  indicatorWeight: 3,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  dividerColor: Colors.transparent,
+                  labelColor: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                  unselectedLabelColor: secondaryTextColor,
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    letterSpacing: -0.2,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  tabs: [
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.bookmark_rounded,
+                            size: 16,
+                            color: isFirst
+                                ? AppTheme.primary
+                                : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Kaydettiklerim',
+                            style: TextStyle(
+                              color: isFirst
+                                  ? (isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A))
+                                  : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                              fontWeight: isFirst ? FontWeight.w800 : FontWeight.w600,
+                              fontSize: 13,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.category_rounded,
+                            size: 16,
+                            color: !isFirst
+                                ? AppTheme.primary
+                                : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Favori Kategorilerim',
+                            style: TextStyle(
+                              color: !isFirst
+                                  ? (isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A))
+                                  : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                              fontWeight: !isFirst ? FontWeight.w800 : FontWeight.w600,
+                              fontSize: 13,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -192,30 +292,35 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Kaydettiklerim
+          // 1. Kaydettiklerim Tab
           _buildMyFavorites(currentUser, isDark),
-          // Favori Kategorilerim
-          _buildFollowedCategories(currentUser, isDark, primaryColor),
+          // 2. Favori Kategorilerim Tab
+          _buildFollowedCategories(currentUser, isDark),
         ],
       ),
       floatingActionButton: _showScrollToTop
           ? FloatingActionButton(
               heroTag: 'favorites_scroll_to_top',
               mini: true,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
               onPressed: () {
-                final controller = _tabController.index == 0 
-                    ? _myFavoritesScrollController 
+                HapticFeedback.lightImpact();
+                final controller = _tabController.index == 0
+                    ? _myFavoritesScrollController
                     : _followedCategoriesScrollController;
                 if (controller.hasClients) {
                   controller.animateTo(
                     0,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOut,
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.easeOutCubic,
                   );
                 }
               },
-              backgroundColor: primaryColor,
-              child: const Icon(Icons.keyboard_arrow_up, color: Colors.black),
+              backgroundColor: AppTheme.primary,
+              child: const Icon(Icons.keyboard_arrow_up_rounded, color: Colors.white, size: 24),
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -223,7 +328,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   }
 
   Widget _buildMyFavorites(User? currentUser, bool isDark) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
+
     if (currentUser == null) {
       return Center(
         child: Padding(
@@ -231,18 +338,27 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.bookmark_border,
-                size: 64,
-                color: isDark ? Colors.grey[600] : Colors.grey[400],
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.bookmark_border_rounded,
+                  size: 36,
+                  color: AppTheme.primary,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
                 'Kaydedilenler İçin Giriş Yap',
                 style: TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                  letterSpacing: -0.3,
                 ),
               ),
               const SizedBox(height: 8),
@@ -250,14 +366,15 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 'Kaydettiğiniz fırsatları görmek ve listenize yeni fırsatlar eklemek için giriş yapmalısınız.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 14,
-                  height: 1.4,
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                  fontSize: 13.5,
+                  height: 1.45,
+                  color: secondaryTextColor,
                 ),
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
                 onPressed: () {
+                  HapticFeedback.lightImpact();
                   showGuestLoginBottomSheet(
                     context,
                     title: 'Fırsatları Kaydetmek İçin Giriş Yap! 🔖',
@@ -269,12 +386,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 icon: const Icon(Icons.login_rounded, size: 18),
                 label: const Text(
                   'Giriş Yap',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                  elevation: 2,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -299,17 +417,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.error_outline,
-                  size: 64,
+                  Icons.error_outline_rounded,
+                  size: 56,
                   color: isDark ? Colors.grey[600] : Colors.grey[400],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Text(
                   'Bir hata oluştu',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
                   ),
                 ),
               ],
@@ -324,26 +442,35 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.bookmark_border,
-                  size: 64,
-                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.bookmark_border_rounded,
+                    size: 34,
+                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'Henüz kaydettiğiniz fırsat yok',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                    letterSpacing: -0.2,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
-                  'Kaydettiğiniz fırsatlar burada görünecek',
+                  'Kaydettiğiniz fırsatlar burada düzenli olarak listelenir',
                   style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                    fontSize: 13,
+                    color: secondaryTextColor,
                   ),
                 ),
               ],
@@ -366,32 +493,42 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
         return Column(
           children: [
-            // 30 gün bilgilendirme mesajı (Kaydırınca gizlenir, tab değişince geri gelir)
+            // 30 gün bilgilendirme mesajı
             AnimatedCrossFade(
               firstChild: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.amber.withValues(alpha: 0.08)
-                        : Colors.amber.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(8),
+                    color: isDark ? AppTheme.darkSurface : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: Colors.amber.withValues(alpha: 0.3),
-                      width: 0.5,
+                      color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                      width: 1.0,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.025),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline, size: 16, color: Colors.amber[700]),
-                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 14.5,
+                        color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 7),
                       Expanded(
                         child: Text(
-                          '30 günden eski fırsatlar otomatik olarak kalıcı silinir.',
+                          '30 günden eski fırsatlar otomatik olarak listeden kaldırılır.',
                           style: TextStyle(
-                            fontSize: 11,
-                            color: isDark ? Colors.amber[200] : Colors.amber[800],
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF475569),
                           ),
                         ),
                       ),
@@ -404,7 +541,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               duration: const Duration(milliseconds: 200),
             ),
 
-            // Filtre Çipleri & Temizle Barı (Ekrana Tam Oturan Dengeli ve Ferah Tasarım)
+            // Filtre Çipleri & Temizle Barı
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Row(
@@ -415,8 +552,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                       icon: Icons.grid_view_rounded,
                       isSelected: _favoriteFilterIndex == 0,
                       isDark: isDark,
-                      selectedColor: primaryColor,
-                      onTap: () => setState(() => _favoriteFilterIndex = 0),
+                      selectedColor: AppTheme.primary,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() => _favoriteFilterIndex = 0);
+                      },
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -427,7 +567,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                       isSelected: _favoriteFilterIndex == 1,
                       isDark: isDark,
                       selectedColor: const Color(0xFF10B981),
-                      onTap: () => setState(() => _favoriteFilterIndex = 1),
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() => _favoriteFilterIndex = 1);
+                      },
                     ),
                   ),
                   if (expiredCount > 0) ...[
@@ -439,7 +582,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                         isSelected: _favoriteFilterIndex == 2,
                         isDark: isDark,
                         selectedColor: const Color(0xFFEF4444),
-                        onTap: () => setState(() => _favoriteFilterIndex = 2),
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _favoriteFilterIndex = 2);
+                        },
                       ),
                     ),
                   ],
@@ -450,39 +596,50 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => _showClearFavoritesBottomSheet(
-                          context,
-                          currentUser,
-                          deals,
-                          expiredDeals,
-                          isDark,
-                        ),
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          _showClearFavoritesBottomSheet(
+                            context,
+                            currentUser,
+                            deals,
+                            expiredDeals,
+                            isDark,
+                          );
+                        },
                         borderRadius: BorderRadius.circular(10),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7.5),
                           decoration: BoxDecoration(
-                            color: Colors.redAccent.withValues(alpha: isDark ? 0.15 : 0.08),
+                            color: isDark ? AppTheme.darkSurface : Colors.white,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: Colors.redAccent.withValues(alpha: 0.25),
-                              width: 0.8,
+                              color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                              width: 1.0,
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.auto_delete_outlined,
-                                color: Colors.redAccent,
-                                size: 13,
+                                color: Color(0xFFDC2626),
+                                size: 14,
                               ),
-                              SizedBox(width: 4),
+                              const SizedBox(width: 4),
                               Text(
                                 'Temizle',
                                 style: TextStyle(
-                                  color: Colors.redAccent,
+                                  color: isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626),
                                   fontWeight: FontWeight.w700,
                                   fontSize: 11.5,
+                                  letterSpacing: -0.2,
                                 ),
                               ),
                             ],
@@ -514,6 +671,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     required Color selectedColor,
     required VoidCallback onTap,
   }) {
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E293B);
+    final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -521,18 +681,26 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         borderRadius: BorderRadius.circular(10),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7.5),
           decoration: BoxDecoration(
             color: isSelected
                 ? selectedColor
-                : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                : (isDark ? AppTheme.darkSurface : Colors.white),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected
                   ? selectedColor
-                  : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
-              width: 0.9,
+                  : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+              width: 1.0,
             ),
+            boxShadow: [
+              if (!isSelected)
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+            ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -540,9 +708,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               Icon(
                 icon,
                 size: 13,
-                color: isSelected
-                    ? Colors.white
-                    : (isDark ? Colors.grey[400] : const Color(0xFF64748B)),
+                color: isSelected ? Colors.white : secondaryTextColor,
               ),
               const SizedBox(width: 4),
               Flexible(
@@ -553,10 +719,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                     maxLines: 1,
                     style: TextStyle(
                       fontSize: 11.5,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                      color: isSelected
-                          ? Colors.white
-                          : (isDark ? AppTheme.darkTextPrimary : const Color(0xFF334155)),
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      letterSpacing: -0.2,
+                      color: isSelected ? Colors.white : textColor,
                     ),
                   ),
                 ),
@@ -575,9 +740,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     List<Deal> expiredDeals,
     bool isDark,
   ) {
-    final messenger = ScaffoldMessenger.of(context);
     final totalCount = allDeals.length;
     final expiredCount = expiredDeals.length;
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
 
     showModalBottomSheet(
       context: context,
@@ -586,11 +752,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       builder: (bottomSheetContext) {
         return Container(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            color: isDark ? AppTheme.darkSurface : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
+                color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
                 blurRadius: 20,
                 offset: const Offset(0, -4),
               ),
@@ -608,7 +774,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                     width: 38,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.grey[700] : Colors.grey[300],
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -619,14 +785,14 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(9),
                       decoration: BoxDecoration(
-                        color: Colors.redAccent.withValues(alpha: isDark ? 0.2 : 0.1),
+                        color: const Color(0xFFEF4444).withValues(alpha: isDark ? 0.2 : 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.auto_delete_rounded,
-                        color: Colors.redAccent,
+                        color: Color(0xFFEF4444),
                         size: 20,
                       ),
                     ),
@@ -639,15 +805,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                             'Kayıtları Temizle',
                             style: TextStyle(
                               fontSize: 16.5,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                              fontWeight: FontWeight.w800,
+                              color: textColor,
+                              letterSpacing: -0.2,
                             ),
                           ),
+                          const SizedBox(height: 2),
                           Text(
                             'Listenizden kaldırmak istediğiniz seçeneği belirleyin',
                             style: TextStyle(
                               fontSize: 12,
-                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                              color: secondaryTextColor,
                             ),
                           ),
                         ],
@@ -661,7 +829,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 if (expiredCount > 0) ...[
                   _buildClearOptionTile(
                     title: 'Süresi Dolanları Temizle ($expiredCount İlan)',
-                    subtitle: 'Yalnızca süresi dolmuş veya tükenmiş fırsatları kaldırır. Aktif fırsatlarınız korunur.',
+                    subtitle: 'Yalnızca süresi dolmuş fırsatları kaldırır. Aktif fırsatlarınız korunur.',
                     icon: Icons.hourglass_bottom_rounded,
                     iconColor: const Color(0xFFF59E0B),
                     isDark: isDark,
@@ -676,12 +844,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                             _favoriteFilterIndex = 0;
                           }
                         });
-                        messenger.showSnackBar(
-                          SnackBar(
-                            content: Text('$expiredCount adet süresi dolan kayıt temizlendi'),
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
+                        _showCustomSnackBar(
+                          message: '$expiredCount adet süresi dolan kayıt temizlendi',
+                          icon: Icons.check_circle_rounded,
+                          backgroundColor: const Color(0xFF10B981),
                         );
                       }
                     },
@@ -694,7 +860,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                   title: 'Tüm Kayıtları Temizle ($totalCount İlan)',
                   subtitle: 'Aktif ve süresi dolan tüm kayıtlı fırsatları listenizden kalıcı olarak siler.',
                   icon: Icons.delete_forever_rounded,
-                  iconColor: Colors.redAccent,
+                  iconColor: const Color(0xFFEF4444),
                   isDark: isDark,
                   onTap: () async {
                     Navigator.pop(bottomSheetContext);
@@ -705,12 +871,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                       setState(() {
                         _favoriteFilterIndex = 0;
                       });
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text('$totalCount adet kayıtlı fırsat temizlendi'),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
+                      _showCustomSnackBar(
+                        message: '$totalCount adet kayıtlı fırsat temizlendi',
+                        icon: Icons.delete_sweep_rounded,
+                        backgroundColor: const Color(0xFFEF4444),
                       );
                     }
                   },
@@ -723,9 +887,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(bottomSheetContext),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                       side: BorderSide(
-                        color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.grey[300]!,
+                        color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                        width: 1.0,
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -734,9 +899,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                     child: Text(
                       'Vazgeç',
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.grey[300] : Colors.grey[700],
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: secondaryTextColor,
                       ),
                     ),
                   ),
@@ -757,19 +922,25 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     required bool isDark,
     required VoidCallback onTap,
   }) {
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+            color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
-              width: 1,
+              color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+              width: 1.0,
             ),
           ),
           child: Row(
@@ -791,8 +962,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                       title,
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                        fontWeight: FontWeight.w800,
+                        color: textColor,
+                        letterSpacing: -0.2,
                       ),
                     ),
                     const SizedBox(height: 2.5),
@@ -801,7 +973,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                       style: TextStyle(
                         fontSize: 11,
                         height: 1.3,
-                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                        color: secondaryTextColor,
                       ),
                     ),
                   ],
@@ -811,7 +983,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               Icon(
                 Icons.chevron_right_rounded,
                 size: 17,
-                color: isDark ? Colors.grey[600] : Colors.grey[400],
+                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
               ),
             ],
           ),
@@ -827,7 +999,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
     if (_favoriteFilterIndex == 1) {
       title = 'Aktif Fırsat Bulunmuyor';
-      message = 'Kaydettiğiniz tüm fırsatların süresi dolmuş. \'Süresi Dolanlar\' filtresinden arşive bakabilirsiniz.';
+      message = 'Kaydettiğiniz tüm fırsatların süresi dolmuş. \'Süresi Dolanlar\' filtresinden inceleyebilirsiniz.';
       icon = Icons.hourglass_bottom_rounded;
     } else if (_favoriteFilterIndex == 2) {
       title = 'Süresi Dolan Fırsat Yok 🎉';
@@ -835,20 +1007,24 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       icon = Icons.check_circle_outline_rounded;
     }
 
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 54, color: isDark ? Colors.grey[600] : Colors.grey[400]),
+            Icon(icon, size: 52, color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8)),
             const SizedBox(height: 14),
             Text(
               title,
               style: TextStyle(
                 fontSize: 16.5,
-                fontWeight: FontWeight.w700,
-                color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                fontWeight: FontWeight.w800,
+                color: textColor,
+                letterSpacing: -0.2,
               ),
             ),
             const SizedBox(height: 6),
@@ -858,17 +1034,20 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               style: TextStyle(
                 fontSize: 13,
                 height: 1.4,
-                color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                color: secondaryTextColor,
               ),
             ),
             const SizedBox(height: 16),
             TextButton.icon(
-              onPressed: () => setState(() => _favoriteFilterIndex = 0),
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                setState(() => _favoriteFilterIndex = 0);
+              },
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: const Text('Tüm Kayıtları Göster'),
               style: TextButton.styleFrom(
                 foregroundColor: AppTheme.primary,
-                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
               ),
             ),
           ],
@@ -879,6 +1058,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   Widget _buildDealGrid(List<Deal> deals, bool isDark, ScrollController scrollController) {
     return RefreshIndicator(
+      color: AppTheme.primary,
       onRefresh: () async {
         final currentUser = FirebaseAuth.instance.currentUser;
         if (currentUser != null) {
@@ -890,7 +1070,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       },
       child: GridView.builder(
         controller: scrollController,
-        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           childAspectRatio: 0.61,
@@ -904,6 +1085,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
             deal: deal,
             viewMode: CardViewMode.vertical,
             onTap: () {
+              HapticFeedback.lightImpact();
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -917,7 +1099,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     );
   }
 
-  Widget _buildFollowedCategories(User? currentUser, bool isDark, Color primaryColor) {
+  Widget _buildFollowedCategories(User? currentUser, bool isDark) {
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
+
     if (currentUser == null) {
       return Center(
         child: Padding(
@@ -925,33 +1110,43 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.category_outlined,
-                size: 64,
-                color: isDark ? Colors.grey[600] : Colors.grey[400],
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.category_outlined,
+                  size: 36,
+                  color: AppTheme.primary,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
                 'Favori Kategoriler İçin Giriş Yap',
                 style: TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                  letterSpacing: -0.3,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Takip ettiğiniz özel kategorilerin anlık akışını görmek için giriş yapmalısınız.',
+                'Takip ettiğiniz özel kategorilerin anlık fırsat akışını görmek için giriş yapmalısınız.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 14,
-                  height: 1.4,
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                  fontSize: 13.5,
+                  height: 1.45,
+                  color: secondaryTextColor,
                 ),
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
                 onPressed: () {
+                  HapticFeedback.lightImpact();
                   showGuestLoginBottomSheet(
                     context,
                     title: 'Kategorileri Takip Etmek İçin Giriş Yap! 🏷️',
@@ -963,12 +1158,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 icon: const Icon(Icons.login_rounded, size: 18),
                 label: const Text(
                   'Giriş Yap',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
+                  backgroundColor: AppTheme.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                  elevation: 2,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -993,17 +1189,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.error_outline,
-                  size: 64,
+                  Icons.error_outline_rounded,
+                  size: 56,
                   color: isDark ? Colors.grey[600] : Colors.grey[400],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Text(
                   'Bir hata oluştu',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
                   ),
                 ),
               ],
@@ -1018,32 +1214,43 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.category_outlined,
-                  size: 64,
-                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.category_outlined,
+                    size: 34,
+                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'Henüz takip ettiğiniz kategori yok',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                    letterSpacing: -0.2,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'İlgi duyduğunuz kategorileri takip ederek\nfırsatlarını burada görebilirsiniz.',
+                  'İlgi duyduğunuz kategorileri takip ederek\nfırsatları burada anlık görebilirsiniz.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                    fontSize: 13,
+                    height: 1.4,
+                    color: secondaryTextColor,
                   ),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
                   onPressed: () {
+                    HapticFeedback.lightImpact();
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -1058,12 +1265,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                   icon: const Icon(Icons.tune_rounded, size: 18),
                   label: const Text(
                     'Kategorileri Seç & Takip Et',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
+                    backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                    elevation: 2,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -1078,7 +1286,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           children: [
             AnimatedCrossFade(
               firstChild: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1087,21 +1295,22 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                         Icon(
                           Icons.local_offer_outlined,
                           size: 16,
-                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                          color: secondaryTextColor,
                         ),
                         const SizedBox(width: 6),
                         Text(
                           '${deals.length} Fırsat',
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                            fontWeight: FontWeight.w700,
+                            color: secondaryTextColor,
                           ),
                         ),
                       ],
                     ),
                     InkWell(
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1113,32 +1322,40 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                           });
                         });
                       },
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(10),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5.5),
                         decoration: BoxDecoration(
-                          color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                          borderRadius: BorderRadius.circular(20),
+                          color: isDark ? AppTheme.darkSurface : Colors.white,
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: primaryColor.withValues(alpha: 0.3),
-                            width: 1,
+                            color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                            width: 1.0,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.tune_rounded,
-                              size: 15,
-                              color: primaryColor,
+                              size: 14,
+                              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 5),
                             Text(
                               'Kategorileri Düzenle',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
-                                color: primaryColor,
+                                color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                letterSpacing: -0.2,
                               ),
                             ),
                           ],
@@ -1164,6 +1381,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   Widget _buildLoadingGrid(bool isDark) {
     return GridView.builder(
       padding: const EdgeInsets.all(16),
+      physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         childAspectRatio: 0.61,
@@ -1177,6 +1395,3 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     );
   }
 }
-
-
-

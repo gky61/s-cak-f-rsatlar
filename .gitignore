@@ -90,5 +90,5 @@ cloud-run-bot/prod_firebase_key.json
 scratch/
 cloud-run-bot/scratch/
 
-
-
+# Agent customizations and skills
+.agents/

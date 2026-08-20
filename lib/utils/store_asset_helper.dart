@@ -1,3 +1,6 @@
+import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
+
 /// Mağaza isimleri ve kodları için merkezi logo asset çözümleyici.
 ///
 /// Türkçe karakterleri, büyük/küçük harf farklılıklarını, boşluk/tire/nokta
@@ -104,6 +107,82 @@ class StoreAssetHelper {
     'mango': 'assets/mango.webp',
   };
 
+  static const Map<String, Color> _storeColorMap = {
+    // Süpermarket / Marketler & Aktüel
+    'bim': Color(0xFF005691),
+    'a101': Color(0xFF14B4C8),
+    'sok': Color(0xFFFFD200),
+    'sokmarket': Color(0xFFFFD200),
+    'ceptesok': Color(0xFFFFD200),
+    'migros': Color(0xFFEE7C11),
+    'migrossanalmarket': Color(0xFFEE7C11),
+    'carrefoursa': Color(0xFF0F4C81),
+    'carrefour': Color(0xFF0F4C81),
+    'metro': Color(0xFF002F6C),
+    'metrogrossmarket': Color(0xFF002F6C),
+    'macrocenter': Color(0xFF1B1B1B),
+    'getir': Color(0xFF5D3EBC),
+    'getirbuyuk': Color(0xFF5D3EBC),
+    'bizim': Color(0xFFFFCC00),
+    'bizimtoptan': Color(0xFFFFCC00),
+    'bizimtoptansatis': Color(0xFFFFCC00),
+    'bizimtoptansatismagazalari': Color(0xFFFFCC00),
+    'file': Color(0xFF3498DB),
+    'filemarket': Color(0xFF3498DB),
+    'happycenter': Color(0xFF8DC63F),
+    'happy': Color(0xFF8DC63F),
+    'hakmar': Color(0xFFD32F2F),
+    'hakmarexpress': Color(0xFFD32F2F),
+    'cagri': Color(0xFFE31B23),
+    'cagrihipermarket': Color(0xFFE31B23),
+    'cagrimarket': Color(0xFFE31B23),
+    'kooperatif': Color(0xFF00755F),
+    'kooperatifmarket': Color(0xFF00755F),
+    'tarimkredi': Color(0xFF00755F),
+    'tarimkredikooperatif': Color(0xFF00755F),
+    'tarimkredikooperatifmarket': Color(0xFF00755F),
+
+    // Kozmetik & Bakım
+    'watsons': Color(0xFF00A19B),
+    'gratis': Color(0xFF8B1E87),
+    'rossmann': Color(0xFFE2001A),
+
+    // Giyim / Yaşam / Anne & Bebek
+    'cetinkaya': Color(0xFFE31E24),
+    'civil': Color(0xFFFF6600),
+    'civilim': Color(0xFFFF6600),
+    'evkur': Color(0xFF003399),
+    'mrdiy': Color(0xFFFFD100),
+    'misterdiy': Color(0xFFFFD100),
+
+    // Elektronik / Teknoloji
+    'teknosa': Color(0xFFFF5F00),
+    'vatan': Color(0xFF005691),
+    'vatanbilgisayar': Color(0xFF005691),
+    'vestel': Color(0xFFCC0000),
+    'mediamarkt': Color(0xFFDF0000),
+    'incehesap': Color(0xFF1E88E5),
+    'itopya': Color(0xFFFF5722),
+    'havit': Color(0xFFE53935),
+
+    // Pazaryerleri & Moda
+    'trendyol': Color(0xFFF27A1A),
+    'ty': Color(0xFFF27A1A),
+    'hepsiburada': Color(0xFFFF6000),
+    'hb': Color(0xFFFF6000),
+    'amazon': Color(0xFFFF9900),
+    'n11': Color(0xFF5A189A),
+    'pazarama': Color(0xFF002855),
+    'pttavm': Color(0xFFE30613),
+    'idefix': Color(0xFFE30613),
+    'boyner': Color(0xFF1E293B),
+    'beymen': Color(0xFF1A1A1A),
+    'mavi': Color(0xFF003366),
+    'defacto': Color(0xFF002855),
+    'zara': Color(0xFF1E293B),
+    'mango': Color(0xFF1E293B),
+  };
+
   /// Mağaza adı veya mağaza kodu parametresine göre doğru logo asset yolunu döndürür.
   static String getStoreAsset(String? storeNameOrCode, [String? fallbackStoreName]) {
     if (storeNameOrCode != null && storeNameOrCode.trim().isNotEmpty) {
@@ -133,5 +212,34 @@ class StoreAssetHelper {
     }
 
     return 'assets/store-icon.png';
+  }
+
+  /// Mağaza adı veya mağaza kodu parametresine göre doğru marka rengini döndürür.
+  static Color getStoreColor(String? storeNameOrCode, [String? fallbackStoreName]) {
+    if (storeNameOrCode != null && storeNameOrCode.trim().isNotEmpty) {
+      final key = normalizeKey(storeNameOrCode);
+      if (_storeColorMap.containsKey(key)) {
+        return _storeColorMap[key]!;
+      }
+      for (final entry in _storeColorMap.entries) {
+        if (key.startsWith(entry.key) || entry.key.startsWith(key)) {
+          return entry.value;
+        }
+      }
+    }
+
+    if (fallbackStoreName != null && fallbackStoreName.trim().isNotEmpty) {
+      final key = normalizeKey(fallbackStoreName);
+      if (_storeColorMap.containsKey(key)) {
+        return _storeColorMap[key]!;
+      }
+      for (final entry in _storeColorMap.entries) {
+        if (key.startsWith(entry.key) || entry.key.startsWith(key)) {
+          return entry.value;
+        }
+      }
+    }
+
+    return AppTheme.primary;
   }
 }

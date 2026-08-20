@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import '../models/category.dart';
 import '../services/notification_service.dart';
@@ -24,7 +25,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   bool _isProcessingBulk = false;
 
   // 'tumu' hariç kategoriler
-  List<Category> get _filteredCategories => 
+  List<Category> get _filteredCategories =>
       Category.categories.where((c) => c.id != 'tumu').toList();
 
   int get _activeCategoryCount =>
@@ -34,6 +35,45 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   void initState() {
     super.initState();
     _loadPreferences();
+  }
+
+  void _showCustomSnackBar({
+    required String message,
+    required IconData icon,
+    required Color backgroundColor,
+    Duration duration = const Duration(seconds: 2),
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: backgroundColor,
+        duration: duration,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        elevation: 6,
+      ),
+    );
   }
 
   Future<void> _loadPreferences() async {
@@ -67,6 +107,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
 
   Future<void> _selectAllCategories() async {
     if (_isProcessingBulk) return;
+    HapticFeedback.mediumImpact();
     setState(() {
       _isProcessingBulk = true;
       for (final cat in _filteredCategories) {
@@ -79,21 +120,10 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
         await _notificationService.subscribeToCategory(cat.id);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Text('Tüm kategoriler takip listenize eklendi', style: TextStyle(fontWeight: FontWeight.w600)),
-              ],
-            ),
-            backgroundColor: const Color(0xFF2E7D32),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            duration: const Duration(seconds: 2),
-          ),
+        _showCustomSnackBar(
+          message: 'Tüm kategoriler takip listenize eklendi',
+          icon: Icons.check_circle_rounded,
+          backgroundColor: const Color(0xFF10B981),
         );
       }
     } catch (e) {
@@ -105,6 +135,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
 
   Future<void> _clearAllCategories() async {
     if (_isProcessingBulk) return;
+    HapticFeedback.mediumImpact();
     setState(() {
       _isProcessingBulk = true;
       for (final cat in _filteredCategories) {
@@ -118,21 +149,10 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
         await _notificationService.unsubscribeFromCategory(cat.id);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.remove_circle_outline_rounded, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Text('Tüm kategori takipleri temizlendi', style: TextStyle(fontWeight: FontWeight.w600)),
-              ],
-            ),
-            backgroundColor: const Color(0xFFC62828),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            duration: const Duration(seconds: 2),
-          ),
+        _showCustomSnackBar(
+          message: 'Tüm kategori takipleri temizlendi',
+          icon: Icons.remove_circle_outline_rounded,
+          backgroundColor: const Color(0xFFEF4444),
         );
       }
     } catch (e) {
@@ -143,6 +163,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   }
 
   Future<void> _toggleCategory(String categoryId, bool value) async {
+    HapticFeedback.selectionClick();
     setState(() => _categoryStates[categoryId] = value);
 
     try {
@@ -166,6 +187,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   }
 
   Future<void> _toggleSubCategory(String categoryId, String subCategoryId, bool value) async {
+    HapticFeedback.selectionClick();
     setState(() {
       if (value) {
         _subCategoryStates[categoryId]?.add(subCategoryId);
@@ -253,28 +275,43 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8F9FA);
+    final backgroundColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
     final cardColor = isDark ? AppTheme.darkSurface : Colors.white;
-    final textColor = isDark ? Colors.white : AppTheme.textPrimary;
-    final secondaryTextColor = isDark ? Colors.grey[400] : AppTheme.textSecondary;
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
 
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Takip Edilen Kategorilerim',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            letterSpacing: -0.3,
+            color: textColor,
+          ),
         ),
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
         foregroundColor: textColor,
         elevation: 0,
-        scrolledUnderElevation: 0.5,
-        centerTitle: false,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: true,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 19,
+            color: textColor,
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Geri',
+        ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
           : ListView(
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               children: [
                 // 1. Üst Modern Bilgi Banner'ı & Sayaç
@@ -282,15 +319,15 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                   padding: const EdgeInsets.all(16),
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+                    color: cardColor,
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1),
-                      width: 1,
+                      color: borderColor,
+                      width: 1.2,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                        color: AppTheme.primary.withValues(alpha: isDark ? 0.12 : 0.04),
                         blurRadius: 10,
                         offset: const Offset(0, 3),
                       ),
@@ -305,12 +342,12 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.12),
+                              color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.12),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(
+                            child: const Icon(
                               Icons.interests_rounded,
-                              color: primaryColor,
+                              color: AppTheme.primary,
                               size: 22,
                             ),
                           ),
@@ -326,33 +363,34 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                         'Kategorileri Kişiselleştir',
                                         style: TextStyle(
                                           fontSize: 15.5,
-                                          fontWeight: FontWeight.w700,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.2,
                                           color: textColor,
                                         ),
                                       ),
                                     ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                                       decoration: BoxDecoration(
-                                        color: primaryColor,
-                                        borderRadius: BorderRadius.circular(16),
+                                        color: AppTheme.primary,
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Text(
                                         '$_activeCategoryCount / ${_filteredCategories.length} Seçili',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.w800,
-                                          fontSize: 11.5,
+                                          fontSize: 11,
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 5),
                                 Text(
-                                  'Kategorileri takip ederek size uygun fırsatları kolayca keşfedebilirsiniz. Bildirimleriniz açık ise bu kategorilerden anlık bildirim alırsınız.',
+                                  'Kategorileri takip ederek size uygun fırsatları kolayca keşfedebilirsiniz. Bildirimleriniz açık ise anlık bildirim alırsınız.',
                                   style: TextStyle(
-                                    fontSize: 12.5,
+                                    fontSize: 12,
                                     height: 1.4,
                                     color: secondaryTextColor,
                                   ),
@@ -360,6 +398,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                 const SizedBox(height: 10),
                                 InkWell(
                                   onTap: () {
+                                    HapticFeedback.lightImpact();
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -373,28 +412,44 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                     decoration: BoxDecoration(
-                                      color: primaryColor.withValues(alpha: isDark ? 0.18 : 0.08),
+                                      color: isDark ? AppTheme.darkSurface : Colors.white,
                                       borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
-                                        color: primaryColor.withValues(alpha: isDark ? 0.35 : 0.25),
-                                        width: 0.9,
+                                        color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                                        width: 1.0,
                                       ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 1),
+                                        ),
+                                      ],
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.notifications_active_outlined, size: 14, color: primaryColor),
+                                        Icon(
+                                          Icons.notifications_active_outlined,
+                                          size: 14,
+                                          color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                        ),
                                         const SizedBox(width: 6),
                                         Text(
                                           'Bildirim Ayarlarına Git',
                                           style: TextStyle(
-                                            fontSize: 12,
+                                            fontSize: 11.5,
                                             fontWeight: FontWeight.w700,
-                                            color: primaryColor,
+                                            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                            letterSpacing: -0.2,
                                           ),
                                         ),
                                         const SizedBox(width: 4),
-                                        Icon(Icons.arrow_forward_rounded, size: 13, color: primaryColor),
+                                        Icon(
+                                          Icons.arrow_forward_rounded,
+                                          size: 13,
+                                          color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -410,7 +465,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
 
                 // 2. Minimalist & Akıllı Aksiyon Barı (Tümünü Seç / Temizle)
                 Container(
-                  margin: const EdgeInsets.only(bottom: 14),
+                  margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -426,23 +481,23 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                       ),
                       Row(
                         children: [
-                          // Tümünü Seç Butonu (Varsayılan Şeffaf -> Tıklanınca/Seçilince Yeşil)
+                          // Tümünü Seç Butonu
                           InkWell(
                             onTap: _isProcessingBulk ? null : _selectAllCategories,
                             borderRadius: BorderRadius.circular(20),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6.5),
+                              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
                               decoration: BoxDecoration(
                                 color: (_activeCategoryCount == _filteredCategories.length && _filteredCategories.isNotEmpty)
-                                    ? (isDark ? const Color(0xFF1B382B) : const Color(0xFFE8F5E9))
-                                    : Colors.transparent,
+                                    ? const Color(0xFF10B981).withValues(alpha: isDark ? 0.22 : 0.12)
+                                    : (isDark ? AppTheme.darkSurface : Colors.white),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: (_activeCategoryCount == _filteredCategories.length && _filteredCategories.isNotEmpty)
-                                      ? const Color(0xFF4CAF50)
-                                      : (isDark ? Colors.white24 : Colors.grey[300]!),
-                                  width: 1,
+                                      ? const Color(0xFF10B981)
+                                      : borderColor,
+                                  width: 1.0,
                                 ),
                               ),
                               child: Row(
@@ -452,7 +507,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     const SizedBox(
                                       width: 12,
                                       height: 12,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2E7D32)),
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
                                     ),
                                     const SizedBox(width: 6),
                                   ] else ...[
@@ -460,7 +515,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                       Icons.done_all_rounded,
                                       size: 14,
                                       color: (_activeCategoryCount == _filteredCategories.length && _filteredCategories.isNotEmpty)
-                                          ? const Color(0xFF2E7D32)
+                                          ? const Color(0xFF10B981)
                                           : secondaryTextColor,
                                     ),
                                     const SizedBox(width: 4),
@@ -469,9 +524,10 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     'Tümünü Seç',
                                     style: TextStyle(
                                       fontSize: 11.5,
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.2,
                                       color: (_activeCategoryCount == _filteredCategories.length && _filteredCategories.isNotEmpty)
-                                          ? const Color(0xFF2E7D32)
+                                          ? const Color(0xFF10B981)
                                           : secondaryTextColor,
                                     ),
                                   ),
@@ -480,23 +536,23 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Seçimleri Temizle Butonu (Varsayılan Şeffaf -> Tıklanınca/Temizlenince Kırmızı)
+                          // Seçimleri Temizle Butonu
                           InkWell(
                             onTap: _isProcessingBulk ? null : _clearAllCategories,
                             borderRadius: BorderRadius.circular(20),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6.5),
+                              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
                               decoration: BoxDecoration(
                                 color: _activeCategoryCount == 0
-                                    ? (isDark ? const Color(0xFF381B1B) : const Color(0xFFFFEBEE))
-                                    : Colors.transparent,
+                                    ? const Color(0xFFEF4444).withValues(alpha: isDark ? 0.22 : 0.12)
+                                    : (isDark ? AppTheme.darkSurface : Colors.white),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: _activeCategoryCount == 0
-                                      ? const Color(0xFFEF5350)
-                                      : (isDark ? Colors.white24 : Colors.grey[300]!),
-                                  width: 1,
+                                      ? const Color(0xFFEF4444)
+                                      : borderColor,
+                                  width: 1.0,
                                 ),
                               ),
                               child: Row(
@@ -506,7 +562,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     const SizedBox(
                                       width: 12,
                                       height: 12,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFC62828)),
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)),
                                     ),
                                     const SizedBox(width: 6),
                                   ] else ...[
@@ -514,7 +570,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                       Icons.deselect_rounded,
                                       size: 14,
                                       color: _activeCategoryCount == 0
-                                          ? const Color(0xFFC62828)
+                                          ? const Color(0xFFEF4444)
                                           : secondaryTextColor,
                                     ),
                                     const SizedBox(width: 4),
@@ -523,9 +579,10 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     'Temizle',
                                     style: TextStyle(
                                       fontSize: 11.5,
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.2,
                                       color: _activeCategoryCount == 0
-                                          ? const Color(0xFFC62828)
+                                          ? const Color(0xFFEF4444)
                                           : secondaryTextColor,
                                     ),
                                   ),
@@ -552,14 +609,14 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color: isExpanded
-                            ? categoryColor.withValues(alpha: isDark ? 0.45 : 0.35)
-                            : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1)),
-                        width: isExpanded ? 1.5 : 1,
+                            ? categoryColor.withValues(alpha: isDark ? 0.5 : 0.4)
+                            : borderColor,
+                        width: isExpanded ? 1.4 : 1.2,
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: isExpanded
-                              ? categoryColor.withValues(alpha: isDark ? 0.15 : 0.06)
+                              ? categoryColor.withValues(alpha: isDark ? 0.12 : 0.05)
                               : Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
                           blurRadius: 10,
                           offset: const Offset(0, 3),
@@ -572,72 +629,75 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                         Material(
                           color: Colors.transparent,
                           child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          leading: Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: categoryColor.withValues(alpha: isDark ? 0.2 : 0.1),
-                              borderRadius: BorderRadius.circular(14),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            leading: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: categoryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Icon(
+                                _getCategoryIcon(category.id),
+                                color: categoryColor,
+                                size: 22,
+                              ),
                             ),
-                            child: Icon(
-                              _getCategoryIcon(category.id),
-                              color: categoryColor,
-                              size: 22,
+                            title: Text(
+                              category.name,
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14.5,
+                                letterSpacing: -0.2,
+                              ),
                             ),
-                          ),
-                          title: Text(
-                            category.name,
-                            style: TextStyle(
-                              color: textColor,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: selectedSubCount > 0
-                                ? Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                        decoration: BoxDecoration(
-                                          color: categoryColor.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          '$selectedSubCount alt kategori seçili',
-                                          style: TextStyle(
-                                            color: categoryColor,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: selectedSubCount > 0
+                                  ? Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: categoryColor.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            '$selectedSubCount alt kategori seçili',
+                                            style: TextStyle(
+                                              color: categoryColor,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w800,
+                                            ),
                                           ),
                                         ),
+                                      ],
+                                    )
+                                  : Text(
+                                      '${category.subcategories.length} alt kategori',
+                                      style: TextStyle(
+                                        color: secondaryTextColor,
+                                        fontSize: 12,
                                       ),
-                                    ],
-                                  )
-                                : Text(
-                                    '${category.subcategories.length} alt kategori',
-                                    style: TextStyle(
-                                      color: secondaryTextColor,
-                                      fontSize: 12,
                                     ),
-                                  ),
+                            ),
+                            trailing: Switch.adaptive(
+                              value: isExpanded,
+                              onChanged: (value) => _toggleCategory(category.id, value),
+                              // ignore: deprecated_member_use
+                              activeColor: categoryColor,
+                              activeTrackColor: categoryColor.withValues(alpha: 0.5),
+                            ),
                           ),
-                          trailing: Switch.adaptive(
-                            value: isExpanded,
-                            onChanged: (value) => _toggleCategory(category.id, value),
-                            activeColor: categoryColor,
-                          ),
-                        ),
                         ),
 
                         // Alt Kategoriler (Çipler)
                         if (isExpanded && category.subcategories.isNotEmpty) ...[
                           Divider(
                             height: 1,
-                            thickness: 0.8,
-                            color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                            thickness: 1.0,
+                            color: isDark ? AppTheme.darkBorder : const Color(0xFFF1F5F9),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(14),
@@ -652,12 +712,13 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                     style: TextStyle(
                                       color: isSelected ? Colors.white : textColor,
                                       fontSize: 12,
-                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                      letterSpacing: -0.2,
                                     ),
                                   ),
                                   selected: isSelected,
                                   onSelected: (value) => _toggleSubCategory(category.id, subCat, value),
-                                  backgroundColor: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                                  backgroundColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
                                   selectedColor: categoryColor,
                                   checkmarkColor: Colors.white,
                                   shape: RoundedRectangleBorder(
@@ -666,7 +727,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                                   side: BorderSide(
                                     color: isSelected
                                         ? Colors.transparent
-                                        : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFCBD5E1)),
+                                        : borderColor,
                                     width: 0.8,
                                   ),
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

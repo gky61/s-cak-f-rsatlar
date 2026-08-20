@@ -34,7 +34,17 @@ class KatalogListesiPage extends StatefulWidget {
 }
 
 class _KatalogListesiPageState extends State<KatalogListesiPage> {
+  late final Stream<QuerySnapshot> _kataloglarStream;
   KatalogSortOption _currentSort = KatalogSortOption.defaultNewest;
+
+  @override
+  void initState() {
+    super.initState();
+    _kataloglarStream = FirebaseFirestore.instance
+        .collection('kataloglar')
+        .where('magazaKodu', isEqualTo: widget.magazaKodu)
+        .snapshots();
+  }
 
   String _formatDateRange(DateTime start, DateTime end) {
     try {
@@ -158,10 +168,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('kataloglar')
-            .where('magazaKodu', isEqualTo: widget.magazaKodu)
-            .snapshots(),
+        stream: _kataloglarStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return _buildShimmerCatalogGrid(isDark);
@@ -226,7 +233,10 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final catalog = catalogs[index];
-                      return _buildCatalogCard(context, catalog, isDark);
+                      return KeyedSubtree(
+                        key: ValueKey(catalog.katalogId),
+                        child: _buildCatalogCard(context, catalog, isDark),
+                      );
                     },
                     childCount: catalogs.length,
                   ),
@@ -241,101 +251,205 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
 
   // --- STORE HERO HEADER ---
   Widget _buildStoreHeroHeader(int catalogCount, bool isDark) {
+    final brandColor = StoreAssetHelper.getStoreColor(widget.magazaKodu, widget.magazaAdi);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
       child: Container(
-        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.04),
-              blurRadius: 10,
+              color: brandColor.withValues(alpha: isDark ? 0.12 : 0.06),
+              blurRadius: 12,
               offset: const Offset(0, 3),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
             ),
           ],
           border: Border.all(
             color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-            width: 1,
+            width: 1.2,
           ),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
-                ],
-                border: Border.all(
-                  color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-                  width: 1,
-                ),
-              ),
-              child: Image.asset(
-                StoreAssetHelper.getStoreAsset(widget.magazaKodu, widget.magazaAdi),
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(Icons.storefront_rounded, size: 28, color: AppTheme.primary),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.magazaAdi,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.2 : 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.check_circle_rounded, size: 11, color: Color(0xFF16A34A)),
-                            const SizedBox(width: 4),
-                            Text(
-                              '$catalogCount Yayında',
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF16A34A),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Resmi İndirim Kataloğu',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                        ),
-                      ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Üst Marka Çizgisi (Aktüel Ana Sayfadaki gibi)
+              Container(
+                height: 3.5,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      brandColor,
+                      brandColor.withValues(alpha: 0.7),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+
+              // 2. Mağaza İçerik Alanı
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    // Mağaza Logosu
+                    Container(
+                      width: 52,
+                      height: 52,
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: brandColor.withValues(alpha: isDark ? 0.40 : 0.22),
+                          width: 1.0,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: brandColor.withValues(alpha: 0.12),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                          const BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 4,
+                            offset: Offset(0, 1.5),
+                          ),
+                        ],
+                      ),
+                      child: Image.asset(
+                        StoreAssetHelper.getStoreAsset(widget.magazaKodu, widget.magazaAdi),
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.storefront_rounded,
+                          size: 28,
+                          color: brandColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 13),
+
+                    // Mağaza Bilgileri
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.magazaAdi,
+                                  style: TextStyle(
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                    letterSpacing: -0.3,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              // Mağaza Kodu Rozeti (Koyu & Net Kontrast)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: Text(
+                                  widget.magazaKodu.toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+
+                          Row(
+                            children: [
+                              // Yayındaki Katalog Sayısı Çipi (Net Yeşil / Aktif Durum)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF16A34A).withValues(alpha: 0.16) : const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.35 : 0.25),
+                                    width: 0.9,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle_rounded,
+                                      size: 11.5,
+                                      color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$catalogCount Yayında',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.verified_rounded,
+                                      size: 12.5,
+                                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                    ),
+                                    const SizedBox(width: 3.5),
+                                    Expanded(
+                                      child: Text(
+                                        'Resmi Broşürler',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -363,21 +477,37 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                   HapticFeedback.selectionClick();
                   setState(() => _currentSort = sortOption);
                 },
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppTheme.primary.withValues(alpha: isDark ? 0.22 : 0.12)
+                        ? AppTheme.primary
                         : (isDark ? AppTheme.darkSurface : Colors.white),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
                           ? AppTheme.primary
                           : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
                       width: isSelected ? 1.2 : 0.9,
                     ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: AppTheme.primary.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -385,17 +515,19 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                       Icon(
                         sortOption.icon,
                         size: 14,
-                        color: isSelected ? AppTheme.primary : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                        color: isSelected
+                            ? Colors.white
+                            : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
                       ),
-                      const SizedBox(width: 5),
+                      const SizedBox(width: 6),
                       Text(
                         sortOption.label,
                         style: TextStyle(
                           color: isSelected
-                              ? (isDark ? Colors.white : AppTheme.primary)
-                              : (isDark ? const Color(0xFFD4D4D8) : const Color(0xFF475569)),
+                              ? Colors.white
+                              : (isDark ? const Color(0xFFE4E4E7) : const Color(0xFF334155)),
                           fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                          fontSize: 11.5,
+                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -433,7 +565,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-              width: 1,
+              width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
@@ -562,15 +694,19 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      // Examine Button
+                      // Examine Button (Koyu & Yüksek Kontrastlı Tasarım)
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.08),
+                          color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
                           borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                            width: 0.9,
+                          ),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
@@ -578,11 +714,16 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                               style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w800,
-                                color: AppTheme.primary,
+                                color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                letterSpacing: 0.1,
                               ),
                             ),
-                            SizedBox(width: 3),
-                            Icon(Icons.arrow_forward_ios_rounded, size: 9, color: AppTheme.primary),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 9,
+                              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                            ),
                           ],
                         ),
                       ),
