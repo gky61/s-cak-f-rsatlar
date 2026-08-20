@@ -29,7 +29,8 @@ function cleanProfileImageUrl(url) {
     if (typeof url !== 'string') return '';
     const trimmed = url.trim();
     if (trimmed.startsWith('assets/')) {
-        return '/' + trimmed;
+        const webpPath = trimmed.replace(/\.(jpg|jpeg|png)$/i, '.webp');
+        return '/' + webpPath;
     }
     return trimmed;
 }

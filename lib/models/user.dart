@@ -37,8 +37,10 @@ class AppUser {
     this.isBot = false,
   });
 
-  // displayName getter (nickname varsa nickname, yoksa username)
-  String get displayName => nickname ?? username;
+  // displayName getter (nickname varsa nickname, yoksa username, en son fallback 'Kullanıcı')
+  String get displayName => (nickname != null && nickname!.trim().isNotEmpty)
+      ? nickname!.trim()
+      : (username.trim().isNotEmpty ? username.trim() : 'Kullanıcı');
 
   // Güvenilirlik yıldızları (0-5 arası)
   int get trustStars {
@@ -213,8 +215,8 @@ class AppUser {
       
       return AppUser(
         uid: doc.id,
-        username: data['username']?.toString() ?? '',
-        profileImageUrl: migrateAssetPath(data['profileImageUrl']?.toString() ?? ''),
+        username: data['username']?.toString() ?? data['displayName']?.toString() ?? data['nickname']?.toString() ?? '',
+        profileImageUrl: migrateAssetPath((data['profileImageUrl'] ?? data['photoURL'] ?? '').toString()),
         followedCategories: followedCategories,
         watchKeywords: watchKeywords,
         following: following,
@@ -236,10 +238,10 @@ class AppUser {
       final data = doc.data();
       final dataMap = data is Map<String, dynamic> ? data : <String, dynamic>{};
       
-    return AppUser(
-      uid: doc.id,
-        username: dataMap['username']?.toString() ?? 'Kullanıcı',
-        profileImageUrl: migrateAssetPath(dataMap['profileImageUrl']?.toString() ?? ''),
+      return AppUser(
+        uid: doc.id,
+        username: dataMap['username']?.toString() ?? dataMap['displayName']?.toString() ?? 'Kullanıcı',
+        profileImageUrl: migrateAssetPath((dataMap['profileImageUrl'] ?? dataMap['photoURL'] ?? '').toString()),
         followedCategories: [],
         watchKeywords: [],
         following: [],
@@ -250,7 +252,7 @@ class AppUser {
         totalLikes: 0,
         badges: [],
         isBot: dataMap['isBot'] == true,
-    );
+      );
     }
   }
 

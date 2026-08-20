@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
@@ -88,29 +87,13 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
   void initState() {
     super.initState();
     _kataloglarStream = FirebaseFirestore.instance.collection('kataloglar').snapshots();
-    _loadBannerPreference();
   }
 
-  Future<void> _loadBannerPreference() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (mounted) {
-        setState(() {
-          _hideHeroBanner = prefs.getBool('hide_aktuel_hero_banner') ?? false;
-        });
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _dismissBanner() async {
+  void _dismissBanner() {
     HapticFeedback.lightImpact();
     setState(() {
       _hideHeroBanner = true;
     });
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('hide_aktuel_hero_banner', true);
-    } catch (_) {}
   }
 
   @override

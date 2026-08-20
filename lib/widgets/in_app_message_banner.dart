@@ -314,7 +314,16 @@ class _InAppBannerWidgetState extends State<_InAppBannerWidget>
       );
     }
     if (cleanUrl.startsWith('assets/')) {
-      return Image.asset(cleanUrl, width: size, height: size, fit: BoxFit.cover);
+      return Image.asset(
+        cleanUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey[300],
+          child: Icon(Icons.person, size: size * 0.6, color: Colors.grey[600]),
+        ),
+      );
     }
     return CachedNetworkImage(
       imageUrl: cleanUrl,

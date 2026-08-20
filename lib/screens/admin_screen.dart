@@ -1528,6 +1528,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                                       ? AssetImage(profileImageUrl) as ImageProvider
                                       : CachedNetworkImageProvider(profileImageUrl))
                                   : null,
+                              onBackgroundImageError: (exception, stackTrace) {},
                               child: profileImageUrl.isEmpty
                                   ? Text(
                                       displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',

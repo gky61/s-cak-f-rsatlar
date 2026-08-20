@@ -217,9 +217,11 @@ class AuthService {
           final updateData = <String, dynamic>{};
           if (currentUser.displayName != null && currentUser.displayName != existingUser.username) {
             updateData['username'] = currentUser.displayName;
+            updateData['displayName'] = currentUser.displayName;
           }
           if (currentUser.photoURL != null && currentUser.photoURL != existingUser.profileImageUrl) {
             updateData['profileImageUrl'] = currentUser.photoURL;
+            updateData['photoURL'] = currentUser.photoURL;
           }
           
           if (updateData.isNotEmpty) {
@@ -332,9 +334,11 @@ class AuthService {
           final updateData = <String, dynamic>{};
           if (firebaseUser.displayName != null && firebaseUser.displayName != existingUser.username) {
             updateData['username'] = firebaseUser.displayName;
+            updateData['displayName'] = firebaseUser.displayName;
           }
           if (firebaseUser.photoURL != null && firebaseUser.photoURL != existingUser.profileImageUrl) {
             updateData['profileImageUrl'] = firebaseUser.photoURL;
+            updateData['photoURL'] = firebaseUser.photoURL;
           }
           
           // E-posta ve üyelik tarihi eksikse ekle/güncelle
@@ -375,6 +379,10 @@ class AuthService {
               .doc(firebaseUser.uid)
               .set({
             ...appUser.toFirestore(),
+            'username': appUser.username,
+            'displayName': appUser.username,
+            'profileImageUrl': appUser.profileImageUrl,
+            'photoURL': appUser.profileImageUrl,
             if (firebaseUser.email != null) 'email': firebaseUser.email,
             'createdAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
@@ -387,6 +395,10 @@ class AuthService {
             .doc(firebaseUser.uid)
             .set({
           ...appUser.toFirestore(),
+          'username': appUser.username,
+          'displayName': appUser.username,
+          'profileImageUrl': appUser.profileImageUrl,
+          'photoURL': appUser.profileImageUrl,
           if (firebaseUser.email != null) 'email': firebaseUser.email,
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
@@ -530,6 +542,11 @@ class AuthService {
       );
 
       if (credential.user != null) {
+        try {
+          await credential.user!.updateDisplayName(username);
+          await credential.user!.reload();
+        } catch (_) {}
+
         final appUser = app_user.AppUser(
           uid: credential.user!.uid,
           username: username,
@@ -545,6 +562,8 @@ class AuthService {
             .doc(credential.user!.uid)
             .set({
           ...appUser.toFirestore(),
+          'username': username,
+          'displayName': username,
           'email': email,
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));

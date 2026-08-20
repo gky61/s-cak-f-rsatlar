@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/deal.dart';
-import '../../models/user.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/asset_path_migration.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/botkolik_profile_screen.dart';
 import '../money_badge.dart';
@@ -514,79 +514,28 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                        ),
                                      )
                                    else if (deal.isUserSubmitted && deal.postedBy.isNotEmpty)
-                                    StreamBuilder<DocumentSnapshot>(
-                                      stream: FirebaseFirestore.instance
-                                          .collection('users')
-                                          .doc(deal.postedBy)
-                                          .snapshots(includeMetadataChanges: false),
-                                      builder: (context, snapshot) {
-                                        if (snapshot.connectionState == ConnectionState.waiting) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        
-                                        if (!snapshot.hasData || !snapshot.data!.exists) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        
-                                        try {
-                                          final userData = snapshot.data!.data() as Map<String, dynamic>?;
-                                          if (userData == null) {
-                                            return const SizedBox.shrink();
-                                          }
-                                          
-                                          final user = AppUser.fromFirestore(snapshot.data!);
-                                          final displayName = userData['username']?.toString() ?? 'Kullanıcı';
-                                          final snapshotHash = snapshot.data?.data().toString().hashCode ?? 0;
-                                          
-                                          return InkWell(
-                                            key: ValueKey('user_avatar_widget_${deal.postedBy}_${displayName}_$snapshotHash'),
-                                            onTap: () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (_) => ProfileScreen(userId: user.uid),
-                                                ),
-                                              );
-                                            },
-                                            child: ClipOval(
-                                              child: user.profileImageUrl.isNotEmpty
-                                                  ? (user.profileImageUrl.startsWith('assets/')
-                                                      ? Image.asset(
-                                                          user.profileImageUrl,
-                                                          width: 16,
-                                                          height: 16,
-                                                          fit: BoxFit.cover,
-                                                        )
-                                                      : CachedNetworkImage(
-                                                          imageUrl: user.profileImageUrl,
-                                                          width: 16,
-                                                          height: 16,
-                                                          fit: BoxFit.cover,
-                                                          memCacheWidth: 32,
-                                                          memCacheHeight: 32,
-                                                          fadeInDuration: const Duration(milliseconds: 200),
-                                                          placeholder: (context, url) => Container(
-                                                            width: 16,
-                                                            height: 16,
-                                                            color: primaryColor.withValues(alpha: 0.1),
-                                                            child: Icon(
-                                                              Icons.person,
-                                                              size: 10,
-                                                              color: primaryColor,
-                                                            ),
-                                                          ),
-                                                          errorWidget: (context, url, error) => Container(
-                                                            width: 16,
-                                                            height: 16,
-                                                            color: primaryColor.withValues(alpha: 0.1),
-                                                            child: Icon(
-                                                              Icons.person,
-                                                              size: 10,
-                                                              color: primaryColor,
-                                                            ),
-                                                          ),
-                                                        ))
-                                                  : Container(
+                                      InkWell(
+                                        key: ValueKey('user_avatar_widget_${deal.postedBy}'),
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => ProfileScreen(userId: deal.postedBy),
+                                            ),
+                                          );
+                                        },
+                                        child: ClipOval(
+                                          child: Builder(
+                                            builder: (context) {
+                                              final avatarUrl = migrateAssetPath(deal.postedByAvatar ?? '');
+                                              if (avatarUrl.isNotEmpty) {
+                                                if (avatarUrl.startsWith('assets/')) {
+                                                  return Image.asset(
+                                                    avatarUrl,
+                                                    width: 16,
+                                                    height: 16,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (context, error, stackTrace) => Container(
                                                       width: 16,
                                                       height: 16,
                                                       decoration: BoxDecoration(
@@ -599,13 +548,55 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                                         color: primaryColor,
                                                       ),
                                                     ),
-                                            ),
-                                          );
-                                        } catch (e) {
-                                          return const SizedBox.shrink();
-                                        }
-                                      },
-                                    ),
+                                                  );
+                                                }
+                                                return CachedNetworkImage(
+                                                  imageUrl: avatarUrl,
+                                                  width: 16,
+                                                  height: 16,
+                                                  fit: BoxFit.cover,
+                                                  memCacheWidth: 32,
+                                                  memCacheHeight: 32,
+                                                  fadeInDuration: const Duration(milliseconds: 150),
+                                                  placeholder: (context, url) => Container(
+                                                    width: 16,
+                                                    height: 16,
+                                                    color: primaryColor.withValues(alpha: 0.1),
+                                                    child: Icon(
+                                                      Icons.person,
+                                                      size: 10,
+                                                      color: primaryColor,
+                                                    ),
+                                                  ),
+                                                  errorWidget: (context, url, error) => Container(
+                                                    width: 16,
+                                                    height: 16,
+                                                    color: primaryColor.withValues(alpha: 0.1),
+                                                    child: Icon(
+                                                      Icons.person,
+                                                      size: 10,
+                                                      color: primaryColor,
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                              return Container(
+                                                width: 16,
+                                                height: 16,
+                                                decoration: BoxDecoration(
+                                                  color: primaryColor.withValues(alpha: 0.1),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Icon(
+                                                  Icons.person,
+                                                  size: 10,
+                                                  color: primaryColor,
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
                                 ],
                               ),
                               const SizedBox(height: 4), // Başlık için üst padding optimize edildi

@@ -16,7 +16,6 @@ import '../theme/app_theme.dart';
 import 'profile_screen.dart';
 import 'botkolik_profile_screen.dart';
 import 'message_screen.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../widgets/report_dialog.dart';
 import '../widgets/comments_bottom_sheet.dart';
@@ -62,14 +61,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   bool _hasVotedHot = false;
   bool _hasVotedCold = false;
   bool _hasVotedExpired = false;
-  bool _isHotVoting = false;
-  bool _isColdVoting = false;
   bool _isExpiredVoting = false;
   int _hotVotes = 0;
   int _coldVotes = 0;
   int _expiredVotes = 0;
   bool _dealNotFound = false;
   bool _hasAutoOpenedComments = false; // Bildirimden açılan yorum penceresinin tekrar tekrar açılmasını engeller
+  Timer? _voteDebounceTimer;
 
   StreamSubscription? _authSub;
 
@@ -92,6 +90,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
   @override
   void dispose() {
+    _voteDebounceTimer?.cancel();
     _authSub?.cancel();
     super.dispose();
   }
@@ -175,103 +174,74 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     }
   }
 
-  Future<void> _handleVote(bool isHot) async {
+  void _handleVote(bool isHot) {
     final user = _authService.currentUser;
     if (user == null) {
-      final loggedIn = await showGuestLoginBottomSheet(
+      showGuestLoginBottomSheet(
         context,
         title: 'Bu Fırsatı Oylamak İçin Giriş Yap! 🔥',
         message: 'Topluluğa yön vermek ve fırsatın sıcaklığını oylamak için hızlıca giriş yapabilirsin.',
         primaryButtonText: '🚀 Google ile Giriş Yap',
-      );
-      if (loggedIn == true && mounted) {
-        _checkUserVote();
-        _handleVote(isHot);
-      }
+      ).then((loggedIn) {
+        if (loggedIn == true && mounted) {
+          _checkUserVote();
+          _handleVote(isHot);
+        }
+      });
       return;
     }
 
     if (_currentDeal == null) return;
 
-    // Spam click önleme - herhangi bir oylama devam ediyorsa yeni tıklamayı engelle
-    if (_isHotVoting || _isColdVoting || _isExpiredVoting) {
-      return;
-    }
-
-    // Eğer zaten bu oyu vermişse ve tekrar aynı oya basarsa, geri al (toggle)
-    if (isHot && _hasVotedHot) {
-      await _removeHotVote();
-      return;
-    }
-    if (!isHot && _hasVotedCold) {
-      await _removeColdVote();
-      return;
-    }
-
-    // Loading state set et
+    // Anında Optimistic UI Güncellemesi (0ms gecikme, kilitlenme yok)
     setState(() {
       if (isHot) {
-        _isHotVoting = true;
-      } else {
-        _isColdVoting = true;
-      }
-    });
-
-    // Önceki durumları kaydet
-    final previousHotVote = _hasVotedHot;
-    final previousColdVote = _hasVotedCold;
-    final previousHotVotes = _hotVotes;
-    final previousColdVotes = _coldVotes;
-
-    // Optimistic UI update - Bağımsız kalite oyu (Fırsat Bitti'ye dokunmaz)
-    setState(() {
-      if (isHot) {
-        if (_hasVotedCold) {
-          _hasVotedCold = false;
-          _coldVotes = _coldVotes > 0 ? _coldVotes - 1 : 0;
-        }
-        _hasVotedHot = true;
-        _hotVotes += 1;
-      } else {
         if (_hasVotedHot) {
+          // Sıcak oyu geri al (toggle off)
           _hasVotedHot = false;
-          _hotVotes = _hotVotes > 0 ? _hotVotes - 1 : 0;
+          _hotVotes = (_hotVotes > 0) ? _hotVotes - 1 : 0;
+        } else {
+          // Sıcak oyu ver (Soğuk oy varsa onu düşür)
+          if (_hasVotedCold) {
+            _hasVotedCold = false;
+            _coldVotes = (_coldVotes > 0) ? _coldVotes - 1 : 0;
+          }
+          _hasVotedHot = true;
+          _hotVotes += 1;
         }
-        _hasVotedCold = true;
-        _coldVotes += 1;
+      } else {
+        if (_hasVotedCold) {
+          // Soğuk oyu geri al (toggle off)
+          _hasVotedCold = false;
+          _coldVotes = (_coldVotes > 0) ? _coldVotes - 1 : 0;
+        } else {
+          // Soğuk oyu ver (Sıcak oy varsa onu düşür)
+          if (_hasVotedHot) {
+            _hasVotedHot = false;
+            _hotVotes = (_hotVotes > 0) ? _hotVotes - 1 : 0;
+          }
+          _hasVotedCold = true;
+          _coldVotes += 1;
+        }
       }
     });
 
-    // Firestore'a kaydet
-    final success = isHot
-        ? await _firestoreService.addHotVote(_currentDeal!.id, user.uid)
-        : await _firestoreService.addColdVote(_currentDeal!.id, user.uid);
-
-    if (!success && mounted) {
-      // Hata durumunda önceki duruma geri dön
-      setState(() {
-        _hasVotedHot = previousHotVote;
-        _hasVotedCold = previousColdVote;
-        _hotVotes = previousHotVotes;
-        _coldVotes = previousColdVotes;
-        _isHotVoting = false;
-        _isColdVoting = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Oy gönderilirken bir hata oluştu. Lütfen tekrar deneyin.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _isHotVoting = false;
-      _isColdVoting = false;
+    // Firestore ile Arka Plan Debounced Senkronizasyon (300ms)
+    _voteDebounceTimer?.cancel();
+    _voteDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
+      if (!mounted || _currentDeal == null) return;
+      final targetVote = _hasVotedHot ? 'hot' : (_hasVotedCold ? 'cold' : null);
+      try {
+        if (targetVote == 'hot') {
+          await _firestoreService.addHotVote(_currentDeal!.id, user.uid);
+        } else if (targetVote == 'cold') {
+          await _firestoreService.addColdVote(_currentDeal!.id, user.uid);
+        } else {
+          await _firestoreService.removeVote(_currentDeal!.id, user.uid);
+        }
+      } catch (e) {
+        // Hata durumunda sessizce logla
+      }
     });
   }
 
@@ -294,7 +264,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     if (_currentDeal == null) return;
 
     // Spam click önleme
-    if (_isHotVoting || _isColdVoting || _isExpiredVoting) {
+    if (_isExpiredVoting) {
       return;
     }
 
@@ -355,88 +325,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         ),
       );
     }
-  }
-
-  Future<void> _removeHotVote() async {
-    final user = _authService.currentUser;
-    if (user == null || _currentDeal == null) return;
-
-    setState(() {
-      _isHotVoting = true;
-    });
-
-    final previousHotVote = _hasVotedHot;
-    final previousHotVotes = _hotVotes;
-
-    setState(() {
-      _hasVotedHot = false;
-      _hotVotes = _hotVotes > 0 ? _hotVotes - 1 : 0;
-    });
-
-    final success = await _firestoreService.removeHotVote(_currentDeal!.id, user.uid);
-
-    if (!success && mounted) {
-      setState(() {
-        _hasVotedHot = previousHotVote;
-        _hotVotes = previousHotVotes;
-        _isHotVoting = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Oy geri alınırken bir hata oluştu. Lütfen tekrar deneyin.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _isHotVoting = false;
-    });
-  }
-
-  Future<void> _removeColdVote() async {
-    final user = _authService.currentUser;
-    if (user == null || _currentDeal == null) return;
-
-    setState(() {
-      _isColdVoting = true;
-    });
-
-    final previousColdVote = _hasVotedCold;
-    final previousColdVotes = _coldVotes;
-
-    setState(() {
-      _hasVotedCold = false;
-      _coldVotes = _coldVotes > 0 ? _coldVotes - 1 : 0;
-    });
-
-    final success = await _firestoreService.removeColdVote(_currentDeal!.id, user.uid);
-
-    if (!success && mounted) {
-      setState(() {
-        _hasVotedCold = previousColdVote;
-        _coldVotes = previousColdVotes;
-        _isColdVoting = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Oy geri alınırken bir hata oluştu. Lütfen tekrar deneyin.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _isColdVoting = false;
-    });
   }
 
   Future<void> _removeExpiredVote() async {
@@ -2103,9 +1991,18 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     );
   }
 
+  String _extractFirstName(String? fullName) {
+    if (fullName == null) return 'Kullanıcı';
+    final trimmed = fullName.trim();
+    if (trimmed.isEmpty) return 'Kullanıcı';
+    final parts = trimmed.split(RegExp(r'\s+'));
+    return parts.isNotEmpty ? parts.first : trimmed;
+  }
+
   Widget _buildCompactBotkolikCard(Deal deal, bool isDark, Color primaryColor) {
     final pillBgColor = isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9);
     final pillBorderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
+    final dividerColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
 
     return StreamBuilder<bool>(
       stream: _firestoreService.botkolikChatEnabledStream(),
@@ -2114,7 +2011,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
         return Container(
           height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
             color: pillBgColor,
             borderRadius: BorderRadius.circular(10),
@@ -2126,90 +2023,104 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Botkolik Avatar & Online Noktası
-              InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
-                  );
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  children: [
-                    Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.35),
-                          width: 1,
+              // Botkolik Profil Segmenti (Tıklanınca Profile Gider)
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Stack(
+                          children: [
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppTheme.primary.withValues(alpha: 0.35),
+                                  width: 1,
+                                ),
+                              ),
+                              child: ClipOval(
+                                child: Image.asset(
+                                  'assets/botkolik.webp',
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 5.5,
+                                height: 5.5,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isDark ? const Color(0xFF1E242B) : Colors.white,
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/botkolik.webp',
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 5.5,
-                        height: 5.5,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isDark ? const Color(0xFF1E242B) : Colors.white,
-                            width: 1,
+                        const SizedBox(width: 6),
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Bot',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              const TextSpan(
+                                text: 'kolik',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.primary,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 13,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 7),
-              // Botkolik Label (Fırsatkolik gibi: Bot + kolik)
-              InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
-                  );
-                },
-                child: RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: 'Bot',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const TextSpan(
-                        text: 'kolik',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.primary,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),
               if (isChatEnabled) ...[
-                const SizedBox(width: 8),
-                // "Mesaj" Butonu (Diğer kullanıcılarda olduğu gibi ilgili fırsatı mesaja iliştirerek sohbet başlatır)
+                // Dikey Ayırıcı Çizgi
+                Container(
+                  width: 1,
+                  height: 14,
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  color: dividerColor,
+                ),
+                // Botkolik Fırsat Sohbet Butonu
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -2219,7 +2130,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         showGuestLoginBottomSheet(
                           context,
                           title: 'Mesaj Gönder',
-                          message: 'Botkolik ile iletişime geçmek ve bu fırsat hakkında bildirim/soru iletmek için Giriş Yap! 🚀',
+                          message: 'Botkolik ile iletişime geçmek ve bu fırsat hakkında soru iletmek için Giriş Yap! 🚀',
                         );
                         return;
                       }
@@ -2242,39 +2153,34 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                     },
                     borderRadius: BorderRadius.circular(6),
                     child: Ink(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isDark ? primaryColor.withValues(alpha: 0.18) : primaryColor,
+                        color: AppTheme.primary,
                         borderRadius: BorderRadius.circular(6),
-                        border: isDark 
-                            ? Border.all(color: primaryColor.withValues(alpha: 0.4), width: 0.8) 
-                            : null,
-                        boxShadow: isDark
-                            ? null
-                            : [
-                                BoxShadow(
-                                  color: primaryColor.withValues(alpha: 0.25),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1.5),
-                                ),
-                              ],
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primary.withValues(alpha: isDark ? 0.35 : 0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1.5),
+                          ),
+                        ],
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.chat_bubble_outline_rounded,
-                            size: 10,
-                            color: isDark ? primaryColor : Colors.white,
+                            size: 10.5,
+                            color: Colors.white,
                           ),
-                          const SizedBox(width: 3.5),
+                          SizedBox(width: 3.5),
                           Text(
-                            'Mesaj',
+                            'Sor',
                             style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? primaryColor : Colors.white,
-                              letterSpacing: 0.1,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: -0.1,
                             ),
                           ),
                         ],
@@ -2291,227 +2197,224 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   }
 
   Widget _buildCompactDealAuthorCard(Deal deal, bool isDark, Color primaryColor) {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(deal.postedBy).snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const SizedBox.shrink();
-        }
+    final firstName = _extractFirstName(deal.postedByName);
+    final profileImageUrl = migrateAssetPath(deal.postedByAvatar ?? '');
+    final currentUid = _authService.currentUser?.uid;
+    final isOwnDeal = currentUid != null && currentUid == deal.postedBy;
 
-        final userData = snapshot.data!.data() as Map<String, dynamic>;
-        final username = userData['username']?.toString() ?? 'Kullanıcı';
-        final profileImageUrl = migrateAssetPath(userData['profileImageUrl']?.toString() ?? '');
-        final currentUid = _authService.currentUser?.uid;
-        final isOwnDeal = currentUid != null && currentUid == deal.postedBy;
+    final pillBgColor = isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9);
+    final pillBorderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
+    final dividerColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
 
-        final pillBgColor = isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9);
-        final pillBorderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
-
-        return Container(
-          height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: pillBgColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: pillBorderColor,
-              width: 1.0,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Avatar & Online Noktası
-              InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => ProfileScreen(userId: deal.postedBy)),
-                  );
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  children: [
-                    Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.35),
-                          width: 1,
-                        ),
-                      ),
-                      child: ClipOval(
-                        child: profileImageUrl.isNotEmpty
-                            ? (profileImageUrl.startsWith('assets/')
-                                ? Image.asset(profileImageUrl, fit: BoxFit.cover)
-                                : CachedNetworkImage(
-                                    imageUrl: profileImageUrl,
-                                    fit: BoxFit.cover,
-                                    placeholder: (_, __) => Container(color: Colors.grey[300]),
-                                    errorWidget: (_, __, ___) => Icon(Icons.person, size: 12, color: primaryColor),
-                                  ))
-                            : Container(
-                                color: primaryColor.withValues(alpha: 0.15),
-                                child: Icon(Icons.person_rounded, size: 12, color: primaryColor),
-                              ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 5.5,
-                        height: 5.5,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isDark ? const Color(0xFF1E242B) : Colors.white,
-                            width: 1,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 7),
-              // Kullanıcı Adı & Profil Linki
-              InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => ProfileScreen(userId: deal.postedBy)),
-                  );
-                },
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: pillBgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: pillBorderColor,
+          width: 1.0,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 1. Profil Segmenti (Tıklanınca Profil Açılır)
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ProfileScreen(userId: deal.postedBy)),
+                );
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Avatar & Canlı Online Noktası
+                    Stack(
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppTheme.primary.withValues(alpha: 0.35),
+                              width: 1,
+                            ),
+                          ),
+                          child: ClipOval(
+                            child: profileImageUrl.isNotEmpty
+                                ? (profileImageUrl.startsWith('assets/')
+                                    ? Image.asset(
+                                        profileImageUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const Icon(Icons.person_rounded, size: 12, color: AppTheme.primary),
+                                      )
+                                    : CachedNetworkImage(
+                                        imageUrl: profileImageUrl,
+                                        fit: BoxFit.cover,
+                                        placeholder: (_, __) => Container(color: Colors.grey[300]),
+                                        errorWidget: (_, __, ___) => const Icon(Icons.person, size: 12, color: AppTheme.primary),
+                                      ))
+                                : Container(
+                                    color: AppTheme.primary.withValues(alpha: 0.15),
+                                    child: const Icon(Icons.person_rounded, size: 12, color: AppTheme.primary),
+                                  ),
+                          ),
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 5.5,
+                            height: 5.5,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark ? const Color(0xFF1E242B) : Colors.white,
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 6),
+                    // Kullanıcı İlk Adı
                     ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 85),
+                      constraints: const BoxConstraints(maxWidth: 80),
                       child: Text(
-                        username,
+                        firstName,
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 3),
+                    const SizedBox(width: 2),
                     Icon(
-                      Icons.verified_rounded,
-                      size: 11,
-                      color: primaryColor,
+                      Icons.chevron_right_rounded,
+                      size: 13,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              // Mesaj Gönder Butonu (veya Sizin Paylaşımınız)
-              if (!isOwnDeal)
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {
-                      if (currentUid == null) {
-                        showGuestLoginBottomSheet(
-                          context,
-                          title: 'Mesaj Gönder',
-                          message: 'Fırsat sahibiyle doğrudan iletişime geçmek için Giriş Yap! 🚀',
-                        );
-                        return;
-                      }
-                      HapticFeedback.lightImpact();
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => MessageScreen(
-                            otherUserId: deal.postedBy,
-                            otherUserName: username,
-                            otherUserImageUrl: profileImageUrl,
-                            initialDealTitle: deal.title,
-                            initialDealId: deal.id,
-                            initialDealImageUrl: deal.imageUrl,
-                            initialDealPrice: deal.price.toString(),
-                            initialDealStore: deal.store,
-                          ),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Ink(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isDark ? primaryColor.withValues(alpha: 0.18) : primaryColor,
-                        borderRadius: BorderRadius.circular(6),
-                        border: isDark 
-                            ? Border.all(color: primaryColor.withValues(alpha: 0.4), width: 0.8) 
-                            : null,
-                        boxShadow: isDark
-                            ? null
-                            : [
-                                BoxShadow(
-                                  color: primaryColor.withValues(alpha: 0.25),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1.5),
-                                ),
-                              ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            size: 10,
-                            color: isDark ? primaryColor : Colors.white,
-                          ),
-                          const SizedBox(width: 3.5),
-                          Text(
-                            'Mesaj',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? primaryColor : Colors.white,
-                              letterSpacing: 0.1,
-                            ),
-                          ),
-                        ],
+            ),
+          ),
+
+          // 2. Dikey Ayırıcı Çizgi (Segment Divider)
+          Container(
+            width: 1,
+            height: 14,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            color: dividerColor,
+          ),
+
+          // 3. Fırsat Sohbet Butonu (Tıklanınca Fırsat İliştirilmiş Mesaj Başlatılır)
+          if (!isOwnDeal)
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  if (currentUid == null) {
+                    showGuestLoginBottomSheet(
+                      context,
+                      title: 'Mesaj Gönder',
+                      message: 'Fırsat sahibiyle doğrudan iletişime geçmek için Giriş Yap! 🚀',
+                    );
+                    return;
+                  }
+                  HapticFeedback.lightImpact();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MessageScreen(
+                        otherUserId: deal.postedBy,
+                        otherUserName: deal.postedByName ?? firstName,
+                        otherUserImageUrl: profileImageUrl,
+                        initialDealTitle: deal.title,
+                        initialDealId: deal.id,
+                        initialDealImageUrl: deal.imageUrl,
+                        initialDealPrice: deal.price.toString(),
+                        initialDealStore: deal.store,
                       ),
                     ),
-                  ),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                  );
+                },
+                borderRadius: BorderRadius.circular(6),
+                child: Ink(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
                   decoration: BoxDecoration(
-                    color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                    color: AppTheme.primary,
                     borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primary.withValues(alpha: isDark ? 0.35 : 0.25),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1.5),
+                      ),
+                    ],
                   ),
-                  child: Row(
+                  child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.star_rounded, size: 9.5, color: primaryColor),
-                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 10.5,
+                        color: Colors.white,
+                      ),
+                      SizedBox(width: 3.5),
                       Text(
-                        'Sizin',
+                        'Sor',
                         style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: primaryColor,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.1,
                         ),
                       ),
                     ],
                   ),
                 ),
-            ],
-          ),
-        );
-      },
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.star_rounded, size: 10, color: AppTheme.primary),
+                  SizedBox(width: 2.5),
+                  Text(
+                    'Sizin',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

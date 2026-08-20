@@ -2824,10 +2824,13 @@ exports.onUserUpdated = functions.firestore
     const after = change.after.data();
     const userId = context.params.userId;
 
-    const oldPhoto = before.profileImageUrl || '';
-    const newPhoto = after.profileImageUrl || '';
-    const oldName = before.username || '';
-    const newName = after.username || '';
+    const oldPhoto = before.profileImageUrl || before.photoURL || '';
+    let newPhoto = after.profileImageUrl || after.photoURL || '';
+    if (newPhoto.startsWith('assets/') && /\.(jpg|jpeg|png)$/i.test(newPhoto)) {
+      newPhoto = newPhoto.replace(/\.(jpg|jpeg|png)$/i, '.webp');
+    }
+    const oldName = before.username || before.displayName || before.nickname || '';
+    const newName = after.username || after.displayName || after.nickname || '';
 
     const photoChanged = oldPhoto !== newPhoto;
     const nameChanged = oldName !== newName;
@@ -2913,6 +2916,27 @@ exports.onUserUpdated = functions.firestore
       }
     } catch (msgErr) {
       functions.logger.error('❌ Received messages sync error:', msgErr);
+    }
+
+    // 4. Fırsatları Senkronize Et (Deals)
+    try {
+      const userDealsSnap = await db.collection('deals')
+        .where('postedBy', '==', userId)
+        .get();
+
+      functions.logger.info(`🔥 Found ${userDealsSnap.size} deals for user ${userId} to sync.`);
+
+      for (const doc of userDealsSnap.docs) {
+        const updateData = {};
+        if (photoChanged) updateData.postedByAvatar = newPhoto;
+        if (nameChanged) updateData.postedByName = newName;
+
+        currentBatch.update(doc.ref, updateData);
+        opCount++;
+        await commitBatchIfNeeded();
+      }
+    } catch (dealErr) {
+      functions.logger.error('❌ Deals sync error:', dealErr);
     }
 
     // Commit any remaining operations

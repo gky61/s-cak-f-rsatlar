@@ -67,7 +67,85 @@ class KuponService {
     await _firestore.collection('kuponlar').doc(kuponId).delete();
   }
 
-  // Kupona oy verme işlemi (Transaction ile)
+  // Kupona oy verme işlemi (Transaction ile - Idempotent)
+  Future<bool> setKuponVote({
+    required String kuponId,
+    required String userId,
+    required String? targetVoteType, // "hot", "cold" veya null (kaldırma)
+  }) async {
+    final kuponRef = _firestore.collection('kuponlar').doc(kuponId);
+    final voteRef = kuponRef.collection('votes').doc(userId);
+
+    try {
+      return await _firestore.runTransaction((transaction) async {
+        final kuponDoc = await transaction.get(kuponRef);
+        if (!kuponDoc.exists) return false;
+
+        final voteDoc = await transaction.get(voteRef);
+        final data = kuponDoc.data() as Map<String, dynamic>;
+
+        int sicakOySayisi = data['sicakOySayisi'] ?? 0;
+        int sogukOySayisi = data['sogukOySayisi'] ?? 0;
+        String? currentDbVote;
+        if (voteDoc.exists) {
+          currentDbVote = voteDoc.data()?['type'] as String?;
+        }
+
+        if (currentDbVote == targetVoteType) {
+          // Zaten veritabanındaki durum ile hedef durum aynı, bir şey yapma
+          return true;
+        }
+
+        // Önceki oyu düşür
+        if (currentDbVote == 'hot') {
+          sicakOySayisi = (sicakOySayisi > 0) ? sicakOySayisi - 1 : 0;
+        } else if (currentDbVote == 'cold') {
+          sogukOySayisi = (sogukOySayisi > 0) ? sogukOySayisi - 1 : 0;
+        }
+
+        // Yeni oyu uygula
+        if (targetVoteType == 'hot') {
+          sicakOySayisi += 1;
+          transaction.set(voteRef, {'type': 'hot'}, SetOptions(merge: true));
+        } else if (targetVoteType == 'cold') {
+          sogukOySayisi += 1;
+          transaction.set(voteRef, {'type': 'cold'}, SetOptions(merge: true));
+        } else {
+          // Oy kaldırıldı
+          transaction.delete(voteRef);
+        }
+
+        // Skor kontrolü ve otomatik gecersiz yapma/silme
+        String durum = data['durum'] ?? 'aktif';
+        final kaynakTipi = data['kaynakTipi'] ?? 'topluluk';
+
+        if (sogukOySayisi - sicakOySayisi >= 5) {
+          if (kaynakTipi == 'web') {
+            transaction.delete(kuponRef);
+            return true;
+          } else {
+            durum = 'gecersiz';
+          }
+        } else if (durum == 'gecersiz' && (sogukOySayisi - sicakOySayisi < 5)) {
+          durum = 'aktif';
+        }
+
+        transaction.update(kuponRef, {
+          'sicakOySayisi': sicakOySayisi,
+          'sogukOySayisi': sogukOySayisi,
+          'durum': durum,
+        });
+
+        return true;
+      });
+    } catch (e) {
+      // ignore: avoid_print
+      print('setKuponVote hatası: $e');
+      return false;
+    }
+  }
+
+  // Kupona oy verme işlemi (Toggle bazlı eski metod - geriye uyumluluk için korundu)
   Future<bool> voteKupon({
     required String kuponId,
     required String userId,

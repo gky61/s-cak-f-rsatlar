@@ -16,6 +16,7 @@ import '../models/deal.dart';
 import '../widgets/category_selector_widget.dart';
 import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
+import '../utils/asset_path_migration.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import 'deal_detail_screen.dart';
 
@@ -976,6 +977,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           imageUrl: imageUrl,
           url: _urlController.text.trim(),
           userId: user.uid,
+          postedByName: user.displayName,
+          postedByAvatar: user.photoURL != null ? migrateAssetPath(user.photoURL!) : null,
           originalPrice: _scrapedOriginalPrice,
           priceLabel: _priceLabel,
           ratingValue: _scrapedRatingValue,

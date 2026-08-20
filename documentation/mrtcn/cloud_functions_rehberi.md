@@ -113,9 +113,9 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **25 
 * **Kullanıldığı / Tetiklendiği Yerler:**
   - `lib/screens/profile_screen.dart` & `edit_profile_screen.dart` (Profil düzenleme)
   - `lib/services/user_service.dart` (`updateUserProfile` metodu)
-* **Kullanım Amacı:** Kullanıcı profil adını (`nickname`) veya avatarını (`photoUrl`) değiştirdiğinde eski yorum ve mesajlardaki kullanıcı verilerini senkronize eder.
+* **Kullanım Amacı:** Kullanıcı profil adını (`username`) veya avatarını (`profileImageUrl`) değiştirdiğinde; eski yorumlar, mesajlar ve paylaştığı tüm aktif fırsatlardaki (`deals` dokümanlarındaki `postedByName` ve `postedByAvatar`) denormalize kullanıcı verilerini senkronize eder.
 * **Somut Senaryo:**
-  > Kullanıcı profil fotoğrafını değiştirdiğinde, geçmişte attığı yorumlardaki avatar görseli de otomatik güncellenir.
+  > Kullanıcı profil fotoğrafını veya kullanıcı adını değiştirdiğinde, geçmişte attığı yorumlar, mesajlar ve paylaştığı tüm fırsat kartlarındaki avatar/isim bilgisi arka planda otomatik olarak güncellenir.
 
 ---
 

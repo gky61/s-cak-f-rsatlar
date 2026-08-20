@@ -31,7 +31,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   final Map<String, String?> _userVotes = {};
   final Map<String, int> _localHotCounts = {};
   final Map<String, int> _localColdCounts = {};
-  final Set<String> _votingInProgress = {};
+  final Map<String, Timer> _couponVoteDebounceTimers = {};
   bool _isAdmin = false;
   bool _hideRadarBanner = false;
   bool _hideHeroBanner = false;
@@ -65,7 +65,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     _kuponlarStream = _kuponService.getKuponlarStream();
     _checkAdminStatus();
     _loadHiddenCoupons();
-    _loadHeroBannerPreference();
     _authSub = AuthService().authStateChanges.listen((user) {
       if (mounted) {
         _checkAdminStatus();
@@ -85,6 +84,10 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       timer.cancel();
     }
     _hideTimers.clear();
+    for (final timer in _couponVoteDebounceTimers.values) {
+      timer.cancel();
+    }
+    _couponVoteDebounceTimers.clear();
     _tabController.dispose();
     _authSub?.cancel();
     super.dispose();
@@ -225,26 +228,11 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
         : 'hidden_kupon_ids_guest';
   }
 
-  Future<void> _loadHeroBannerPreference() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (mounted) {
-        setState(() {
-          _hideHeroBanner = prefs.getBool('hide_kuponlar_hero_banner') ?? false;
-        });
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _dismissHeroBanner() async {
+  void _dismissHeroBanner() {
     HapticFeedback.lightImpact();
     setState(() {
       _hideHeroBanner = true;
     });
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('hide_kuponlar_hero_banner', true);
-    } catch (_) {}
   }
 
   Future<void> _loadHiddenCoupons() async {
@@ -465,84 +453,68 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     );
   }
 
-  Future<void> _handleVote(String kuponId, dynamic currentUser, String voteType) async {
+  void _handleVote(String kuponId, dynamic currentUser, String voteType) {
     if (currentUser == null) {
-      final loggedIn = await showGuestLoginBottomSheet(
+      showGuestLoginBottomSheet(
         context,
         title: 'Bu Kuponu Oylamak İçin Giriş Yap! 🔥',
         message: 'Topluluğa yön vermek ve kuponun çalışıp çalışmadığını bildirmek için hızlıca giriş yapabilirsin.',
         primaryButtonText: '🚀 Google ile Giriş Yap',
-      );
-      if (loggedIn == true && mounted) {
-        setState(() {});
-        final freshUser = AuthService().currentUser;
-        if (freshUser != null) {
-          _handleVote(kuponId, freshUser, voteType);
+      ).then((loggedIn) {
+        if (loggedIn == true && mounted) {
+          final freshUser = AuthService().currentUser;
+          if (freshUser != null) {
+            _handleVote(kuponId, freshUser, voteType);
+          }
         }
-      }
+      });
       return;
     }
-
-    if (_votingInProgress.contains(kuponId)) return;
 
     HapticFeedback.lightImpact();
     final userId = currentUser.uid;
     final currentVote = _userVotes[kuponId];
 
-    final prevHot = _localHotCounts[kuponId];
-    final prevCold = _localColdCounts[kuponId];
+    final prevHot = _localHotCounts[kuponId] ?? 0;
+    final prevCold = _localColdCounts[kuponId] ?? 0;
 
+    // 0ms Anında Optimistic UI Güncellemesi (Kilitlenme ve tıklama kaybı yok)
     setState(() {
-      _votingInProgress.add(kuponId);
-
       if (currentVote == voteType) {
+        // Tıklanan oyu geri al (toggle off)
         _userVotes[kuponId] = null;
-        if (voteType == 'hot' && prevHot != null) {
+        if (voteType == 'hot') {
           _localHotCounts[kuponId] = (prevHot > 0) ? prevHot - 1 : 0;
-        } else if (voteType == 'cold' && prevCold != null) {
+        } else {
           _localColdCounts[kuponId] = (prevCold > 0) ? prevCold - 1 : 0;
         }
       } else {
         _userVotes[kuponId] = voteType;
 
-        if (currentVote == 'hot' && prevHot != null) {
-          _localHotCounts[kuponId] = (prevHot > 0) ? prevHot - 1 : 0;
-        } else if (currentVote == 'cold' && prevCold != null) {
-          _localColdCounts[kuponId] = (prevCold > 0) ? prevCold - 1 : 0;
-        }
-
         if (voteType == 'hot') {
-          _localHotCounts[kuponId] = (_localHotCounts[kuponId] ?? prevHot ?? 0) + 1;
+          _localHotCounts[kuponId] = prevHot + 1;
+          if (currentVote == 'cold') {
+            _localColdCounts[kuponId] = (prevCold > 0) ? prevCold - 1 : 0;
+          }
         } else {
-          _localColdCounts[kuponId] = (_localColdCounts[kuponId] ?? prevCold ?? 0) + 1;
+          _localColdCounts[kuponId] = prevCold + 1;
+          if (currentVote == 'hot') {
+            _localHotCounts[kuponId] = (prevHot > 0) ? prevHot - 1 : 0;
+          }
         }
       }
     });
 
-    final success = await _kuponService.voteKupon(
-      kuponId: kuponId,
-      userId: userId,
-      voteType: voteType,
-    );
-
-    if (mounted) {
-      setState(() {
-        _votingInProgress.remove(kuponId);
-      });
-    }
-
-    if (!success && mounted) {
-      setState(() {
-        _userVotes[kuponId] = currentVote;
-        if (prevHot != null) _localHotCounts[kuponId] = prevHot;
-        if (prevCold != null) _localColdCounts[kuponId] = prevCold;
-      });
-      _showToast(
-        message: 'Oy kaydedilirken bir hata oluştu.',
-        icon: Icons.error_outline_rounded,
-        backgroundColor: const Color(0xFFDC2626),
+    // 300ms Debounced Firestore senkronizasyonu
+    _couponVoteDebounceTimers[kuponId]?.cancel();
+    _couponVoteDebounceTimers[kuponId] = Timer(const Duration(milliseconds: 300), () async {
+      final target = _userVotes[kuponId];
+      await _kuponService.setKuponVote(
+        kuponId: kuponId,
+        userId: userId,
+        targetVoteType: target,
       );
-    }
+    });
   }
 
   // --- 1. HERO BANNER ---
@@ -721,47 +693,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildVoteButton({
-    required String label,
-    required bool isSelected,
-    required Color selectedColor,
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 4),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? selectedColor.withValues(alpha: isDark ? 0.22 : 0.12)
-                : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9)),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isSelected
-                  ? selectedColor.withValues(alpha: 0.8)
-                  : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-              width: isSelected ? 1.1 : 0.8,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-              color: isSelected
-                  ? selectedColor
-                  : (isDark ? const Color(0xFFD4D4D8) : const Color(0xFF475569)),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildTrustBadge(double basariOrani, bool isDark) {
     Color badgeColor;
@@ -1195,17 +1126,19 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                     spacing: 5,
                     runSpacing: 4,
                     children: [
-                      _buildVoteButton(
-                        label: '🔥 $displayHot',
+                      _KuponVoteButton(
+                        iconEmoji: '🔥',
+                        count: displayHot,
                         isSelected: isHotSelected,
-                        selectedColor: const Color(0xFFEF4444),
+                        isHot: true,
                         onTap: () => _handleVote(kupon.id, currentUser, 'hot'),
                         isDark: isDark,
                       ),
-                      _buildVoteButton(
-                        label: '❄️ $displayCold',
+                      _KuponVoteButton(
+                        iconEmoji: '❄️',
+                        count: displayCold,
                         isSelected: isColdSelected,
-                        selectedColor: const Color(0xFF38BDF8),
+                        isHot: false,
                         onTap: () => _handleVote(kupon.id, currentUser, 'cold'),
                         isDark: isDark,
                       ),
@@ -2196,6 +2129,144 @@ class _AnimatedCouponItemState extends State<_AnimatedCouponItem> with SingleTic
         child: ScaleTransition(
           scale: _scaleAnimation,
           child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+class _KuponVoteButton extends StatefulWidget {
+  final String iconEmoji;
+  final int count;
+  final bool isSelected;
+  final bool isHot;
+  final VoidCallback onTap;
+  final bool isDark;
+
+  const _KuponVoteButton({
+    required this.iconEmoji,
+    required this.count,
+    required this.isSelected,
+    required this.isHot,
+    required this.onTap,
+    required this.isDark,
+  });
+
+  @override
+  State<_KuponVoteButton> createState() => _KuponVoteButtonState();
+}
+
+class _KuponVoteButtonState extends State<_KuponVoteButton> with SingleTickerProviderStateMixin {
+  late AnimationController _scaleController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 140),
+      lowerBound: 0.88,
+      upperBound: 1.0,
+      value: 1.0,
+    );
+  }
+
+  @override
+  void dispose() {
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    HapticFeedback.lightImpact();
+    _scaleController.reverse().then((_) {
+      if (mounted) _scaleController.forward();
+    });
+    widget.onTap();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = widget.isSelected;
+    final isHot = widget.isHot;
+    final isDark = widget.isDark;
+
+    const hotGradient = LinearGradient(
+      colors: [Color(0xFFFF6B35), Color(0xFFFF3D00)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+    const coldGradient = LinearGradient(
+      colors: [Color(0xFF0284C7), Color(0xFF0891B2)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+
+    final activeBorderColor = isHot ? const Color(0xFFFF8E53) : const Color(0xFF38BDF8);
+    final activeShadowColor = isHot ? const Color(0xFFFF5722) : const Color(0xFF0284C7);
+
+    return ScaleTransition(
+      scale: _scaleController,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _handleTap,
+          borderRadius: BorderRadius.circular(8),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 4),
+            decoration: BoxDecoration(
+              gradient: isSelected ? (isHot ? hotGradient : coldGradient) : null,
+              color: isSelected
+                  ? null
+                  : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9)),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isSelected
+                    ? activeBorderColor
+                    : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                width: isSelected ? 1.1 : 0.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isSelected
+                      ? activeShadowColor.withValues(alpha: isDark ? 0.35 : 0.25)
+                      : Colors.black.withValues(alpha: isDark ? 0.1 : 0.02),
+                  blurRadius: isSelected ? 6 : 2,
+                  offset: const Offset(0, 1.5),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.iconEmoji,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(width: 4),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: ScaleTransition(scale: anim, child: child),
+                  ),
+                  child: Text(
+                    '${widget.count}',
+                    key: ValueKey<int>(widget.count),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+                      color: isSelected
+                          ? Colors.white
+                          : (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

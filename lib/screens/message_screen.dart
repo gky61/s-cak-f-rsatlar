@@ -388,7 +388,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       id: tempId,
       senderId: currentUserId,
       senderName: _authService.currentUser?.displayName ?? 'Ben',
-      senderImageUrl: _authService.currentUser?.photoURL ?? '',
+      senderImageUrl: migrateAssetPath(_authService.currentUser?.photoURL ?? ''),
       receiverId: widget.otherUserId,
       receiverName: widget.otherUserName,
       receiverImageUrl: widget.otherUserImageUrl,
@@ -2192,17 +2192,27 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   }
 
   Widget _buildAvatar(String imageUrl, double size, {bool isDeleted = false}) {
-    if (isDeleted || imageUrl.isEmpty || imageUrl == 'assets/kullanıcı pp.jpg') {
+    final cleanUrl = migrateAssetPath(imageUrl);
+    if (isDeleted || cleanUrl.isEmpty) {
       return Container(
         color: Colors.grey[300],
         child: Icon(Icons.person, size: size * 0.6, color: Colors.grey[600]),
       );
     }
-    if (imageUrl.startsWith('assets/')) {
-      return Image.asset(imageUrl, width: size, height: size, fit: BoxFit.cover);
+    if (cleanUrl.startsWith('assets/')) {
+      return Image.asset(
+        cleanUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey[300],
+          child: Icon(Icons.person, size: size * 0.6, color: Colors.grey[600]),
+        ),
+      );
     }
     return CachedNetworkImage(
-      imageUrl: imageUrl,
+      imageUrl: cleanUrl,
       width: size,
       height: size,
       fit: BoxFit.cover,

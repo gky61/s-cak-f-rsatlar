@@ -6,6 +6,7 @@ import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/asset_path_migration.dart';
 import '../widgets/skeletons/user_list_skeleton.dart';
 import 'profile_screen.dart';
 
@@ -294,16 +295,27 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
                     ),
                   ),
                   child: ClipOval(
-                    child: user.profileImageUrl.isNotEmpty
-                        ? (user.profileImageUrl.startsWith('assets/')
-                            ? Image.asset(user.profileImageUrl, fit: BoxFit.cover)
-                            : CachedNetworkImage(
-                                imageUrl: user.profileImageUrl,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) => Container(color: Colors.grey[300]),
-                                errorWidget: (_, __, ___) => Icon(Icons.person, size: 24, color: Colors.grey[400]),
-                              ))
-                        : Icon(Icons.person, size: 24, color: Colors.grey[400]),
+                    child: Builder(
+                      builder: (context) {
+                        final avatarUrl = migrateAssetPath(user.profileImageUrl);
+                        if (avatarUrl.isNotEmpty) {
+                          if (avatarUrl.startsWith('assets/')) {
+                            return Image.asset(
+                              avatarUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Icon(Icons.person, size: 24, color: Colors.grey[400]),
+                            );
+                          }
+                          return CachedNetworkImage(
+                            imageUrl: avatarUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(color: Colors.grey[300]),
+                            errorWidget: (_, __, ___) => Icon(Icons.person, size: 24, color: Colors.grey[400]),
+                          );
+                        }
+                        return Icon(Icons.person, size: 24, color: Colors.grey[400]);
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),

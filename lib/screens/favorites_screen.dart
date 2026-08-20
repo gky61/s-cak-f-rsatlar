@@ -1229,7 +1229,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Henüz takip ettiğiniz kategori yok',
+                  'Henüz Fırsat Bulunamadı',
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
@@ -1239,7 +1239,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'İlgi duyduğunuz kategorileri takip ederek\nfırsatları burada anlık görebilirsiniz.',
+                  'Takip ettiğiniz kategorilerde son 48 saatte paylaşılan yeni bir fırsat bulunmuyor veya henüz kategori seçmediniz.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
@@ -1264,7 +1264,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                   },
                   icon: const Icon(Icons.tune_rounded, size: 18),
                   label: const Text(
-                    'Kategorileri Seç & Takip Et',
+                    'Kategorileri Yönet & Takip Et',
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
                   ),
                   style: ElevatedButton.styleFrom(

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/deal.dart';
-import '../../models/user.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/asset_path_migration.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/botkolik_profile_screen.dart';
 import '../money_badge.dart';
@@ -509,89 +509,76 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                                  ),
                                                ),
                                              ] else if (deal.isUserSubmitted && deal.postedBy.isNotEmpty) ...[
-                                               const SizedBox(width: 6),
-                                               StreamBuilder<DocumentSnapshot>(
-                                                stream: FirebaseFirestore.instance
-                                                    .collection('users')
-                                                    .doc(deal.postedBy)
-                                                    .snapshots(includeMetadataChanges: false),
-                                                builder: (context, snapshot) {
-                                                  if (snapshot.connectionState == ConnectionState.waiting) {
-                                                    return const SizedBox.shrink();
-                                                  }
-                                                  
-                                                  if (!snapshot.hasData || !snapshot.data!.exists) {
-                                                    return const SizedBox.shrink();
-                                                  }
-                                                  
-                                                  try {
-                                                    final userData = snapshot.data!.data() as Map<String, dynamic>?;
-                                                    if (userData == null) {
-                                                      return const SizedBox.shrink();
-                                                    }
-                                                    
-                                                    final user = AppUser.fromFirestore(snapshot.data!);
-                                                    final displayName = userData['username']?.toString() ?? 'Kullanıcı';
-                                                    final snapshotHash2 = snapshot.data?.data().toString().hashCode ?? 0;
-                                                    
-                                                    final primaryColor = Theme.of(context).colorScheme.primary;
-                                                    return InkWell(
-                                                      key: ValueKey('user_avatar_list_widget_${deal.postedBy}_${displayName}_$snapshotHash2'),
-                                                      onTap: () {
-                                                        Navigator.push(
-                                                          context,
-                                                          MaterialPageRoute(
-                                                            builder: (_) => ProfileScreen(userId: user.uid),
-                                                          ),
-                                                        );
-                                                      },
-                                                      child: ClipOval(
-                                                        child: user.profileImageUrl.isNotEmpty
-                                                            ? (user.profileImageUrl.startsWith('assets/')
-                                                                ? Image.asset(
-                                                                    user.profileImageUrl,
-                                                                    width: 14,
-                                                                    height: 14,
-                                                                    fit: BoxFit.cover,
-                                                                  )
-                                                                : CachedNetworkImage(
-                                                                    imageUrl: user.profileImageUrl,
-                                                                    width: 14,
-                                                                    height: 14,
-                                                                    fit: BoxFit.cover,
-                                                                    memCacheWidth: 28,
-                                                                    memCacheHeight: 28,
-                                                                    fadeInDuration: const Duration(milliseconds: 200),
-                                                                    placeholder: (context, url) => Container(
-                                                                      width: 14,
-                                                                      height: 14,
-                                                                      color: primaryColor.withValues(alpha: 0.1),
-                                                                      child: Icon(Icons.person, size: 9, color: primaryColor),
-                                                                    ),
-                                                                    errorWidget: (context, url, error) => Container(
-                                                                      width: 14,
-                                                                      height: 14,
-                                                                      color: primaryColor.withValues(alpha: 0.1),
-                                                                      child: Icon(Icons.person, size: 9, color: primaryColor),
-                                                                    ),
-                                                                  ))
-                                                            : Container(
+                                                const SizedBox(width: 6),
+                                                InkWell(
+                                                  key: ValueKey('user_avatar_list_widget_${deal.postedBy}'),
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) => ProfileScreen(userId: deal.postedBy),
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: ClipOval(
+                                                    child: Builder(
+                                                      builder: (context) {
+                                                        final avatarUrl = migrateAssetPath(deal.postedByAvatar ?? '');
+                                                        final primaryCol = Theme.of(context).colorScheme.primary;
+                                                        if (avatarUrl.isNotEmpty) {
+                                                          if (avatarUrl.startsWith('assets/')) {
+                                                            return Image.asset(
+                                                              avatarUrl,
+                                                              width: 14,
+                                                              height: 14,
+                                                              fit: BoxFit.cover,
+                                                              errorBuilder: (context, error, stackTrace) => Container(
                                                                 width: 14,
                                                                 height: 14,
                                                                 decoration: BoxDecoration(
-                                                                  color: primaryColor.withValues(alpha: 0.1),
+                                                                  color: primaryCol.withValues(alpha: 0.1),
                                                                   shape: BoxShape.circle,
                                                                 ),
-                                                                child: Icon(Icons.person, size: 9, color: primaryColor),
+                                                                child: Icon(Icons.person, size: 9, color: primaryCol),
                                                               ),
-                                                      ),
-                                                    );
-                                                  } catch (e) {
-                                                    return const SizedBox.shrink();
-                                                  }
-                                                },
-                                              ),
-                                            ],
+                                                            );
+                                                          }
+                                                          return CachedNetworkImage(
+                                                            imageUrl: avatarUrl,
+                                                            width: 14,
+                                                            height: 14,
+                                                            fit: BoxFit.cover,
+                                                            memCacheWidth: 28,
+                                                            memCacheHeight: 28,
+                                                            fadeInDuration: const Duration(milliseconds: 150),
+                                                            placeholder: (context, url) => Container(
+                                                              width: 14,
+                                                              height: 14,
+                                                              color: primaryCol.withValues(alpha: 0.1),
+                                                              child: Icon(Icons.person, size: 9, color: primaryCol),
+                                                            ),
+                                                            errorWidget: (context, url, error) => Container(
+                                                              width: 14,
+                                                              height: 14,
+                                                              color: primaryCol.withValues(alpha: 0.1),
+                                                              child: Icon(Icons.person, size: 9, color: primaryCol),
+                                                            ),
+                                                          );
+                                                        }
+                                                        return Container(
+                                                          width: 14,
+                                                          height: 14,
+                                                          decoration: BoxDecoration(
+                                                            color: primaryCol.withValues(alpha: 0.1),
+                                                            shape: BoxShape.circle,
+                                                          ),
+                                                          child: Icon(Icons.person, size: 9, color: primaryCol),
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                           ],
                                         ),
                                       ),

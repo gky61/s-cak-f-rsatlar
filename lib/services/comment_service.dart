@@ -5,6 +5,7 @@ import 'auth_service.dart';
 import 'notification_service.dart';
 import 'content_moderation_service.dart';
 import 'message_service.dart';
+import '../utils/asset_path_migration.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -61,7 +62,7 @@ class CommentService {
         userId: userId,
         userName: userName,
         userEmail: userEmail,
-        userProfileImageUrl: userProfileImageUrl ?? '',
+        userProfileImageUrl: userProfileImageUrl != null ? migrateAssetPath(userProfileImageUrl) : '',
         text: text,
         createdAt: DateTime.now(),
         parentCommentId: parentCommentId,

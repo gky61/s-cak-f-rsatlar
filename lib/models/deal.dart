@@ -2,8 +2,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
-import 'package:intl/intl.dart';
 
+import '../utils/asset_path_migration.dart';
 import 'category.dart';
 
 void _log(String message) {
@@ -27,6 +27,8 @@ class Deal {
   final int expiredVotes;
   final int commentCount;
   final String postedBy;
+  final String? postedByName; // Paylaşan kullanıcının adı (denormalized snapshot)
+  final String? postedByAvatar; // Paylaşan kullanıcının avatarı (denormalized snapshot)
   final DateTime createdAt;
   final bool isEditorPick;
   final bool? isApproved; // Nullable: Bot'un yazdığı verilerde olmayabilir
@@ -59,6 +61,8 @@ class Deal {
     this.expiredVotes = 0,
     required this.commentCount,
     required this.postedBy,
+    this.postedByName,
+    this.postedByAvatar,
     required this.createdAt,
     required this.isEditorPick,
     this.isApproved,
@@ -286,6 +290,10 @@ class Deal {
       expiredVotes: (data['expiredVotes'] ?? 0) is int ? (data['expiredVotes'] ?? 0) : ((data['expiredVotes'] ?? 0) as num).toInt(),
       commentCount: (data['commentCount'] ?? 0) is int ? (data['commentCount'] ?? 0) : ((data['commentCount'] ?? 0) as num).toInt(),
       postedBy: data['postedBy'] ?? '',
+      postedByName: data['postedByName']?.toString(),
+      postedByAvatar: (data['postedByAvatar'] != null && data['postedByAvatar'].toString().trim().isNotEmpty)
+          ? migrateAssetPath(data['postedByAvatar'].toString().trim())
+          : null,
       createdAt: createdAt,
       isEditorPick: data['isEditorPick'] == true,
       isApproved: data.containsKey('isApproved') ? data['isApproved'] as bool? : null, // Alan yoksa null, varsa değerini al
@@ -323,6 +331,8 @@ class Deal {
       'expiredVotes': expiredVotes,
       'commentCount': commentCount,
       'postedBy': postedBy,
+      'postedByName': postedByName,
+      'postedByAvatar': postedByAvatar,
       'createdAt': Timestamp.fromDate(createdAt),
       'isEditorPick': isEditorPick,
       'isApproved': isApproved,

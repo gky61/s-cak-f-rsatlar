@@ -39,8 +39,8 @@ service cloud.firestore {
     // USERS COLLECTION
     // ========================================
     match /users/{targetUserId} {
-      // Herkes okuyabilir (profil bilgileri için)
-      allow read: if isAuthenticated();
+      // Herkes okuyabilir (profil bilgileri ve yazar detayları için)
+      allow read: if true;
       
       // Kendi profilini, botkolik sistem profilini veya admin oluşturabilir
       allow create: if isAuthenticated() && (userId() == targetUserId || targetUserId == 'botkolik' || isAdmin());

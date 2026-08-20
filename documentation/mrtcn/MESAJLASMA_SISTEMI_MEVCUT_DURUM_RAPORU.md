@@ -40,7 +40,7 @@ Kullanıcılar arası mesajlar düz (flat) bir Firestore koleksiyonunda (`messag
 
 #### Denormalizasyon Stratejisi:
 - Mesaj dokümanlarında `senderName`, `senderImageUrl`, `receiverName` ve `receiverImageUrl` alanları performans ve hızlı UI render amacıyla denormalize (gömülü) olarak saklanır.
-- Profil güncellemelerinde (`users/{userId}` değişikliğinde), `onUserUpdated` Cloud Function tetikleyicisi geçmiş tüm mesajlardaki isim ve görsel URL'lerini batch write ile günceller.
+- Profil güncellemelerinde (`users/{userId}` değişikliğinde), `onUserUpdated` Cloud Function tetikleyicisi geçmiş tüm mesajlardaki, yorumlardaki ve paylaşılan fırsatlardaki (`postedByName` / `postedByAvatar`) isim ve görsel URL'lerini batch write ile senkronize eder.
 
 ---
 

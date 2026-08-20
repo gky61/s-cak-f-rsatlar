@@ -9,6 +9,7 @@ import '../models/comment.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../utils/badge_helper.dart';
+import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_dialog.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
@@ -688,31 +689,35 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                       ),
                     );
                   },
-                  child: comment.userProfileImageUrl.isNotEmpty
-                      ? CircleAvatar(
+                  child: Builder(
+                    builder: (context) {
+                      final avatarUrl = migrateAssetPath(comment.userProfileImageUrl);
+                      if (avatarUrl.isNotEmpty) {
+                        return CircleAvatar(
                           radius: 14,
                           backgroundColor: primaryColor.withValues(alpha: 0.1),
-                          backgroundImage: comment.userProfileImageUrl.startsWith('assets/')
-                              ? AssetImage(comment.userProfileImageUrl) as ImageProvider
-                              : CachedNetworkImageProvider(comment.userProfileImageUrl),
-                          onBackgroundImageError: (exception, stackTrace) {
-                            // Hata durumunda harf göster
-                          },
-                        )
-                      : CircleAvatar(
-                          radius: 14,
-                          backgroundColor: primaryColor.withValues(alpha: 0.1),
-                          child: Text(
-                            comment.userName.isNotEmpty
-                                ? comment.userName[0].toUpperCase()
-                                : 'U',
-                            style: TextStyle(
-                              color: primaryColor,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
+                          backgroundImage: avatarUrl.startsWith('assets/')
+                              ? AssetImage(avatarUrl) as ImageProvider
+                              : CachedNetworkImageProvider(avatarUrl),
+                          onBackgroundImageError: (exception, stackTrace) {},
+                        );
+                      }
+                      return CircleAvatar(
+                        radius: 14,
+                        backgroundColor: primaryColor.withValues(alpha: 0.1),
+                        child: Text(
+                          comment.userName.isNotEmpty
+                              ? comment.userName[0].toUpperCase()
+                              : 'U',
+                          style: TextStyle(
+                            color: primaryColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
                           ),
                         ),
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(

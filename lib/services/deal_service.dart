@@ -6,6 +6,7 @@ import 'content_moderation_service.dart';
 import 'user_service.dart';
 import 'link_preview_service.dart';
 import 'advertising_compliance_service.dart';
+import '../utils/asset_path_migration.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -133,7 +134,7 @@ class DealService {
           .map((doc) {
             try { return Deal.fromFirestore(doc); } catch (e) { return null; }
           })
-          .where((deal) => deal != null && deal!.isApproved != true && deal.isTest != true)
+          .where((deal) => deal != null && deal.isApproved != true && deal.isTest != true)
           .cast<Deal>()
           .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -153,7 +154,7 @@ class DealService {
           .map((doc) {
             try { return Deal.fromFirestore(doc); } catch (e) { return null; }
           })
-          .where((deal) => deal != null && deal!.isApproved == true && deal.isExpired != true && !deal.createdAt.isBefore(cutoffTime) && deal.isTest != true)
+          .where((deal) => deal != null && deal.isApproved == true && deal.isExpired != true && !deal.createdAt.isBefore(cutoffTime) && deal.isTest != true)
           .cast<Deal>()
           .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -201,6 +202,8 @@ class DealService {
     required String imageUrl,
     required String url,
     required String userId,
+    String? postedByName,
+    String? postedByAvatar,
     double? originalPrice,
     String? priceLabel,
     double? ratingValue,
@@ -291,6 +294,33 @@ class DealService {
         _log('⚠️ Settings loading error: $e');
       }
 
+      // Yazar bilgilerini al (snapshot)
+      String? finalPosterName = (postedByName != null && postedByName.trim().isNotEmpty) ? postedByName.trim() : null;
+      String? finalPosterAvatar = (postedByAvatar != null && postedByAvatar.trim().isNotEmpty) ? postedByAvatar.trim() : null;
+      if (finalPosterName == null || finalPosterAvatar == null) {
+        try {
+          final userDoc = await _firestore.collection('users').doc(userId).get();
+          if (userDoc.exists) {
+            final uData = userDoc.data();
+            final usernameVal = uData?['username']?.toString() ?? uData?['displayName']?.toString() ?? uData?['nickname']?.toString();
+            if (finalPosterName == null && usernameVal != null && usernameVal.trim().isNotEmpty) {
+              finalPosterName = usernameVal.trim();
+            }
+            final rawAvatar = uData?['profileImageUrl']?.toString() ?? uData?['photoURL']?.toString();
+            if (finalPosterAvatar == null && rawAvatar != null && rawAvatar.trim().isNotEmpty) {
+              finalPosterAvatar = migrateAssetPath(rawAvatar.trim());
+            }
+          }
+        } catch (_) {}
+      }
+
+      finalPosterName ??= 'Kullanıcı';
+      if (finalPosterAvatar != null && finalPosterAvatar.isNotEmpty) {
+        finalPosterAvatar = migrateAssetPath(finalPosterAvatar);
+      } else {
+        finalPosterAvatar = null;
+      }
+
       final compliantDescription = AdvertisingComplianceService.ensureDisclosure(description);
 
       final deal = Deal(
@@ -304,6 +334,8 @@ class DealService {
         link: url,
         imageUrl: imageUrl,
         postedBy: userId,
+        postedByName: finalPosterName,
+        postedByAvatar: finalPosterAvatar,
         hotVotes: 0,
         coldVotes: 0,
         commentCount: 0,

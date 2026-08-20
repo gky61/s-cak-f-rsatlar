@@ -39,8 +39,9 @@ class MessageService {
       } else {
         final senderDoc = await _firestore.collection('users').doc(senderId).get();
         if (!senderDoc.exists) return null;
-        senderName = senderDoc.data()?['username'] ?? 'Kullanıcı';
-        senderImageUrl = migrateAssetPath(senderDoc.data()?['profileImageUrl'] ?? '');
+        final sData = senderDoc.data();
+        senderName = sData?['username'] ?? sData?['displayName'] ?? sData?['nickname'] ?? 'Kullanıcı';
+        senderImageUrl = migrateAssetPath((sData?['profileImageUrl'] ?? sData?['photoURL'] ?? '').toString());
       }
 
       String receiverName = 'Kullanıcı';
@@ -51,14 +52,15 @@ class MessageService {
       } else {
         final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
         if (!receiverDoc.exists) return null;
+        final rData = receiverDoc.data();
         // Engellenmişlik kontrolü: Alıcı göndereni engellediyse mesaj gitmez
-        final receiverBlockedList = List<String>.from(receiverDoc.data()?['blockedUsers'] ?? []);
+        final receiverBlockedList = List<String>.from(rData?['blockedUsers'] ?? []);
         if (receiverBlockedList.contains(senderId)) {
           _log('🚫 Alıcı bu kullanıcıyı engellediği için mesaj iletilmedi.');
           return null;
         }
-        receiverName = receiverDoc.data()?['username'] ?? 'Kullanıcı';
-        receiverImageUrl = migrateAssetPath(receiverDoc.data()?['profileImageUrl'] ?? '');
+        receiverName = rData?['username'] ?? rData?['displayName'] ?? rData?['nickname'] ?? 'Kullanıcı';
+        receiverImageUrl = migrateAssetPath((rData?['profileImageUrl'] ?? rData?['photoURL'] ?? '').toString());
       }
 
       final message = Message(

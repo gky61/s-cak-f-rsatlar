@@ -977,17 +977,27 @@ class _DealForwardBottomSheetState extends State<DealForwardBottomSheet> {
   }
 
   Widget _buildAvatar(String imageUrl, double size) {
-    if (imageUrl.isEmpty || imageUrl == 'assets/kullanıcı pp.jpg') {
+    final cleanUrl = migrateAssetPath(imageUrl);
+    if (cleanUrl.isEmpty) {
       return Container(
         color: Colors.grey[300],
         child: Icon(Icons.person, size: size * 0.6, color: Colors.grey[600]),
       );
     }
-    if (imageUrl.startsWith('assets/')) {
-      return Image.asset(imageUrl, width: size, height: size, fit: BoxFit.cover);
+    if (cleanUrl.startsWith('assets/')) {
+      return Image.asset(
+        cleanUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey[300],
+          child: Icon(Icons.person, size: size * 0.6, color: Colors.grey[600]),
+        ),
+      );
     }
     return CachedNetworkImage(
-      imageUrl: imageUrl,
+      imageUrl: cleanUrl,
       width: size,
       height: size,
       fit: BoxFit.cover,

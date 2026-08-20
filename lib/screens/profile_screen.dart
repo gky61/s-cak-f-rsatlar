@@ -11,6 +11,7 @@ import '../services/firestore_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
+import '../utils/asset_path_migration.dart';
 import 'notification_settings_screen.dart';
 import 'auth_screen.dart';
 // import 'edit_profile_screen.dart'; // Dosya bulunamadı, geçici olarak yorum satırı
@@ -470,10 +471,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final cleanImageUrl = migrateAssetPath(imageUrl);
       // 1. Firebase Auth'daki photoURL'yi güncelle (sadece kendi profilini güncellerken)
       if (_isOwnProfile && targetUserId == user.uid) {
         try {
-          await user.updatePhotoURL(imageUrl);
+          await user.updatePhotoURL(cleanImageUrl);
           await user.reload();
           _log('✅ Firebase Auth photoURL güncellendi');
         } catch (authError) {
@@ -486,17 +488,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .collection('users')
           .doc(targetUserId)
           .set({
-        'profileImageUrl': imageUrl,
+        'profileImageUrl': cleanImageUrl,
+        'photoURL': cleanImageUrl,
       }, SetOptions(merge: true));
 
-      _log('✅ Profil resmi Firestore\'a kaydedildi: $imageUrl (userId: $targetUserId)');
+      _log('✅ Profil resmi Firestore\'a kaydedildi: $cleanImageUrl (userId: $targetUserId)');
 
       // 3. CachedNetworkImage cache'ini temizle (eski resmi göstermesin)
-      try {
-        await CachedNetworkImage.evictFromCache(imageUrl);
-        _log('✅ Cache temizlendi');
-      } catch (e) {
-        _log('⚠️ Cache temizleme hatası: $e');
+      if (cleanImageUrl.isNotEmpty && !cleanImageUrl.startsWith('assets/')) {
+        try {
+          await CachedNetworkImage.evictFromCache(cleanImageUrl);
+          _log('✅ Cache temizlendi');
+        } catch (e) {
+          _log('⚠️ Cache temizleme hatası: $e');
+        }
       }
 
       // 4. State'i direkt güncelle (Firestore'dan tekrar okumaya gerek yok)
@@ -505,7 +510,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _user = AppUser(
             uid: _user!.uid,
             username: _user!.username,
-            profileImageUrl: imageUrl,
+            profileImageUrl: cleanImageUrl,
             followedCategories: _user!.followedCategories,
             watchKeywords: _user!.watchKeywords,
             nickname: _user!.nickname,
@@ -1289,25 +1294,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   child: ClipOval(
-                    child: (user?.profileImageUrl != null && user!.profileImageUrl.isNotEmpty)
-                        ? (user.profileImageUrl.startsWith('assets/')
-                            ? Image.asset(
-                                user.profileImageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Icon(Icons.person_rounded, size: 48, color: textSub),
-                              )
-                            : CachedNetworkImage(
-                                imageUrl: user.profileImageUrl,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: isDark ? Colors.grey[800] : Colors.grey[200],
-                                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                ),
-                                errorWidget: (context, url, error) =>
-                                    Icon(Icons.person_rounded, size: 48, color: textSub),
-                              ))
-                        : Icon(Icons.person_rounded, size: 48, color: textSub),
+                    child: Builder(
+                      builder: (context) {
+                        final avatarUrl = migrateAssetPath(user?.profileImageUrl ?? '');
+                        if (avatarUrl.isNotEmpty) {
+                          if (avatarUrl.startsWith('assets/')) {
+                            return Image.asset(
+                              avatarUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Icon(Icons.person_rounded, size: 48, color: textSub),
+                            );
+                          }
+                          return CachedNetworkImage(
+                            imageUrl: avatarUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              color: isDark ? Colors.grey[800] : Colors.grey[200],
+                              child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            ),
+                            errorWidget: (context, url, error) =>
+                                Icon(Icons.person_rounded, size: 48, color: textSub),
+                          );
+                        }
+                        return Icon(Icons.person_rounded, size: 48, color: textSub);
+                      },
+                    ),
                   ),
                 ),
                 // Edit Button (Own Profile)
