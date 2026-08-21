@@ -754,25 +754,38 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                             const SizedBox(width: 6),
                             Builder(
                               builder: (context) {
-                                _log('🔍 Yorumda rozetler gösteriliyor: ${comment.userBadges}');
                                 final badgeInfos = BadgeHelper.getBadgeInfos(comment.userBadges);
-                                _log('🔍 BadgeHelper.getBadgeInfos sonucu: ${badgeInfos.length} rozet');
                                 return Row(
                                   mainAxisSize: MainAxisSize.min,
-                                  children: badgeInfos.take(3).map(
+                                  children: badgeInfos.take(2).map(
                                     (badge) => Padding(
                                       padding: const EdgeInsets.only(left: 3),
                                       child: Tooltip(
-                                        message: badge.name,
+                                        message: '${badge.name} (${badge.tier.label})',
                                         child: Container(
-                                          padding: const EdgeInsets.all(2),
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: badge.color.withValues(alpha: 0.15),
-                                            borderRadius: BorderRadius.circular(4),
+                                            color: badge.color.withValues(alpha: isDark ? 0.2 : 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: badge.color.withValues(alpha: 0.35),
+                                              width: 0.8,
+                                            ),
                                           ),
-                                          child: Text(
-                                            badge.icon,
-                                            style: const TextStyle(fontSize: 12),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(badge.iconData, size: 10.5, color: badge.color),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                badge.name,
+                                                style: TextStyle(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: badge.color,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),

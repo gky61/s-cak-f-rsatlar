@@ -151,10 +151,16 @@ String migrateAssetPath(String? path) {
 ### 5.3. Ekranlar (Screens)
 
 #### 📄 `lib/screens/profile_screen.dart`
+- **Profil Yönlendirmesi & Durum Yönetimi:** Kullanıcı oturum açmamışsa (`currentUser == null`), sayfayı doğrudan modüler `GuestProfileScreen` bileşenine devreder; giriş yapıldığında reaktif olarak dolu kullanıcı profili render edilir.
 - **Ana Avatar Renderı:** `migrateAssetPath(user?.profileImageUrl)` ile `Builder` içerisinde `Image.asset` (`errorBuilder`) veya `CachedNetworkImage` (`errorWidget`) render eder.
 - **`_showProfileImagePicker`**: Kullanıcıya `assets/kullanıcı pp.webp` ve `assets/kkpp.webp` avatarlarını sunan diyalog penceresi.
 - **`_updateProfileImage`**: Seçilen görseli Firebase Auth (`user.updatePhotoURL`), Firestore (`profileImageUrl` ve `photoURL`), `CachedNetworkImage.evictFromCache` ve yerel State (`AppUser`) üzerinde anında günceller.
 - **`_showEditUsernameDialog` & `_updateUsername`**: Kullanıcı adını Firebase Auth (`updateDisplayName`) ve Firestore (`username`, `nickname`) üzerinde günceller.
+
+#### 📄 `lib/screens/guest_profile_screen.dart` (Modüler Misafir Profili)
+- **Misafir Karşılama Hero Vitrini (`_buildHeroCard`):** Parıltılı misafir avatarı, karşılama metni ve Google ile hızlı ve güvenli tek tıkla giriş butonu.
+- **Topluluk Ayrıcalıkları Çentikli Kartı (`_buildPerksSection`):** Özel kupon radarı & paylaşımı, fırsat paylaşımı & avcı rozetleri, sıcak/soğuk oylama, kelime radarı, kişiselleştirilmiş akış & kategori seçimi ve topluluk sohbeti olmak üzere 6 temel cazibe vitrini.
+- **Uygulama Tercihleri ve Bilgiler (`_buildSettingsSection`):** Karanlık/Aydınlık tema geçişi (`CircularThemeTransition`), SSS (`FAQScreen`), Gizlilik Politikası (`PrivacyPolicyScreen`), Bize Ulaşın ve Play Store puanlama bağlantıları.
 
 #### 📄 `lib/screens/deal_detail_screen.dart`
 - **`_buildCompactDealAuthorCard`**: Fırsat detayında yer alan yazar avatarı, canlı online yeşil noktası, yazar kullanıcı adı, rozeti ve mesaj butonu (`otherUserImageUrl: profileImageUrl`).

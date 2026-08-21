@@ -16,14 +16,14 @@ graph TD
     end
 
     subgraph Google_Cloud_Platform [Google Cloud Platform (GCP)]
-        subgraph Cloud_Run [Google Cloud Run - Serverless]
-            Bot["Telegram Userbot Container<br>(Node.js / GramJS / Always-on GMS)"]
+        subgraph Compute_Engine_VM [GCP Compute Engine VM (e2-micro)]
+            Bot["Telegram Userbot Container<br>(Node.js / GramJS / Always-on Docker)"]
         end
         subgraph Secret_Manager [Google Secret Manager]
             Secrets["API Anahtarları & Session String<br>(GEMINI_API_KEY, TELEGRAM_STRING_SESSION)"]
         end
         subgraph Gemini_API [Google Generative AI]
-            Gemini["Gemini-1.5-Flash API<br>(Fırsat Analizi / Görsel & Metin Okuma)"]
+            Gemini["Gemini-2.5 / 2.0 Flash API<br>(Fırsat Analizi / Görsel & Metin Okuma)"]
         end
     end
 

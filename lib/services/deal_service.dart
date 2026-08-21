@@ -355,9 +355,10 @@ class DealService {
 
       final docRef = await _firestore.collection('deals').add(deal.toFirestore());
       
-      // Kullanıcı puanını artır (UserService kullanımı)
+      // Kullanıcı puanını artır ve başarımları kontrol et (UserService kullanımı)
       final userService = UserService();
       await userService.incrementUserPoints(userId, points: 5, dealCount: 1);
+      await userService.checkAndAwardBadges(userId);
       
       // Profil geçmişine minimalist fırsat kartı ekle
       await userService.addLastSharedDeal(
@@ -475,9 +476,10 @@ class DealService {
 
         if (postedBy.isNotEmpty && (diffPoints != 0 || diffLikes != 0)) {
           final userService = UserService();
-          // Puan güncellemesini transaction sonrasında arka planda yap
+          // Puan ve başarım güncellemesini transaction sonrasında arka planda yap
           Future.delayed(Duration.zero, () async {
             await userService.incrementUserPoints(postedBy, points: diffPoints, totalLikes: diffLikes);
+            await userService.checkAndAwardBadges(postedBy);
           });
         }
 

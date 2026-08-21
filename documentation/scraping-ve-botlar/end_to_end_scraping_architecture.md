@@ -73,7 +73,7 @@ Kullanıcıların mobil uygulama içindeki "Fırsat Paylaş" ekranından (`Submi
 *   **Görsel Proxyleme**: Çekilen ürün resimleri hotlink yapılmaz; Firebase Storage'a yüklenerek istemcilerin doğrudan mağaza CDN'lerini yüklemesi ve olası CORS engelleri engellenir.
 
 Detaylı mağaza bazlı çözümler için istemci tarafı raporuna bakın:
-👉 [Mağaza Özel Scraping Kuralları ve Stratejileri](file:///d:/firsatkolik/documentation/mrtcn/scraping_rules_and_strategies.md)
+👉 [Mağaza Özel Scraping Kuralları ve Stratejileri](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_rules_and_strategies.md)
 
 ---
 
@@ -87,7 +87,7 @@ Telegram'daki indirim ve kampanya paylaşan popüler kanalları (örn: `@indirim
 *   **WAF ve Bulut IP Engelini Aşma**: Sunucular Google Cloud us-central1 veri merkezinde çalıştığı için Cloudflare/Akamai IP bloklarına takılır. Bu engelleri aşmak için 5 farklı gelişmiş proxy ve tünelleme yöntemi kullanılır (Google Translate, Yandex Translate, `curl` spawnSync, Microlink API, Wayback Machine).
 
 Detaylı sunucu tarafı aşma teknikleri için sunucu bot raporuna bakın:
-👉 [Cloud Run Telegram Bot Scraping Kuralları ve Stratejileri](file:///d:/firsatkolik/documentation/mrtcn/bot_scraping_rules_and_strategies.md)
+👉 [Cloud Run Telegram Bot Scraping Kuralları ve Stratejileri](file:///d:/firsatkolik/documentation/scraping-ve-botlar/bot_scraping_rules_and_strategies.md)
 
 ---
 

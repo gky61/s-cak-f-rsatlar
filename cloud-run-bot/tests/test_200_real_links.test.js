@@ -3,7 +3,10 @@ const path = require('path');
 const { isDomainAllowed, getStoreKeyForUrl, isProductUrl } = require('../domain_allowlist');
 
 function test200Links() {
-  const jsonPath = path.join(__dirname, '../../documentation/aktuel-logs/20_magaza_200_gercek_urun_linki.json');
+  let jsonPath = path.join(__dirname, '../../documentation/aktuel/logs/20_magaza_200_gercek_urun_linki.json');
+  if (!fs.existsSync(jsonPath)) {
+    jsonPath = path.join(__dirname, '../../documentation/aktuel-logs/20_magaza_200_gercek_urun_linki.json');
+  }
   if (!fs.existsSync(jsonPath)) {
     console.error(`❌ Dosya bulunamadı: ${jsonPath}`);
     process.exit(1);

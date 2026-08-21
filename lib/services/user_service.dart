@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import '../models/user.dart';
 import '../models/deal.dart';
+import '../utils/badge_helper.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -19,6 +20,47 @@ class UserService {
       }, SetOptions(merge: true));
     } catch (e) {
       _log('Puan güncelleme hatası: $e');
+    }
+  }
+
+  /// Kullanıcının başarımlarını otomatik denetler ve yeni rozetleri Firestore'a atomik olarak kaydeder
+  Future<List<String>> checkAndAwardBadges(String userId, {AppUser? user}) async {
+    try {
+      AppUser? currentUser = user;
+      if (currentUser == null) {
+        final doc = await _firestore.collection('users').doc(userId).get();
+        if (!doc.exists) return [];
+        currentUser = AppUser.fromFirestore(doc);
+      }
+
+      final eligibleBadges = BadgeHelper.evaluateEligibleBadges(currentUser);
+      final newBadges = eligibleBadges.where((id) => !currentUser!.badges.contains(id)).toList();
+
+      if (newBadges.isNotEmpty) {
+        await _firestore.collection('users').doc(userId).set({
+          'badges': FieldValue.arrayUnion(newBadges),
+        }, SetOptions(merge: true));
+
+        _log('🎉 Kullanıcıya yeni rozetler tanımlandı: $newBadges');
+      }
+
+      return newBadges;
+    } catch (e) {
+      _log('Rozet kontrol ve ödüllendirme hatası: $e');
+      return [];
+    }
+  }
+
+  /// Kullanıcının profilde ve yorumlarda öne çıkacak vitrin rozetini günceller
+  Future<bool> setPinnedBadge(String userId, String? badgeId) async {
+    try {
+      await _firestore.collection('users').doc(userId).set({
+        'pinnedBadge': badgeId,
+      }, SetOptions(merge: true));
+      return true;
+    } catch (e) {
+      _log('Vitrin rozeti güncelleme hatası: $e');
+      return false;
     }
   }
 

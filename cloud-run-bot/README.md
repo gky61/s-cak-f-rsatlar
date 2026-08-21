@@ -1,125 +1,56 @@
-# 🤖 Real-Time Telegram Bot - Google Cloud Run
+# 🤖 FırsatKolik — Otonom Telegram Botu & Web Kazıma Servisi
 
-Bu bot **7/24 çalışır** ve Telegram kanallarını **gerçek zamanlı dinler**.
+Bu servis, Telegram indirim kanallarını MTProto üzerinden **7/24 gerçek zamanlı dinleyen**, yakalanan linkleri gelişmiş WAF bypass yöntemleriyle kazıyan, yapay zeka ile kategorize eden ve Firestore veritabanına aktaran Node.js uygulamasıdır.
 
-## ✨ Özellikler
+---
 
-- ✅ **Real-time mesaj yakalama** - Yeni mesaj gelir gelmez yakalar
-- ✅ **Link filtreleme** - Sadece link içeren mesajları işler
-- ✅ **Firebase entegrasyonu** - Direkt Firestore'a kaydeder
-- ✅ **Otomatik yeniden bağlanma** - Bağlantı koparsa otomatik tekrar bağlanır
-- ✅ **Health check** - Servis sağlığı izlenebilir
-- ✅ **Docker containerized** - Kolay deploy ve scaling
+## 🏗️ Altyapı ve Barındırma
+Bot, **Google Cloud Compute Engine** üzerindeki ücretsiz katman sanal makinede (`telegram-bot-server`, `e2-micro`, `us-central1-a`) Docker konteynerleri olarak çalışmaktadır:
 
-## 📋 Gereksinimler
+* **DEV Bot Konteyneri (`dev-bot`):** Port `8081` -> `8080`, Firestore: `sicak-firsatlar-e6eae`
+* **PROD Bot Konteyneri (`prod-bot`):** Port `8082` -> `8080`, Firestore: `firsatkolik-prod-e6eae`
 
-1. **Google Cloud SDK** (gcloud CLI)
-2. **Docker**
-3. **Telegram API credentials**
-4. **Firebase service account**
+---
 
-## 🚀 Kurulum
+## 🚀 Dağıtım (Deployment)
 
-### 1. Google Cloud SDK Kurulumu
-
-**Mac için:**
+### 1. Standart Bulut Derlemeli Dağıtım (Cloud Build):
 ```bash
-# Homebrew ile kur
-brew install --cask google-cloud-sdk
+# DEV Botunu Güncelle
+python deploy_to_vm.py dev
 
-# Giriş yap
-gcloud auth login
-
-# Docker için authentication
-gcloud auth configure-docker
-
-# Projeyi ayarla
-gcloud config set project sicak-firsatlar-e6eae
+# PROD Botunu Güncelle
+python deploy_to_vm.py prod
 ```
 
-### 2. Environment Variables Ayarla
-
+### 2. Doğrudan VM İçi Derlemeli Dağıtım (Cloud Build Bypass / Sıfır Maliyet):
 ```bash
-export TELEGRAM_API_ID="37462587"
-export TELEGRAM_API_HASH="35c8bc7cd010dd61eb5a123e2722be41"
-export TELEGRAM_SESSION_STRING="1BAAOMTQ5Lj..."
-export TELEGRAM_CHANNELS="@indirimkaplani,-3371238729"
+# DEV Botunu Doğrudan VM'de Derle
+python deploy_direct_vm.py dev
+
+# PROD Botunu Doğrudan VM'de Derle
+python deploy_direct_vm.py prod
 ```
 
-### 3. Deploy Et
+---
+
+## 🔍 Sağlık ve Log Kontrolü
 
 ```bash
-cd cloud-run-bot
-chmod +x deploy.sh
-./deploy.sh
+# Sağlık Kontrolü (Health Check)
+curl http://34.135.181.112:8081/health  # DEV
+curl http://34.135.181.112:8082/health  # PROD
+
+# VM İçerisinde Canlı Logları İzleme (SSH)
+gcloud compute ssh telegram-bot-server --zone=us-central1-a --project=firsatkolik-prod-e6eae
+sudo docker logs -f dev-bot --tail 100
+sudo docker logs -f prod-bot --tail 100
 ```
 
-## 📊 Kontrol ve İzleme
+---
 
-### Servis Durumu
-```bash
-gcloud run services describe telegram-bot \
-  --region us-central1 \
-  --project sicak-firsatlar-e6eae
-```
-
-### Logları İzle
-```bash
-gcloud logging tail "resource.type=cloud_run_revision AND resource.labels.service_name=telegram-bot" \
-  --project sicak-firsatlar-e6eae
-```
-
-### Health Check
-```bash
-# Servis URL'sini al
-SERVICE_URL=$(gcloud run services describe telegram-bot --region us-central1 --project sicak-firsatlar-e6eae --format='value(status.url)')
-
-# Health check yap
-curl ${SERVICE_URL}/health
-```
-
-## 🛑 Durdurma
-
-```bash
-# Servisi sil
-gcloud run services delete telegram-bot \
-  --region us-central1 \
-  --project sicak-firsatlar-e6eae
-```
-
-## 💰 Maliyet
-
-Cloud Run pricing:
-- **CPU:** $0.00002400/vCPU-second
-- **Memory:** $0.00000250/GiB-second
-- **Request:** $0.40/million requests
-
-**Tahmini aylık maliyet:** $5-10
-- 1 instance sürekli çalışır
-- 512MB RAM
-- 1 vCPU
-
-## 🔧 Sorun Giderme
-
-### Bot başlamıyor:
-```bash
-# Logları kontrol et
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=telegram-bot" \
-  --limit 50 \
-  --project sicak-firsatlar-e6eae
-```
-
-### Telegram bağlantısı kopuyor:
-- Session string'i güncelleyin
-- API credentials'ları kontrol edin
-
-### Firebase hatası:
-- Service account permissions kontrol edin
-- Firestore rules kontrol edin
-
-## 📝 Notlar
-
-- Bot **minimum 1 instance** ile çalışır (her zaman aktif)
-- Mesajlar **anında** Firebase'e kaydedilir
-- Duplicate kontrolü yapılır
-- Admin onayı bekler (`isApproved: false`)
+## 📚 Detaylı Dokümantasyon
+Tüm WAF bypass stratejileri, kazıma kuralları ve mimari akışlar için ana dokümanları inceleyiniz:
+* 👉 [Cloud Run Telegram Bot Scraping Kuralları ve Stratejileri](file:///d:/firsatkolik/documentation/scraping-ve-botlar/bot_scraping_rules_and_strategies.md)
+* 👉 [Uçtan Uca Scraping Mimarisi ve Doğrulama Akışları](file:///d:/firsatkolik/documentation/scraping-ve-botlar/end_to_end_scraping_architecture.md)
+* 👉 [Google Cloud Maliyet Analizi ve Free Tier VM Mimarisi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/google_cloud_cost_analysis.md)

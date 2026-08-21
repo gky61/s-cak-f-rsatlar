@@ -1,134 +1,46 @@
-# FIRSATKOLİK Web Admin Paneli
+# 💻 FırsatKolik Web Admin Paneli
 
-PC'den tarayıcıda kullanılabilen özel admin paneli.
+FırsatKolik platformunun tarayıcı üzerinden yönetilebilen, 10 modülden oluşan resmi web yönetim merkezidir.
 
-## 📍 Konum
+---
 
-`web/admin/index.html`
+## 📍 Barındırma ve Adresler
+Firebase Hosting üzerinde barındırılır ve `config.js` aracılığıyla tarayıcının hostname değerine göre ilgili Firebase projesine (`sicak-firsatlar-e6eae` vs `firsatkolik-prod-e6eae`) dinamik olarak bağlanır:
 
-## 🚀 Kullanım
+* **DEV Admin Paneli:** `https://sicak-firsatlar-e6eae.web.app/admin/` (veya yerel testte `http://localhost:5000/admin/`)
+* **PROD Admin Paneli:** `https://firsatkolik-prod-e6eae.web.app/admin/`
 
-### Yerel Test
+---
 
-1. **Basit HTTP Server ile:**
-   ```bash
-   cd web/admin
-   python3 -m http.server 8000
-   ```
-   Sonra tarayıcıda: `http://localhost:8000`
+## 🚀 Dağıtım (Deploy)
 
-2. **Firebase Hosting ile:**
-   ```bash
-   firebase serve --only hosting
-   ```
-   Sonra: `http://localhost:5000/admin`
-
-### Firebase Hosting'e Deploy
-
-`firebase.json` dosyasına hosting yapılandırması ekleyin:
-
-```json
-{
-  "hosting": {
-    "public": "web",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "/admin/**",
-        "destination": "/admin/index.html"
-      }
-    ]
-  }
-}
-```
-
-Sonra deploy edin:
 ```bash
+# DEV Hosting'e Dağıt
+firebase use dev
+firebase deploy --only hosting
+
+# PROD (Canlı) Hosting'e Dağıt
+firebase use prod
 firebase deploy --only hosting
 ```
 
-## 🔐 Giriş
+---
 
-- Sadece **admin yetkisine sahip** kullanıcılar giriş yapabilir
-- Google Sign-In ile giriş yapılır
-- Admin kontrolü Firestore'da `users/{uid}/isAdmin: true` alanına göre yapılır
+## ✨ 10 Temel Yönetim Modülü
 
-## ✨ Özellikler
+1. 📊 **Dashboard Görünümü:** Canlı sistem sağlığı (Bot Heartbeat), genel istatistikler ve haftalık trend grafikleri.
+2. 🏷️ **Fırsatlar Görünümü:** Onay bekleyen fırsatları onaylama/reddetme, düzenleme modalı, resim lightbox ve affiliate link dönüştürme.
+3. 👥 **Kullanıcılar Görünümü:** Profil inceleme, özel admin mesajı gönderme ve `adminDeleteUser` ile kullanıcı silme.
+4. 💬 **Mesajlar & Simülatör:** İki kullanıcı arası canlı mesajlaşma simülatörü, gerçek zamanlı sohbet akışı ve Botkolik AI sohbetleri.
+5. 🚩 **Şikayetler & Raporlar:** Kullanıcıların ilettiği içerik şikayet havuzu, tek tıkla silme ve ban uygulama.
+6. ⚙️ **Sistem & Bot Ayarları:** Dinamik Telegram kanalları yönetimi (`monitoredChannels`), bot durdurma/başlatma, fırsat/yorum/kupon şalterleri ve 30+ günlük eski veri temizliği (`purgeOldDealsWeb`).
+7. 🔔 **Bildirimler Merkezi:** Cihaz izin istatistikleri, saatlik/günlük hız limitleri, manuel push gönderme ve geçersiz token temizliği.
+8. 📜 **Sistem Logları:** Firestore `systemErrors` koleksiyonundaki sunucu/bot hata kayıtları ve filtreleme.
+9. 🎟️ **Kuponlar Yönetimi:** Kupon ekleme/düzenleme/silme ve Cloud Functions ile çok kaynaklı otomatik kupon kazıma.
+10. 📰 **Aktüel Kataloglar:** Süpermarket broşürlerini inceleme/silme ve Cloud Functions ile otomatik aktüel kazıma.
 
-- ✅ **Onay Bekleyen Deal'leri Görüntüleme**
-- ✅ **Deal Onaylama/Reddetme**
-- ✅ **Deal Yayından Kaldırma**
-- ✅ **Deal Yeniden Aktifleştirme**
-- ✅ **İstatistikler** (Onay bekleyen, Onaylanmış, Bot, Kullanıcı deal sayıları)
-- ✅ **Filtreleme** (Onay bekleyen, Onaylanmış, Tümü)
-- ✅ **Deal Detayları** (Modal ile)
-- ✅ **Affiliate Link Dönüştürme** (Otomatik ve manuel)
-- ✅ **Responsive Tasarım** (Mobil uyumlu)
+---
 
-## 💰 Affiliate Link Dönüştürme
-
-Admin panelinde fırsat onaylarken veya düzenlerken, gelen linkleri otomatik olarak kendi affiliate linklerinize dönüştürebilirsiniz.
-
-### Yapılandırma
-
-1. `config.js` dosyasını açın
-2. `affiliateConfig` objesine kendi affiliate ID'lerinizi ekleyin:
-
-```javascript
-const affiliateConfig = {
-    trendyol: {
-        boutiqueId: '123456', // Trendyol Boutique ID'niz
-    },
-    hepsiburada: {
-        utmSource: 'affiliate123', // Hepsiburada UTM Source ID'niz
-    },
-    n11: {
-        refId: 'affiliate789', // N11 Referans ID'niz
-    },
-    amazon: {
-        tag: 'yourstore-21', // Amazon Associate Tag'iniz
-    },
-    gittigidiyor: {
-        affiliateId: 'partner456', // GittiGidiyor Affiliate ID'niz
-    }
-};
-```
-
-### Kullanım
-
-1. **Otomatik Dönüştürme**: Fırsatı onayladığınızda, eğer affiliate ID yapılandırılmışsa link otomatik olarak dönüştürülür.
-
-2. **Manuel Dönüştürme**: 
-   - Fırsat detay modalını açın
-   - "Affiliate Link'e Dönüştür" butonuna tıklayın
-   - Link otomatik olarak dönüştürülecektir
-
-### Desteklenen Siteler
-
-- ✅ Trendyol (boutiqueId parametresi)
-- ✅ Hepsiburada (utm_source parametresi)
-- ✅ N11 (ref parametresi)
-- ✅ Amazon (tag parametresi)
-- ✅ GittiGidiyor (affiliateId parametresi)
-
-## 🎨 Tasarım
-
-- Modern ve kullanıcı dostu arayüz
-- Gradient arka plan
-- Kart tabanlı deal görünümü
-- Modal ile detay görüntüleme
-- Responsive (mobil, tablet, desktop)
-
-## 📝 Notlar
-
-- Mobil uygulamaya **dokunulmadı**, sadece web admin paneli eklendi
-- Firebase Authentication ve Firestore kullanılıyor
-- Tüm işlemler gerçek zamanlı Firestore üzerinden yapılıyor
-
-
-
-
+## 📚 Detaylı Mimari Dokümantasyonu
+Panelin kaynak kod fonksiyonları, yetki denetimi ve operasyonel yönergeler için:
+👉 [Web Admin Paneli Kapsamlı Mimari ve Operasyon Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/web_admin_paneli_rehberi.md)

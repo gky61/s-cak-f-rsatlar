@@ -26,7 +26,6 @@ import 'kuponlar_page.dart';
 import 'aktuel_magazalar_page.dart';
 import 'admin_notifications_screen.dart';
 import 'popular_deals_screen.dart';
-import 'auth_screen.dart';
 import 'keyword_tracking_screen.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 
@@ -1876,14 +1875,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 isSelected: false,
                 badgeCount: _unreadMessageCount + _unreadAdminMessageCount,
                 onTap: () {
-                  final user = _authService.currentUser;
-                  if (user == null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AuthScreen()),
-                    );
-                    return;
-                  }
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const ProfileScreen()),

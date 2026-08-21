@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/category.dart';
+import '../models/notification_preferences.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/skeletons/settings_skeleton.dart';
+import 'auth_screen.dart';
 import 'notification_settings_screen.dart';
 
 void _log(String message) {
@@ -19,9 +22,11 @@ class CategoryPreferencesScreen extends StatefulWidget {
 }
 
 class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final NotificationService _notificationService = NotificationService();
   final Map<String, bool> _categoryStates = {};
   final Map<String, Set<String>> _subCategoryStates = {};
+  NotificationPreferences? _notificationPreferences;
   bool _isLoading = true;
   bool _isProcessingBulk = false;
 
@@ -77,37 +82,103 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
     );
   }
 
+  void _showGuestLoginPrompt() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.lock_person_rounded, color: AppTheme.primary, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Giriş Yapmalısınız',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Kategori tercihlerinizi kaydetmek ve seçtiğiniz kategorilerde anlık bildirim alabilmek için lütfen hesabınıza giriş yapın.',
+          style: TextStyle(fontSize: 13.5, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Daha Sonra'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AuthScreen()),
+              );
+            },
+            icon: const Icon(Icons.login_rounded, size: 18),
+            label: const Text('Giriş Yap'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadPreferences() async {
     try {
       final followedCategories = await _notificationService.getFollowedCategories();
       final followedSubCategories = await _notificationService.getFollowedSubCategories();
+      final prefs = await _notificationService.getNotificationPreferences();
 
-      setState(() {
-        for (final category in _filteredCategories) {
-          _categoryStates[category.id] = followedCategories.contains(category.id);
-          _subCategoryStates[category.id] = {};
-        }
-
-        // Alt kategorileri yükle
-        for (final subCatKey in followedSubCategories) {
-          final parts = subCatKey.split(':');
-          if (parts.length == 2) {
-            final categoryId = parts[0];
-            final subCategoryId = parts[1];
-            _subCategoryStates[categoryId]?.add(subCategoryId);
+      if (mounted) {
+        setState(() {
+          _notificationPreferences = prefs;
+          for (final category in _filteredCategories) {
+            _categoryStates[category.id] = followedCategories.contains(category.id);
+            _subCategoryStates[category.id] = {};
           }
-        }
 
-        _isLoading = false;
-      });
+          // Alt kategorileri yükle
+          for (final subCatKey in followedSubCategories) {
+            final parts = subCatKey.split(':');
+            if (parts.length == 2) {
+              final categoryId = parts[0];
+              final subCategoryId = parts[1];
+              _subCategoryStates[categoryId]?.add(subCategoryId);
+            }
+          }
+
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       _log('Kategori tercihleri yüklenirken hata: $e');
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _selectAllCategories() async {
     if (_isProcessingBulk) return;
+    if (_auth.currentUser?.uid == null) {
+      _showGuestLoginPrompt();
+      return;
+    }
+
     HapticFeedback.mediumImpact();
     setState(() {
       _isProcessingBulk = true;
@@ -136,6 +207,11 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
 
   Future<void> _clearAllCategories() async {
     if (_isProcessingBulk) return;
+    if (_auth.currentUser?.uid == null) {
+      _showGuestLoginPrompt();
+      return;
+    }
+
     HapticFeedback.mediumImpact();
     setState(() {
       _isProcessingBulk = true;
@@ -164,6 +240,11 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   }
 
   Future<void> _toggleCategory(String categoryId, bool value) async {
+    if (_auth.currentUser?.uid == null) {
+      _showGuestLoginPrompt();
+      return;
+    }
+
     HapticFeedback.selectionClick();
     setState(() => _categoryStates[categoryId] = value);
 
@@ -188,6 +269,11 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   }
 
   Future<void> _toggleSubCategory(String categoryId, String subCategoryId, bool value) async {
+    if (_auth.currentUser?.uid == null) {
+      _showGuestLoginPrompt();
+      return;
+    }
+
     HapticFeedback.selectionClick();
     setState(() {
       if (value) {
@@ -315,6 +401,123 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               children: [
+                // ─── GUEST USER PROMPT BANNER ───
+                if (_auth.currentUser == null) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.amber.withValues(alpha: 0.12) : Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: isDark ? 0.35 : 0.5),
+                        width: 1.1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded, color: Colors.amber.shade800, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Misafir modundasınız. Kategori tercihlerinizin kaydedilmesi için giriş yapın.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: _showGuestLoginPrompt,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade800,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'Giriş Yap',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (_notificationPreferences != null &&
+                    (!_notificationPreferences!.pushMasterEnabled ||
+                        !_notificationPreferences!.categoryNotificationsEnabled)) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.amber.withValues(alpha: 0.12) : Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: isDark ? 0.35 : 0.5),
+                        width: 1.1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.notifications_off_outlined, color: Colors.amber.shade800, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Kategori Bildirimleriniz Kapalı',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12.5,
+                                  color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Tercihleriniz kaydedildi ancak telefonunuza bildirim gelebilmesi için Bildirim Ayarlarından kategori bildirimlerini açmanız gerekir.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()),
+                            ).then((_) => _loadPreferences());
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.amber.shade800,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          child: const Text('Aç'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 // 1. Üst Modern Bilgi Banner'ı & Sayaç
                 Container(
                   padding: const EdgeInsets.all(16),

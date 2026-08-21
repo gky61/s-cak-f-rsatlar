@@ -19,6 +19,7 @@ class AppUser {
   final int dealCount;
   final int totalLikes;
   final List<String> badges; // Rozet listesi (örn: ['gold', 'top_reviewer', 'helpful'])
+  final String? pinnedBadge; // Kullanıcının vitrinde/profilinde sabitlediği öncelikli rozet
   final bool isBot;
 
   AppUser({
@@ -34,6 +35,7 @@ class AppUser {
     this.dealCount = 0,
     this.totalLikes = 0,
     this.badges = const [],
+    this.pinnedBadge,
     this.isBot = false,
   });
 
@@ -76,6 +78,7 @@ class AppUser {
     int? dealCount,
     int? totalLikes,
     List<String>? badges,
+    String? pinnedBadge,
     bool? isBot,
   }) {
     return AppUser(
@@ -91,6 +94,7 @@ class AppUser {
       dealCount: dealCount ?? this.dealCount,
       totalLikes: totalLikes ?? this.totalLikes,
       badges: badges ?? this.badges,
+      pinnedBadge: pinnedBadge ?? this.pinnedBadge,
       isBot: isBot ?? this.isBot,
     );
   }
@@ -226,6 +230,7 @@ class AppUser {
         dealCount: parseInt(data['dealCount']),
         totalLikes: parseInt(data['totalLikes']),
         badges: badges,
+        pinnedBadge: data['pinnedBadge']?.toString(),
         isBot: data['isBot'] == true,
       );
     } catch (e, stackTrace) {
@@ -251,6 +256,7 @@ class AppUser {
         dealCount: 0,
         totalLikes: 0,
         badges: [],
+        pinnedBadge: null,
         isBot: dataMap['isBot'] == true,
       );
     }
@@ -271,8 +277,8 @@ class AppUser {
       'dealCount': dealCount,
       'totalLikes': totalLikes,
       'badges': badges,
+      if (pinnedBadge != null) 'pinnedBadge': pinnedBadge,
       'isBot': isBot,
     };
   }
 }
-

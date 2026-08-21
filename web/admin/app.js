@@ -4618,6 +4618,49 @@ window.showDealDetail = async function (dealId) {
     }
 }
 
+// Official Badges Catalog
+const BADGE_CATALOG = {
+    // 🎯 Fırsat Avcılığı
+    'first_spark': { id: 'first_spark', name: 'İlk Kıvılcım', tier: 'Bronz', category: 'Fırsat Avcılığı', icon: 'local_fire_department', color: '#CD7F32', desc: '1. fırsatını paylaşan avcı' },
+    'hunter_apprentice': { id: 'hunter_apprentice', name: 'Fırsat Çırağı', tier: 'Gümüş', category: 'Fırsat Avcılığı', icon: 'explore', color: '#94A3B8', desc: '5 fırsat paylaştı' },
+    'contributor': { id: 'contributor', name: 'Katkıda Bulunan', tier: 'Gümüş', category: 'Fırsat Avcılığı', icon: 'share', color: '#94A3B8', desc: '10 fırsat paylaştı' },
+    'master_hunter': { id: 'master_hunter', name: 'Usta Avcı', tier: 'Altın', category: 'Fırsat Avcılığı', icon: 'military_tech', color: '#F59E0B', desc: '25 fırsat paylaştı' },
+    'legendary_hunter': { id: 'legendary_hunter', name: 'Efsanevi Avcı', tier: 'Elmas', category: 'Fırsat Avcılığı', icon: 'diamond', color: '#06B6D4', desc: '100 fırsat paylaştı' },
+
+    // 🔥 Sıcaklık & Oylar
+    'active_voter': { id: 'active_voter', name: 'Aktif Seçmen', tier: 'Bronz', category: 'Sıcaklık & Oylar', icon: 'how_to_vote', color: '#CD7F32', desc: '30+ puan oylama' },
+    'flame_master': { id: 'flame_master', name: 'Alev Ustası', tier: 'Altın', category: 'Sıcaklık & Oylar', icon: 'whatshot', color: '#F59E0B', desc: '100+ puan oylama' },
+    'volcanic_record': { id: 'volcanic_record', name: 'Volkanik Rekortmen', tier: 'Elmas', category: 'Sıcaklık & Oylar', icon: 'volcano', color: '#06B6D4', desc: '300+ puan oylama' },
+
+    // 💬 Topluluk & Yorum
+    'voice_of_community': { id: 'voice_of_community', name: 'Söz Sahibi', tier: 'Bronz', category: 'Topluluk & Yorum', icon: 'forum', color: '#CD7F32', desc: '20+ puan topluluk' },
+    'helpful': { id: 'helpful', name: 'Yardımsever Avcı', tier: 'Gümüş', category: 'Topluluk & Yorum', icon: 'thumb_up', color: '#94A3B8', desc: '25+ beğeni aldı' },
+    'top_reviewer': { id: 'top_reviewer', name: 'Fikir Önderi', tier: 'Altın', category: 'Topluluk & Yorum', icon: 'rate_review', color: '#F59E0B', desc: '100+ beğeni aldı' },
+
+    // ⭐ Sadakat & Özel
+    'bronze': { id: 'bronze', name: 'Bronz Avcı', tier: 'Bronz', category: 'Sadakat & Özel', icon: 'shield', color: '#CD7F32', desc: '10+ puan' },
+    'silver': { id: 'silver', name: 'Gümüş Avcı', tier: 'Gümüş', category: 'Sadakat & Özel', icon: 'shield', color: '#94A3B8', desc: '60+ puan' },
+    'gold': { id: 'gold', name: 'Altın Avcı', tier: 'Altın', category: 'Sadakat & Özel', icon: 'workspace_premium', color: '#F59E0B', desc: '200+ puan' },
+    'verified': { id: 'verified', name: 'Doğrulanmış Avcı', tier: 'Özel', category: 'Sadakat & Özel', icon: 'verified', color: '#00BCD4', desc: 'Onaylı güvenilir hesap' },
+    'early_bird': { id: 'early_bird', name: 'Öncü Kurucu Üye', tier: 'Özel', category: 'Sadakat & Özel', icon: 'auto_awesome', color: '#8B5CF6', desc: 'İlk dönem kurucu üye' },
+    'premium': { id: 'premium', name: 'Premium Üye', tier: 'Özel', category: 'Sadakat & Özel', icon: 'stars', color: '#8B5CF6', desc: 'Özel statülü üye' },
+};
+
+function getBadgeMeta(badgeId) {
+    if (BADGE_CATALOG[badgeId]) {
+        return BADGE_CATALOG[badgeId];
+    }
+    return {
+        id: badgeId,
+        name: badgeId,
+        tier: 'Özel',
+        category: 'Diğer',
+        icon: 'military_tech',
+        color: '#64748B',
+        desc: 'Özel Rozet'
+    };
+}
+
 // Load users from Firestore
 async function loadUsers() {
     try {
@@ -4627,7 +4670,7 @@ async function loadUsers() {
         if (usersTableBody) {
             usersTableBody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                    <td colspan="8" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                         <div class="flex flex-col items-center gap-2">
                             <span class="material-symbols-outlined text-4xl opacity-50 animate-spin">hourglass_empty</span>
                             <p>Kullanıcılar yükleniyor...</p>
@@ -4663,6 +4706,7 @@ async function loadUsers() {
                     following: userData.following || [],
                     followersWithNotifications: userData.followersWithNotifications || [],
                     badges: userData.badges || [],
+                    pinnedBadge: userData.pinnedBadge || null,
                     email: userData.email || null,
                     isAdmin: userData.isAdmin === true || userData.isadmin === true || userData.isAdmin === 'true' || userData.isadmin === 'true',
                     createdAt: userData.createdAt?.toDate ? userData.createdAt.toDate() : (userData.createdAt ? new Date(userData.createdAt) : null)
@@ -4687,7 +4731,7 @@ async function loadUsers() {
             if (usersTableBody) {
                 usersTableBody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="px-6 py-12 text-center text-red-500">
+                        <td colspan="8" class="px-6 py-12 text-center text-red-500">
                             <p>Kullanıcılar yüklenirken hata oluştu: ${error.message}</p>
                         </td>
                     </tr>
@@ -4705,7 +4749,7 @@ function renderUsers() {
     const usersTableBody = document.getElementById('usersTableBody');
     if (!usersTableBody) return;
 
-    // Arama sorgusuna göre filtrele
+    // Arama sorgusuna göre filtrele (kullanıcı adı, e-posta, ID ve sahip olunan rozetler)
     let filteredUsers = users;
     if (usersSearchQuery && usersSearchQuery.trim() !== '') {
         filteredUsers = users.filter(user => {
@@ -4714,18 +4758,20 @@ function renderUsers() {
             const nickname = (user.nickname || '').toLowerCase();
             const email = (user.email || '').toLowerCase();
             const uid = (user.uid || user.id || '').toLowerCase();
+            const badgesStr = (user.badges || []).map(b => `${b} ${getBadgeMeta(b).name}`).join(' ').toLowerCase();
 
             return username.includes(searchLower) ||
                 nickname.includes(searchLower) ||
                 email.includes(searchLower) ||
-                uid.includes(searchLower);
+                uid.includes(searchLower) ||
+                badgesStr.includes(searchLower);
         });
     }
 
     if (filteredUsers.length === 0) {
         usersTableBody.innerHTML = `
             <tr>
-                <td colspan="7" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                <td colspan="8" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                     <div class="flex flex-col items-center gap-2">
                         <span class="material-symbols-outlined text-4xl opacity-50">${usersSearchQuery ? 'search_off' : 'group_off'}</span>
                         <p>${usersSearchQuery ? 'Arama sonucu bulunamadı' : 'Henüz kullanıcı yok'}</p>
@@ -4742,6 +4788,25 @@ function renderUsers() {
         const profileImage = user.profileImageUrl || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(displayName) + '&background=135bec&color=fff&size=128';
         const followedCategoriesCount = user.followedCategories ? user.followedCategories.length : 0;
         const followingCount = user.following ? user.following.length : 0;
+        const badgesCount = (user.badges || []).length;
+        const pinnedMeta = user.pinnedBadge ? getBadgeMeta(user.pinnedBadge) : null;
+
+        let badgesHtml = '<span class="text-slate-400 dark:text-slate-500 text-xs">Rozet yok</span>';
+        if (badgesCount > 0) {
+            badgesHtml = `
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        ${badgesCount} Rozet
+                    </span>
+                    ${pinnedMeta ? `
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold text-white" style="background-color: ${pinnedMeta.color};" title="Vitrin Rozeti: ${escapeHtml(pinnedMeta.name)}">
+                            <span class="material-symbols-outlined text-[13px]">${pinnedMeta.icon}</span>
+                            ${escapeHtml(pinnedMeta.name)}
+                        </span>
+                    ` : ''}
+                </div>
+            `;
+        }
 
         return `
             <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
@@ -4765,6 +4830,9 @@ function renderUsers() {
                 </td>
                 <td class="px-6 py-4">
                     <span class="text-slate-700 dark:text-slate-300">${user.totalLikes || 0}</span>
+                </td>
+                <td class="px-6 py-4">
+                    ${badgesHtml}
                 </td>
                 <td class="px-6 py-4">
                     <span class="text-slate-700 dark:text-slate-300">${followingCount}</span>
@@ -5236,33 +5304,111 @@ async function showUserDetail(userId) {
     // Modal Sidebar (Sağ Kolon)
     console.log('📝 Rendering user modal sidebar for user:', user.uid || user.id);
     userModalSidebar.innerHTML = `
-        <!-- Badges Section -->
-        <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Rozetler</h3>
-            </div>
-            
-            <!-- Mevcut Rozetler -->
-            ${user.badges && user.badges.length > 0 ? `
-                <div class="flex flex-col gap-2 mb-4">
-                    ${user.badges.map((badge, index) => `
-                        <div class="flex items-center justify-between px-3 py-2 bg-amber-500/10 dark:bg-amber-500/20 rounded-lg border border-amber-500/20">
-                            <span class="px-2 py-1 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full text-sm font-medium">${escapeHtml(badge)}</span>
-                            <button onclick="removeBadge('${user.uid || user.id}', '${escapeHtml(badge)}')" class="p-1 text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors" title="Rozeti Kaldır">
-                                <span class="material-symbols-outlined text-[18px]">close</span>
-                            </button>
-                        </div>
-                    `).join('')}
+        <!-- Badges Management Section -->
+        <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-amber-500 text-xl">military_tech</span>
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Rozet Yönetimi</h3>
                 </div>
-            ` : '<p class="text-slate-500 dark:text-slate-400 text-sm mb-4">Rozet yok</p>'}
-            
-            <!-- Rozet Ekleme -->
-            <div class="flex gap-2 w-full min-w-0">
-                <input type="text" id="newBadgeInput" placeholder="Yeni rozet adı" class="flex-1 min-w-0 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
-                <button onclick="addBadge('${user.uid || user.id}')" class="flex-shrink-0 px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium flex items-center gap-1 whitespace-nowrap">
-                    <span class="material-symbols-outlined text-[18px]">add</span>
-                    <span class="hidden sm:inline">Ekle</span>
-                </button>
+                <span class="px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-full text-xs font-bold">
+                    ${(user.badges || []).length} Rozet
+                </span>
+            </div>
+
+            <!-- Otomatik Eşitle Butonu -->
+            <button onclick="window.autoAwardBadgesForUser('${escapeHtml(user.uid || user.id)}')" class="w-full px-3 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-lg transition-all text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">sync</span>
+                Hak Edilen Rozetleri Otomatik Eşitle
+            </button>
+
+            <!-- Mevcut Rozetler -->
+            <div class="space-y-2">
+                <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Mevcut Rozetler</p>
+                ${user.badges && user.badges.length > 0 ? `
+                    <div class="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                        ${user.badges.map(badgeId => {
+                            const meta = getBadgeMeta(badgeId);
+                            const isPinned = user.pinnedBadge === badgeId;
+                            return `
+                                <div class="flex items-center justify-between p-2.5 rounded-lg border transition-all ${isPinned ? 'bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30' : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'}">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <div class="w-7 h-7 rounded-full flex items-center justify-center text-white flex-shrink-0 text-xs shadow-sm" style="background-color: ${meta.color};">
+                                            <span class="material-symbols-outlined text-[15px]">${meta.icon}</span>
+                                        </div>
+                                        <div class="flex flex-col min-w-0">
+                                            <div class="flex items-center gap-1.5 flex-wrap">
+                                                <p class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(meta.name)}</p>
+                                                <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold text-white" style="background-color: ${meta.color};">${meta.tier}</span>
+                                                ${isPinned ? '<span class="px-1.5 py-0.2 rounded bg-amber-500 text-white text-[10px] font-extrabold flex items-center gap-0.5">⭐ Vitrin</span>' : ''}
+                                            </div>
+                                            <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate font-mono">${escapeHtml(badgeId)}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-1 flex-shrink-0">
+                                        <button onclick="window.togglePinBadge('${escapeHtml(user.uid || user.id)}', '${escapeHtml(badgeId)}')" class="p-1.5 rounded-lg transition-colors ${isPinned ? 'text-amber-600 hover:bg-amber-500/20' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-500/10'}" title="${isPinned ? 'Vitrinden Kaldır' : 'Vitrinde Göster (Profilde Sabitle)'}">
+                                            <span class="material-symbols-outlined text-[16px]">${isPinned ? 'push_pin' : 'keep'}</span>
+                                        </button>
+                                        <button onclick="window.removeBadge('${escapeHtml(user.uid || user.id)}', '${escapeHtml(badgeId)}')" class="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 rounded-lg transition-colors" title="Rozeti Kaldır">
+                                            <span class="material-symbols-outlined text-[16px]">close</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                ` : '<p class="text-slate-500 dark:text-slate-400 text-xs italic py-2">Kullanıcının henüz bir rozeti bulunmuyor.</p>'}
+            </div>
+
+            <!-- Katalogdan Rozet Ekle -->
+            <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Katalogdan Rozet Ekle</p>
+                <div class="flex gap-2">
+                    <select id="catalogBadgeSelect" class="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="">-- Rozet Seçin --</option>
+                        <optgroup label="🎯 Fırsat Avcılığı">
+                            <option value="first_spark">İlk Kıvılcım (Bronz)</option>
+                            <option value="hunter_apprentice">Fırsat Çırağı (Gümüş)</option>
+                            <option value="contributor">Katkıda Bulunan (Gümüş)</option>
+                            <option value="master_hunter">Usta Avcı (Altın)</option>
+                            <option value="legendary_hunter">Efsanevi Avcı (Elmas)</option>
+                        </optgroup>
+                        <optgroup label="🔥 Sıcaklık & Oylar">
+                            <option value="active_voter">Aktif Seçmen (Bronz)</option>
+                            <option value="flame_master">Alev Ustası (Altın)</option>
+                            <option value="volcanic_record">Volkanik Rekortmen (Elmas)</option>
+                        </optgroup>
+                        <optgroup label="💬 Topluluk & Yorum">
+                            <option value="voice_of_community">Söz Sahibi (Bronz)</option>
+                            <option value="helpful">Yardımsever Avcı (Gümüş)</option>
+                            <option value="top_reviewer">Fikir Önderi (Altın)</option>
+                        </optgroup>
+                        <optgroup label="⭐ Sadakat & Özel">
+                            <option value="bronze">Bronz Avcı (Bronz)</option>
+                            <option value="silver">Gümüş Avcı (Gümüş)</option>
+                            <option value="gold">Altın Avcı (Altın)</option>
+                            <option value="verified">Doğrulanmış Avcı (Özel)</option>
+                            <option value="early_bird">Öncü Kurucu Üye (Özel)</option>
+                            <option value="premium">Premium Üye (Özel)</option>
+                        </optgroup>
+                    </select>
+                    <button onclick="window.addBadgeFromCatalog('${escapeHtml(user.uid || user.id)}')" class="px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-xs font-bold flex items-center gap-1 flex-shrink-0">
+                        <span class="material-symbols-outlined text-[15px]">add</span>
+                        Ekle
+                    </button>
+                </div>
+            </div>
+
+            <!-- Özel Rozet Ekle -->
+            <div class="space-y-1 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Özel Rozet Girişi</p>
+                <div class="flex gap-2">
+                    <input type="text" id="newBadgeInput" placeholder="Örn: vip_member" class="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary">
+                    <button onclick="window.addBadge('${escapeHtml(user.uid || user.id)}')" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1 flex-shrink-0">
+                        <span class="material-symbols-outlined text-[15px]">add</span>
+                        Özel Ekle
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -5790,7 +5936,18 @@ window.deleteUserComment = async function (commentId, dealId, userId) {
     }
 }
 
-// Add badge to user
+// Add badge from official catalog dropdown
+window.addBadgeFromCatalog = async function (userId) {
+    const select = document.getElementById('catalogBadgeSelect');
+    if (!select || !select.value) {
+        showError('Lütfen katalogdan bir rozet seçin!');
+        return;
+    }
+    const badgeId = select.value;
+    await window.addBadgeById(userId, badgeId);
+};
+
+// Add badge by manual input
 window.addBadge = async function (userId) {
     const input = document.getElementById('newBadgeInput');
     if (!input) return;
@@ -5801,23 +5958,26 @@ window.addBadge = async function (userId) {
         return;
     }
 
+    await window.addBadgeById(userId, badgeName);
+    input.value = '';
+};
+
+// Core Add Badge method
+window.addBadgeById = async function (userId, badgeId) {
     // Önce users array'inde ara
     let user = users.find(u => (u.uid || u.id) === userId);
 
     // Eğer bulunamazsa, Firestore'dan direkt çek
     if (!user) {
-        console.log('📥 Kullanıcı users array\'inde bulunamadı, Firestore\'dan çekiliyor...');
         try {
             const userDoc = await db.collection('users').doc(userId).get();
             if (userDoc.exists) {
-                const userData = userDoc.data();
                 user = {
                     id: userDoc.id,
                     uid: userDoc.id,
-                    ...userData,
-                    profileImageUrl: cleanProfileImageUrl(userData.profileImageUrl)
+                    ...userDoc.data(),
+                    profileImageUrl: cleanProfileImageUrl(userDoc.data().profileImageUrl)
                 };
-                console.log('✅ Kullanıcı Firestore\'dan yüklendi:', user);
             } else {
                 showError('Kullanıcı bulunamadı!');
                 return;
@@ -5831,26 +5991,22 @@ window.addBadge = async function (userId) {
 
     // Rozet zaten varsa ekleme
     const currentBadges = user.badges || [];
-    if (currentBadges.includes(badgeName)) {
-        showError('Bu rozet zaten mevcut!');
-        input.value = '';
+    if (currentBadges.includes(badgeId)) {
+        showError('Bu rozet zaten kullanıcıda mevcut!');
         return;
     }
 
     // Firestore'a ekle
-    const newBadges = [...currentBadges, badgeName];
+    const newBadges = [...currentBadges, badgeId];
     try {
         await db.collection('users').doc(userId).update({
-            badges: newBadges
+            badges: firebase.firestore.FieldValue.arrayUnion(badgeId)
         });
 
-        console.log('✅ Rozet eklendi:', badgeName);
-        // Kullanıcı verisini güncelle
+        console.log('✅ Rozet eklendi:', badgeId);
         user.badges = newBadges;
-        // Modal'ı yeniden yükle
         await showUserDetail(userId);
-        input.value = '';
-        showSuccess('Rozet başarıyla eklendi!');
+        showSuccess(`✅ "${getBadgeMeta(badgeId).name}" rozeti başarıyla eklendi!`);
     } catch (error) {
         console.error('❌ Rozet ekleme hatası:', error);
         showError('Rozet eklenirken bir hata oluştu: ' + error.message);
@@ -5859,7 +6015,8 @@ window.addBadge = async function (userId) {
 
 // Remove badge from user
 window.removeBadge = async function (userId, badgeName) {
-    if (!confirm(`"${badgeName}" rozetini kaldırmak istediğinize emin misiniz?`)) {
+    const meta = getBadgeMeta(badgeName);
+    if (!confirm(`"${meta.name}" (${badgeName}) rozetini bu kullanıcıdan kaldırmak istediğinize emin misiniz?`)) {
         return;
     }
 
@@ -5868,18 +6025,15 @@ window.removeBadge = async function (userId, badgeName) {
 
     // Eğer bulunamazsa, Firestore'dan direkt çek
     if (!user) {
-        console.log('📥 Kullanıcı users array\'inde bulunamadı, Firestore\'dan çekiliyor...');
         try {
             const userDoc = await db.collection('users').doc(userId).get();
             if (userDoc.exists) {
-                const userData = userDoc.data();
                 user = {
                     id: userDoc.id,
                     uid: userDoc.id,
-                    ...userData,
-                    profileImageUrl: cleanProfileImageUrl(userData.profileImageUrl)
+                    ...userDoc.data(),
+                    profileImageUrl: cleanProfileImageUrl(userDoc.data().profileImageUrl)
                 };
-                console.log('✅ Kullanıcı Firestore\'dan yüklendi:', user);
             } else {
                 showError('Kullanıcı bulunamadı!');
                 return;
@@ -5894,21 +6048,108 @@ window.removeBadge = async function (userId, badgeName) {
     // Firestore'dan kaldır
     const currentBadges = user.badges || [];
     const newBadges = currentBadges.filter(b => b !== badgeName);
+    const updates = { badges: newBadges };
+
+    // Eğer silinen rozet kullanıcının vitrin rozeti ise onu da kaldır
+    if (user.pinnedBadge === badgeName) {
+        updates.pinnedBadge = firebase.firestore.FieldValue.delete();
+        user.pinnedBadge = null;
+    }
 
     try {
-        await db.collection('users').doc(userId).update({
-            badges: newBadges
-        });
+        await db.collection('users').doc(userId).update(updates);
 
         console.log('✅ Rozet kaldırıldı:', badgeName);
-        // Kullanıcı verisini güncelle
         user.badges = newBadges;
-        // Modal'ı yeniden yükle
         await showUserDetail(userId);
-        showSuccess('Rozet başarıyla kaldırıldı!');
+        showSuccess(`"${meta.name}" rozeti başarıyla kaldırıldı!`);
     } catch (error) {
         console.error('❌ Rozet kaldırma hatası:', error);
         showError('Rozet kaldırılırken bir hata oluştu: ' + error.message);
+    }
+};
+
+// Toggle Pin Badge (Vitrin Rozeti Yap / Kaldır)
+window.togglePinBadge = async function (userId, badgeId) {
+    let user = users.find(u => (u.uid || u.id) === userId);
+    if (!user) {
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists) user = { id: userDoc.id, uid: userDoc.id, ...userDoc.data() };
+    }
+    if (!user) return;
+
+    const isCurrentlyPinned = user.pinnedBadge === badgeId;
+    const newPinned = isCurrentlyPinned ? null : badgeId;
+    const meta = getBadgeMeta(badgeId);
+
+    try {
+        await db.collection('users').doc(userId).update({
+            pinnedBadge: newPinned ? newPinned : firebase.firestore.FieldValue.delete()
+        });
+        user.pinnedBadge = newPinned;
+        showSuccess(newPinned ? `⭐ "${meta.name}" kullanıcının vitrin rozeti olarak sabitlendi!` : 'Vitrin rozeti kaldırıldı.');
+        await showUserDetail(userId);
+    } catch (e) {
+        console.error('❌ Vitrin rozeti güncelleme hatası:', e);
+        showError('Vitrin rozeti güncellenirken hata: ' + e.message);
+    }
+};
+
+// Auto-Award Badges based on user stats
+window.autoAwardBadgesForUser = async function (userId) {
+    let user = users.find(u => (u.uid || u.id) === userId);
+    if (!user) {
+        try {
+            const userDoc = await db.collection('users').doc(userId).get();
+            if (userDoc.exists) {
+                user = { id: userDoc.id, uid: userDoc.id, ...userDoc.data() };
+            }
+        } catch (e) {
+            showError('Kullanıcı bulunamadı!');
+            return;
+        }
+    }
+    if (!user) return;
+
+    const dealCount = user.dealCount || 0;
+    const points = user.points || 0;
+    const totalLikes = user.totalLikes || 0;
+    const currentBadges = new Set(user.badges || []);
+
+    const eligible = [];
+    if (dealCount >= 1) eligible.push('first_spark');
+    if (dealCount >= 5) eligible.push('hunter_apprentice');
+    if (dealCount >= 10) eligible.push('contributor');
+    if (dealCount >= 25) eligible.push('master_hunter');
+    if (dealCount >= 100) eligible.push('legendary_hunter');
+
+    if (points >= 10) eligible.push('bronze');
+    if (points >= 20) eligible.push('voice_of_community');
+    if (points >= 30) eligible.push('active_voter');
+    if (points >= 60) eligible.push('silver');
+    if (points >= 100) eligible.push('flame_master');
+    if (points >= 200) eligible.push('gold');
+    if (points >= 300) eligible.push('volcanic_record');
+
+    if (totalLikes >= 25) eligible.push('helpful');
+    if (totalLikes >= 100) eligible.push('top_reviewer');
+
+    const toAdd = eligible.filter(b => !currentBadges.has(b));
+    if (toAdd.length === 0) {
+        showSuccess('Kullanıcı zaten tüm istatistiksel rozetlerine sahip!');
+        return;
+    }
+
+    try {
+        await db.collection('users').doc(userId).update({
+            badges: firebase.firestore.FieldValue.arrayUnion(...toAdd)
+        });
+        showSuccess(`🎉 ${toAdd.length} yeni hak edilmiş rozet otomatik eklendi: ${toAdd.map(b => getBadgeMeta(b).name).join(', ')}`);
+        user.badges = Array.from(new Set([...currentBadges, ...toAdd]));
+        await showUserDetail(userId);
+    } catch (e) {
+        console.error('❌ Otomatik rozet eşitleme hatası:', e);
+        showError('Rozetler eşitlenirken hata oluştu: ' + e.message);
     }
 };
 

@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/skeletons/settings_skeleton.dart';
+import 'auth_screen.dart';
 import 'home_screen.dart';
 
 void _log(String message) {
@@ -23,6 +24,8 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   final NotificationService _notificationService = NotificationService();
   final TextEditingController _keywordController = TextEditingController();
   
+  static const int maxKeywordLimit = 30;
+
   List<String> _watchKeywords = [];
   bool _isLoading = true;
   bool _isAdding = false;
@@ -66,11 +69,93 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
     }
   }
 
+  void _showGuestLoginPrompt() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.lock_person_rounded, color: primaryColor, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Giriş Yapmalısınız',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Fırsat radarına anahtar kelime eklemek ve eşleşen fırsatlarda anlık bildirim alabilmek için hesabınıza giriş yapmanız gerekmektedir.',
+          style: TextStyle(fontSize: 13.5, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Daha Sonra'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AuthScreen()),
+              );
+            },
+            icon: const Icon(Icons.login_rounded, size: 18),
+            label: const Text('Giriş Yap'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _addKeyword([String? customKeyword]) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) {
+      _showGuestLoginPrompt();
+      return;
+    }
+
     final keyword = (customKeyword ?? _keywordController.text).trim();
     if (keyword.isEmpty) {
       HapticFeedback.lightImpact();
       _showSnackBar('Lütfen bir anahtar kelime yazın', isWarning: true);
+      return;
+    }
+
+    if (keyword.length < 2) {
+      HapticFeedback.lightImpact();
+      _showSnackBar('Anahtar kelime en az 2 karakter olmalıdır', isWarning: true);
+      return;
+    }
+
+    if (keyword.length > 35) {
+      HapticFeedback.lightImpact();
+      _showSnackBar('Anahtar kelime en fazla 35 karakter olabilir', isWarning: true);
+      return;
+    }
+
+    if (_watchKeywords.length >= maxKeywordLimit) {
+      HapticFeedback.lightImpact();
+      _showSnackBar('Maksimum $maxKeywordLimit anahtar kelime limitine ulaştınız', isWarning: true);
       return;
     }
 
@@ -80,9 +165,6 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
       _showSnackBar('"$keyword" zaten takip listenizde ekli', isWarning: true);
       return;
     }
-
-    final userId = _auth.currentUser?.uid;
-    if (userId == null) return;
 
     setState(() => _isAdding = true);
     HapticFeedback.mediumImpact();
@@ -108,7 +190,10 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
 
   Future<void> _removeKeyword(String keyword) async {
     final userId = _auth.currentUser?.uid;
-    if (userId == null) return;
+    if (userId == null) {
+      _showGuestLoginPrompt();
+      return;
+    }
 
     HapticFeedback.mediumImpact();
 
@@ -127,6 +212,10 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
 
   Future<void> _clearAllKeywords() async {
     if (_watchKeywords.isEmpty) return;
+    if (_auth.currentUser?.uid == null) {
+      _showGuestLoginPrompt();
+      return;
+    }
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -135,11 +224,11 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-          title: Row(
+          title: const Row(
             children: [
-              const Icon(Icons.delete_sweep_rounded, color: Color(0xFFEF5350)),
-              const SizedBox(width: 10),
-              const Text('Tümünü Sil?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Icon(Icons.delete_sweep_rounded, color: Color(0xFFEF5350)),
+              SizedBox(width: 10),
+              Text('Tümünü Sil?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ],
           ),
           content: const Text(
@@ -198,13 +287,22 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
     final textMain = isDark ? Colors.white : AppTheme.textPrimary;
     final textSub = isDark ? Colors.grey[400] : AppTheme.textSecondary;
     final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final isGuest = _auth.currentUser == null;
+    final quotaRatio = _watchKeywords.length / maxKeywordLimit;
+
+    Color quotaColor = primaryColor;
+    if (_watchKeywords.length >= maxKeywordLimit) {
+      quotaColor = const Color(0xFFEF4444);
+    } else if (_watchKeywords.length >= 22) {
+      quotaColor = const Color(0xFFF59E0B);
+    }
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF6F8FA),
       appBar: AppBar(
         title: const Text(
-          'Anahtar Kelime Takibi',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+          'Fırsat Radarı & Kelime Takibi',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
         ),
         backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
         foregroundColor: textMain,
@@ -219,6 +317,59 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ─── GUEST USER PROMPT BANNER ───
+                  if (isGuest) ...[
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.amber.withValues(alpha: 0.12) : Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.amber.withValues(alpha: isDark ? 0.35 : 0.5),
+                          width: 1.1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, color: Colors.amber.shade800, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Misafir modundasınız. Canlı radar alarmlarını alabilmek için lütfen giriş yapın.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          InkWell(
+                            onTap: _showGuestLoginPrompt,
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade800,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Text(
+                                'Giriş Yap',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   // ─── 1. BİLGİ & İSTATİSTİK KARTI (Glassmorphic Header) ───
                   Container(
                     width: double.infinity,
@@ -258,14 +409,14 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
-                                    Icons.notifications_active_rounded,
+                                    Icons.radar_rounded,
                                     color: primaryColor,
                                     size: 20,
                                   ),
                                 ),
                                 const SizedBox(width: 10),
                                 Text(
-                                  'Canlı İndirim Takibi',
+                                  'Fırsat Radarı',
                                   style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w800,
@@ -274,15 +425,15 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                                 ),
                               ],
                             ),
-                            // Takip Edilen Kelime Rozeti
+                            // Takip Edilen Kelime Rozeti (Sayaç)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                               decoration: BoxDecoration(
-                                color: primaryColor,
+                                color: quotaColor,
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                '${_watchKeywords.length} Kelime Takipte',
+                                '${_watchKeywords.length} / $maxKeywordLimit Kelime',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 11.5,
@@ -294,11 +445,22 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Eklediğiniz anahtar kelimeler yeni paylaşılan fırsat başlıklarında geçtiğinde özel bildirim alırsınız.',
+                          'Eklediğiniz anahtar kelimeler yeni fırsat başlıklarında geçtiğinde cihazınıza anlık özel sesli bildirim gelir.',
                           style: TextStyle(
                             color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                            fontSize: 13,
+                            fontSize: 12.5,
                             height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        // Kota İlerleme Çubuğu (Progress Indicator)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: quotaRatio,
+                            minHeight: 4.5,
+                            backgroundColor: isDark ? Colors.white12 : Colors.black12,
+                            valueColor: AlwaysStoppedAnimation<Color>(quotaColor),
                           ),
                         ),
                       ],

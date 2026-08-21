@@ -9,7 +9,10 @@ void main() {
   });
 
   test('20 Mağaza 200 Gerçek Ürün Linki Doğrulama Testi', () async {
-    final file = File('documentation/aktuel-logs/20_magaza_200_gercek_urun_linki.json');
+    var file = File('documentation/aktuel/logs/20_magaza_200_gercek_urun_linki.json');
+    if (!file.existsSync()) {
+      file = File('documentation/aktuel-logs/20_magaza_200_gercek_urun_linki.json');
+    }
     expect(file.existsSync(), isTrue, reason: '200 ürün linki JSON dosyası bulunamadı');
 
     final jsonStr = await file.readAsString();

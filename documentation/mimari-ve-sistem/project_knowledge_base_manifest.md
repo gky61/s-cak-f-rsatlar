@@ -11,7 +11,7 @@ FırsatKolik; Telegram kanallarından paylaşılan indirimli ürün linklerini y
 ```mermaid
 graph TD
     Telegram[Telegram Kanalları] -->|Canlı MTProto Soket Akışı| BotServer[GCP VM: Telegram Bot Server]
-    BotServer -->|Görsel + Metin Analizi| Gemini[Gemini-1.5-Flash API]
+    BotServer -->|Görsel + Metin Analizi| Gemini[Gemini-2.5 / 2.0 Flash API]
     BotServer -->|Ürün Görseli Yükleme| Storage[Firebase Storage]
     BotServer -->|Taslak Fırsat Ekleme| Firestore[Cloud Firestore]
     
@@ -41,10 +41,8 @@ graph TD
 *   **`functions/`**: Firebase Cloud Functions kodları.
     *   `index.js`: Veritabanı trigger'larını (tetikleyicilerini) barındırır. Fırsat onaylandığında push bildirimi tetikleyen `onDealUpdated` buradadır.
 *   **`web/admin/`**: Firebase Hosting üzerinde barındırılan ve yöneticilerin fırsatları onayladığı basit HTML/CSS/JS tabanlı yönetim paneli.
-*   **`documentation/`**: Proje gereksinimleri, yol haritaları ve geliştirme notları.
-    *   `mrtcn/`: VM taşıması, Dockerize süreçleri, bypass stratejileri, scraper metadata ve indirimsiz orijinal fiyat entegrasyon belgeleri.
-        *   `original_price_scraper_integration_guide.md`: Yeni mağazalara `originalPrice` ekleme teknik adımları ve mimari yol haritası.
-        *   `scraper_metadata_integration_guide.md`: Rating, oy sayısı ve marka verilerinin uçtan uca kazınması ve gösterimi.
+*   **`documentation/`**: Proje gereksinimleri, yol haritaları, mimari ve geliştirme rehberleri (9 tematik alt grupta kategorize edilmiştir: `aktuel/`, `kuponlar/`, `scraping-ve-botlar/`, `kategoriler-ve-magazalar/`, `bildirimler/`, `backend-ve-altyapi/`, `mimari-ve-sistem/`, `mobil-ve-ui/`, `yayin-ve-surec/`).
+    *   Detaylı rehber listesi ve açıklamaları için: `documentation/README.md`.
 
 ---
 

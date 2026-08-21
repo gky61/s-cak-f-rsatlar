@@ -1,74 +1,46 @@
-# Firebase Cloud Functions
+# ⚡ Firebase Cloud Functions — FırsatKolik Backend
 
-Bu klasör, Sıcak Fırsatlar uygulaması için Firebase Cloud Functions içerir.
+Bu klasör, FırsatKolik platformunun reaktif veritabanı trigger'larını, zamanlanmış bakım cron görevlerini ve güvenli API proxy'lerini barındıran **25 adet Cloud Function**'ı içerir (`index.js`).
 
-## 📋 Kurulum
+---
 
-### 1. Node.js Güncellemesi (Gerekli)
+## 📋 Kurulum ve Çalıştırma
 
-Firebase CLI için **Node.js 20 veya üzeri** gereklidir.
-
-```bash
-# nvm kullanarak (önerilen)
-nvm install 20
-nvm use 20
-
-# veya doğrudan https://nodejs.org/ adresinden indirin
-```
-
-### 2. NPM Paketlerini Yükle
+### 1. Gereksinimler
+- **Node.js:** v20 veya v22
+- **Firebase CLI:** `firebase-tools` güncel sürüm
 
 ```bash
 cd functions
 npm install
 ```
 
-### 3. Firebase'e Giriş
+### 2. Dağıtım (Deploy)
 
 ```bash
-firebase login
-```
-
-### 4. Functions'ı Deploy Et
-
-```bash
-# Proje root klasöründe
+# DEV Ortamına Dağıtım
+firebase use dev
 firebase deploy --only functions
+
+# PROD (Canlı) Ortamına Dağıtım
+firebase use prod
+firebase deploy --only functions --force
 ```
 
-## 🔔 Functions
+---
 
-### `sendDealNotification`
-- **Tetiklenme:** Yeni bir deal oluşturulduğunda
-- **Aksiyon:** Onaylanmış deal'ler için kategori ve alt kategori topic'lerine bildirim gönderir
+## 🔔 25 Cloud Function Özeti
 
-### `sendDealApprovalNotification`
-- **Tetiklenme:** Bir deal onaylandığında (`isApproved: false` → `true`)
-- **Aksiyon:** Kategori ve alt kategori topic'lerine bildirim gönderir
+1. **Fırsat & Yorum:** `onDealCreated`, `onDealUpdated`, `onCommentCreated`
+2. **Mesajlaşma & Bildirim:** `onNotificationCreated` (Merkezi FCM V1 push motoru), `onUserMessageCreated`, `onAdminMessageCreated`
+3. **Kullanıcı & Profil:** `onUserUpdated` (Denormalize avatar/isim sync), `onUserDeleted`, `adminDeleteUser`
+4. **API & Güvenli Proxy:** `resolveShortLink`, `analyzeProductProxy` (App Check & Secret Manager korumalı Gemini AI proxy), `sendManualNotification`
+5. **Temizlik & Arşiv Cron:** `cleanupExpiredDeals` (48h soft-expire), `purgeOldDeals` (30 gün hard-purge), `cleanupOldImages` (Storage garbage collector), `cleanupInvalidTokens`
+6. **Kupon & Katalog Kazıyıcılar:** `scrapeCouponsScheduled` / `scrapeCouponsManual`, `scrapeCatalogsScheduled` / `scrapeCatalogsManual`
+7. **Test & Geliştirici:** `generateTestData`, `cleanupTestData`
 
-## 📊 Topic Yapısı
+---
 
-- Kategori: `category_{categoryId}` (örn: `category_bilgisayar`)
-- Alt Kategori: `subcategory_{categoryId}_{subCategoryId}` (örn: `subcategory_bilgisayar_ekran_karti`)
-
-## 🧪 Test
-
-### Local Emulator
-```bash
-npm run serve
-```
-
-### Log İzleme
-```bash
-firebase functions:log
-```
-
-## 📚 Daha Fazla Bilgi
-
-Detaylı kurulum talimatları için `FIREBASE_FUNCTIONS_SETUP.md` dosyasına bakın.
-
-
-
-
-
-
+## 📚 Detaylı Dokümantasyon
+Her bir fonksiyonun kaynak kodu, tetiklenme şartları, yetki modeli ve kullanım senaryoları için ana rehberi inceleyiniz:
+👉 [Cloud Functions ve Backend Servisleri Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/cloud_functions_rehberi.md)

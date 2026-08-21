@@ -12,12 +12,16 @@ import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
 import '../utils/asset_path_migration.dart';
+import 'guest_profile_screen.dart';
 import 'notification_settings_screen.dart';
 import 'auth_screen.dart';
 // import 'edit_profile_screen.dart'; // Dosya bulunamadı, geçici olarak yorum satırı
 import 'privacy_policy_screen.dart';
 import 'faq_screen.dart';
 import 'category_preferences_screen.dart';
+import 'admin_screen.dart';
+import 'keyword_tracking_screen.dart';
+import 'badges_screen.dart';
 import '../widgets/report_dialog.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import 'message_screen.dart';
@@ -795,9 +799,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
     final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final primaryColor = Theme.of(context).colorScheme.primary;
-    final textMain = isDark ? Colors.white : const Color(0xFF0F172A);
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final primaryColor = isDark ? const Color(0xFFEA580C) : const Color(0xFFFF6B35);
+    final accentBlue = isDark ? const Color(0xFF38BDF8) : const Color(0xFF004E92);
+    final textMain = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
     final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    // Misafir (Giriş yapmamış kullanıcı) kendi profiline bakıyorsa:
+    if (_isOwnProfile && _authService.currentUser == null) {
+      return GuestProfileScreen(
+        onLoginSuccess: () {
+          _checkIfOwnProfile();
+          _checkAdminStatus();
+          _loadUserData();
+          if (_isOwnProfile) {
+            _loadUnreadMessageCount();
+            _loadUnreadAdminMessageCount();
+          }
+        },
+      );
+    }
 
     if (_isLoading && _user == null) {
       return Scaffold(
@@ -828,7 +849,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textSub: textSub,
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
                 // Action Buttons Bar (Sadece başka bir kullanıcının profili ise)
                 if (!_isOwnProfile && _user != null && _authService.currentUser != null && widget.userId != null) ...[
@@ -846,10 +867,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       surfaceColor: surfaceColor,
                       textMain: textMain,
                       onMessageTap: _navigateToMessageScreen,
-                      onBadgeTap: (u) => _showBadgeDialog(u),
+                      onBadgeTap: (u) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => BadgesScreen(
+                              user: u,
+                              isOwnProfile: false,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                 ],
 
                 // 4-Column Stats Matrix Card
@@ -860,28 +891,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     isDark: isDark,
                     primaryColor: primaryColor,
                     surfaceColor: surfaceColor,
+                    borderColor: borderColor,
                     textMain: textMain,
                     textSub: textSub,
                   ),
                 ),
 
-                const SizedBox(height: 20),
-
-                // Badges Showcase (Kazanılan Rozetler)
-                if (_user?.badges != null && _user!.badges.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _buildBadgesSection(
-                      context,
-                      isDark: isDark,
-                      primaryColor: primaryColor,
-                      surfaceColor: surfaceColor,
-                      textMain: textMain,
-                      textSub: textSub,
-                    ),
+                // Bento Quick Shortcuts (Sadece kendi profilinde)
+                if (_isOwnProfile) ...[
+                  const SizedBox(height: 10),
+                  _buildBentoQuickActions(
+                    context,
+                    isDark: isDark,
+                    primaryColor: primaryColor,
+                    accentBlue: accentBlue,
+                    surfaceColor: surfaceColor,
+                    borderColor: borderColor,
+                    textMain: textMain,
+                    textSub: textSub,
                   ),
-                  const SizedBox(height: 20),
                 ],
+
+                if (_isOwnProfile) const SizedBox(height: 12),
 
                 // If Other User's Profile: Shared Deals Feed
                 if (!_isOwnProfile && _user != null) ...[
@@ -899,316 +930,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
 
-                // Settings Section (sadece kendi profilinde)
+                // Settings Sections (Sadece kendi profilinde)
                 if (_isOwnProfile) ...[
-                  const SizedBox(height: 12),
-                  _buildSectionHeader('HESAP & BİLDİRİMLER', textSub),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: surfaceColor,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
-                          width: 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          // Notifications
-                          _buildSettingItem(
-                            icon: Icons.notifications_rounded,
-                            title: 'Bildirim Ayarları',
-                            iconBgColor: primaryColor.withValues(alpha: 0.15),
-                            iconColor: primaryColor,
-                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const NotificationSettingsScreen(),
-                                ),
-                              );
-                            },
-                            isDark: isDark,
-                          ),
-                          _buildDivider(isDark),
-                          // Paylaştığım Fırsatlar
-                          _buildSettingItem(
-                            icon: Icons.local_offer_rounded,
-                            title: 'Paylaştığım Fırsatlar',
-                            iconBgColor: Colors.orange.withValues(alpha: 0.15),
-                            iconColor: Colors.orange,
-                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                            onTap: () {
-                              final currentUserId = _authService.currentUser?.uid;
-                              if (currentUserId != null) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => UserDealsScreen(
-                                      userId: currentUserId,
-                                      username: _user?.username ?? '',
-                                      isOwnProfile: true,
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                            isDark: isDark,
-                          ),
-                          _buildDivider(isDark),
-                          // Takip Ettiklerim
-                          _buildSettingItem(
-                            icon: Icons.people_alt_rounded,
-                            title: 'Takip Ettiklerim',
-                            iconBgColor: Colors.purple.withValues(alpha: 0.15),
-                            iconColor: Colors.purple,
-                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const FollowingUsersScreen(),
-                                ),
-                              );
-                            },
-                            isDark: isDark,
-                          ),
-                          _buildDivider(isDark),
-                          // Mesajlar
-                          _buildSettingItem(
-                            icon: Icons.chat_bubble_rounded,
-                            title: 'Mesajlar',
-                            iconBgColor: Colors.blue.withValues(alpha: 0.15),
-                            iconColor: Colors.blue,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if ((_unreadMessageCount + _unreadAdminMessageCount) > 0)
-                                  Container(
-                                    margin: const EdgeInsets.only(right: 8),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      (_unreadMessageCount + _unreadAdminMessageCount) > 99
-                                          ? '99+'
-                                          : (_unreadMessageCount + _unreadAdminMessageCount).toString(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                Icon(Icons.chevron_right_rounded, color: textSub),
-                              ],
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const MessagesListScreen(),
-                                ),
-                              );
-                            },
-                            isDark: isDark,
-                          ),
-                          _buildDivider(isDark),
-                          // Privacy
-                          _buildSettingItem(
-                            icon: Icons.shield_rounded,
-                            title: 'Gizlilik Politikası',
-                            iconBgColor: Colors.teal.withValues(alpha: 0.15),
-                            iconColor: Colors.teal,
-                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const PrivacyPolicyScreen(),
-                                ),
-                              );
-                            },
-                            isDark: isDark,
-                          ),
-                        ],
-                      ),
-                    ),
+                  _buildAccountSettingsSection(
+                    context,
+                    isDark: isDark,
+                    primaryColor: primaryColor,
+                    accentBlue: accentBlue,
+                    surfaceColor: surfaceColor,
+                    borderColor: borderColor,
+                    textMain: textMain,
+                    textSub: textSub,
                   ),
-
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('DESTEK & İLETİŞİM', textSub),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: surfaceColor,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          // FAQ
-                          _buildSettingItem(
-                            icon: Icons.help_outline_rounded,
-                            title: 'Sıkça Sorulan Sorular',
-                            iconBgColor: Colors.purple.withValues(alpha: 0.15),
-                            iconColor: Colors.purple,
-                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const FAQScreen(),
-                                ),
-                              );
-                            },
-                            isDark: isDark,
-                          ),
-                          _buildDivider(isDark),
-                          // Contact
-                          _buildSettingItem(
-                            icon: Icons.alternate_email_rounded,
-                            title: 'Bize Ulaşın',
-                            iconBgColor: Colors.orange.withValues(alpha: 0.15),
-                            iconColor: Colors.orange,
-                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                            onTap: () async {
-                              const email = 'kolikfirsat@gmail.com';
-                              final uri = Uri.parse('mailto:$email');
-                              try {
-                                if (await canLaunchUrl(uri)) {
-                                  await launchUrl(uri);
-                                } else {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('E-posta uygulaması açılamadı. Lütfen $email adresine manuel olarak e-posta gönderin.'),
-                                        backgroundColor: Colors.orange,
-                                        duration: Duration(seconds: 4),
-                                      ),
-                                    );
-                                  }
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('E-posta açılırken hata: $e'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                            isDark: isDark,
-                          ),
-                          _buildDivider(isDark),
-                          // Rate App
-                          _buildSettingItem(
-                            icon: Icons.star_outline_rounded,
-                            title: 'Uygulamayı Değerlendir',
-                            iconBgColor: Colors.amber.withValues(alpha: 0.15),
-                            iconColor: Colors.amber[800]!,
-                            trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                            onTap: () async {
-                              const packageName = 'com.sicakfirsatlar.sicak_firsatlar';
-                              final playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=$packageName');
-                              final marketUrl = Uri.parse('market://details?id=$packageName');
-                              
-                              try {
-                                if (await canLaunchUrl(marketUrl)) {
-                                  await launchUrl(marketUrl, mode: LaunchMode.externalApplication);
-                                } else if (await canLaunchUrl(playStoreUrl)) {
-                                  await launchUrl(playStoreUrl, mode: LaunchMode.externalApplication);
-                                } else {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Play Store açılamadı'),
-                                        behavior: SnackBarBehavior.floating,
-                                      ),
-                                    );
-                                  }
-                                }
-                              } catch (e) {
-                                _log('Play Store açılırken hata: $e');
-                              }
-                            },
-                            isDark: isDark,
-                          ),
-                        ],
-                      ),
-                    ),
+                  const SizedBox(height: 16),
+                  _buildSupportSettingsSection(
+                    context,
+                    isDark: isDark,
+                    primaryColor: primaryColor,
+                    accentBlue: accentBlue,
+                    surfaceColor: surfaceColor,
+                    borderColor: borderColor,
+                    textMain: textMain,
+                    textSub: textSub,
                   ),
-
-                  // Logout & Delete Account
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: TextButton.icon(
-                            onPressed: _signOut,
-                            icon: const Icon(Icons.logout_rounded),
-                            label: const Text('Çıkış Yap'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.red,
-                              backgroundColor: Colors.red.withValues(alpha: 0.06),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.red.withValues(alpha: 0.15)),
-                              ),
-                              textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: TextButton.icon(
-                            onPressed: _deleteAccount,
-                            icon: const Icon(Icons.delete_forever_rounded),
-                            label: const Text('Hesabımı Sil'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.red,
-                              backgroundColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'FırsatKolik v1.2.4 (Build 302)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: textSub.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ],
-                    ),
+                  const SizedBox(height: 16),
+                  _buildLogoutSection(
+                    context,
+                    isDark: isDark,
+                    primaryColor: primaryColor,
+                    surfaceColor: surfaceColor,
+                    borderColor: borderColor,
+                    textMain: textMain,
+                    textSub: textSub,
                   ),
                 ],
 
@@ -1424,68 +1177,158 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 const SizedBox(height: 10),
 
-                // Trust Level / Reputation Pill Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? primaryColor.withValues(alpha: 0.12)
-                        : primaryColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: primaryColor.withValues(alpha: 0.22),
-                      width: 1,
+                // Trust Level & Pinned Badge Row (Tıklanabilir Başarım Kısayolları)
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    // Trust Level / Reputation Pill Badge
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () async {
+                          if (user == null) return;
+                          HapticFeedback.selectionClick();
+                          final updatedUser = await Navigator.push<AppUser>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => BadgesScreen(
+                                user: user,
+                                isOwnProfile: _isOwnProfile,
+                              ),
+                            ),
+                          );
+                          if (updatedUser != null && mounted) {
+                            setState(() {
+                              _user = updatedUser;
+                            });
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? primaryColor.withValues(alpha: 0.12)
+                                : primaryColor.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: primaryColor.withValues(alpha: 0.22),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.verified_rounded,
+                                size: 13,
+                                color: primaryColor,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                trustLevel,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: primaryColor,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                width: 3.5,
+                                height: 3.5,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: textSub.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$points Puan',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: textSub,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.verified_rounded,
-                        size: 13,
-                        color: primaryColor,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        trustLevel,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: primaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        width: 3.5,
-                        height: 3.5,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: textSub.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$points Puan',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: textSub,
-                        ),
-                      ),
+
+                    // Pinned Badge Pill (If user selected one)
+                    if (user?.pinnedBadge != null) ...[
+                      Builder(builder: (context) {
+                        final pinnedBadge = BadgeHelper.getBadgeInfo(user!.pinnedBadge!);
+                        if (pinnedBadge == null) return const SizedBox.shrink();
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () async {
+                              HapticFeedback.selectionClick();
+                              final updatedUser = await Navigator.push<AppUser>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => BadgesScreen(
+                                    user: user,
+                                    isOwnProfile: _isOwnProfile,
+                                  ),
+                                ),
+                              );
+                              if (updatedUser != null && mounted) {
+                                setState(() {
+                                  _user = updatedUser;
+                                });
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                              decoration: BoxDecoration(
+                                color: pinnedBadge.color.withValues(alpha: isDark ? 0.18 : 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: pinnedBadge.color.withValues(alpha: 0.45),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(pinnedBadge.iconData, size: 13, color: pinnedBadge.color),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    pinnedBadge.name,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: pinnedBadge.color,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
                     ],
-                  ),
+                  ],
                 ),
               ],
             ),
           );
   }
 
-  // 3. STATS MATRIX (4-COLUMN CARD)
+  // 3. STATS MATRIX (4-COLUMN CARD - COMPACT)
   Widget _buildStatsMatrix(
     BuildContext context, {
     required bool isDark,
     required Color primaryColor,
     required Color surfaceColor,
+    required Color borderColor,
     required Color textMain,
     required Color textSub,
   }) {
@@ -1496,19 +1339,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final followingCount = user?.following.length ?? 0;
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       decoration: BoxDecoration(
         color: surfaceColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
-          width: 1,
-        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 1.1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -1516,43 +1356,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _buildSingleStat(
-            icon: Icons.local_fire_department_rounded,
-            iconColor: Colors.orange.shade600,
-            iconBg: Colors.orange.withValues(alpha: 0.12),
+            icon: Icons.local_offer_rounded,
+            iconColor: isDark ? const Color(0xFF2DD4BF) : Colors.teal.shade600,
+            iconBg: Colors.teal.withValues(alpha: isDark ? 0.18 : 0.10),
             value: '$dealCount',
             label: 'Fırsat',
             textMain: textMain,
             textSub: textSub,
+            onTap: () {
+              final uid = widget.userId ?? _authService.currentUser?.uid;
+              if (uid != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => UserDealsScreen(
+                      userId: uid,
+                      username: _user?.username ?? '',
+                      isOwnProfile: _isOwnProfile,
+                    ),
+                  ),
+                );
+              }
+            },
           ),
-          _buildStatDivider(isDark),
+          _buildStatDivider(isDark, borderColor),
           _buildSingleStat(
             icon: Icons.star_rounded,
-            iconColor: Colors.amber.shade700,
-            iconBg: Colors.amber.withValues(alpha: 0.12),
+            iconColor: isDark ? const Color(0xFFFBBF24) : Colors.amber.shade700,
+            iconBg: Colors.amber.withValues(alpha: isDark ? 0.18 : 0.10),
             value: '$points',
             label: 'Puan',
             textMain: textMain,
             textSub: textSub,
           ),
-          _buildStatDivider(isDark),
+          _buildStatDivider(isDark, borderColor),
           _buildSingleStat(
-            icon: Icons.favorite_rounded,
-            iconColor: Colors.redAccent,
-            iconBg: Colors.redAccent.withValues(alpha: 0.12),
+            icon: Icons.local_fire_department_rounded,
+            iconColor: isDark ? const Color(0xFFFB923C) : Colors.orange.shade600,
+            iconBg: Colors.orange.withValues(alpha: isDark ? 0.18 : 0.10),
             value: '$totalLikes',
-            label: 'Beğeni',
+            label: 'Sıcaklık',
             textMain: textMain,
             textSub: textSub,
           ),
-          _buildStatDivider(isDark),
+          _buildStatDivider(isDark, borderColor),
           _buildSingleStat(
             icon: Icons.people_alt_rounded,
-            iconColor: Colors.blue.shade600,
-            iconBg: Colors.blue.withValues(alpha: 0.12),
+            iconColor: isDark ? const Color(0xFF60A5FA) : Colors.blue.shade600,
+            iconBg: Colors.blue.withValues(alpha: isDark ? 0.18 : 0.10),
             value: '$followingCount',
             label: 'Takip',
             textMain: textMain,
             textSub: textSub,
+            onTap: _isOwnProfile
+                ? () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const FollowingUsersScreen(),
+                      ),
+                    );
+                  }
+                : null,
           ),
         ],
       ),
@@ -1567,188 +1432,611 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String label,
     required Color textMain,
     required Color textSub,
+    VoidCallback? onTap,
   }) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: iconBg,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Icon(icon, size: 13, color: iconColor),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w800,
+            color: textMain,
+            letterSpacing: -0.2,
+          ),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: textSub,
+          ),
+        ),
+      ],
+    );
+
     return Expanded(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: iconBg,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 14, color: iconColor),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: textMain,
-              letterSpacing: -0.2,
-            ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w500,
-              color: textSub,
-            ),
-          ),
-        ],
-      ),
+      child: onTap != null
+          ? InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: content,
+              ),
+            )
+          : content,
     );
   }
 
-  Widget _buildStatDivider(bool isDark) {
+  Widget _buildStatDivider(bool isDark, Color borderColor) {
     return Container(
       width: 1,
-      height: 28,
-      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+      height: 22,
+      color: borderColor,
     );
   }
 
-  // 4. BADGES SHOWCASE SECTION
-  Widget _buildBadgesSection(
+  // 4. BENTO QUICK SHORTCUTS GRID (COMPACT INLINE)
+  Widget _buildBentoQuickActions(
     BuildContext context, {
     required bool isDark,
     required Color primaryColor,
+    required Color accentBlue,
     required Color surfaceColor,
+    required Color borderColor,
     required Color textMain,
     required Color textSub,
   }) {
-    final badgeInfos = BadgeHelper.getBadgeInfos(_user!.badges);
-    if (badgeInfos.isEmpty) return const SizedBox.shrink();
+    final unreadTotal = _unreadMessageCount + _unreadAdminMessageCount;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.military_tech_rounded, size: 16, color: primaryColor),
-              const SizedBox(width: 6),
-              Text(
-                'KAZANILAN ROZETLER',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: textSub,
+              Expanded(
+                child: _buildBentoCard(
+                  context,
+                  title: 'Mesajlarım',
+                  subtitle: unreadTotal > 0 ? '$unreadTotal yeni mesaj' : 'Özel ve anlık sohbetler',
+                  icon: Icons.chat_bubble_rounded,
+                  iconColor: isDark ? const Color(0xFF60A5FA) : Colors.blue.shade600,
+                  iconBg: Colors.blue.withValues(alpha: isDark ? 0.20 : 0.12),
+                  badgeCount: unreadTotal,
+                  isDark: isDark,
+                  surfaceColor: surfaceColor,
+                  borderColor: borderColor,
+                  textMain: textMain,
+                  textSub: textSub,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const MessagesListScreen()),
+                    );
+                  },
                 ),
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: primaryColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${badgeInfos.length}',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: primaryColor,
-                  ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildBentoCard(
+                  context,
+                  title: 'Fırsat Radarı',
+                  subtitle: 'Anahtar kelime takibi',
+                  icon: Icons.radar_rounded,
+                  iconColor: isDark ? const Color(0xFFFB923C) : Colors.orange.shade600,
+                  iconBg: Colors.orange.withValues(alpha: isDark ? 0.20 : 0.12),
+                  isDark: isDark,
+                  surfaceColor: surfaceColor,
+                  borderColor: borderColor,
+                  textMain: textMain,
+                  textSub: textSub,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const KeywordTrackingScreen()),
+                    );
+                  },
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: badgeInfos.map((badge) {
-              return InkWell(
-                onTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                    ),
-                    builder: (context) => Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(badge.icon, style: const TextStyle(fontSize: 48)),
-                          const SizedBox(height: 12),
-                          Text(
-                            badge.name,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: textMain,
-                            ),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Expanded(
+                child: _buildBentoCard(
+                  context,
+                  title: 'Fırsatlarım',
+                  subtitle: '${_user?.dealCount ?? 0} paylaşılan fırsat',
+                  icon: Icons.local_offer_rounded,
+                  iconColor: isDark ? const Color(0xFF2DD4BF) : Colors.teal.shade600,
+                  iconBg: Colors.teal.withValues(alpha: isDark ? 0.20 : 0.12),
+                  isDark: isDark,
+                  surfaceColor: surfaceColor,
+                  borderColor: borderColor,
+                  textMain: textMain,
+                  textSub: textSub,
+                  onTap: () {
+                    final currentUserId = _authService.currentUser?.uid;
+                    if (currentUserId != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => UserDealsScreen(
+                            userId: currentUserId,
+                            username: _user?.username ?? '',
+                            isOwnProfile: true,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            badge.description,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: textSub,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                        ],
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildBentoCard(
+                  context,
+                  title: 'Kategori Takibi',
+                  subtitle: 'İlgi alanları & bildirimler',
+                  icon: Icons.dashboard_customize_rounded,
+                  iconColor: isDark ? const Color(0xFFC084FC) : Colors.purple.shade600,
+                  iconBg: Colors.purple.withValues(alpha: isDark ? 0.20 : 0.12),
+                  isDark: isDark,
+                  surfaceColor: surfaceColor,
+                  borderColor: borderColor,
+                  textMain: textMain,
+                  textSub: textSub,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CategoryPreferencesScreen()),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBentoCard(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    int badgeCount = 0,
+    required bool isDark,
+    required Color surfaceColor,
+    required Color borderColor,
+    required Color textMain,
+    required Color textSub,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 1.1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top Row: [Icon] + [Title] + [Badge or Arrow]
+                Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: iconBg,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Icon(icon, color: iconColor, size: 16),
                       ),
                     ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: badge.color.withValues(alpha: isDark ? 0.15 : 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: badge.color.withValues(alpha: 0.35),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(badge.icon, style: const TextStyle(fontSize: 14)),
-                      const SizedBox(width: 5),
-                      Text(
-                        badge.name,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
                         style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: badge.color,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: textMain,
+                          letterSpacing: -0.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (badgeCount > 0) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade600,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          badgeCount > 99 ? '99+' : '$badgeCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
+                    ] else ...[
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: textSub.withValues(alpha: 0.4),
+                      ),
                     ],
-                  ),
+                  ],
                 ),
-              );
-            }).toList(),
+                const SizedBox(height: 5),
+
+                // Bottom: Subtitle / Description under the icon+title row
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: textSub,
+                    height: 1.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 6. ACCOUNT & PREFERENCES SECTION
+  Widget _buildAccountSettingsSection(
+    BuildContext context, {
+    required bool isDark,
+    required Color primaryColor,
+    required Color accentBlue,
+    required Color surfaceColor,
+    required Color borderColor,
+    required Color textMain,
+    required Color textSub,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('HESAP & UYGULAMA TERCİHLERİ', textSub),
+          Container(
+            decoration: BoxDecoration(
+              color: surfaceColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor, width: 1.1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.02),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildSettingItem(
+                  icon: Icons.notifications_active_rounded,
+                  title: 'Bildirim Tercihleri',
+                  subtitle: 'Ses, titreşim ve kategori alarmları',
+                  iconBgColor: (isDark ? accentBlue : primaryColor).withValues(alpha: isDark ? 0.18 : 0.10),
+                  iconColor: isDark ? accentBlue : primaryColor,
+                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationSettingsScreen(),
+                      ),
+                    );
+                  },
+                  isDark: isDark,
+                  textMain: textMain,
+                  textSub: textSub,
+                ),
+                _buildDivider(isDark, borderColor),
+                _buildSettingItem(
+                  icon: Icons.people_alt_rounded,
+                  title: 'Takip Ettiğim Avcılar',
+                  subtitle: 'Takip listeniz ve paylaşımları',
+                  iconBgColor: Colors.purple.withValues(alpha: isDark ? 0.18 : 0.10),
+                  iconColor: isDark ? const Color(0xFFC084FC) : Colors.purple.shade600,
+                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const FollowingUsersScreen(),
+                      ),
+                    );
+                  },
+                  isDark: isDark,
+                  textMain: textMain,
+                  textSub: textSub,
+                ),
+                _buildDivider(isDark, borderColor),
+                _buildSettingItem(
+                  icon: Icons.military_tech_rounded,
+                  title: 'Avcı Başarımları & Rozetler',
+                  subtitle: '${_user?.badges.length ?? 0} / ${BadgeHelper.badges.length} Rozet Kazanıldı',
+                  iconBgColor: Colors.amber.withValues(alpha: isDark ? 0.18 : 0.10),
+                  iconColor: isDark ? const Color(0xFFFBBF24) : Colors.amber.shade800,
+                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                  onTap: () async {
+                    if (_user == null) return;
+                    HapticFeedback.lightImpact();
+                    final updatedUser = await Navigator.push<AppUser>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => BadgesScreen(
+                          user: _user!,
+                          isOwnProfile: _isOwnProfile,
+                        ),
+                      ),
+                    );
+                    if (updatedUser != null && mounted) {
+                      setState(() {
+                        _user = updatedUser;
+                      });
+                    }
+                  },
+                  isDark: isDark,
+                  textMain: textMain,
+                  textSub: textSub,
+                ),
+                if (_isAdmin) ...[
+                  _buildDivider(isDark, borderColor),
+                  _buildSettingItem(
+                    icon: Icons.admin_panel_settings_rounded,
+                    title: 'Yönetici Kontrol Paneli',
+                    subtitle: 'Botkolik ve içerik yönetimi',
+                    iconBgColor: Colors.amber.withValues(alpha: isDark ? 0.18 : 0.10),
+                    iconColor: isDark ? const Color(0xFFFBBF24) : Colors.amber.shade800,
+                    trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AdminScreen(),
+                        ),
+                      );
+                    },
+                    isDark: isDark,
+                    textMain: textMain,
+                    textSub: textSub,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 7. SUPPORT & LEGAL SECTION
+  Widget _buildSupportSettingsSection(
+    BuildContext context, {
+    required bool isDark,
+    required Color primaryColor,
+    required Color accentBlue,
+    required Color surfaceColor,
+    required Color borderColor,
+    required Color textMain,
+    required Color textSub,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('BİLGİ, DESTEK & HUKUKİ', textSub),
+          Container(
+            decoration: BoxDecoration(
+              color: surfaceColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor, width: 1.1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.02),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildSettingItem(
+                  icon: Icons.help_outline_rounded,
+                  title: 'Sıkça Sorulan Sorular',
+                  subtitle: 'Fırsatlar, kuponlar ve avcı rehberi',
+                  iconBgColor: Colors.blue.withValues(alpha: isDark ? 0.18 : 0.10),
+                  iconColor: isDark ? const Color(0xFF60A5FA) : Colors.blue.shade600,
+                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const FAQScreen()),
+                    );
+                  },
+                  isDark: isDark,
+                  textMain: textMain,
+                  textSub: textSub,
+                ),
+                _buildDivider(isDark, borderColor),
+                _buildSettingItem(
+                  icon: Icons.shield_outlined,
+                  title: 'Gizlilik Politikası',
+                  subtitle: 'KVKK, şeffaflık ve veri hakları',
+                  iconBgColor: Colors.teal.withValues(alpha: isDark ? 0.18 : 0.10),
+                  iconColor: isDark ? const Color(0xFF2DD4BF) : Colors.teal.shade600,
+                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                    );
+                  },
+                  isDark: isDark,
+                  textMain: textMain,
+                  textSub: textSub,
+                ),
+                _buildDivider(isDark, borderColor),
+                _buildSettingItem(
+                  icon: Icons.alternate_email_rounded,
+                  title: 'Bize Ulaşın & Geri Bildirim',
+                  subtitle: 'kolikfirsat@gmail.com',
+                  iconBgColor: Colors.orange.withValues(alpha: isDark ? 0.18 : 0.10),
+                  iconColor: isDark ? const Color(0xFFFB923C) : Colors.orange.shade600,
+                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                  onTap: () async {
+                    const email = 'kolikfirsat@gmail.com';
+                    final uri = Uri.parse('mailto:$email');
+                    try {
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri);
+                      }
+                    } catch (_) {}
+                  },
+                  isDark: isDark,
+                  textMain: textMain,
+                  textSub: textSub,
+                ),
+                _buildDivider(isDark, borderColor),
+                _buildSettingItem(
+                  icon: Icons.star_outline_rounded,
+                  title: 'Uygulamayı Değerlendir',
+                  subtitle: 'Google Play & App Store',
+                  iconBgColor: Colors.amber.withValues(alpha: isDark ? 0.18 : 0.10),
+                  iconColor: isDark ? const Color(0xFFFBBF24) : Colors.amber.shade800,
+                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
+                  onTap: () async {
+                    const packageName = 'com.sicakfirsatlar.sicak_firsatlar';
+                    final playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=$packageName');
+                    final marketUrl = Uri.parse('market://details?id=$packageName');
+                    try {
+                      if (await canLaunchUrl(marketUrl)) {
+                        await launchUrl(marketUrl, mode: LaunchMode.externalApplication);
+                      } else if (await canLaunchUrl(playStoreUrl)) {
+                        await launchUrl(playStoreUrl, mode: LaunchMode.externalApplication);
+                      }
+                    } catch (_) {}
+                  },
+                  isDark: isDark,
+                  textMain: textMain,
+                  textSub: textSub,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 8. LOGOUT & ACCOUNT DELETION
+  Widget _buildLogoutSection(
+    BuildContext context, {
+    required bool isDark,
+    required Color primaryColor,
+    required Color surfaceColor,
+    required Color borderColor,
+    required Color textMain,
+    required Color textSub,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: _signOut,
+              icon: const Icon(Icons.logout_rounded, size: 18),
+              label: const Text('Çıkış Yap'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red.shade400,
+                side: BorderSide(color: Colors.red.withValues(alpha: 0.35), width: 1.2),
+                backgroundColor: Colors.red.withValues(alpha: isDark ? 0.10 : 0.05),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: TextButton.icon(
+              onPressed: _deleteAccount,
+              icon: Icon(Icons.delete_outline_rounded, size: 16, color: textSub.withValues(alpha: 0.8)),
+              label: Text('Hesabımı Sil', style: TextStyle(color: textSub.withValues(alpha: 0.8))),
+              style: TextButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'FırsatKolik v1.2.4 (Build 302)',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+              color: textSub.withValues(alpha: 0.6),
+            ),
           ),
         ],
       ),
@@ -2224,13 +2512,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildSectionHeader(String title, Color color) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.only(left: 20, bottom: 8),
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
       child: Text(
         title,
         style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.2,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
           color: color,
         ),
       ),
@@ -2240,18 +2528,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildSettingItem({
     required IconData icon,
     required String title,
+    String? subtitle,
     required Color iconBgColor,
     required Color iconColor,
     required Widget trailing,
     VoidCallback? onTap,
     required bool isDark,
+    Color? textMain,
+    Color? textSub,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           child: Row(
             children: [
               Container(
@@ -2265,13 +2557,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.grey[200] : Colors.black87,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: textMain ?? (isDark ? Colors.white : Colors.black87),
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: textSub ?? (isDark ? Colors.grey[400] : Colors.grey[600]),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               trailing,
@@ -2282,11 +2591,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildDivider(bool isDark) {
+  Widget _buildDivider(bool isDark, [Color? borderColor]) {
     return Divider(
       height: 1,
       indent: 68,
-      color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+      color: borderColor ?? (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
     );
   }
 
