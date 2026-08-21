@@ -29,12 +29,12 @@ void main() {
 
       expect(progressMaster.isUnlocked, isFalse);
       expect(progressMaster.currentValue, 0);
-      expect(progressMaster.targetValue, 25);
+      expect(progressMaster.targetValue, 50);
       expect(progressMaster.percentage, 0.0);
-      expect(progressMaster.remaining, 25);
+      expect(progressMaster.remaining, 50);
     });
 
-    test('Kısmi ilerleme (Örn: 10/25 Fırsat) doğru yüzde ve kalan üretmeli', () {
+    test('Kısmi ilerleme (Örn: 10/50 Fırsat) doğru yüzde ve kalan üretmeli', () {
       final user = AppUser(
         uid: 'user_2',
         username: 'HevesliAvci',
@@ -42,7 +42,7 @@ void main() {
         dealCount: 10,
         points: 45,
         totalLikes: 15,
-        badges: ['first_spark', 'hunter_apprentice', 'contributor'],
+        badges: ['first_spark', 'hunter_apprentice'],
       );
 
       final masterHunterBadge = BadgeHelper.getBadgeInfo('master_hunter')!;
@@ -50,9 +50,9 @@ void main() {
 
       expect(progress.isUnlocked, isFalse);
       expect(progress.currentValue, 10);
-      expect(progress.targetValue, 25);
-      expect(progress.percentage, 0.4); // %40
-      expect(progress.remaining, 15);
+      expect(progress.targetValue, 50);
+      expect(progress.percentage, 0.2); // %20 (10/50)
+      expect(progress.remaining, 40);
     });
 
     test('Kazanılmış rozetler %100 ve isUnlocked = true dönmeli', () {
@@ -60,9 +60,9 @@ void main() {
         uid: 'user_3',
         username: 'UstaAvci',
         profileImageUrl: '',
-        dealCount: 28,
-        points: 120,
-        totalLikes: 60,
+        dealCount: 55,
+        points: 180,
+        totalLikes: 80,
         badges: ['first_spark', 'hunter_apprentice', 'contributor', 'master_hunter', 'flame_master'],
       );
 
@@ -79,9 +79,9 @@ void main() {
         uid: 'user_4',
         username: 'AktifAvci',
         profileImageUrl: '',
-        dealCount: 6, // first_spark (1), hunter_apprentice (5) hak eder
-        points: 35,   // bronze (10), voice_of_community (20), active_voter (30) hak eder
-        totalLikes: 26, // helpful (25) hak eder
+        dealCount: 12, // first_spark (1), hunter_apprentice (10) hak eder
+        points: 55,   // bronze (15), voice_of_community (35), active_voter (50) hak eder
+        totalLikes: 42, // helpful (40) hak eder
         badges: [],
       );
 
@@ -95,9 +95,9 @@ void main() {
       expect(eligible.contains('helpful'), isTrue);
 
       // Henüz hak edilmeyenler
-      expect(eligible.contains('master_hunter'), isFalse); // 25 fırsat gerekir
-      expect(eligible.contains('legendary_hunter'), isFalse); // 100 fırsat gerekir
-      expect(eligible.contains('volcanic_record'), isFalse); // 300 puan gerekir
+      expect(eligible.contains('master_hunter'), isFalse); // 50 fırsat gerekir
+      expect(eligible.contains('legendary_hunter'), isFalse); // 150 fırsat gerekir
+      expect(eligible.contains('volcanic_record'), isFalse); // 500 puan gerekir
     });
 
     test('Kategori filtreleme doğru rozet sayılarını döndürmeli', () {

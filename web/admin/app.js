@@ -6118,21 +6118,21 @@ window.autoAwardBadgesForUser = async function (userId) {
 
     const eligible = [];
     if (dealCount >= 1) eligible.push('first_spark');
-    if (dealCount >= 5) eligible.push('hunter_apprentice');
-    if (dealCount >= 10) eligible.push('contributor');
-    if (dealCount >= 25) eligible.push('master_hunter');
-    if (dealCount >= 100) eligible.push('legendary_hunter');
+    if (dealCount >= 10) eligible.push('hunter_apprentice');
+    if (dealCount >= 20) eligible.push('contributor');
+    if (dealCount >= 50) eligible.push('master_hunter');
+    if (dealCount >= 150) eligible.push('legendary_hunter');
 
-    if (points >= 10) eligible.push('bronze');
-    if (points >= 20) eligible.push('voice_of_community');
-    if (points >= 30) eligible.push('active_voter');
-    if (points >= 60) eligible.push('silver');
-    if (points >= 100) eligible.push('flame_master');
-    if (points >= 200) eligible.push('gold');
-    if (points >= 300) eligible.push('volcanic_record');
+    if (points >= 15) eligible.push('bronze');
+    if (points >= 35) eligible.push('voice_of_community');
+    if (points >= 50) eligible.push('active_voter');
+    if (points >= 100) eligible.push('silver');
+    if (points >= 150) eligible.push('flame_master');
+    if (points >= 300) eligible.push('gold');
+    if (points >= 500) eligible.push('volcanic_record');
 
-    if (totalLikes >= 25) eligible.push('helpful');
-    if (totalLikes >= 100) eligible.push('top_reviewer');
+    if (totalLikes >= 40) eligible.push('helpful');
+    if (totalLikes >= 150) eligible.push('top_reviewer');
 
     const toAdd = eligible.filter(b => !currentBadges.has(b));
     if (toAdd.length === 0) {

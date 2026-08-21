@@ -57,31 +57,31 @@ Rozetler 5 farklı nadirlik kademesine ayrılmıştır. Her kademenin kendine ha
 | Rozet ID | Rozet Adı | Kademe | Kazanma Şartı (`Threshold`) | Açıklama |
 | :--- | :--- | :--- | :--- | :--- |
 | `first_spark` | **İlk Kıvılcım** | Bronz | `dealCount >= 1` | Toplulukla ilk fırsatını paylaşan yeni avcı. |
-| `hunter_apprentice`| **Fırsat Çırağı** | Gümüş | `dealCount >= 5` | Fırsat avcılığında deneyim kazanan hevesli üye. |
-| `contributor` | **Katkıda Bulunan** | Gümüş | `dealCount >= 10` | Topluluğa düzenli fırsat kazandıran aktif üye. |
-| `master_hunter` | **Usta Avcı** | Altın | `dealCount >= 25` | Fırsatları kaçırmayan, platformun usta paylaşımcısı. |
-| `legendary_hunter`| **Efsanevi Avcı** | Elmas | `dealCount >= 100` | FırsatKolik tarihine geçen en elit avcılardan biri. |
+| `hunter_apprentice`| **Fırsat Çırağı** | Gümüş | `dealCount >= 10` | Fırsat avcılığında deneyim kazanan hevesli üye. |
+| `contributor` | **Katkıda Bulunan** | Gümüş | `dealCount >= 20` | Topluluğa düzenli fırsat kazandıran aktif üye. |
+| `master_hunter` | **Usta Avcı** | Altın | `dealCount >= 50` | Fırsatları kaçırmayan, platformun usta paylaşımcısı. |
+| `legendary_hunter`| **Efsanevi Avcı** | Elmas | `dealCount >= 150` | FırsatKolik tarihine geçen en elit avcılardan biri. |
 
 ### B. 🔥 Sıcaklık & Oylar (`temperatureVoting`)
 | Rozet ID | Rozet Adı | Kademe | Kazanma Şartı (`Threshold`) | Açıklama |
 | :--- | :--- | :--- | :--- | :--- |
-| `active_voter` | **Aktif Seçmen** | Bronz | `points >= 30` | Fırsatların sıcaklığını belirleyen topluluk jürisi. |
-| `flame_master` | **Alev Ustası** | Altın | `points >= 100` | Fırsatları alevlendiren ve yüksek sıcaklıklar yakalayan üye. |
-| `volcanic_record` | **Volkanik Rekortmen** | Elmas | `points >= 300` | Topluluğu kasıp kavuran rekor sıcaklıklara imza atan üye. |
+| `active_voter` | **Aktif Seçmen** | Bronz | `points >= 50` | Fırsatların sıcaklığını belirleyen topluluk jürisi. |
+| `flame_master` | **Alev Ustası** | Altın | `points >= 150` | Fırsatları alevlendiren ve yüksek sıcaklıklar yakalayan üye. |
+| `volcanic_record` | **Volkanik Rekortmen** | Elmas | `points >= 500` | Topluluğu kasıp kavuran rekor sıcaklıklara imza atan üye. |
 
 ### C. 💬 Topluluk & Yorum (`communityReviews`)
 | Rozet ID | Rozet Adı | Kademe | Kazanma Şartı (`Threshold`) | Açıklama |
 | :--- | :--- | :--- | :--- | :--- |
-| `voice_of_community`| **Söz Sahibi** | Bronz | `points >= 20` | Fikir ve değerlendirmeleriyle topluluğa katılan üye. |
-| `helpful` | **Yardımsever Avcı**| Gümüş | `totalLikes >= 25` | Yorumlarında veya paylaşımlarında 25 beğeni toplayan avcı. |
-| `top_reviewer` | **Fikir Önderi** | Altın | `totalLikes >= 100` | Yorumları ve ürün analizleriyle fırsatçılara rehberlik eden üye. |
+| `voice_of_community`| **Söz Sahibi** | Bronz | `points >= 35` | Fikir ve değerlendirmeleriyle topluluğa katılan üye. |
+| `helpful` | **Yardımsever Avcı**| Gümüş | `totalLikes >= 40` | Yorumlarında veya paylaşımlarında 40 beğeni toplayan avcı. |
+| `top_reviewer` | **Fikir Önderi** | Altın | `totalLikes >= 150` | Yorumları ve ürün analizleriyle fırsatçılara rehberlik eden üye. |
 
 ### D. ⭐ Sadakat, Doğrulama & Özel (`loyaltySpecial`)
 | Rozet ID | Rozet Adı | Kademe | Kazanma Şartı (`Threshold`) | Açıklama |
 | :--- | :--- | :--- | :--- | :--- |
-| `bronze` | **Bronz Avcı** | Bronz | `points >= 10` | FırsatKolik yolculuğuna başlayan aktif üye. |
-| `silver` | **Gümüş Avcı** | Gümüş | `points >= 60` | Platformda aktifliğiyle öne çıkan değerli üye. |
-| `gold` | **Altın Avcı** | Altın | `points >= 200` | Platformun en saygın ve yüksek puanlı üyelerinden biri. |
+| `bronze` | **Bronz Avcı** | Bronz | `points >= 15` | FırsatKolik yolculuğuna başlayan aktif üye. |
+| `silver` | **Gümüş Avcı** | Gümüş | `points >= 100` | Platformda aktifliğiyle öne çıkan değerli üye. |
+| `gold` | **Altın Avcı** | Altın | `points >= 300` | Platformun en saygın ve yüksek puanlı üyelerinden biri. |
 | `verified` | **Doğrulanmış Avcı** | Özel | Manuel / Moderatör Onayı | Topluluk güvenilirliği moderasyonca onaylanmış hesap. |
 | `early_bird` | **Öncü Kurucu Üye** | Özel | Manuel / Erken Kayıt | İlk dönemde aramıza katılan kurucu topluluk üyesi. |
 | `premium` | **Premium** | Özel | Özel Etkinlik / Program | Özel avantajlara ve prestijli statüye sahip üye. |
