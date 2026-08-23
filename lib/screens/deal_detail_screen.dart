@@ -1012,13 +1012,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       icon: _isFavorite ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
                                       count: -1,
                                       label: _isFavorite ? 'Kaydedildi' : 'Kaydet',
-                                      color: _isFavorite ? const Color(0xFFF59E0B) : const Color(0xFF64748B),
+                                      color: const Color(0xFFF59E0B),
                                       onTap: _toggleFavorite,
                                       isSelected: _isFavorite,
                                       isDark: isDark,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 8.5),
                                   Expanded(
                                     child: _buildStatButton(
                                       icon: Icons.chat_bubble_outline_rounded,
@@ -1033,12 +1033,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       isDark: isDark,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 8.5),
                                   Expanded(
                                     child: _buildStatButton(
-                                      icon: Icons.cancel_outlined,
+                                      icon: _hasVotedExpired ? Icons.cancel_rounded : Icons.cancel_outlined,
                                       count: _expiredVotes,
-                                      label: 'Fırsat Bitti',
+                                      label: _hasVotedExpired ? 'Bitti (Oylandı)' : 'Fırsat Bitti',
                                       color: const Color(0xFFEF4444),
                                       onTap: _handleExpiredVote,
                                       isSelected: _hasVotedExpired,

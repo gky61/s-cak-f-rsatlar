@@ -56,14 +56,14 @@ class _FAQScreenState extends State<FAQScreen> {
       icon: Icons.notifications_active_rounded,
       items: [
         FAQItem(
-          question: 'Kelime & Fırsat Radarı nedir?',
+          question: 'Kelime Takibi ve bildirimler nasıl çalışır?',
           answer:
-              'Aradığınız belirli bir ürün (örn: iPhone, Dyson, Robot Süpürge) veya marka indirime girdiğinde anında bildirim almak için "Fırsat Radarı"na kelime ekleyebilirsiniz.',
+              'Aradığınız belirli bir ürün (örn: iPhone, Dyson, Robot Süpürge) veya marka indirime girdiğinde anında bildirim almak için "Kelime Takibi" ekranına anahtar kelimeler ekleyebilirsiniz.',
         ),
         FAQItem(
-          question: 'Avcı Puanları ve Seviye Rozetleri nasıl kazanılır?',
+          question: 'Avcı Puanları ve Seviye Rütbeleri nasıl kazanılır?',
           answer:
-              'Fırsat paylaştıkça, paylaşımlarınız sıcak oy aldıkça ve topluluğa faydalı yorumlar yaptıkça puan kazanırsınız. Puanlarınız arttıkça "Yeni Üye", "Fırsat Avcısı", "Uzman" ve "Efsane Avcı" rozetlerine ulaşırsınız.',
+              'Fırsat paylaştıkça (+5 puan), paylaşımlarınız sıcak oy aldıkça ve toplulukta aktif oldukça puan kazanırsınız. Puanlarınız arttıkça "Çaylak Avcı"dan başlayıp "Uzman Avcı", "Kozmik Avcı" ve nihai "Fırsat Lordu" rütbelerine kadar yükselirsiniz.',
         ),
       ],
     ),

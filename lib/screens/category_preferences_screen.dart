@@ -191,6 +191,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
       for (final cat in _filteredCategories) {
         await _notificationService.subscribeToCategory(cat.id);
       }
+      _notificationService.requestPermission();
       if (mounted) {
         _showCustomSnackBar(
           message: 'Tüm kategoriler takip listenize eklendi',
@@ -251,6 +252,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
     try {
       if (value) {
         await _notificationService.subscribeToCategory(categoryId);
+        _notificationService.requestPermission();
       } else {
         await _notificationService.unsubscribeFromCategory(categoryId);
         final category = _filteredCategories.firstWhere((c) => c.id == categoryId);

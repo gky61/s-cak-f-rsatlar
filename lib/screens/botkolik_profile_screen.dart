@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/deal.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/notification_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
@@ -142,6 +143,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
     try {
       if (nextFollowing) {
         await _firestoreService.followUser(currentUserId, 'botkolik');
+        NotificationService().requestPermission();
       } else {
         await _firestoreService.unfollowUser(currentUserId, 'botkolik');
       }
@@ -176,6 +178,9 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
 
     try {
       await _firestoreService.toggleFollowNotification(currentUserId, 'botkolik', nextNotification);
+      if (nextNotification) {
+        NotificationService().requestPermission();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {

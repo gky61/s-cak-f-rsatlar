@@ -1127,7 +1127,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                     runSpacing: 4,
                     children: [
                       _KuponVoteButton(
-                        iconEmoji: '🔥',
                         count: displayHot,
                         isSelected: isHotSelected,
                         isHot: true,
@@ -1135,7 +1134,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                         isDark: isDark,
                       ),
                       _KuponVoteButton(
-                        iconEmoji: '❄️',
                         count: displayCold,
                         isSelected: isColdSelected,
                         isHot: false,
@@ -2136,7 +2134,6 @@ class _AnimatedCouponItemState extends State<_AnimatedCouponItem> with SingleTic
 }
 
 class _KuponVoteButton extends StatefulWidget {
-  final String iconEmoji;
   final int count;
   final bool isSelected;
   final bool isHot;
@@ -2144,7 +2141,6 @@ class _KuponVoteButton extends StatefulWidget {
   final bool isDark;
 
   const _KuponVoteButton({
-    required this.iconEmoji,
     required this.count,
     required this.isSelected,
     required this.isHot,
@@ -2191,19 +2187,46 @@ class _KuponVoteButtonState extends State<_KuponVoteButton> with SingleTickerPro
     final isHot = widget.isHot;
     final isDark = widget.isDark;
 
-    const hotGradient = LinearGradient(
-      colors: [Color(0xFFFF6B35), Color(0xFFFF3D00)],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-    );
-    const coldGradient = LinearGradient(
-      colors: [Color(0xFF0284C7), Color(0xFF0891B2)],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-    );
+    // Harmonious Matte Gradients (Light & Dark matching deal_thermometer)
+    final hotGradient = isDark
+        ? const LinearGradient(
+            colors: [Color(0xFF9A3412), Color(0xFF881337)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          )
+        : const LinearGradient(
+            colors: [Color(0xFFEA580C), Color(0xFFDC2626)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          );
 
-    final activeBorderColor = isHot ? const Color(0xFFFF8E53) : const Color(0xFF38BDF8);
-    final activeShadowColor = isHot ? const Color(0xFFFF5722) : const Color(0xFF0284C7);
+    final coldGradient = isDark
+        ? const LinearGradient(
+            colors: [Color(0xFF155E75), Color(0xFF083344)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          )
+        : const LinearGradient(
+            colors: [Color(0xFF06B6D4), Color(0xFF0284C7)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          );
+
+    final activeBorderColor = isHot
+        ? (isDark
+            ? const Color(0xFFFB923C).withValues(alpha: 0.40)
+            : const Color(0xFFFDBA74).withValues(alpha: 0.85))
+        : (isDark
+            ? const Color(0xFF22D3EE).withValues(alpha: 0.50)
+            : const Color(0xFF67E8F9).withValues(alpha: 0.90));
+
+    final activeShadowColor = isHot
+        ? (isDark
+            ? const Color(0xFFEA580C).withValues(alpha: 0.22)
+            : const Color(0xFFDC2626).withValues(alpha: 0.20))
+        : (isDark
+            ? const Color(0xFF06B6D4).withValues(alpha: 0.25)
+            : const Color(0xFF0891B2).withValues(alpha: 0.22));
 
     return ScaleTransition(
       scale: _scaleController,
@@ -2212,39 +2235,48 @@ class _KuponVoteButtonState extends State<_KuponVoteButton> with SingleTickerPro
         child: InkWell(
           onTap: _handleTap,
           borderRadius: BorderRadius.circular(8),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 4.5),
             decoration: BoxDecoration(
               gradient: isSelected ? (isHot ? hotGradient : coldGradient) : null,
               color: isSelected
                   ? null
-                  : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9)),
+                  : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC)),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: isSelected
                     ? activeBorderColor
                     : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-                width: isSelected ? 1.1 : 0.8,
+                width: isSelected ? 1.2 : 0.9,
               ),
               boxShadow: [
                 BoxShadow(
                   color: isSelected
-                      ? activeShadowColor.withValues(alpha: isDark ? 0.35 : 0.25)
-                      : Colors.black.withValues(alpha: isDark ? 0.1 : 0.02),
+                      ? activeShadowColor
+                      : Colors.black.withValues(alpha: isDark ? 0.12 : 0.02),
                   blurRadius: isSelected ? 6 : 2,
-                  offset: const Offset(0, 1.5),
+                  offset: const Offset(0, 1),
                 ),
               ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  widget.iconEmoji,
-                  style: const TextStyle(fontSize: 12),
-                ),
+                if (isSelected)
+                  Icon(
+                    isHot
+                        ? Icons.local_fire_department_rounded
+                        : Icons.ac_unit_rounded,
+                    size: 13.5,
+                    color: isDark
+                        ? (isHot ? const Color(0xFFFFEDD5) : const Color(0xFFE0F2FE))
+                        : Colors.white,
+                  )
+                else
+                  Text(
+                    isHot ? '🔥' : '🥶',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 const SizedBox(width: 4),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
@@ -2257,9 +2289,11 @@ class _KuponVoteButtonState extends State<_KuponVoteButton> with SingleTickerPro
                     key: ValueKey<int>(widget.count),
                     style: TextStyle(
                       fontSize: 11.5,
-                      fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
                       color: isSelected
-                          ? Colors.white
+                          ? (isDark
+                              ? (isHot ? const Color(0xFFFFEDD5) : const Color(0xFFE0F2FE))
+                              : Colors.white)
                           : (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
                     ),
                   ),

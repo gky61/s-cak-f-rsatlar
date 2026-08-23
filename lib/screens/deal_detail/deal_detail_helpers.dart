@@ -21,21 +21,78 @@ class DealDetailHelpers {
     bool isSelected = false,
     bool isLoading = false,
   }) {
-    // Harmonious modern palette
-    final unselectedBg = isDark
-        ? AppTheme.darkSurfaceElevated
-        : const Color(0xFFF1F5F9);
-    final unselectedBorder = isDark
-        ? AppTheme.darkBorder
-        : const Color(0xFFE2E8F0);
+    // 1. Curated Vibrant Tone System
+    final Color activeColor = isDark
+        ? (color == const Color(0xFFF59E0B)
+            ? const Color(0xFFFBBF24) // Amber 400
+            : (color == const Color(0xFFEF4444)
+                ? const Color(0xFFF87171) // Red 400
+                : const Color(0xFF60A5FA))) // Blue 400
+        : (color == const Color(0xFFF59E0B)
+            ? const Color(0xFFD97706) // Amber 600
+            : (color == const Color(0xFFEF4444)
+                ? const Color(0xFFDC2626) // Red 600
+                : const Color(0xFF2563EB))); // Blue 600
 
-    final selectedBg = isDark
-        ? color.withValues(alpha: 0.18)
-        : color.withValues(alpha: 0.08);
-    final selectedBorder = color.withValues(alpha: isDark ? 0.65 : 0.55);
+    // 2. Modern Elevated Container Styling
+    final BoxDecoration buttonDecoration = isSelected
+        ? BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [
+                      color.withValues(alpha: 0.24),
+                      color.withValues(alpha: 0.16),
+                    ]
+                  : [
+                      color.withValues(alpha: 0.18),
+                      color.withValues(alpha: 0.10),
+                    ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: isDark ? color.withValues(alpha: 0.75) : color.withValues(alpha: 0.65),
+              width: 1.4,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: activeColor.withValues(alpha: isDark ? 0.30 : 0.18),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          )
+        : BoxDecoration(
+            color: isDark ? AppTheme.darkSurfaceElevated : Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: isDark
+                  ? AppTheme.darkBorder
+                  : const Color(0xFFE2E8F0),
+              width: 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 1.5),
+              ),
+            ],
+          );
 
-    final effectiveColor = isSelected ? color : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B));
-    final effectiveLabelColor = isSelected ? color : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B));
+    // 3. High Contrast Text & Icon Hierarchy
+    final Color effectiveIconColor = isSelected
+        ? activeColor
+        : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B));
+
+    final Color effectiveCountColor = isSelected
+        ? activeColor
+        : (isDark ? Colors.white : const Color(0xFF0F172A));
+
+    final Color effectiveLabelColor = isSelected
+        ? activeColor
+        : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569));
 
     return Material(
       color: Colors.transparent,
@@ -44,70 +101,47 @@ class DealDetailHelpers {
           HapticFeedback.selectionClick();
           onTap();
         },
-        borderRadius: BorderRadius.circular(14),
-        splashColor: color.withValues(alpha: 0.1),
-        highlightColor: color.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(15),
+        splashColor: activeColor.withValues(alpha: isDark ? 0.25 : 0.14),
+        highlightColor: activeColor.withValues(alpha: isDark ? 0.12 : 0.06),
+        hoverColor: activeColor.withValues(alpha: isDark ? 0.15 : 0.08),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
-          height: 52,
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? selectedBg : unselectedBg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isSelected ? selectedBorder : unselectedBorder,
-              width: isSelected ? 1.2 : 1.0,
-            ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: isDark ? 0.25 : 0.12),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ]
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-          ),
+          height: 56,
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+          decoration: buttonDecoration,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Top Row: Icon + Count
+              // Top Row: Icon + Count (if applicable)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (isLoading)
                     SizedBox(
-                      width: 14,
-                      height: 14,
+                      width: 15,
+                      height: 15,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation<Color>(activeColor),
                       ),
                     )
                   else
                     Icon(
                       icon,
-                      size: 16,
-                      color: effectiveColor,
+                      size: 16.5,
+                      color: effectiveIconColor,
                     ),
                   if (count >= 0) ...[
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 4.5),
                     Text(
                       count.toString(),
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
-                        color: isSelected
-                            ? color
-                            : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                        color: effectiveCountColor,
                         height: 1.1,
                         letterSpacing: -0.2,
                       ),
@@ -115,15 +149,15 @@ class DealDetailHelpers {
                   ],
                 ],
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 3.5),
               // Bottom Row: Label
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 10.5,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                   color: effectiveLabelColor,
-                  letterSpacing: 0.15,
+                  letterSpacing: 0.1,
                   height: 1.1,
                 ),
                 textAlign: TextAlign.center,

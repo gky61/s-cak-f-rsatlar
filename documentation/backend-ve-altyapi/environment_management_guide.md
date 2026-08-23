@@ -23,10 +23,15 @@ Mobil uygulama, kod içerisinde hiçbir el ile müdahale gerektirmeksizin tamame
 
 ### 🔸 PROD (Canlı / Production) Modu
 *   **Amaç:** Google Play Store'a yüklenecek paketi üretmek veya gerçek telefonunuzda canlı verileri test etmek.
-*   **Google Play Store (AAB) Derleme Komutu:**
+*   **Google Play Store (AAB) Derleme Komutları:**
     ```bash
+    # 1. Shorebird Code-Push Destekli AAB Derleme (Tavsiye Edilen)
+    shorebird release android --flavor prod -t lib/main.dart
+
+    # 2. Standart AAB Derleme
     flutter build appbundle --flavor prod --dart-define=FLAVOR=prod --release
     ```
+    *(Detaylı Code-Push kılavuzu için bkz: [Flutter Canlı Kod Güncelleme Rehberi](file:///d:/firsatkolik/documentation/mobil-ve-ui/flutter_live_code_push_and_hot_reload_strategies.md))*
 *   **Kendi Cihazınızda Canlı Test Komutu:**
     ```bash
     flutter run -d <cihaz_id> --flavor prod --dart-define=FLAVOR=prod

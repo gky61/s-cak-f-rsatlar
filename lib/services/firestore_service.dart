@@ -599,6 +599,7 @@ class FirestoreService {
     String? quotedCommentText,
     String? userProfileImageUrl,
     List<String>? userBadges,
+    String? userPinnedBadge,
   }) => _commentService.addComment(
         dealId: dealId,
         userId: userId,
@@ -610,6 +611,7 @@ class FirestoreService {
         quotedCommentText: quotedCommentText,
     userProfileImageUrl: userProfileImageUrl,
     userBadges: userBadges,
+    userPinnedBadge: userPinnedBadge,
   );
 
   Stream<List<Comment>> getCommentsStream(String dealId) => _commentService.getCommentsStream(dealId);

@@ -14,6 +14,7 @@ class Comment {
   final String? replyToUserName; // Cevap verilen kullanıcı adı
   final String? quotedCommentText; // Alıntılanan yorum metni
   final List<String> userBadges; // Kullanıcının rozetleri (yorum anındaki)
+  final String? userPinnedBadge; // Kullanıcının vitrine sabitlediği rozet
 
   Comment({
     required this.id,
@@ -28,6 +29,7 @@ class Comment {
     this.replyToUserName,
     this.quotedCommentText,
     this.userBadges = const [],
+    this.userPinnedBadge,
   });
 
   // Firestore'dan Comment oluşturma
@@ -46,6 +48,7 @@ class Comment {
       replyToUserName: data['replyToUserName'],
       quotedCommentText: data['quotedCommentText'],
       userBadges: List<String>.from(data['userBadges'] ?? []),
+      userPinnedBadge: data['userPinnedBadge']?.toString() ?? data['pinnedBadge']?.toString(),
     );
   }
 
@@ -61,6 +64,9 @@ class Comment {
       'createdAt': Timestamp.fromDate(createdAt),
       'userBadges': userBadges,
     };
+    if (userPinnedBadge != null && userPinnedBadge!.isNotEmpty) {
+      map['userPinnedBadge'] = userPinnedBadge!;
+    }
     if (parentCommentId != null) {
       map['parentCommentId'] = parentCommentId!;
     }

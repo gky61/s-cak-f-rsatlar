@@ -457,7 +457,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         ),
                         value: _preferences.pushMasterEnabled,
                         activeColor: primaryColor,
-                        onChanged: (val) {
+                        onChanged: (val) async {
+                          if (val) {
+                            await _notificationService.requestPermission();
+                            await _checkSystemPermission();
+                          }
                           // STATE PRESERVATION: Only toggle pushMasterEnabled, keep all sub-channel states preserved!
                           _updatePrefs(_preferences.copyWith(pushMasterEnabled: val));
                         },

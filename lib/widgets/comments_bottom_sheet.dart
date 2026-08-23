@@ -123,6 +123,7 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
     String displayName = user.displayName ?? 'Kullanıcı';
     String profileImageUrl = '';
     List<String> userBadges = [];
+    String? userPinnedBadge;
     try {
       final userData = await _authService.getUserData(user.uid);
       if (userData != null) {
@@ -130,7 +131,8 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
         displayName = userData.username.isNotEmpty ? userData.username : userData.displayName;
         profileImageUrl = userData.profileImageUrl;
         userBadges = userData.badges;
-        _log('🔍 Yorum eklerken rozetler alındı: ${userBadges.length} rozet - $userBadges');
+        userPinnedBadge = userData.pinnedBadge;
+        _log('🔍 Yorum eklerken rozetler alındı: ${userBadges.length} rozet - vitrin: $userPinnedBadge');
       } else {
         _log('⚠️ getUserData null döndü');
       }
@@ -150,6 +152,7 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
         quotedCommentText: _replyingTo?.text,
         userProfileImageUrl: profileImageUrl,
         userBadges: userBadges,
+        userPinnedBadge: userPinnedBadge,
       );
 
       setState(() {
@@ -749,48 +752,41 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                               ),
                             ),
                           ),
-                          // Rozetler
-                          if (comment.userBadges.isNotEmpty) ...[
+                          // Vitrin Rozeti (Yalnızca kullanıcı vitrine sabitlediyse gösterilir)
+                          if (comment.userPinnedBadge != null && comment.userPinnedBadge!.isNotEmpty) ...[
                             const SizedBox(width: 6),
                             Builder(
                               builder: (context) {
-                                final badgeInfos = BadgeHelper.getBadgeInfos(comment.userBadges);
-                                return Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: badgeInfos.take(2).map(
-                                    (badge) => Padding(
-                                      padding: const EdgeInsets.only(left: 3),
-                                      child: Tooltip(
-                                        message: '${badge.name} (${badge.tier.label})',
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: badge.color.withValues(alpha: isDark ? 0.2 : 0.12),
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: badge.color.withValues(alpha: 0.35),
-                                              width: 0.8,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(badge.iconData, size: 10.5, color: badge.color),
-                                              const SizedBox(width: 3),
-                                              Text(
-                                                badge.name,
-                                                style: TextStyle(
-                                                  fontSize: 9.5,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: badge.color,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                final badge = BadgeHelper.getBadgeInfo(comment.userPinnedBadge!);
+                                if (badge == null) return const SizedBox.shrink();
+                                return Tooltip(
+                                  message: '${badge.name} (${badge.tier.label})',
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: badge.color.withValues(alpha: isDark ? 0.2 : 0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: badge.color.withValues(alpha: 0.35),
+                                        width: 0.8,
                                       ),
                                     ),
-                                  ).toList(),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(badge.iconData, size: 10.5, color: badge.color),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          badge.name,
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: badge.color,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 );
                               },
                             ),

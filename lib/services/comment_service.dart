@@ -26,6 +26,7 @@ class CommentService {
     String? quotedCommentText,
     String? userProfileImageUrl,
     List<String>? userBadges,
+    String? userPinnedBadge,
   }) async {
     try {
       final isAdmin = await _authService.isAdmin();
@@ -69,6 +70,7 @@ class CommentService {
         replyToUserName: replyToUserName,
         quotedCommentText: quotedCommentText,
         userBadges: userBadges ?? [],
+        userPinnedBadge: userPinnedBadge,
       );
 
       batch.set(commentRef, comment.toFirestore());

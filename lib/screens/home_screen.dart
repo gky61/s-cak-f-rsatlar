@@ -28,6 +28,8 @@ import 'admin_notifications_screen.dart';
 import 'popular_deals_screen.dart';
 import 'keyword_tracking_screen.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
+import '../services/in_app_tutorial_service.dart';
+import '../widgets/in_app_tutorial/tutorial_spotlight_overlay.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -37,10 +39,12 @@ void _log(String message) {
 
 class HomeScreen extends StatefulWidget {
   final String? initialSearchQuery;
+  final bool startTutorial;
 
   const HomeScreen({
     super.key,
     this.initialSearchQuery,
+    this.startTutorial = false,
   });
 
   @override
@@ -52,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
   final ThemeService _themeService = ThemeService();
+  final InAppTutorialService _tutorialService = InAppTutorialService();
   
   String _selectedCategory = 'tumu';
   String? _selectedSubCategory;
@@ -102,12 +107,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _tutorialService.refreshKeys();
     _startInitialLoadingTimeout();
     _dealsStream = _firestoreService.getDealsStream();
     _viewMode = _themeService.viewMode;
     _checkAdminStatus();
     _checkBlockedStatus();
-    _notificationService.requestPermission();
     _notificationService.setupNotificationListeners();
     _notificationService.saveFCMToken(); // Otomatik FCM token doğrulama ve iyileştirme
     _cleanupExpiredDeals();
@@ -139,6 +144,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController.addListener(_onScroll);
     // Share Intent dinleyici
     _initShareIntentListener();
+    // In-App Tutorial Kontrolü
+    _checkAndTriggerTutorial();
   }
 
   @override
@@ -154,6 +161,43 @@ class _HomeScreenState extends State<HomeScreen> {
         _displayLimit = 20;
       });
     }
+
+    if (widget.startTutorial && !oldWidget.startTutorial) {
+      _checkAndTriggerTutorial();
+    }
+  }
+
+  void _checkAndTriggerTutorial() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      if (widget.startTutorial) {
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (mounted) {
+            _startInAppTutorial();
+          }
+        });
+        return;
+      }
+
+      if (widget.initialSearchQuery == null || widget.initialSearchQuery!.trim().isEmpty) {
+        final hasSeen = await _tutorialService.hasSeenTutorial();
+        if (!hasSeen && mounted) {
+          Future.delayed(const Duration(milliseconds: 800), () {
+            if (mounted) {
+              _startInAppTutorial();
+            }
+          });
+        }
+      }
+    });
+  }
+
+  void _startInAppTutorial() {
+    TutorialSpotlightOverlay.show(
+      context: context,
+      steps: _tutorialService.getTutorialSteps(),
+    );
   }
   
   @override
@@ -580,6 +624,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       } else {
         await _notificationService.addKeywordSubscription(trimmed);
+        _notificationService.requestPermission();
         if (mounted) {
           setState(() {
             _followedKeywords.add(normalized);
@@ -624,6 +669,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final newValue = !_isGeneralNotificationsEnabled;
     try {
       await _notificationService.setGeneralNotifications(newValue);
+      if (newValue) {
+        _notificationService.requestPermission();
+      }
       if (mounted) {
         setState(() => _isGeneralNotificationsEnabled = newValue);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -653,6 +701,7 @@ class _HomeScreenState extends State<HomeScreen> {
         await _notificationService.unsubscribeFromCategory(categoryId);
       } else {
         await _notificationService.subscribeToCategory(categoryId);
+        _notificationService.requestPermission();
       }
       await _loadFollowedCategories();
       if (mounted) {
@@ -978,10 +1027,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const Spacer(),
                         // ── İkon grubu: hepsi aynı boyut, aynı stil ──
-                        _buildHeaderAction(
-                          icon: Icons.search_rounded,
-                          onTap: _toggleSearchMode,
-                          isDark: isDark,
+                        KeyedSubtree(
+                          key: _tutorialService.searchBarKey,
+                          child: _buildHeaderAction(
+                            icon: Icons.search_rounded,
+                            onTap: _toggleSearchMode,
+                            isDark: isDark,
+                          ),
                         ),
                         const SizedBox(width: 6),
                         // Bildirim zili
@@ -1074,29 +1126,35 @@ class _HomeScreenState extends State<HomeScreen> {
                             return Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _buildNavChip(
-                                  label: 'Aktüel',
-                                  icon: Icons.auto_stories_rounded,
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) =>
-                                            const AktuelMagazalarPage()),
-                                  ),
-                                  isDark: isDark,
-                                ),
-                                if (couponsEnabled) ...[
-                                  const SizedBox(width: 8),
-                                  _buildNavChip(
-                                    label: 'Kuponlar',
-                                    icon: Icons.confirmation_number_outlined,
+                                KeyedSubtree(
+                                  key: _tutorialService.aktuelChipKey,
+                                  child: _buildNavChip(
+                                    label: 'Aktüel',
+                                    icon: Icons.auto_stories_rounded,
                                     onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                           builder: (_) =>
-                                              const KuponlarPage()),
+                                              const AktuelMagazalarPage()),
                                     ),
                                     isDark: isDark,
+                                  ),
+                                ),
+                                if (couponsEnabled) ...[
+                                  const SizedBox(width: 8),
+                                  KeyedSubtree(
+                                    key: _tutorialService.kuponlarChipKey,
+                                    child: _buildNavChip(
+                                      label: 'Kuponlar',
+                                      icon: Icons.confirmation_number_outlined,
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                const KuponlarPage()),
+                                      ),
+                                      isDark: isDark,
+                                    ),
                                   ),
                                 ],
                               ],
@@ -1667,19 +1725,25 @@ class _HomeScreenState extends State<HomeScreen> {
                                     return const SizedBox.shrink();
                                   }
                                   final deal = dealsToShow[actualIndex];
-                                  return RepaintBoundary(
-                                    key: ValueKey('deal_card_${deal.id}'),
-                                    child: DealCard(
-                                      key: ValueKey('deal_card_${deal.id}'),
-                                      deal: deal,
-                                      viewMode: CardViewMode.vertical,
-                                      onTap: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => DealDetailScreen(dealId: deal.id),
-                                        ),
+                                  final cardWidget = DealCard(
+                                    deal: deal,
+                                    viewMode: CardViewMode.vertical,
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => DealDetailScreen(dealId: deal.id),
                                       ),
                                     ),
+                                  );
+
+                                  return RepaintBoundary(
+                                    key: ValueKey('deal_grid_boundary_${deal.id}'),
+                                    child: actualIndex == 0
+                                        ? Container(
+                                            key: _tutorialService.firstDealCardKey,
+                                            child: cardWidget,
+                                          )
+                                        : cardWidget,
                                   );
                                 },
                               )
@@ -1741,19 +1805,25 @@ class _HomeScreenState extends State<HomeScreen> {
                                     return const SizedBox.shrink();
                                   }
                                   final deal = dealsToShow[actualIndex];
-                                  return RepaintBoundary(
-                                    key: ValueKey('deal_card_list_${deal.id}'),
-                                    child: DealCard(
-                                      key: ValueKey('deal_card_list_${deal.id}'),
-                                      deal: deal,
-                                      viewMode: CardViewMode.horizontal,
-                                      onTap: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => DealDetailScreen(dealId: deal.id),
-                                        ),
+                                  final listCardWidget = DealCard(
+                                    deal: deal,
+                                    viewMode: CardViewMode.horizontal,
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => DealDetailScreen(dealId: deal.id),
                                       ),
                                     ),
+                                  );
+
+                                  return RepaintBoundary(
+                                    key: ValueKey('deal_list_boundary_${deal.id}'),
+                                    child: actualIndex == 0
+                                        ? Container(
+                                            key: _tutorialService.firstDealCardKey,
+                                            child: listCardWidget,
+                                          )
+                                        : listCardWidget,
                                   );
                                 },
                               ),
@@ -1824,6 +1894,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               // 2. Kaydedilenler
               _buildBottomNavItem(
+                targetKey: _tutorialService.bottomNavSavedKey,
                 icon: Icons.bookmark_rounded,
                 label: 'Kaydedilenler',
                 isSelected: false,
@@ -1836,6 +1907,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               // 3. Popüler Fırsatlar (Tam Ortada)
               _buildBottomNavItem(
+                targetKey: _tutorialService.bottomNavPopularKey,
                 icon: Icons.whatshot_rounded,
                 label: 'Popüler',
                 isSelected: false,
@@ -1848,6 +1920,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               // 4. Fırsat Paylaş
               _buildBottomNavItem(
+                targetKey: _tutorialService.bottomNavAddKey,
                 icon: Icons.add_circle_outline_rounded,
                 label: 'Fırsat Paylaş',
                 isSelected: false,
@@ -1870,6 +1943,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               // 5. Profil
               _buildBottomNavItem(
+                targetKey: _tutorialService.bottomNavProfileKey,
                 icon: Icons.person_rounded,
                 label: 'Profil',
                 isSelected: false,
@@ -1908,6 +1982,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isSelected,
     required VoidCallback onTap,
     int badgeCount = 0,
+    Key? targetKey,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
@@ -1918,6 +1993,7 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         borderRadius: BorderRadius.circular(12),
         child: Container(
+          key: targetKey,
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,

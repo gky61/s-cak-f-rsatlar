@@ -190,6 +190,11 @@ Release Keystore üretimi, `key.properties` yapılandırması ve yerel SHA-1 imz
 | 60 | **Atomik Sayaç Güncellemeleri** | ✅ Tamamlandı | Oylama sayaçlarının Firestore'da `FieldValue.increment` ile atomik güncellendiği teyit edildi |
 | 61 | **Mesaj Bildirimi Yönlendirmesi (TODO)** | ✅ Tamamlandı | `notification_service.dart:1329` TODO'su çözüldü, `MessagesListScreen` yönlendirmesi eklendi |
 | 62 | **Nihai QA Testleri (Release AAB)** | ✅ Tamamlandı | `flutter analyze` ile sıfır hata doğrulaması yapıldı |
+| 63 | **Shorebird Code-Push Entegrasyonu** | ✅ Tamamlandı | `shorebird.yaml` bağlandı, varlıklara eklendi. Google Play için AAB paketi `shorebird release android --flavor prod -t lib/main.dart` ile derlenecek. |
+
+> [!TIP]
+> **Canlı Kod Güncelleme (Code-Push) Rehberi:**  
+> Mağaza onayını beklemeden Dart/UI yaması atma adımları için bkz: [`flutter_live_code_push_and_hot_reload_strategies.md`](file:///d:/firsatkolik/documentation/mobil-ve-ui/flutter_live_code_push_and_hot_reload_strategies.md)
 
 ---
 

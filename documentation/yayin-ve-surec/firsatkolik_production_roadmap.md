@@ -309,17 +309,25 @@ AdMob geliri, reklam birimi ID'leri ve AdMob App ID'si için önce **admob.googl
 - **İzin (permission) denetimi:** `AndroidManifest.xml`'de kullanılmayan/gereksiz izinler kaldırılmalı. Hem Play Store incelemesinde hem de Veri Güvenliği (Data Safety) formunda gereksiz izinler ekstra açıklama yükü ve ret riski yaratır.
 - **Sürümleme:** `pubspec.yaml`'daki `version` alanı (`versionName+versionCode`), her yayında `versionCode` artırılarak ilerletilmeli; ilk production sürümü için `1.0.0+1` gibi net bir başlangıç noktası belirlenmeli.
 
-### 6.7 Release Build Üretimi (AAB) ve ProGuard/R8 Kuralları
+### 6.7 Release Build Üretimi (AAB), Shorebird Code-Push ve ProGuard/R8 Kuralları
 
-- **Yayın Dosyası Formatı ve Script Uyuşmazlığı (Kritik):**
+- **Yayın Dosyası Formatı ve Shorebird Code-Push Entegrasyonu (KRİTİK):**
   Google Play, Ağustos 2021'den itibaren yeni uygulamalar için yalnızca **Android App Bundle (AAB)** formatını kabul etmektedir; `.apk` yüklemesi artık reddedilir.
   
-  > [!WARNING]
-  > Projede yer alan [build_release_apk.sh](file:///d:/firsatkolik/scripts/build_release_apk.sh) scripti `flutter build apk --release` komutuyla sadece APK üretmektedir. Bu script güncellenmeli veya AAB çıktısı almak için `scripts/build_release_aab.sh` adında yeni bir script oluşturulmalı ve içerisindeki derleme komutu şu şekilde ayarlanmalıdır:
+  > [!IMPORTANT]
+  > **Shorebird Canlı Kod Güncelleme (Code-Push) Zorunluluğu:**
+  > Canlıya çıktıktan sonra mağaza onay süreçlerini (24-48 saat) beklemeden Dart/UI ve iş mantığı hatalarını anında kullanıcıların telefonuna yama (`patch`) olarak gönderebilmek için **Google Play'e yüklenecek ilk AAB paketi mutlaka Shorebird ile derlenmelidir**:
   > ```bash
-  > flutter build appbundle --release
+  > # Google Play Store için Shorebird AAB Üretme (PROD)
+  > shorebird release android --flavor prod -t lib/main.dart
   > ```
-  > Çıktı dosyası `build/app/outputs/bundle/release/app-release.aab` konumunda üretilecek ve Play Console'a bu dosya yüklenecektir. APK dosyaları sadece manuel/fiziksel QA testlerinde kullanılabilir.
+  > *Standart derleme alternatifi:* `flutter build appbundle --flavor prod --dart-define=FLAVOR=prod --release`
+  > 
+  > *Detaylı Code-Push mimarisi, kurulum ve yama atma rehberi için bkz:*  
+  > 🔗 [Flutter Canlı Kod Güncelleme (Code Push / OTA) ve Shorebird Rehberi](file:///d:/firsatkolik/documentation/mobil-ve-ui/flutter_live_code_push_and_hot_reload_strategies.md)
+
+- **Çıktı Dosyası:**
+  Derleme tamamlandığında üretilen AAB paketi Play Console'a yüklenecektir. APK dosyaları ise sadece manuel/fiziksel QA testlerinde kullanılabilir.
 
 
 **ProGuard/R8 kuralları — sessiz release kırılmaları:**

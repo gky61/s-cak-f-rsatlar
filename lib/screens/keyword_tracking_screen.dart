@@ -171,6 +171,7 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
 
     try {
       await _notificationService.addKeywordSubscription(keyword);
+      _notificationService.requestPermission();
       if (mounted) {
         setState(() {
           _watchKeywords.add(keyword);

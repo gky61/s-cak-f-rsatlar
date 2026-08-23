@@ -1,6 +1,6 @@
 # FırsatKolik Bildirim Sistemi Mimari ve Referans Kılavuzu
 
-Bu doküman, FırsatKolik uygulamasının mobil (Flutter), sunucu (Firebase Cloud Functions), veritabanı (Firestore) ve yönetim paneli (Web Admin) katmanlarındaki bildirim mekanizmasının çalışma prensiplerini, veri modellerini, akış diyagramlarını ve olası sorunların çözümlerini (troubleshooting) içerir.
+Bu doküman, FırsatKolik uygulamasının mobil (Flutter), sunucu (Firebase Cloud Functions), veritabanı (Firestore) ve yönetim paneli (Web Admin) katmanlarındaki bildirim mekanizmasının çalışma prensiplerini, veri modellerini, akış diyagramlarını, bağlamsal izin isteme mimarisini ve olası sorunların çözümlerini (troubleshooting) içerir.
 
 ---
 
@@ -26,6 +26,23 @@ graph TD
     M[Web Admin: adminToUserMessages] -->|onAdminMessageCreated| D
     N[Kullanıcı Mesajı: messages] -->|onUserMessageCreated| I
 ```
+
+---
+
+### 1.1 🎯 Bağlamsal ve Değer Odaklı İzin İsteme Mimarisi (Contextual & Value-First Permission Flow)
+
+Modern mobil UX ve Apple/Google yönergeleri doğrultusunda, uygulamanın ilk açılışında (`cold-start / initState`) sorulan körü körüne izin isteme mekanizması **tamamen kaldırılmıştır**. 
+
+Açılışta sorulan izinler kullanıcıda direnç oluşturup %70 oranında ret getirdiği ve yeni başlayan interaktif rehber (Tutorial Spotlight) ile çakıştığı için, sistem bildirim izni talebi **kullanıcının değer gördüğü 4 organik noktaya** taşınmıştır:
+
+1. **🎯 Arama Radarı ve Anahtar Kelime Takibi (`_addKeywordFromSearch` / `KeywordTrackingScreen`):**
+   - Kullanıcı bir kelimeyi (örn: *"Dyson"*, *"PlayStation 5"*) takibe aldığı an bildirim izni talep edilir.
+2. **📂 Kategori Takibi (`CategoryPreferencesScreen` / `_toggleCategoryNotification`):**
+   - Kullanıcı "Elektronik", "Moda" gibi bir kategoriyi takip listesine eklediğinde izin tetiklenir.
+3. **👤 Yazar Takibi ve Bildirim Zili (`ProfileScreen` / `BotkolikProfileScreen`):**
+   - Kullanıcı bir fırsat avcısını takip ettiğinde veya fırsat zilini (`_toggleFollowNotification`) açtığında izin talep edilir.
+4. **⚙️ Bildirim Ayarları Ekranı (`NotificationSettingsScreen`):**
+   - Kullanıcı "Telefon Bildirimleri" master anahtarını aktif ettiğinde sistem izin penceresi açılır.
 
 ---
 

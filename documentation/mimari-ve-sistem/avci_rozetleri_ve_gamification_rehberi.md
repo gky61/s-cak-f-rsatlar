@@ -1,6 +1,6 @@
 # 🏆 FırsatKolik — Avcı Rozetleri ve Oyunlaştırma (Gamification) Mimari Rehberi
 
-Bu doküman, **FırsatKolik** platformundaki kullanıcı bağlılığını, kaliteli fırsat paylaşımını ve topluluk etkileşimini sürdürülebilir kılmak amacıyla geliştirilen **Avcı Rozetleri ve Oyunlaştırma (Gamification)** mimarisinin tüm teknik detaylarını, veri modellerini, otomatik kazanma algoritmalarını ve hile önleme kurallarını belgeler.
+Bu doküman, **FırsatKolik** platformundaki kullanıcı bağlılığını, kaliteli fırsat paylaşımını ve topluluk etkileşimini sürdürülebilir kılmak amacıyla geliştirilen **Avcı Rozetleri ve Oyunlaştırma (Gamification)** mimarisinin tüm teknik detaylarını, veri modellerini, otomatik kazanma algoritmalarını, dinamik rütbe gösterimini ve hile önleme kurallarını belgeler.
 
 ---
 
@@ -10,9 +10,10 @@ Bu doküman, **FırsatKolik** platformundaki kullanıcı bağlılığını, kali
 3. [📋 Eksiksiz Rozet Kataloğu (16+ Rozet)](#3--eksiksiz-rozet-kataloğu-16-rozet)
 4. [⚙️ Veri Modelleri ve Firestore Şeması](#4-️-veri-modelleri-ve-firestore-şeması)
 5. [🔄 Otomatik Ödüllendirme Algoritması ve Tetikleyiciler](#5--otomatik-ödüllendirme-algoritması-ve-tetikleyiciler)
-6. [📱 Mobil Arayüz (UI/UX) ve Vitrin Rozeti (Pinned Badge)](#6--mobil-arayüz-uiux-ve-vitrin-rozeti-pinned-badge)
+6. [📱 Mobil Arayüz (UI/UX) ve Dinamik Rütbe Entegrasyonu](#6--mobil-arayüz-uiux-ve-dinamik-rütbe-entegrasyonu)
 7. [🛡️ Hile Önleme ve Suistimal Koruması (Anti-Abuse)](#7-️-hile-önleme-ve-suistimal-koruması-anti-abuse)
 8. [💻 Web Admin Paneli Rozet Yönetimi ve İşlemleri](#8--web-admin-paneli-rozet-yönetimi-ve-i̇şlemleri)
+9. [🎖️ 10 Kademeli Avcı Rütbeleri ve Güven Seviyeleri (Hunter Ranks)](#9-️-10-kademeli-avcı-rütbeleri-ve-güven-seviyeleri-hunter-ranks)
 
 ---
 
@@ -23,13 +24,13 @@ FırsatKolik gamification sistemi; kullanıcıları sadece pasif birer tüketici
 ### Temel Prensipler:
 * **Şeffaf İlerleme:** Her kilitli rozet, kullanıcının hedefe ne kadar yaklaştığını net olarak gösteren sayısal ilerleme çubuğuna (`18 / 25 Paylaşım - %72`) sahiptir.
 * **Katmanlı Prestij:** Başlangıç seviyesindeki bir avcıdan, platform efsanesine uzanan net kademe ayrımı (Bronz ➔ Gümüş ➔ Altın ➔ Elmas ➔ Özel).
-* **Sosyal Kanıt (Social Proof):** Kazanılan unvanların profil başlığında ve yorumlarda diğer kullanıcılara karşı parlaması ("Vitrin Rozeti").
+* **Sosyal Kanıt (Social Proof):** Kullanıcı adının yanında dinamik parlayan rütbe amblemi (`Muratcan [🛡️]`) ve seçilen vitrin rozetleri (`⭐ Alev Ustası`).
 
 ---
 
 ## 2. 🏛️ Rozet Taksonomisi ve Nadirlik Kademeleri (Tiers)
 
-Rozetler 5 farklı nadirlik kademesine ayrılmıştır. Her kademenin kendine has amblem rengi, metalik gradient'i ve mikro-ışık (halo glow) efekti mevcuttur:
+Rozetler 5 farklı nadirlik kademesine ayrılmıştır. Her kademenin kendine has amblem rengi, metalik gradient'i ve mikro-ışık efekti mevcuttur:
 
 | Kademe (`BadgeTier`) | Amblem Rengi | Gradient Paleti | Prestij Seviyesi |
 | :--- | :--- | :--- | :--- |
@@ -95,22 +96,31 @@ Rozetler 5 farklı nadirlik kademesine ayrılmıştır. Her kademenin kendine ha
 {
   "uid": "usr_94827104",
   "username": "KuponAvcisi",
-  "points": 145,
-  "dealCount": 18,
-  "totalLikes": 72,
+  "nickname": "Muratcan Gökyokuş",
+  "points": 134,
+  "dealCount": 24,
+  "totalLikes": 7,
   "badges": [
     "first_spark",
     "hunter_apprentice",
-    "contributor",
     "bronze",
     "silver",
     "voice_of_community",
     "active_voter",
-    "flame_master",
     "helpful"
   ],
-  "pinnedBadge": "flame_master"
+  "pinnedBadge": "hunter_apprentice"
 }
+```
+
+### `AppUser` Dart Modeli Helper Getters (`lib/models/user.dart`):
+```dart
+// Kullanıcının puanına göre dinamik rütbe bilgileri
+String get trustLevel;   // 'Güvenilir Avcı', 'Uzman Avcı' vb.
+IconData get trustIcon;  // Icons.shield_rounded, Icons.stars_rounded vb.
+Color get trustColor;    // Color(0xFFD97706) vb.
+String get trustEmoji;   // '🛡️', '⭐', '💎' vb.
+int get trustStars;      // 0 - 9 arası güven yıldızı
 ```
 
 ---
@@ -146,30 +156,34 @@ sequenceDiagram
 
 ---
 
-## 6. 📱 Mobil Arayüz (UI/UX) ve Vitrin Rozeti (Pinned Badge)
+## 6. 📱 Mobil Arayüz (UI/UX) ve Dinamik Rütbe Entegrasyonu
 
-Profesyonel Tier-1 mimari standardına uygun olarak rozetler ana profil gövdesinde ekstra alan kaplamayacak şekilde entegre edilmiştir:
+### 1. 👑 Kullanıcı İsmi Yanında Dinamik Rütbe Rozeti (`profile_screen.dart`)
+* **Görünüm:** `Muratcan Gökyokuş` `[🛡️]` `✏️`
+* Kullanıcının puanına göre rütbesi geliştikçe ismin yanındaki dairesel mini amblem (ikon ve renk) otomatik güncellenir.
+* Rozete tıklandığında veya basılı tutulduğunda `Tooltip` ile mevcut seviye (`Güvenilir Avcı (134 Puan)`) bilgisi açılır.
 
-### 1. 🪪 Ana Profil Ekranı (`profile_screen.dart`)
-* **Tıklanabilir Vitrin Rozeti (Hero Pinned Badge):** Profil başlığında kullanıcının seçtiği unvan rozeti (`⭐ Alev Ustası`) ve puan/seviye çipi parlar. Kullanıcı bu çipe dokunduğunda doğrudan **`BadgesScreen`** açılır.
-* **Hesap & Tercihler Menü Satırı (`_buildAccountSettingsSection`):**
-  - Profil sayfasında ayrı bir kart veya göze batan bir blok yer almaz.
-  - "Bildirim Tercihleri" ve "Takip Ettiğim Avcılar"ın bulunduğu standart ayarlar listesi içerisine minimalist bir satır olarak entegre edilmiştir: `🏆 Avcı Başarımları & Rozetler • 3 / 16 Rozet Kazanıldı >`
-  - Bu menü satırına dokunulduğunda doğrudan müstakil **`BadgesScreen`** açılır.
+### 2. 🛡️ Tıklanabilir Seviye & Vitrin Hap Butonları (Hero Badges)
+* **Dinamik Rütbe Çipi:** `[ 🛡️ Güvenilir Avcı • 134 P > ]` — Yüksek kontrastlı, açık ve koyu modda kusursuz okunaklı tasarım. Dokunulduğunda doğrudan **`BadgesScreen`** açılır.
+* **Vitrin Rozeti (Pinned Badge):** Kullanıcı bir rozet seçtiğinde rütbe çipinin yanında ikinci bir vitrin hapı (`[ 🏹 Fırsat Çırağı ]`) belirir.
 
-### 2. 🏛️ Müstakil Avcı Başarımları Ekranı (`badges_screen.dart`)
-Kullanıcı tüm rozetleri incelemek ve yönetmek istediğinde açılan dedicated başarım merkezi:
-* **Başarım Özeti Kartı:** Toplam kazanılan rozet sayısı (`3 / 16`), seviye tamamlanma yüzdesi (`%18`) ve canlı ilerleme çubuğu.
+### 3. 📑 Destek Hub'ı (Bottom Sheet) Entegrasyonu
+* Kullanıcı **"Hesap, Yardım & Destek"** menüsünü açtığında, en üstte **REHBER & BAŞARIMLAR** grubunda rozet kazanım durumu görüntülenir:
+  `🏆 Avcı Başarımları & Rozetler • 7 / 16 Rozet Kazanıldı >`
+* Dokunulduğunda doğrudan tam ekran **`BadgesScreen`** açılır.
+
+### 4. 🏛️ Müstakil Avcı Başarımları Ekranı (`badges_screen.dart`)
+* **Başarım Özeti Kartı:** Toplam kazanılan rozet sayısı (`7 / 16`), seviye tamamlanma yüzdesi (`%43`) ve canlı ilerleme çubuğu.
 * **Kategori Filtre Çipleri:** `Tümü (16)`, `🎯 Fırsatlar`, `🔥 Sıcaklık`, `💬 Topluluk`, `⭐ Sadakat`.
 * **Kademeli Rozet Izgarası:** 2 sütunlu kartlarda metalik çerçeveler (`[Bronz]`, `[Gümüş]`, `[Altın]`, `[Elmas]`), açık/kilitli durumu ve kilitli rozetlerde kalan kota çubuğu (`18 / 25 Paylaşım - %72`).
 * **İnteraktif Rozet Detay Modalı (`_showBadgeDetailModal`):**
   - 3D parıltılı amblem ve kademe etiketi.
-  - Rozetin topluluk hikayesi ve açıklaması.
-  - "Nasıl Kazanılır?" görev kutusu ve canlı ilerleme barı.
-  - **"Vitrinde Göster / Vitrinden Kaldır" Butonu:** Kullanıcı kazandığı bir rozeti tek tıkla profil başlığında ve yorumlarda adının yanında unvan olarak sabitleyebilir (`pinnedBadge`).
+  - Rozetin hikayesi ve "Nasıl Kazanılır?" canlı ilerleme barı.
+  - **"Vitrinde Göster / Vitrinden Kaldır" Butonu:** Kullanıcı kazandığı bir rozeti profilinde sabitleyebilir (`pinnedBadge`).
 
-### 3. 💬 Yorumlarda Yazar Rozeti (`comments_bottom_sheet.dart`)
-* Yorum sahibinin seçtiği vitrin rozeti isminin yanında minyatür şık bir vektör çip olarak görüntülenir.
+### 5. 💬 Yorumlarda Yazar Rozeti (`comments_bottom_sheet.dart`)
+* Yorum sahibinin seçtiği vitrin rozeti (`userPinnedBadge`), yazar adının yanında minyatür şık bir vektör çip olarak görüntülenir.
+* Vitrin rozeti seçilmemişse yazar adı sade kalır.
 
 ---
 
@@ -190,19 +204,30 @@ Yöneticiler, web yönetim paneli (`web/admin/`) üzerinden kullanıcıların sa
 * **Rozet Bazlı Arama Motoru:** Arama çubuğuna kullanıcının rozet adı (örn: `Usta Avcı`, `Alev Ustası`, `Doğrulanmış`) veya teknik kimliği (`first_spark`, `verified`, `gold`) yazıldığında anında filtreleme yapılır.
 
 ### B. 👤 Kullanıcı Detay Modalı (`showUserDetail` — Rozet Yönetimi)
-Kullanıcı detayına tıklandığında sağ panelde açılan **"Rozet Yönetimi"** kartı şu yetenekleri sunar:
-
 | Yönetimsel İşlem | Tetiklenen Fonksiyon | Açıklama |
 | :--- | :--- | :--- |
-| **Mevcut Rozetleri Listeleme** | `getBadgeMeta(badgeId)` | Kullanıcının tüm rozetlerini ikon, localized başlık, kademe etiketi (`[Bronz]`, `[Gümüş]`, `[Altın]`, `[Elmas]`, `[Özel]`) ve `⭐ Vitrin` rozetiyle gösterir. |
-| **Vitrinde Göster / Kaldır** | `window.togglePinBadge(userId, badgeId)` | İlgili rozeti kullanıcının profilinde ve yorumlarda adının yanında görünecek vitrin unvanı olarak ayarlar veya kaldırır. |
-| **Rozet Silme / Geri Alma** | `window.removeBadge(userId, badgeId)` | Kullanıcıdan rozeti onay kutusu eşliğinde kaldırır. Eğer silinen rozet vitrinde ise `pinnedBadge` alanını da temizler. |
-| **Katalogdan Rozet Ekleme** | `window.addBadgeFromCatalog(userId)` | 16+ resmi katalog rozetini kategorize dropdown üzerinden seçerek tek tıkla kullanıcıya atar. |
+| **Mevcut Rozetleri Listeleme** | `getBadgeMeta(badgeId)` | Kullanıcının tüm rozetlerini ikon, localized başlık, kademe etiketi ve `⭐ Vitrin` rozetiyle gösterir. |
+| **Vitrinde Göster / Kaldır** | `window.togglePinBadge(userId, badgeId)` | İlgili rozeti kullanıcının profilinde ve yorumlarda unvan olarak ayarlar veya kaldırır. |
+| **Rozet Silme / Geri Alma** | `window.removeBadge(userId, badgeId)` | Kullanıcıdan rozeti onay kutusu eşliğinde kaldırır. |
+| **Katalogdan Rozet Ekleme** | `window.addBadgeFromCatalog(userId)` | 16+ resmi katalog rozetini dropdown üzerinden seçerek tek tıkla kullanıcıya atar. |
 | **Özel Rozet Ekleme** | `window.addBadge(userId)` | Manuel kimlik girilerek özel promosyon veya iş birliği rozeti eklenmesini sağlar. |
-| **Otomatik Rozet Eşitleme** | `window.autoAwardBadgesForUser(userId)` | Kullanıcının `dealCount`, `points` ve `totalLikes` istatistiklerini tarayarak hak ettiği tüm eksik rozetleri tek tıkla topluca verir. |
+| **Otomatik Rozet Eşitleme** | `window.autoAwardBadgesForUser(userId)` | Kullanıcının istatistiklerini tarayarak hak ettiği tüm eksik rozetleri tek tıkla topluca verir. |
 
-### C. 🔄 Firestore Veri Senkronizasyonu
-* Panel üzerinden yapılan tüm ekleme/çıkarma/sabitleme işlemleri doğrudan Firestore `users/{userId}` dokümanına `FieldValue.arrayUnion` ve `FieldValue.delete` ile atomik olarak işlenir.
-* Mobil uygulama tarafındaki reaktif Firestore dinleyicileri (snapshot listener) sayesinde kullanıcının ekranında rozetler anında güncellenir.
+---
 
+## 9. 🎖️ 10 Kademeli Avcı Rütbeleri ve Güven Seviyeleri (Hunter Ranks)
 
+Rozetlerin yanı sıra kullanıcının topladığı `points` (Puan) miktarına göre otomatik olarak hesaplanan 10 kademeli resmi Avcı Rütbesi hiyerarşisi:
+
+| Seviye | İkon / Emoji | Flutter İkonu (`trustIcon`) | Rütbe Adı (`trustLevel`) | Vurgu Rengi (`trustColor`) | Puan Aralığı (`points`) | Güvenilirlik Yıldızı (`trustStars`) |
+| :---: | :---: | :--- | :--- | :--- | :---: | :---: |
+| **1** | 🌱 | `Icons.shield_outlined` | **Çaylak Avcı** | `#94A3B8` (Arduvaz Gri) | `0 – 19 Puan` | ☆☆☆☆☆☆☆☆☆ (0 Yıldız) |
+| **2** | 🏹 | `Icons.military_tech_outlined` | **Çırak Avcı** | `#64748B` (Çelik) | `20 – 49 Puan` | ★☆☆☆☆☆☆☆☆ (1 Yıldız) |
+| **3** | ⚡ | `Icons.bolt_rounded` | **Aktif Avcı** | `#10B981` (Zümrüt Yeşil) | `50 – 119 Puan` | ★★☆☆☆☆☆☆☆ (2 Yıldız) |
+| **4** | 🛡️ | `Icons.shield_rounded` | **Güvenilir Avcı** | `#D97706` (Asil Kehribar) | `120 – 249 Puan` | ★★★☆☆☆☆☆☆ (3 Yıldız) |
+| **5** | ⭐ | `Icons.stars_rounded` | **Kıdemli Avcı** | `#3B82F6` (Derin Mavi) | `250 – 499 Puan` | ★★★★☆☆☆☆☆ (4 Yıldız) |
+| **6** | 🔮 | `Icons.auto_awesome_rounded` | **Uzman Avcı** | `#8B5CF6` (Asil Mor) | `500 – 999 Puan` | ★★★★★☆☆☆☆ (5 Yıldız) |
+| **7** | 💎 | `Icons.diamond_rounded` | **Üstat Avcı** | `#06B6D4` (Elmas Camgöbeği) | `1.000 – 2.499 Puan` | ★★★★★★☆☆☆ (6 Yıldız) |
+| **8** | 🦅 | `Icons.workspace_premium_rounded` | **Efsanevi Avcı** | `#EC4899` (Yakut Pembe) | `2.500 – 4.999 Puan` | ★★★★★★★☆☆ (7 Yıldız) |
+| **9** | 🪐 | `Icons.flare_rounded` | **Kozmik Avcı** | `#F59E0B` (Kozmik Altın) | `5.000 – 9.999 Puan` | ★★★★★★★★☆ (8 Yıldız) |
+| **10** | 👑 | `Icons.military_tech_rounded` | **Fırsat Lordu** | `#EAB308` (Zirve Taç Sarısı) | `10.000+ Puan` | ★★★★★★★★★ (9 Yıldız / Tanrısal) |

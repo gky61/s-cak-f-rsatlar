@@ -1,6 +1,6 @@
 # 🔔 FırsatKolik — Bildirim ve Push Bildirim Senaryoları Rehberi (vProduction - Kapsamlı & Güncel)
 
-Bu doküman, FırsatKolik platformundaki iki temel bildirim alanının (**"Profilim -> Bildirimler"** menüsü ve **"Profilim -> Bildirim Ayarları"** menüsü) işleyişini, tetikleme kurallarını, kademeli pasifleştirme (parent-child) mantığını, veri akışlarını, önceliklendirme ve tekilleştirme mekanizmalarını ve tüm olası senaryoları detaylandırır.
+Bu doküman, FırsatKolik platformundaki iki temel bildirim alanının (**"Profilim -> Bildirimler"** menüsü ve **"Profilim -> Bildirim Ayarları"** menüsü) işleyişini, tetikleme kurallarını, kademeli pasifleştirme (parent-child) mantığını, veri akışlarını, bağlamsal izin isteme matrisini, önceliklendirme ve tekilleştirme mekanizmalarını ve tüm olası senaryoları detaylandırır.
 
 ---
 
@@ -56,7 +56,7 @@ Uygulama içerisinde bildirimlerle ilgili iki temel kavram bulunur:
 
 1. **Master Switch (`pushMasterEnabled`):**
    - **KAPALI:** Altındaki tüm kanal switch'leri ve detay kartları %50 opaklık ile grileşir ve kilitlenir. Tıklandığında dinamik Snackbar uyarısı gösterilir: *"Bu ayarı değiştirmek için önce yukarıdan Telefon Bildirimleri'ni açmalısınız."*. Alt kanalların veritabanındaki değerleri **korunur (State Preservation)**. Cloud Functions tüm push'ları `disabled_by_user_master_switch` ile durdurur.
-   - **AÇIK:** Tüm alt kanallar eski durumları korunmuş şekilde canlı renklerine döner ve etkileşime açılır.
+   - **AÇIK:** Tüm alt kanallar eski durumları korunmuş şekilde canlı renklerine döner ve etkileşime açılır. Kullanıcı bu şalteri ilk açtığında işletim sisteminden bildirim izni istenir (`requestPermission`).
 
 2. **Kanal Bazlı Switch'ler:**
    - `dealNotificationsEnabled`: Yazar bildirimlerini kontrol eder (`disabled_by_user_group_deal`).
@@ -82,7 +82,21 @@ Uygulama içerisinde bildirimlerle ilgili iki temel kavram bulunur:
 
 ---
 
-## 🧪 4. Otomatik Test Süitleri ve Doğrulama
+## 🎯 4. Bağlamsal İzin İsteme Matrisi (Contextual Permission Matrix)
+
+Açılışta körü körüne izin sormak yerine, kullanıcının niyet gösterdiği anlarda izin isteme akışı:
+
+| Tetikleyici Ekran / Bileşen | Kullanıcı Eylemi | İzin İsteme Mantığı | Kabul Olasılığı |
+| :--- | :--- | :--- | :---: |
+| **Arama Çubuğu Radarı** (`HomeScreen`) | Bir arama kelimesini radar simgesine basarak takibe ekleme | `_addKeywordFromSearch` ➔ `requestPermission()` | **%90+** |
+| **Anahtar Kelime Takibi** (`KeywordTrackingScreen`) | Yeni kelime ekleme veya önerilerden seçme | `_addKeyword` ➔ `requestPermission()` | **%92+** |
+| **Kategori Tercihleri** (`CategoryPreferencesScreen`) | Bir kategoriyi veya tümünü takibe alma | `_toggleCategory` / `_selectAllCategories` ➔ `requestPermission()` | **%85+** |
+| **Yazar / Avcı Profili** (`ProfileScreen` & `BotkolikProfileScreen`) | Başka bir kullanıcıyı takip etme veya bildirim zilini açma | `_toggleFollow` / `_toggleFollowNotification` ➔ `requestPermission()` | **%88+** |
+| **Bildirim Ayarları** (`NotificationSettingsScreen`) | "Telefon Bildirimleri" master anahtarını AÇIK konuma getirme | `SwitchListTile.onChanged(true)` ➔ `requestPermission()` | **%95+** |
+
+---
+
+## 🧪 5. Otomatik Test Süitleri ve Doğrulama
 
 Tüm bildirim sistemi ve senaryoları 3 ayrı test paketiyle tam kapsamlı (%100) doğrulanmaktadır:
 

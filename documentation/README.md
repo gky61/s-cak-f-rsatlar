@@ -215,10 +215,12 @@ Uygulama, modern, enerjik ve göz yormayan **resmi FırsatKolik Tasarım Dili** 
 * **Canlı Önizleme Vitrini (Hero Live Preview):** Kullanıcı link yapıştırdığında `AnimatedSwitcher` ve `Shimmer` iskelet animasyonlarıyla anında canlanan ürün kartı.
 * **Akıllı Arama Motoru (`DealSearchEngine`):** Türkçe normalizasyonlu, çoklu alan taramalı (başlık, açıklama, mağaza, marka, kupon) ve alaka düzeyi puanlamalı (Relevance Scoring) yerel arama.
 * **Saf Karanlık Mod:** Donuk gri zeminler yerine saf siyah (`#000000`) sayfa tabanı ve yüksek kontrastlı koyu kartlar (`#121212` / `#1E1E1E`).
+* **İnteraktif Spotlight Eğitimi (In-App Tutorial):** İlk kez giriş yapan kullanıcılar için sıfır sürtünmeli (dialogsuz) doğrudan başlayan, 8 kritik özelliği (Radar, Aktüel, Kuponlar, Termometre, Kaydedilenler, Popüler, AI Paylaşım ve Profil) tanıtan pürüzsüz spotlight rehberi.
 * **APK Boyut Optimizasyonu:** Fat APK boyutu **72 MB'dan 27 MB'a**, Play Store indirme boyutu (AAB) **~20 MB'a** düşürülmüştür. 41 mağaza logosu WebP formatına çevrilerek asset boyutunda %91 tasarruf sağlanmıştır.
 * **Shorebird Canlı Kod Güncelleme (OTA):** Canlıdaki Dart UI ve iş mantığı hatalarını mağaza onayını beklemeden kullanıcının cebinde anında düzeltme stratejisi.
 
 ### 📚 İlgili Tasarım ve Mobil Dokümanları:
+* 🔗 [İnteraktif Uygulama Turu ve Spotlight Rehberi](file:///d:/firsatkolik/documentation/mobil-ve-ui/in_app_tutorial_ve_spotlight_rehberi.md) — [YENİ] 8 adımlı spotlight keşif matrisi, dikey stabilite kilidi ve durum kalıcılığı mimarisi.
 * 🔗 [FırsatKolik Tasarım Sistemi ve Arayüz Standartları Rehberi](file:///d:/firsatkolik/documentation/mobil-ve-ui/DESIGN_SYSTEM_GUIDE.md) — Çentikli kart şablonları, renk paletleri, tipografi ve bileşen kodları.
 * 🔗 [APK Boyut Optimizasyonu Referans Kılavuzu](file:///d:/firsatkolik/documentation/mobil-ve-ui/apk_size_optimization_guide.md) — Split-per-abi, WebP dönüşümü ve ProGuard/R8 kuralları.
 * 🔗 [Canlı Kod Güncelleme (Code Push / OTA) Stratejileri](file:///d:/firsatkolik/documentation/mobil-ve-ui/flutter_live_code_push_and_hot_reload_strategies.md) — Shorebird, Server-Driven mimari ve In-App Update karşılaştırması.
@@ -245,14 +247,19 @@ Backend tarafında `functions/index.js` dosyasında yer alan **25 adet Cloud Fun
 
 ## 11. 🚀 Üretim (Production) Süreci, Dağıtım ve Hızlı Komutlar
 
-### 📱 Mobil Uygulama (Flutter)
+### 📱 Mobil Uygulama (Flutter & Shorebird Code-Push)
 ```bash
 # DEV ortamında kendi cihazında test etme
 flutter run -d <cihaz_id> --flavor dev --dart-define=FLAVOR=dev
 
-# Google Play Store için Release AAB Paketi Üretme (PROD)
-flutter build appbundle --flavor prod --dart-define=FLAVOR=prod --release
+# 1. Google Play Store İçin İlk Sürümü Derleme (Shorebird Release)
+shorebird release android --flavor prod -t lib/main.dart
+
+# 2. Canlıdaki Kullanıcılara Anlık Kod Yaması Gönderme (Shorebird Patch - Mağaza Onaysız)
+shorebird patch android --flavor prod -t lib/main.dart
 ```
+
+*Detaylı Code-Push stratejileri ve CI/CD akışı için: [Flutter Canlı Kod Güncelleme Rehberi](file:///d:/firsatkolik/documentation/mobil-ve-ui/flutter_live_code_push_and_hot_reload_strategies.md)*
 
 ### ⚡ Cloud Functions, Güvenlik Kuralları ve Web Admin Deploy
 ```bash
@@ -357,6 +364,7 @@ documentation/
 │   └── 📁 logs/                                              # 200 Canlı Ürün Test Linki Veri Tabanı
 │
 ├── 📁 mobil-ve-ui/                                           # Mobil Tasarım, UX & Optimizasyon
+│   ├── 📄 in_app_tutorial_ve_spotlight_rehberi.md            # [YENİ] 8 Adımlı İnteraktif Spotlight Rehberi & Dikey Stabilite Mimarisi
 │   ├── 📄 DESIGN_SYSTEM_GUIDE.md                             # Resmi FırsatKolik Tasarım Sistemi (Notched Cards, Colors)
 │   ├── 📄 apk_size_optimization_guide.md                     # APK Boyut Optimizasyonu (72MB -> 27MB) ve WebP Dönüşümü
 │   └── 📄 flutter_live_code_push_and_hot_reload_strategies.md# Shorebird OTA Code Push & Sunucu Güdümlü Mimari Analizi

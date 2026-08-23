@@ -895,7 +895,6 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
                   label: 'Kategoriler',
                   isSelected: false,
                   onTap: () {
-                    Navigator.pop(context);
                     Navigator.push(
                       context,
                       MaterialPageRoute(

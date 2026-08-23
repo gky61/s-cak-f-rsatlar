@@ -122,3 +122,100 @@ FırsatKolik projesinin yüksek performanslı ve kesintisiz çalışabilmesi iç
 
 3. **Katman 3 (Büyük Sürümler & Native Değişiklikler):**
    - Native kamera/bildirim/reklam kütüphanesi güncellemelerinde `upgrader` ve `in_app_update` ile kullanıcılar uygulama içinden yönlendirilmelidir.
+
+---
+
+## 🛠️ 6. FırsatKolik Shorebird Entegrasyon ve Kullanım Kılavuzu
+
+FırsatKolik projesini Code-Push yeteneğiyle donatmak için izlenecek kesin adımlar:
+
+### Adım 1: Shorebird CLI Kurulumu (Geliştirici Bilgisayarı)
+PowerShell terminalinizde şu resmi kurulum komutunu çalıştırın:
+```powershell
+irm https://raw.githubusercontent.com/shorebirdtech/install/main/install.ps1 | iex
+```
+Kurulum tamamlandıktan sonra terminali yeniden başlatın ve doğrulayın:
+```powershell
+shorebird --version
+```
+
+### Adım 2: Projeyi Shorebird ile Başlatma (`init`)
+FırsatKolik proje dizininde (`d:\firsatkolik`):
+```bash
+# 1. Google hesabınızla ücretsiz giriş yapın
+shorebird login
+
+# 2. Projeyi Shorebird'e bağlayın (shorebird.yaml oluşturur)
+shorebird init
+```
+*Bu komut projenizin kök dizinine otomatik bir `shorebird.yaml` (benzersiz app_id) ekler ve mevcut kodunuzu kesinlikle bozmaz.*
+
+### Adım 3: Google Play / App Store İçin İlk Sürümün Çıkarılması (`Release`)
+Lansman günü mağazalara yüklenecek AAB / IPA paketini standart flutter yerine Shorebird ile derleyin:
+```bash
+# Android Release (Google Play için AAB)
+shorebird release android --flavor prod -t lib/main.dart
+
+# iOS Release (App Store için IPA)
+shorebird release ios --flavor prod -t lib/main.dart
+```
+*Oluşan AAB paketini Google Play Console'a yükleyerek standart mağaza onayına gönderin.*
+
+### Adım 4: Canlıdaki Kullanıcılara Anlık Kod Yaması Gönderme (`Patch`)
+Uygulama mağazadayken bir hata düzeltmesi veya tasarım güncellemesi yaptığınızda mağaza onayını beklemeden tek komutla canlıya geçin:
+```bash
+# Android kullanıcılarına anlık yama
+shorebird patch android --flavor prod -t lib/main.dart
+
+# iOS kullanıcılarına anlık yama
+shorebird patch ios --flavor prod -t lib/main.dart
+```
+
+---
+
+## 🤖 7. GitHub Actions ile Otomatik Code-Push Pipeline (Opsiyonel)
+
+`main` branch'ine yapılan her push işleminde otomatik yama atmak için `.github/workflows/shorebird_patch.yml` dosyası:
+
+```yaml
+name: Shorebird Auto Patch
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  patch:
+    name: Deploy Shorebird Patch
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Kodu Çek
+        uses: actions/checkout@v4
+
+      - name: 🐦 Shorebird Kur
+        uses: shorebirdtech/actions/setup-shorebird@v1
+
+      - name: 🚀 Android Yamasını Dağıt
+        run: shorebird patch android --flavor prod -t lib/main.dart --force
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+```
+
+---
+
+## 💡 8. Önemli Kurallar ve Kota Yönetimi
+
+1. **Aylık 5.000 Ücretsiz Yama:** Shorebird, aylık 5.000 yama indirmesine kadar tamamen ücretsizdir.
+2. **Native Kuralı:** Yeni bir Android/iOS native SDK eklenmediği sürece tüm Dart, UI, renk, buton, API ve ekran değişiklikleri %100 mağaza onaysız dağıtılabilir.
+3. **Pürüzsüz Deneyim:** Kullanıcı uygulamayı açtığında yama arka planda 2 saniyede iner, bir sonraki açılışta güncel sürüm sessizce aktif olur.
+
+---
+
+## 📌 9. Mevcut Durum Özeti ve Bundan Sonraki Zaman Çizelgesi
+
+| Aşama | Ne Yapılmalı? | Ne Zaman? |
+| :--- | :--- | :--- |
+| **Aşama 1: Hazırlık (TAMAMLANDI ✅)** | `shorebird.yaml` oluşturuldu, `dev` ve `prod` flavor ID'leri bağlandı, `pubspec.yaml` varlıklarına kaydedildi. | Şu an (Tamamlandı) |
+| **Aşama 2: Geliştirme (ŞU ANKİ AŞAMA ⏳)** | Hiçbir şey yapmanıza gerek yok. `develop` dalında kodunuzu geliştirmeye ve test etmeye normal şekilde devam edin. | Store Lansmanına Kadar |
+| **Aşama 3: Store Çıkışı (LANSMAN GÜNÜ 🚀)** | `develop` ➔ `main` merge sonrası Google Play AAB derlemesini `shorebird release android --flavor prod -t lib/main.dart` ile alın. | Google Play'e Yüklerken |
+| **Aşama 4: Canlıda Yama (PRODUCTION 🔥)** | Canlıdaki hataları düzeltip `shorebird patch android --flavor prod -t lib/main.dart` ile anında dağıtın. | Mağaza Onayından Sonra |

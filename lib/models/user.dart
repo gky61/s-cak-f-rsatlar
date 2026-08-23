@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
@@ -44,24 +45,74 @@ class AppUser {
       ? nickname!.trim()
       : (username.trim().isNotEmpty ? username.trim() : 'Kullanıcı');
 
-  // Güvenilirlik yıldızları (0-5 arası)
+  // Güvenilirlik yıldızları (0-9 arası)
   int get trustStars {
-    if (points < 10) return 0;
-    if (points < 30) return 1;
-    if (points < 60) return 2;
-    if (points < 100) return 3;
-    if (points < 200) return 4;
-    return 5;
+    if (points < 20) return 0;
+    if (points < 50) return 1;
+    if (points < 120) return 2;
+    if (points < 250) return 3;
+    if (points < 500) return 4;
+    if (points < 1000) return 5;
+    if (points < 2500) return 6;
+    if (points < 5000) return 7;
+    if (points < 10000) return 8;
+    return 9;
   }
 
-  // Güvenilirlik seviyesi
+  // Güvenilirlik seviyesi ve Avcı Rütbesi
   String get trustLevel {
-    if (points < 10) return 'Yeni Üye';
-    if (points < 30) return 'Başlangıç';
-    if (points < 60) return 'Aktif';
-    if (points < 100) return 'Güvenilir';
-    if (points < 200) return 'Çok Güvenilir';
-    return 'Uzman';
+    if (points < 20) return 'Çaylak Avcı';
+    if (points < 50) return 'Çırak Avcı';
+    if (points < 120) return 'Aktif Avcı';
+    if (points < 250) return 'Güvenilir Avcı';
+    if (points < 500) return 'Kıdemli Avcı';
+    if (points < 1000) return 'Uzman Avcı';
+    if (points < 2500) return 'Üstat Avcı';
+    if (points < 5000) return 'Efsanevi Avcı';
+    if (points < 10000) return 'Kozmik Avcı';
+    return 'Fırsat Lordu';
+  }
+
+  // Güvenilirlik seviyesi / Avcı Rütbesi İkonu
+  IconData get trustIcon {
+    if (points < 20) return Icons.shield_outlined;
+    if (points < 50) return Icons.military_tech_outlined;
+    if (points < 120) return Icons.bolt_rounded;
+    if (points < 250) return Icons.shield_rounded;
+    if (points < 500) return Icons.stars_rounded;
+    if (points < 1000) return Icons.auto_awesome_rounded;
+    if (points < 2500) return Icons.diamond_rounded;
+    if (points < 5000) return Icons.workspace_premium_rounded;
+    if (points < 10000) return Icons.flare_rounded;
+    return Icons.military_tech_rounded;
+  }
+
+  // Güvenilirlik seviyesi / Avcı Rütbesi Vurgu Rengi
+  Color get trustColor {
+    if (points < 20) return const Color(0xFF94A3B8); // Çaylak (Slate)
+    if (points < 50) return const Color(0xFF64748B); // Çırak (Steel)
+    if (points < 120) return const Color(0xFF10B981); // Aktif (Emerald)
+    if (points < 250) return const Color(0xFFD97706); // Güvenilir (Amber)
+    if (points < 500) return const Color(0xFF3B82F6); // Kıdemli (Blue)
+    if (points < 1000) return const Color(0xFF8B5CF6); // Uzman (Purple)
+    if (points < 2500) return const Color(0xFF06B6D4); // Üstat (Cyan)
+    if (points < 5000) return const Color(0xFFEC4899); // Efsanevi (Ruby/Pink)
+    if (points < 10000) return const Color(0xFFF59E0B); // Kozmik (Gold)
+    return const Color(0xFFEAB308); // Fırsat Lordu (Crown Gold)
+  }
+
+  // Güvenilirlik seviyesi / Avcı Rütbesi Emojisi
+  String get trustEmoji {
+    if (points < 20) return '🌱';
+    if (points < 50) return '🏹';
+    if (points < 120) return '⚡';
+    if (points < 250) return '🛡️';
+    if (points < 500) return '⭐';
+    if (points < 1000) return '🔮';
+    if (points < 2500) return '💎';
+    if (points < 5000) return '🦅';
+    if (points < 10000) return '🪐';
+    return '👑';
   }
 
   // copyWith metodu

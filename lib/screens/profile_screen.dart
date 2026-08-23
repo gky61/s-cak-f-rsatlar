@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/notification_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
@@ -15,7 +16,8 @@ import '../utils/asset_path_migration.dart';
 import 'guest_profile_screen.dart';
 import 'notification_settings_screen.dart';
 import 'auth_screen.dart';
-// import 'edit_profile_screen.dart'; // Dosya bulunamadı, geçici olarak yorum satırı
+import 'home_screen.dart';
+import '../services/in_app_tutorial_service.dart';
 import 'privacy_policy_screen.dart';
 import 'faq_screen.dart';
 import 'category_preferences_screen.dart';
@@ -717,20 +719,135 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _signOut() async {
+    final email = _authService.currentUser?.email;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final textMain = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
+    final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Çıkış Yap'),
-        content: const Text('Çıkış yapmak istediğinize emin misiniz?'),
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: borderColor, width: 1),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: isDark ? 0.20 : 0.10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.logout_rounded, color: Colors.red.shade400, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Çıkış Yap',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: textMain,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (email != null && email.isNotEmpty) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: borderColor, width: 0.8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.alternate_email_rounded, size: 14, color: textSub),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        email,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: textMain,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            Text(
+              email != null && email.isNotEmpty
+                  ? 'Bu hesaptan çıkış yapmak istediğinize emin misiniz? Dilediğiniz zaman tekrar giriş yapabilirsiniz.'
+                  : 'Çıkış yapmak istediğinize emin misiniz?',
+              style: TextStyle(
+                fontSize: 13.5,
+                color: textSub,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Çıkış Yap'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    side: BorderSide(color: borderColor),
+                  ),
+                  child: Text(
+                    'Vazgeç',
+                    style: TextStyle(
+                      color: textSub,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade600,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text(
+                    'Çıkış Yap',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -751,21 +868,136 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _deleteAccount() async {
+    final email = _authService.currentUser?.email;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final textMain = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
+    final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Hesabımı Sil'),
-        content: const Text(
-            'Hesabınızı ve tüm verilerinizi kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: borderColor, width: 1),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: isDark ? 0.20 : 0.10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.delete_forever_rounded, color: Colors.red.shade400, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Hesabı Kalıcı Olarak Sil',
+                style: TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w700,
+                  color: textMain,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (email != null && email.isNotEmpty) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: isDark ? 0.12 : 0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.red.withValues(alpha: isDark ? 0.35 : 0.20),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.alternate_email_rounded, size: 14, color: Colors.red.shade400),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        email,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? const Color(0xFFFCA5A5) : Colors.red.shade900,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            Text(
+              'Bu işlem GERİ ALINAMAZ. Paylaştığınız tüm fırsatlar, yorumlar, avcı puanlarınız ve rozetleriniz kalıcı olarak silinecektir.',
+              style: TextStyle(
+                fontSize: 13,
+                color: textSub,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Hesabı Sil'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    side: BorderSide(color: borderColor),
+                  ),
+                  child: Text(
+                    'İptal',
+                    style: TextStyle(
+                      color: textSub,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text(
+                    'Kalıcı Olarak Sil',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -883,23 +1115,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 12),
                 ],
 
-                // 4-Column Stats Matrix Card
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _buildStatsMatrix(
-                    context,
-                    isDark: isDark,
-                    primaryColor: primaryColor,
-                    surfaceColor: surfaceColor,
-                    borderColor: borderColor,
-                    textMain: textMain,
-                    textSub: textSub,
-                  ),
-                ),
-
                 // Bento Quick Shortcuts (Sadece kendi profilinde)
                 if (_isOwnProfile) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   _buildBentoQuickActions(
                     context,
                     isDark: isDark,
@@ -937,27 +1155,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     isDark: isDark,
                     primaryColor: primaryColor,
                     accentBlue: accentBlue,
-                    surfaceColor: surfaceColor,
-                    borderColor: borderColor,
-                    textMain: textMain,
-                    textSub: textSub,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildSupportSettingsSection(
-                    context,
-                    isDark: isDark,
-                    primaryColor: primaryColor,
-                    accentBlue: accentBlue,
-                    surfaceColor: surfaceColor,
-                    borderColor: borderColor,
-                    textMain: textMain,
-                    textSub: textSub,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildLogoutSection(
-                    context,
-                    isDark: isDark,
-                    primaryColor: primaryColor,
                     surfaceColor: surfaceColor,
                     borderColor: borderColor,
                     textMain: textMain,
@@ -1007,21 +1204,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = _user;
     final username = user?.username ?? 'Kullanıcı';
     final displayName = user?.displayName ?? username;
-    final trustLevel = user?.trustLevel ?? 'Yeni Üye';
+    final trustLevel = user?.trustLevel ?? 'Çaylak Avcı';
+    final trustIcon = user?.trustIcon ?? Icons.shield_outlined;
+    final trustColor = user?.trustColor ?? (isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706));
     final points = user?.points ?? 0;
+    final dealCount = user?.dealCount ?? 0;
+    final totalLikes = user?.totalLikes ?? 0;
+    final followingCount = user?.following.length ?? 0;
     final isVerified = user?.badges.contains('verified') ?? false;
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(20, topPadding + 64, 20, 24),
+      padding: EdgeInsets.fromLTRB(16, topPadding + 56, 16, 14),
       decoration: BoxDecoration(
         color: surfaceColor,
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
             color: isDark ? Colors.black.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.04),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -1034,8 +1236,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 // Inner Avatar with Clean Border
                 Container(
-                  width: 96,
-                  height: 96,
+                  width: 92,
+                  height: 92,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: surfaceColor,
@@ -1056,7 +1258,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               avatarUrl,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
-                                  Icon(Icons.person_rounded, size: 48, color: textSub),
+                                  Icon(Icons.person_rounded, size: 46, color: textSub),
                             );
                           }
                           return CachedNetworkImage(
@@ -1067,10 +1269,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                             ),
                             errorWidget: (context, url, error) =>
-                                Icon(Icons.person_rounded, size: 48, color: textSub),
+                                Icon(Icons.person_rounded, size: 46, color: textSub),
                           );
                         }
-                        return Icon(Icons.person_rounded, size: 48, color: textSub);
+                        return Icon(Icons.person_rounded, size: 46, color: textSub);
                       },
                     ),
                   ),
@@ -1118,377 +1320,396 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-                const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
-                // Name with edit or verified icon
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        displayName,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: textMain,
-                          letterSpacing: -0.3,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (_isOwnProfile) ...[
-                      const SizedBox(width: 6),
-                      InkWell(
-                        onTap: () => _showEditUsernameDialog(context),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4.0),
-                          child: Icon(Icons.edit_rounded, size: 15, color: primaryColor),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-
-                const SizedBox(height: 3),
-
-                // Username handle (@username)
-                Text(
-                  '@$username',
+          // Name with dynamic trust badge & edit icon
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  displayName,
                   style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                    color: textSub,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    color: textMain,
+                    letterSpacing: -0.4,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Dynamic Trust / Rank Badge Icon
+              Tooltip(
+                message: '$trustLevel ($points Puan)',
+                child: Container(
+                  padding: const EdgeInsets.all(3.5),
+                  decoration: BoxDecoration(
+                    color: trustColor.withValues(alpha: isDark ? 0.22 : 0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: trustColor.withValues(alpha: isDark ? 0.45 : 0.30),
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(
+                    trustIcon,
+                    size: 13.5,
+                    color: trustColor,
                   ),
                 ),
-
-                if (_isOwnProfile && _authService.currentUser?.email != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    _authService.currentUser!.email!,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w400,
-                      color: textSub.withValues(alpha: 0.8),
-                    ),
+              ),
+              if (_isOwnProfile) ...[
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () => _showEditUsernameDialog(context),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Icon(Icons.edit_rounded, size: 15, color: primaryColor),
                   ),
-                ],
+                ),
+              ],
+            ],
+          ),
 
-                const SizedBox(height: 10),
+          const SizedBox(height: 10),
 
-                // Trust Level & Pinned Badge Row (Tıklanabilir Başarım Kısayolları)
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    // Trust Level / Reputation Pill Badge
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () async {
-                          if (user == null) return;
-                          HapticFeedback.selectionClick();
-                          final updatedUser = await Navigator.push<AppUser>(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => BadgesScreen(
-                                user: user,
-                                isOwnProfile: _isOwnProfile,
-                              ),
-                            ),
-                          );
-                          if (updatedUser != null && mounted) {
-                            setState(() {
-                              _user = updatedUser;
-                            });
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? primaryColor.withValues(alpha: 0.12)
-                                : primaryColor.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: primaryColor.withValues(alpha: 0.22),
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.verified_rounded,
-                                size: 13,
-                                color: primaryColor,
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                trustLevel,
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: primaryColor,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Container(
-                                width: 3.5,
-                                height: 3.5,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: textSub.withValues(alpha: 0.5),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '$points Puan',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: textSub,
-                                ),
-                              ),
-                            ],
-                          ),
+          // Trust Level & Pinned Badge Row (Tıklanabilir Başarım Kısayolları - Yüksek Kontrast & Prestijli Tasarım)
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              // Trust Level / Reputation Pill Badge (Prestijli & Yüksek Kontrastlı Tasarım)
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () async {
+                    if (user == null) return;
+                    HapticFeedback.selectionClick();
+                    final updatedUser = await Navigator.push<AppUser>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => BadgesScreen(
+                          user: user,
+                          isOwnProfile: _isOwnProfile,
                         ),
                       ),
+                    );
+                    if (updatedUser != null && mounted) {
+                      setState(() {
+                        _user = updatedUser;
+                      });
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                        width: 1.1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.02),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
                     ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          trustIcon,
+                          size: 14,
+                          color: trustColor,
+                        ),
+                        const SizedBox(width: 5.5),
+                        Text(
+                          trustLevel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: textMain,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 3.5,
+                          height: 3.5,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: textSub.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$points P',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 14,
+                          color: textSub.withValues(alpha: 0.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
 
-                    // Pinned Badge Pill (If user selected one)
-                    if (user?.pinnedBadge != null) ...[
-                      Builder(builder: (context) {
-                        final pinnedBadge = BadgeHelper.getBadgeInfo(user!.pinnedBadge!);
-                        if (pinnedBadge == null) return const SizedBox.shrink();
-                        return Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () async {
-                              HapticFeedback.selectionClick();
-                              final updatedUser = await Navigator.push<AppUser>(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => BadgesScreen(
-                                    user: user,
-                                    isOwnProfile: _isOwnProfile,
-                                  ),
-                                ),
-                              );
-                              if (updatedUser != null && mounted) {
-                                setState(() {
-                                  _user = updatedUser;
-                                });
-                              }
-                            },
-                            borderRadius: BorderRadius.circular(20),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
-                              decoration: BoxDecoration(
-                                color: pinnedBadge.color.withValues(alpha: isDark ? 0.18 : 0.12),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: pinnedBadge.color.withValues(alpha: 0.45),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(pinnedBadge.iconData, size: 13, color: pinnedBadge.color),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    pinnedBadge.name,
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: pinnedBadge.color,
-                                    ),
-                                  ),
-                                ],
-                              ),
+              // Pinned Badge Pill (If user selected one)
+              if (user?.pinnedBadge != null) ...[
+                Builder(builder: (context) {
+                  final pinnedBadge = BadgeHelper.getBadgeInfo(user!.pinnedBadge!);
+                  if (pinnedBadge == null) return const SizedBox.shrink();
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () async {
+                        HapticFeedback.selectionClick();
+                        final updatedUser = await Navigator.push<AppUser>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => BadgesScreen(
+                              user: user,
+                              isOwnProfile: _isOwnProfile,
                             ),
                           ),
                         );
-                      }),
-                    ],
-                  ],
+                        if (updatedUser != null && mounted) {
+                          setState(() {
+                            _user = updatedUser;
+                          });
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: pinnedBadge.color.withValues(alpha: isDark ? 0.20 : 0.10),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: pinnedBadge.color.withValues(alpha: isDark ? 0.50 : 0.35),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(pinnedBadge.iconData, size: 13.5, color: pinnedBadge.color),
+                            const SizedBox(width: 5),
+                            Text(
+                              pinnedBadge.name,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : textMain,
+                                letterSpacing: -0.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // 🌟 HERO ENTEGRE 4'LÜ MİNİMALİST EMOJİLİ İSTATİSTİK ŞERİDİ 🌟
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.black.withValues(alpha: 0.025),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.07)
+                    : Colors.black.withValues(alpha: 0.06),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                _buildHeroStatItem(
+                  emoji: '🏷️',
+                  value: '$dealCount',
+                  label: 'Fırsat',
+                  textMain: textMain,
+                  textSub: textSub,
+                  onTap: () {
+                    final uid = widget.userId ?? _authService.currentUser?.uid;
+                    if (uid != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => UserDealsScreen(
+                            userId: uid,
+                            username: _user?.username ?? '',
+                            isOwnProfile: _isOwnProfile,
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                _buildHeroStatDivider(isDark),
+                _buildHeroStatItem(
+                  emoji: '🎯',
+                  value: '$points',
+                  label: 'Puan',
+                  textMain: textMain,
+                  textSub: textSub,
+                  onTap: () async {
+                    if (user == null) return;
+                    HapticFeedback.selectionClick();
+                    final updatedUser = await Navigator.push<AppUser>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => BadgesScreen(
+                          user: user,
+                          isOwnProfile: _isOwnProfile,
+                        ),
+                      ),
+                    );
+                    if (updatedUser != null && mounted) {
+                      setState(() => _user = updatedUser);
+                    }
+                  },
+                ),
+                _buildHeroStatDivider(isDark),
+                _buildHeroStatItem(
+                  emoji: '🔥',
+                  value: '$totalLikes',
+                  label: 'Sıcaklık',
+                  textMain: textMain,
+                  textSub: textSub,
+                ),
+                _buildHeroStatDivider(isDark),
+                _buildHeroStatItem(
+                  emoji: '👥',
+                  value: '$followingCount',
+                  label: 'Takip',
+                  textMain: textMain,
+                  textSub: textSub,
+                  onTap: _isOwnProfile
+                      ? () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const FollowingUsersScreen(),
+                            ),
+                          );
+                        }
+                      : null,
                 ),
               ],
             ),
-          );
-  }
-
-  // 3. STATS MATRIX (4-COLUMN CARD - COMPACT)
-  Widget _buildStatsMatrix(
-    BuildContext context, {
-    required bool isDark,
-    required Color primaryColor,
-    required Color surfaceColor,
-    required Color borderColor,
-    required Color textMain,
-    required Color textSub,
-  }) {
-    final user = _user;
-    final dealCount = user?.dealCount ?? 0;
-    final points = user?.points ?? 0;
-    final totalLikes = user?.totalLikes ?? 0;
-    final followingCount = user?.following.length ?? 0;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: 1.1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildSingleStat(
-            icon: Icons.local_offer_rounded,
-            iconColor: isDark ? const Color(0xFF2DD4BF) : Colors.teal.shade600,
-            iconBg: Colors.teal.withValues(alpha: isDark ? 0.18 : 0.10),
-            value: '$dealCount',
-            label: 'Fırsat',
-            textMain: textMain,
-            textSub: textSub,
-            onTap: () {
-              final uid = widget.userId ?? _authService.currentUser?.uid;
-              if (uid != null) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => UserDealsScreen(
-                      userId: uid,
-                      username: _user?.username ?? '',
-                      isOwnProfile: _isOwnProfile,
-                    ),
-                  ),
-                );
-              }
-            },
-          ),
-          _buildStatDivider(isDark, borderColor),
-          _buildSingleStat(
-            icon: Icons.star_rounded,
-            iconColor: isDark ? const Color(0xFFFBBF24) : Colors.amber.shade700,
-            iconBg: Colors.amber.withValues(alpha: isDark ? 0.18 : 0.10),
-            value: '$points',
-            label: 'Puan',
-            textMain: textMain,
-            textSub: textSub,
-          ),
-          _buildStatDivider(isDark, borderColor),
-          _buildSingleStat(
-            icon: Icons.local_fire_department_rounded,
-            iconColor: isDark ? const Color(0xFFFB923C) : Colors.orange.shade600,
-            iconBg: Colors.orange.withValues(alpha: isDark ? 0.18 : 0.10),
-            value: '$totalLikes',
-            label: 'Sıcaklık',
-            textMain: textMain,
-            textSub: textSub,
-          ),
-          _buildStatDivider(isDark, borderColor),
-          _buildSingleStat(
-            icon: Icons.people_alt_rounded,
-            iconColor: isDark ? const Color(0xFF60A5FA) : Colors.blue.shade600,
-            iconBg: Colors.blue.withValues(alpha: isDark ? 0.18 : 0.10),
-            value: '$followingCount',
-            label: 'Takip',
-            textMain: textMain,
-            textSub: textSub,
-            onTap: _isOwnProfile
-                ? () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const FollowingUsersScreen(),
-                      ),
-                    );
-                  }
-                : null,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSingleStat({
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBg,
+  Widget _buildHeroStatItem({
+    required String emoji,
     required String value,
     required String label,
     required Color textMain,
     required Color textSub,
     VoidCallback? onTap,
   }) {
-    final content = Column(
+    final itemContent = Column(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            color: iconBg,
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Icon(icon, size: 13, color: iconColor),
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              emoji,
+              style: const TextStyle(fontSize: 13, height: 1.15),
+            ),
+            const SizedBox(width: 3.5),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w800,
+                color: textMain,
+                letterSpacing: -0.3,
+                height: 1.15,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 3),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w800,
-            color: textMain,
-            letterSpacing: -0.2,
-          ),
-        ),
-        const SizedBox(height: 1),
+        const SizedBox(height: 2.5),
         Text(
           label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 10.5,
             fontWeight: FontWeight.w600,
             color: textSub,
+            height: 1.15,
           ),
         ),
       ],
     );
 
     return Expanded(
-      child: onTap != null
-          ? InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: content,
-              ),
-            )
-          : content,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap != null
+              ? () {
+                  HapticFeedback.lightImpact();
+                  onTap();
+                }
+              : null,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Center(
+              child: itemContent,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildStatDivider(bool isDark, Color borderColor) {
+  Widget _buildHeroStatDivider(bool isDark) {
     return Container(
       width: 1,
-      height: 22,
-      color: borderColor,
+      height: 18,
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.10)
+          : Colors.black.withValues(alpha: 0.08),
     );
   }
 
@@ -1538,8 +1759,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Expanded(
                 child: _buildBentoCard(
                   context,
-                  title: 'Fırsat Radarı',
-                  subtitle: 'Anahtar kelime takibi',
+                  title: 'Kelime Takibi',
+                  subtitle: 'Anahtar kelime bildirimleri',
                   icon: Icons.radar_rounded,
                   iconColor: isDark ? const Color(0xFFFB923C) : Colors.orange.shade600,
                   iconBg: Colors.orange.withValues(alpha: isDark ? 0.20 : 0.12),
@@ -1565,7 +1786,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: _buildBentoCard(
                   context,
                   title: 'Fırsatlarım',
-                  subtitle: '${_user?.dealCount ?? 0} paylaşılan fırsat',
+                  subtitle: 'Son 30 güne ait aktif fırsatlar',
                   icon: Icons.local_offer_rounded,
                   iconColor: isDark ? const Color(0xFF2DD4BF) : Colors.teal.shade600,
                   iconBg: Colors.teal.withValues(alpha: isDark ? 0.20 : 0.12),
@@ -1734,7 +1955,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 6. ACCOUNT & PREFERENCES SECTION
+  // 6. ACCOUNT & PREFERENCES SECTION (Kompakt & Sade 3 Satırlık Kart)
   Widget _buildAccountSettingsSection(
     BuildContext context, {
     required bool isDark,
@@ -1750,7 +1971,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader('HESAP & UYGULAMA TERCİHLERİ', textSub),
+          _buildSectionHeader('HESAP & TERCİHLER', textSub),
           Container(
             decoration: BoxDecoration(
               color: surfaceColor,
@@ -1766,6 +1987,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             child: Column(
               children: [
+                // 1. Bildirim Tercihleri
                 _buildSettingItem(
                   icon: Icons.notifications_active_rounded,
                   title: 'Bildirim Tercihleri',
@@ -1786,6 +2008,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textSub: textSub,
                 ),
                 _buildDivider(isDark, borderColor),
+                // 2. Takip Ettiğim Avcılar
                 _buildSettingItem(
                   icon: Icons.people_alt_rounded,
                   title: 'Takip Ettiğim Avcılar',
@@ -1806,30 +2029,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textSub: textSub,
                 ),
                 _buildDivider(isDark, borderColor),
+                // 3. 🌟 HESAP, YARDIM & DESTEK MERKEZİ 🌟
                 _buildSettingItem(
-                  icon: Icons.military_tech_rounded,
-                  title: 'Avcı Başarımları & Rozetler',
-                  subtitle: '${_user?.badges.length ?? 0} / ${BadgeHelper.badges.length} Rozet Kazanıldı',
-                  iconBgColor: Colors.amber.withValues(alpha: isDark ? 0.18 : 0.10),
-                  iconColor: isDark ? const Color(0xFFFBBF24) : Colors.amber.shade800,
+                  icon: Icons.tune_rounded,
+                  title: 'Hesap, Yardım & Destek',
+                  subtitle: 'Rozetler, rehber, iletişim ve güvenlik',
+                  iconBgColor: Colors.blue.withValues(alpha: isDark ? 0.18 : 0.10),
+                  iconColor: isDark ? const Color(0xFF60A5FA) : Colors.blue.shade600,
                   trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                  onTap: () async {
-                    if (_user == null) return;
+                  onTap: () {
                     HapticFeedback.lightImpact();
-                    final updatedUser = await Navigator.push<AppUser>(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => BadgesScreen(
-                          user: _user!,
-                          isOwnProfile: _isOwnProfile,
-                        ),
-                      ),
-                    );
-                    if (updatedUser != null && mounted) {
-                      setState(() {
-                        _user = updatedUser;
-                      });
-                    }
+                    _showSupportHubBottomSheet(context);
                   },
                   isDark: isDark,
                   textMain: textMain,
@@ -1865,180 +2075,461 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 7. SUPPORT & LEGAL SECTION
-  Widget _buildSupportSettingsSection(
-    BuildContext context, {
-    required bool isDark,
-    required Color primaryColor,
-    required Color accentBlue,
-    required Color surfaceColor,
-    required Color borderColor,
-    required Color textMain,
-    required Color textSub,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader('BİLGİ, DESTEK & HUKUKİ', textSub),
-          Container(
-            decoration: BoxDecoration(
-              color: surfaceColor,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: borderColor, width: 1.1),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.02),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
+  // 7. HESAP, YARDIM & DESTEK BOTTOM SHEET (Modern Glassmorphic Hub)
+  void _showSupportHubBottomSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final surfaceColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final textMain = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
+    final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.86,
+          ),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: borderColor, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
+                blurRadius: 24,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _buildSettingItem(
-                  icon: Icons.help_outline_rounded,
-                  title: 'Sıkça Sorulan Sorular',
-                  subtitle: 'Fırsatlar, kuponlar ve avcı rehberi',
-                  iconBgColor: Colors.blue.withValues(alpha: isDark ? 0.18 : 0.10),
-                  iconColor: isDark ? const Color(0xFF60A5FA) : Colors.blue.shade600,
-                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const FAQScreen()),
-                    );
-                  },
-                  isDark: isDark,
-                  textMain: textMain,
-                  textSub: textSub,
+                // Drag Handle
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
-                _buildDivider(isDark, borderColor),
-                _buildSettingItem(
-                  icon: Icons.shield_outlined,
-                  title: 'Gizlilik Politikası',
-                  subtitle: 'KVKK, şeffaflık ve veri hakları',
-                  iconBgColor: Colors.teal.withValues(alpha: isDark ? 0.18 : 0.10),
-                  iconColor: isDark ? const Color(0xFF2DD4BF) : Colors.teal.shade600,
-                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
-                    );
-                  },
-                  isDark: isDark,
-                  textMain: textMain,
-                  textSub: textSub,
+
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: isDark ? 0.20 : 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.tune_rounded,
+                            color: isDark ? const Color(0xFF60A5FA) : Colors.blue.shade600,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Hesap, Yardım & Destek',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: textMain,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Rozetler, rehber, iletişim ve güvenlik',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: textSub,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: Icon(Icons.close_rounded, color: textSub, size: 20),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
                 ),
-                _buildDivider(isDark, borderColor),
-                _buildSettingItem(
-                  icon: Icons.alternate_email_rounded,
-                  title: 'Bize Ulaşın & Geri Bildirim',
-                  subtitle: 'kolikfirsat@gmail.com',
-                  iconBgColor: Colors.orange.withValues(alpha: isDark ? 0.18 : 0.10),
-                  iconColor: isDark ? const Color(0xFFFB923C) : Colors.orange.shade600,
-                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                  onTap: () async {
-                    const email = 'kolikfirsat@gmail.com';
-                    final uri = Uri.parse('mailto:$email');
-                    try {
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri);
-                      }
-                    } catch (_) {}
-                  },
-                  isDark: isDark,
-                  textMain: textMain,
-                  textSub: textSub,
-                ),
-                _buildDivider(isDark, borderColor),
-                _buildSettingItem(
-                  icon: Icons.star_outline_rounded,
-                  title: 'Uygulamayı Değerlendir',
-                  subtitle: 'Google Play & App Store',
-                  iconBgColor: Colors.amber.withValues(alpha: isDark ? 0.18 : 0.10),
-                  iconColor: isDark ? const Color(0xFFFBBF24) : Colors.amber.shade800,
-                  trailing: Icon(Icons.chevron_right_rounded, color: textSub),
-                  onTap: () async {
-                    const packageName = 'com.sicakfirsatlar.sicak_firsatlar';
-                    final playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=$packageName');
-                    final marketUrl = Uri.parse('market://details?id=$packageName');
-                    try {
-                      if (await canLaunchUrl(marketUrl)) {
-                        await launchUrl(marketUrl, mode: LaunchMode.externalApplication);
-                      } else if (await canLaunchUrl(playStoreUrl)) {
-                        await launchUrl(playStoreUrl, mode: LaunchMode.externalApplication);
-                      }
-                    } catch (_) {}
-                  },
-                  isDark: isDark,
-                  textMain: textMain,
-                  textSub: textSub,
+
+                const Divider(height: 1, thickness: 1),
+
+                // Content List
+                Flexible(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 1. Grup: REHBER & BAŞARIMLAR
+                        _buildHubGroupHeader('REHBER & BAŞARIMLAR', textSub),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: surfaceColor,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: borderColor, width: 1),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildHubItem(
+                                icon: Icons.military_tech_rounded,
+                                title: 'Avcı Başarımları & Rozetler',
+                                subtitle: '${_user?.badges.length ?? 0} / ${BadgeHelper.badges.length} Rozet Kazanıldı',
+                                iconBgColor: Colors.amber.withValues(alpha: isDark ? 0.20 : 0.12),
+                                iconColor: isDark ? const Color(0xFFFBBF24) : Colors.amber.shade800,
+                                isDark: isDark,
+                                textMain: textMain,
+                                textSub: textSub,
+                                onTap: () async {
+                                  Navigator.pop(ctx);
+                                  if (_user == null) return;
+                                  final updatedUser = await Navigator.push<AppUser>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => BadgesScreen(
+                                        user: _user!,
+                                        isOwnProfile: _isOwnProfile,
+                                      ),
+                                    ),
+                                  );
+                                  if (updatedUser != null && mounted) {
+                                    setState(() {
+                                      _user = updatedUser;
+                                    });
+                                  }
+                                },
+                              ),
+                              _buildDivider(isDark, borderColor),
+                              _buildHubItem(
+                                icon: Icons.explore_rounded,
+                                title: 'Uygulama Turu (Nasıl Kullanılır?)',
+                                subtitle: '8 adımda tüm avantajları keşfet',
+                                iconBgColor: const Color(0xFFFF6B35).withValues(alpha: isDark ? 0.20 : 0.12),
+                                iconColor: const Color(0xFFFF6B35),
+                                isDark: isDark,
+                                textMain: textMain,
+                                textSub: textSub,
+                                onTap: () async {
+                                  Navigator.pop(ctx);
+                                  await InAppTutorialService().resetTutorial();
+                                  if (context.mounted) {
+                                    Navigator.of(context).pushAndRemoveUntil(
+                                      MaterialPageRoute(
+                                        builder: (_) => const HomeScreen(startTutorial: true),
+                                      ),
+                                      (route) => false,
+                                    );
+                                  }
+                                },
+                              ),
+                              _buildDivider(isDark, borderColor),
+                              _buildHubItem(
+                                icon: Icons.help_outline_rounded,
+                                title: 'Sıkça Sorulan Sorular',
+                                subtitle: 'Fırsatlar, kuponlar ve oylama rehberi',
+                                iconBgColor: Colors.blue.withValues(alpha: isDark ? 0.20 : 0.12),
+                                iconColor: isDark ? const Color(0xFF60A5FA) : Colors.blue.shade600,
+                                isDark: isDark,
+                                textMain: textMain,
+                                textSub: textSub,
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const FAQScreen()),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        // 2. Grup: İLETİŞİM & GERİ BİLDİRİM
+                        _buildHubGroupHeader('İLETİŞİM & GERİ BİLDİRİM', textSub),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: surfaceColor,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: borderColor, width: 1),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildHubItem(
+                                icon: Icons.alternate_email_rounded,
+                                title: 'Bize Ulaşın & Geri Bildirim',
+                                subtitle: 'kolikfirsat@gmail.com',
+                                iconBgColor: Colors.orange.withValues(alpha: isDark ? 0.20 : 0.12),
+                                iconColor: isDark ? const Color(0xFFFB923C) : Colors.orange.shade600,
+                                isDark: isDark,
+                                textMain: textMain,
+                                textSub: textSub,
+                                onTap: () async {
+                                  const email = 'kolikfirsat@gmail.com';
+                                  final uri = Uri.parse('mailto:$email');
+                                  try {
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri);
+                                    }
+                                  } catch (_) {}
+                                },
+                              ),
+                              _buildDivider(isDark, borderColor),
+                              _buildHubItem(
+                                icon: Icons.star_rounded,
+                                title: 'Uygulamayı Değerlendir',
+                                subtitle: 'Google Play & App Store',
+                                iconBgColor: Colors.amber.withValues(alpha: isDark ? 0.20 : 0.12),
+                                iconColor: isDark ? const Color(0xFFFBBF24) : Colors.amber.shade800,
+                                isDark: isDark,
+                                textMain: textMain,
+                                textSub: textSub,
+                                onTap: () async {
+                                  const packageName = 'com.sicakfirsatlar.sicak_firsatlar';
+                                  final playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=$packageName');
+                                  final marketUrl = Uri.parse('market://details?id=$packageName');
+                                  try {
+                                    if (await canLaunchUrl(marketUrl)) {
+                                      await launchUrl(marketUrl, mode: LaunchMode.externalApplication);
+                                    } else if (await canLaunchUrl(playStoreUrl)) {
+                                      await launchUrl(playStoreUrl, mode: LaunchMode.externalApplication);
+                                    }
+                                  } catch (_) {}
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        // 3. Grup: YASAL & HUKUKİ
+                        _buildHubGroupHeader('YASAL BİLGİLER', textSub),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: surfaceColor,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: borderColor, width: 1),
+                          ),
+                          child: _buildHubItem(
+                            icon: Icons.shield_outlined,
+                            title: 'Gizlilik Politikası & KVKK',
+                            subtitle: 'Şeffaflık, çerezler ve kullanıcı hakları',
+                            iconBgColor: Colors.teal.withValues(alpha: isDark ? 0.20 : 0.12),
+                            iconColor: isDark ? const Color(0xFF2DD4BF) : Colors.teal.shade600,
+                            isDark: isDark,
+                            textMain: textMain,
+                            textSub: textSub,
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                              );
+                            },
+                          ),
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        // 4. Grup: OTURUM & GÜVENLİK
+                        _buildHubGroupHeader('OTURUM & GÜVENLİK', textSub),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: surfaceColor,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: borderColor, width: 1),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildHubItem(
+                                icon: Icons.logout_rounded,
+                                title: 'Çıkış Yap',
+                                subtitle: _authService.currentUser?.email != null &&
+                                        _authService.currentUser!.email!.isNotEmpty
+                                    ? '${_authService.currentUser!.email} oturumunu kapat'
+                                    : 'Oturumunuzu güvenle sonlandırın',
+                                iconBgColor: Colors.red.withValues(alpha: isDark ? 0.18 : 0.10),
+                                iconColor: Colors.red.shade400,
+                                isDark: isDark,
+                                textMain: Colors.red.shade400,
+                                textSub: textSub,
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  _signOut();
+                                },
+                              ),
+                              _buildDivider(isDark, borderColor),
+                              _buildHubItem(
+                                icon: Icons.delete_outline_rounded,
+                                title: 'Hesabımı Kalıcı Olarak Sil',
+                                subtitle: _authService.currentUser?.email != null &&
+                                        _authService.currentUser!.email!.isNotEmpty
+                                    ? '${_authService.currentUser!.email} ve tüm verileri sil'
+                                    : 'Hesabınızı ve tüm verilerinizi silin',
+                                iconBgColor: Colors.red.withValues(alpha: isDark ? 0.12 : 0.06),
+                                iconColor: Colors.red.shade400,
+                                isDark: isDark,
+                                textMain: isDark ? const Color(0xFFF87171) : Colors.red.shade700,
+                                textSub: textSub,
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  _deleteAccount();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Footer Badge
+                        Center(
+                          child: Column(
+                            children: [
+                              Text(
+                                'FırsatKolik v1.2.4 (Build 302)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: textSub,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Türkiye\'nin En Sıcak Fırsat Topluluğu 🔥',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: textSub.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-        ],
+        );
+      },
+    );
+  }
+
+  Widget _buildHubGroupHeader(String title, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
+          color: color.withValues(alpha: 0.8),
+        ),
       ),
     );
   }
 
-  // 8. LOGOUT & ACCOUNT DELETION
-  Widget _buildLogoutSection(
-    BuildContext context, {
+  Widget _buildHubItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color iconBgColor,
+    required Color iconColor,
     required bool isDark,
-    required Color primaryColor,
-    required Color surfaceColor,
-    required Color borderColor,
     required Color textMain,
     required Color textSub,
+    required VoidCallback onTap,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton.icon(
-              onPressed: _signOut,
-              icon: const Icon(Icons.logout_rounded, size: 18),
-              label: const Text('Çıkış Yap'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red.shade400,
-                side: BorderSide(color: Colors.red.withValues(alpha: 0.35), width: 1.2),
-                backgroundColor: Colors.red.withValues(alpha: isDark ? 0.10 : 0.05),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: iconBgColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Icon(icon, color: iconColor, size: 18),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: TextButton.icon(
-              onPressed: _deleteAccount,
-              icon: Icon(Icons.delete_outline_rounded, size: 16, color: textSub.withValues(alpha: 0.8)),
-              label: Text('Hesabımı Sil', style: TextStyle(color: textSub.withValues(alpha: 0.8))),
-              style: TextButton.styleFrom(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: textMain,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: textSub,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: textSub.withValues(alpha: 0.6),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            'FırsatKolik v1.2.4 (Build 302)',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
-              color: textSub.withValues(alpha: 0.6),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2421,7 +2912,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: 'Kategoriler',
                   isSelected: false,
                   onTap: () {
-                    Navigator.pop(context);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -3094,6 +3584,7 @@ class _OtherUserActionBarWidgetState extends State<_OtherUserActionBarWidget> {
     try {
       if (nextFollowing) {
         await _firestoreService.followUser(widget.currentUserId, widget.targetUserId);
+        NotificationService().requestPermission();
       } else {
         await _firestoreService.unfollowUser(widget.currentUserId, widget.targetUserId);
       }
@@ -3130,6 +3621,9 @@ class _OtherUserActionBarWidgetState extends State<_OtherUserActionBarWidget> {
         widget.targetUserId,
         nextNotification,
       );
+      if (nextNotification) {
+        NotificationService().requestPermission();
+      }
     } catch (e) {
       // Revert upon error
       if (mounted) {
