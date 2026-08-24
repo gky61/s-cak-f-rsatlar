@@ -56,7 +56,7 @@ Bu doküman, FırsatKolik uygulamasının Google Play Store'da production-ready 
 | # | Adım | Durum | Notlar |
 |---|---|---|---|
 | 12 | **storage.rules** | ✅ Deploy Edildi | DEV + PROD — `deals/` okuma açık, yazma Admin SDK |
-| 13 | **firestore.indexes.json** | ✅ Deploy Edildi | DEV + PROD — `deals`, `messages`, `reports` composite indeksler |
+| 13 | **firestore.indexes.json** | ✅ Deploy Edildi | DEV + PROD — `deals`, `messages`, `reports` ve `notifications` collection group indeksleri |
 | 14 | **firestore.rules** | ✅ Deploy Edildi | DEV + PROD |
 
 ### 🛡️ App Check & Güvenli API

@@ -124,6 +124,22 @@ function canWrite() {
 
 ---
 
+### 3.6 `notifications` (Bildirim Merkezi & Collection Group)
+* **Kullanıcı İzolasyonu & Admin Erişimi:** Normal kullanıcılar yalnızca kendi bildirimlerini okuyup yazabilir (`userId == targetUserId`). Yöneticiler (`isAdmin()`) bakım ve yönetim amacıyla tüm kullanıcıların bildirimlerini yönetebilir:
+  ```rules
+  match /users/{targetUserId}/notifications/{notificationId} {
+    allow read, write: if isAuthenticated() && (userId() == targetUserId || isAdmin());
+  }
+  ```
+* **Collection Group Yetkilendirmesi:** 30+ günlük atıl bildirim temizliği ve toplu yönetim için `collectionGroup('notifications')` sorguları yalnızca yöneticilere açıktır:
+  ```rules
+  match /{path=**}/notifications/{notificationId} {
+    allow read, write: if isAdmin();
+  }
+  ```
+
+---
+
 ## 📦 4. Firebase Storage Güvenlik Kuralları (`storage.rules`)
 
 Firebase Storage kuralları fırsat görsellerinin güvenliğini sağlar:

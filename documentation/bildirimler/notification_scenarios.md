@@ -9,12 +9,19 @@ Bu doküman, FırsatKolik platformundaki iki temel bildirim alanının (**"Profi
 Uygulama içerisinde bildirimlerle ilgili iki temel kavram bulunur:
 
 1. **"Bildirimler" Menüsü (Uygulama İçi Bildirim Kutusu / Notification Center):**
-   * Kullanıcının geçmişe dönük aldığı tüm bildirimleri (Fırsat eşleşmeleri, yorum yanıtları, paylaşım onay/red durumları, yönetici duyuruları vb.) listelediği arayüzdür.
-   * Firestore'da `users/{userId}/notifications` koleksiyonunda saklanır.
+   * Kullanıcının geçmişe dönük aldığı tüm bildirimleri listelediği arayüzdür (`AdminNotificationsScreen`).
+   * **3 Sekmeli Filtreleme (Tabs):**
+     * **Tümü (`all`):** Fırsat, yazar, kelime, yorum ve admin tüm bildirimleri.
+     * **Admin (`admin`):** Yalnızca `admin_message` ve `submission_status` bildirimleri.
+     * **Yorumlar (`replies`):** Yalnızca `comment_reply` bildirimleri.
+   * **İşlemler:** Bildirime tıklayarak ilgili ekrana gitme ve okundu işaretleme (`markNotificationAsRead`), sağa kaydırarak silme (`deleteNotification`), sağ üst çöp kutusu ikonuyla tümünü silme (`deleteAllNotifications`).
+   * **Veritabanı Konumu:** Firestore'da her kullanıcının kendi alt koleksiyonunda saklanır (`users/{userId}/notifications`).
+   * **İndeks Gereksinimi:** Mobil uygulamanın listeleme sorgusu `users/{userId}/notifications.orderBy('createdAt', descending: true)` için `COLLECTION_DESC` indeksi zorunludur.
    * **Kritik Kural:** Bir bildirim tetiklendiğinde, kullanıcının push ayarları veya sessiz saatleri ne olursa olsun, bu doküman veritabanında **HER ZAMAN** oluşturulur. Push bildirimi gitmese bile bildirim kutusunda bu bildirim listelenmeye devam eder.
+   * **🧹 30 Günlük Yaşam Döngüsü (Auto-Purge):** Bildirim kutusunda atıl bildirim birikmesini önlemek için, oluşturulma tarihi üzerinden **30 gün geçmiş olan tüm bildirimler**, haftalık zamanlanmış `purgeOldDeals` görevi veya Admin paneli derin temizliği ile tüm kullanıcılardan kalıcı olarak silinir (`COLLECTION_GROUP_ASC` indeksi kullanılır).
 
 2. **"Bildirim Ayarları" Menüsü (Anlık Push Bildirimleri / FCM Push Notifications):**
-   * Kullanıcının telefonuna gelen anlık uyarıların (Push) kanallarını, sessiz saatlerini ve genel izin durumunu yönettiği arayüzdür.
+   * Kullanıcının telefonuna gelen anlık uyarıların (Push) kanallarını, sessiz saatlerini ve genel izin durumunu yönettiği arayüzdür (`NotificationSettingsScreen`).
    * Firestore'da `users/{userId}/notificationPreferences/main` belgesinde saklanır.
    * Cloud Functions `onNotificationCreated` tetikleyicisi, bildirim kutusuna yeni bir doküman eklendiğinde devreye girer. Bu tercihlere, sistem limitlerine ve sessiz saatlere bakarak push bildirimini hedefler veya göndermeyi atlar.
 
@@ -37,7 +44,25 @@ Uygulama içerisinde bildirimlerle ilgili iki temel kavram bulunur:
 
 ---
 
-## ⚙️ 3. "Bildirim Ayarları" 3 Katmanlı UX & Karar Mimarisi
+## 📊 3. Push Durum Kodları (pushStatus Değerleri)
+
+Cloud Functions `onNotificationCreated` motoru her bildirim için kararı verip `users/{uid}/notifications/{id}` dokümanına şu durum kodlarından birini işler:
+
+| `pushStatus` Değeri | Açıklama |
+| :--- | :--- |
+| **`sent`** | Push bildirimi FCM üzerinden kullanıcının aktif cihaz(lar)ına başarıyla iletildi. |
+| **`failed`** | FCM gönderimi sırasında cihaz bazlı teknik bir hata oluştu. |
+| **`no_active_devices`** | Kullanıcının veritabanında `active: true` olan geçerli bir FCM token kaydı bulunamadı. |
+| **`disabled_permanently_for_submission_status`** | Paylaşım durumu (onay/red) bildirimleri için push bilerek kapatılmıştır (sadece uygulama içi kutuda saklanır). |
+| **`disabled_by_system_master_switch`** | Web Admin panelinden global bildirim şalteri (`systemConfig/notifications.enabled: false`) kapatılmıştır. |
+| **`disabled_by_user_master_switch`** | Kullanıcı "Telefon Bildirimleri" master anahtarını (`pushMasterEnabled: false`) kapatmıştır. |
+| **`disabled_by_user_group_<grup>`** | Kullanıcı ilgili bildirim grubunu kapatmıştır (Örn: `disabled_by_user_group_category`, `disabled_by_user_group_deal`). |
+| **`skipped_quiet_hours`** | Kullanıcının belirlediği sessiz saatler aralığında olunduğu için push gönderimi atlandı. |
+| **`skipped_category_limit`** | Kullanıcının saatlik (3) veya günlük (8) kategori bildirim kotası dolduğu için push atlandı. |
+
+---
+
+## ⚙️ 4. "Bildirim Ayarları" 3 Katmanlı UX & Karar Mimarisi
 
 ```text
 [ Katman 1: Master Switch - TELEFON BİLDİRİMLERİ ]
@@ -82,7 +107,7 @@ Uygulama içerisinde bildirimlerle ilgili iki temel kavram bulunur:
 
 ---
 
-## 🎯 4. Bağlamsal İzin İsteme Matrisi (Contextual Permission Matrix)
+## 🎯 5. Bağlamsal İzin İsteme Matrisi (Contextual Permission Matrix)
 
 Açılışta körü körüne izin sormak yerine, kullanıcının niyet gösterdiği anlarda izin isteme akışı:
 
@@ -96,7 +121,7 @@ Açılışta körü körüne izin sormak yerine, kullanıcının niyet gösterdi
 
 ---
 
-## 🧪 5. Otomatik Test Süitleri ve Doğrulama
+## 🧪 6. Otomatik Test Süitleri ve Doğrulama
 
 Tüm bildirim sistemi ve senaryoları 3 ayrı test paketiyle tam kapsamlı (%100) doğrulanmaktadır:
 

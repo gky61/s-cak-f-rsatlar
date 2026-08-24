@@ -138,7 +138,7 @@ Web Admin Paneli
   - **Botkolik Sohbet Şalteri (`toggleBotkolikChat`):** Yapay zeka sohbet modülünü kapatma/açma.
   - **Global Bildirim Şalteri (`toggleGlobalNotifications`):** Tüm push bildirim iletimini tek şalterle durdurma (`systemConfig/notifications.enabled`).
 * **Veritabanı Bakım ve Toplu Temizlik:**
-  - **30+ Günlük Eski Fırsatları Temizle (`purgeOldDealsWeb`):** 30 günden eski fırsatları, oyları, yorumları ve Storage görsellerini tarayıcı üzerinden batch silme işlemiyle kalıcı temizler.
+  - **30+ Günlük Fırsat ve Bildirim Temizliği (`purgeOldDealsWeb`):** 30 günden eski fırsatları, oyları, yorumları, Storage görsellerini ve **tüm kullanıcılardaki 30+ günlük eski bildirimleri (`collectionGroup('notifications')`)** kalıcı olarak temizler. İlk olarak sunucu tarafındaki `purgeOldDealsManual` Cloud Function'ını çağırarak Admin SDK yetkisiyle anında siler; olası bağlantı sorununda doğrudan Firestore istemcisi üzerinden yedek silme mekanizmasını çalıştırır.
 
 ---
 

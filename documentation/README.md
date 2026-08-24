@@ -227,9 +227,9 @@ Uygulama, modern, enerjik ve göz yormayan **resmi FırsatKolik Tasarım Dili** 
 
 ---
 
-## 10. ⚡ Cloud Functions ve Backend Servisleri (25 Fonksiyon)
+## 10. ⚡ Cloud Functions ve Backend Servisleri (26 Fonksiyon)
 
-Backend tarafında `functions/index.js` dosyasında yer alan **25 adet Cloud Function** 7/24 hizmet vermektedir:
+Backend tarafında `functions/index.js` dosyasında yer alan **26 adet Cloud Function** 7/24 hizmet vermektedir:
 
 | Kategori | Fonksiyonlar | Tetikleyici Türü | Görevi |
 | :--- | :--- | :--- | :--- |
@@ -237,11 +237,11 @@ Backend tarafında `functions/index.js` dosyasında yer alan **25 adet Cloud Fun
 | **Mesajlaşma & Bildirim** | `onNotificationCreated`, `onUserMessageCreated`, `onAdminMessageCreated` | Firestore Trigger | Merkezi FCM push gönderimi, data-only sohbet iletimi. |
 | **Kullanıcı & Güvenlik** | `onUserUpdated`, `onUserDeleted`, `adminDeleteUser` | Firestore & Auth Trigger | Denormalize profil/avatar senkronizasyonu, veri silme. |
 | **API & Proxy** | `resolveShortLink`, `analyzeProductProxy`, `sendManualNotification` | HTTPS Request / Callable | Kısa link çözme, Gemini AI proxy'si, manuel bildirim. |
-| **Temizlik & Arşiv** | `cleanupExpiredDeals`, `purgeOldDeals`, `cleanupOldImages`, `cleanupInvalidTokens` | Scheduled Cron (GCP) | 48 saatlik soft-expire, 30 günlük hard-purge, çöp dosya temizliği. |
+| **Temizlik & Arşiv** | `cleanupExpiredDeals`, `purgeOldDeals`, `purgeOldDealsManual`, `purgeOldNotificationsManual`, `cleanupOldImages`, `cleanupInvalidTokens` | Scheduled Cron (GCP) & Callable | 48 saatlik soft-expire, **30 günlük hard-purge (fırsatlar + tüm eski bildirimler)**, çöp dosya temizliği. |
 | **Kupon & Katalog** | `scrapeCouponsScheduled`, `scrapeCouponsManual`, `scrapeCatalogsScheduled`, `scrapeCatalogsManual` | Scheduled Cron & Callable | Otomatik ve manuel kupon / katalog kazıma servisleri. |
 
 ### 📚 İlgili Backend Dokümanı:
-* 🔗 [Cloud Functions ve Backend Servisleri Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/cloud_functions_rehberi.md) — 25 fonksiyonun tamamının kaynak kod referansları ve somut senaryoları.
+* 🔗 [Cloud Functions ve Backend Servisleri Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/cloud_functions_rehberi.md) — 26 fonksiyonun tamamının kaynak kod referansları ve somut senaryoları.
 
 ---
 

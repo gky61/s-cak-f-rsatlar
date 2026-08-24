@@ -782,7 +782,7 @@ function initEventListeners() {
     if (purgeOldDealsBtn) {
         console.log('✅ Purge Old Deals button found, adding event listener...');
         purgeOldDealsBtn.addEventListener('click', async () => {
-            if (!confirm('30 günden eski TÜM fırsatları (oylar, yorumlar, favori kayıtları dahil) kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) {
+            if (!confirm('30 günden eski TÜM fırsatları (oylar, yorumlar, favoriler dahil) ve TÜM kullanıcıların 30+ günlük eski bildirimlerini kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) {
                 return;
             }
             try {
@@ -790,8 +790,11 @@ function initEventListeners() {
                 const originalHTML = purgeOldDealsBtn.innerHTML;
                 purgeOldDealsBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>Temizleniyor...</span>';
 
-                const deletedCount = await purgeOldDealsWeb();
-                showSuccess(`${deletedCount} adet 30+ günlük eski fırsat kalıcı olarak temizlendi!`);
+                const result = await purgeOldDealsWeb();
+                const deletedDeals = result && typeof result === 'object' ? (result.deletedCount || 0) : (result || 0);
+                const deletedNotifs = result && typeof result === 'object' ? (result.deletedNotificationsCount || 0) : 0;
+
+                showSuccess(`${deletedDeals} adet fırsat ve ${deletedNotifs} adet eski bildirim kalıcı olarak temizlendi!`);
                 await loadDeals();
                 updateStats();
 
@@ -6624,6 +6627,24 @@ async function toggleDealSharing() {
 // 30+ Günlük Fırsatları Kalıcı Olarak Temizleme (Derin Temizlik)
 async function purgeOldDealsWeb() {
     console.log('🔥 30+ günlük derin temizlik işlemi başlatılıyor...');
+
+    // 1. Önce Cloud Function (purgeOldDealsManual) üzerinden güvenli ve tam yetkili backend silmesini dene
+    try {
+        console.log('⚡ Cloud Function (purgeOldDealsManual) çağrılıyor...');
+        const purgeFunc = firebase.functions().httpsCallable('purgeOldDealsManual');
+        const res = await purgeFunc({});
+        if (res && res.data && res.data.success) {
+            const stats = res.data.stats || {};
+            const deletedCount = stats.deletedCount || 0;
+            const deletedNotificationsCount = stats.deletedNotificationsCount || 0;
+            console.log(`✅ Cloud Function ile temizlik bitti. Silinen Fırsat: ${deletedCount}, Silinen Bildirim: ${deletedNotificationsCount}`);
+            return { deletedCount, deletedNotificationsCount };
+        }
+    } catch (fnErr) {
+        console.warn('⚠️ Cloud Function çağrısı başarısız oldu, doğrudan Firestore üzerinden deneniyor:', fnErr.message);
+    }
+
+    // 2. Doğrudan Firestore istemcisi üzerinden yedek silme işlemi
     const thirtyDaysAgo = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000));
     const thirtyDaysAgoTimestamp = firebase.firestore.Timestamp.fromDate(thirtyDaysAgo);
 
@@ -6688,8 +6709,39 @@ async function purgeOldDealsWeb() {
         }
     }
 
-    console.log(`✅ 30+ günlük derin temizlik bitti. Silinen: ${deletedCount}`);
-    return deletedCount;
+    // E. 30 Günü Geçmiş Tüm Bildirimleri Temizle (Notification Center / users/{uid}/notifications)
+    let deletedNotificationsCount = 0;
+    try {
+        console.log('🧹 30 günden eski bildirimler taranıyor...');
+        let hasMoreNotifs = true;
+        while (hasMoreNotifs) {
+            const notifsSnap = await db.collectionGroup('notifications')
+                .where('createdAt', '<', thirtyDaysAgoTimestamp)
+                .limit(400)
+                .get();
+
+            if (notifsSnap.empty) {
+                hasMoreNotifs = false;
+                break;
+            }
+
+            const notifBatch = db.batch();
+            notifsSnap.docs.forEach(doc => notifBatch.delete(doc.ref));
+            await notifBatch.commit();
+
+            deletedNotificationsCount += notifsSnap.size;
+            console.log(`🗑️ ${notifsSnap.size} eski bildirim silindi (Toplam: ${deletedNotificationsCount})`);
+
+            if (notifsSnap.size < 400) {
+                hasMoreNotifs = false;
+            }
+        }
+    } catch (notifErr) {
+        console.warn('⚠️ Bildirim temizleme sırasında hata (isteğe bağlı):', notifErr);
+    }
+
+    console.log(`✅ 30+ günlük derin temizlik bitti. Silinen Fırsat: ${deletedCount}, Silinen Bildirim: ${deletedNotificationsCount}`);
+    return { deletedCount, deletedNotificationsCount };
 }
 
 // Deal Approval durumunu toggle et

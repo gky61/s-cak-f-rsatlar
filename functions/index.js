@@ -196,7 +196,7 @@ async function getUserDeviceTokens(userId) {
     .where('uid', '==', userId)
     .where('active', '==', true)
     .get();
-  
+
   const tokens = [];
   const seenTokens = new Set();
 
@@ -221,7 +221,7 @@ async function getUserDeviceTokens(userId) {
         active: false,
         deactivatedReason: 'duplicate_token_cleanup',
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true }).catch(() => {});
+      }, { merge: true }).catch(() => { });
     }
   }
   return tokens;
@@ -299,7 +299,7 @@ async function matchAndCreateDealNotifications(deal, dealId) {
         .where('key', '==', authorTarget)
         .where('enabled', '==', true)
         .get();
-      
+
       authorSubsSnap.forEach(doc => {
         const sub = doc.data();
         if (sub.uid !== postedBy) { // Kendi kendine bildirim gitmesin
@@ -427,7 +427,7 @@ async function matchAndCreateDealNotifications(deal, dealId) {
   functions.logger.info(`📊 Eşleşen kullanıcı sayısı: ${matchedUsers.size}`);
 
   // 2. Bildirim Dokümanlarını Oluştur
-  const batch = admin.firestore().batch();
+  let batch = admin.firestore().batch();
   let opCount = 0;
 
   for (const [userId, match] of matchedUsers) {
@@ -470,6 +470,7 @@ async function matchAndCreateDealNotifications(deal, dealId) {
     opCount++;
     if (opCount >= 400) {
       await batch.commit();
+      batch = admin.firestore().batch();
       opCount = 0;
     }
   }
@@ -1121,10 +1122,10 @@ exports.onNotificationCreated = functions.firestore
     if (prefs.quietHoursEnabled && (type === 'deal' || type === 'keyword' || type === 'marketing')) {
       const userTime = new Date().toLocaleTimeString('tr-TR', { timeZone: prefs.timezone, hour12: false });
       const currentHm = userTime.substring(0, 5); // "HH:MM"
-      
+
       const start = prefs.quietHoursStart; // e.g. "23:00"
       const end = prefs.quietHoursEnd; // e.g. "08:00"
-      
+
       let isQuiet = false;
       if (start <= end) {
         isQuiet = currentHm >= start && currentHm <= end;
@@ -2158,32 +2159,32 @@ exports.cleanupExpiredDeals = functions
   .timeZone('Europe/Istanbul')
   .onRun(wrapTrigger('cleanupExpiredDeals', async (context) => {
     functions.logger.info('⌛ 48 saatlik eski fırsatları süresi doldu olarak işaretleme görevi başladı...');
-    
+
     const now = new Date();
     const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
-    
+
     let expiredCount = 0;
     let errorCount = 0;
-    
+
     try {
       const db = admin.firestore();
       const targetDocs = new Map();
-      
+
       // 1. 48 saatten eski olup henüz isExpired=true yapılmamış fırsatları bul
       const snap1 = await db.collection('deals')
         .where('createdAt', '<', fortyEightHoursAgo)
         .where('isExpired', '==', false)
         .get();
       snap1.forEach(doc => targetDocs.set(doc.id, doc));
-      
+
       const snap2 = await db.collection('deals')
         .where('timestamp', '<', fortyEightHoursAgo)
         .where('isExpired', '==', false)
         .get();
       snap2.forEach(doc => targetDocs.set(doc.id, doc));
-      
+
       functions.logger.info(`🔍 Toplam süresi doldu işaretlenecek ${targetDocs.size} eski fırsat bulundu.`);
-      
+
       const batchSize = 400;
       let batch = db.batch();
       let countInBatch = 0;
@@ -2197,7 +2198,7 @@ exports.cleanupExpiredDeals = functions
           });
           countInBatch++;
           expiredCount++;
-          
+
           if (countInBatch >= batchSize) {
             await batch.commit();
             batch = db.batch();
@@ -2212,12 +2213,12 @@ exports.cleanupExpiredDeals = functions
       if (countInBatch > 0) {
         await batch.commit();
       }
-      
+
       functions.logger.info(`✅ 48 saatlik fırsat süresi doldu işaretlemesi bitti. İşaretlenen: ${expiredCount}, Hata: ${errorCount}`);
     } catch (error) {
       functions.logger.error('❌ Fırsat süresi doldu işaretleme genel hatası:', error);
     }
-    
+
     return null;
   }));
 
@@ -2229,30 +2230,30 @@ exports.cleanupExpiredDealsManual = functions
   .runWith({ timeoutSeconds: 360, memory: '512MB' })
   .https.onRequest(wrapRequest('cleanupExpiredDealsManual', async (req, res) => {
     functions.logger.info('⌛ Manuel 48 saatlik fırsat süresi doldu işaretleme başlıyor...');
-    
+
     const now = new Date();
     const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
-    
+
     let expiredCount = 0;
     let errorCount = 0;
     const updatedDeals = [];
-    
+
     try {
       const db = admin.firestore();
       const targetDocs = new Map();
-      
+
       const snap1 = await db.collection('deals')
         .where('createdAt', '<', fortyEightHoursAgo)
         .where('isExpired', '==', false)
         .get();
       snap1.forEach(doc => targetDocs.set(doc.id, doc));
-      
+
       const snap2 = await db.collection('deals')
         .where('timestamp', '<', fortyEightHoursAgo)
         .where('isExpired', '==', false)
         .get();
       snap2.forEach(doc => targetDocs.set(doc.id, doc));
-      
+
       const batchSize = 400;
       let batch = db.batch();
       let countInBatch = 0;
@@ -2282,7 +2283,7 @@ exports.cleanupExpiredDealsManual = functions
       if (countInBatch > 0) {
         await batch.commit();
       }
-      
+
       res.status(200).json({
         success: true,
         message: 'Fırsat süresi doldu işaretleme tamamlandı (Fırsatlar silinmedi, arşivlendi).',
@@ -2388,8 +2389,64 @@ async function _purgeOldDealsCore() {
     }
   }
 
-  functions.logger.info(`✅ 30 günlük derin temizlik bitti. Silinen: ${deletedCount}, Hata: ${errorCount}`);
-  return { totalFound: docsToDelete.length, deletedCount, errorCount, deletedDeals };
+  // F. 30 Günü Geçmiş Tüm Bildirimleri Temizle (Notification Center / users/{uid}/notifications)
+  let deletedNotificationsCount = 0;
+  try {
+    const notifResult = await _purgeOldNotificationsCore(30);
+    deletedNotificationsCount = notifResult.deletedNotificationsCount;
+  } catch (notifErr) {
+    functions.logger.error('❌ Eski bildirimleri silme sırasında hata:', notifErr.message);
+  }
+
+  functions.logger.info(`✅ 30 günlük derin temizlik bitti. Silinen Fırsat: ${deletedCount}, Silinen Bildirim: ${deletedNotificationsCount}, Hata: ${errorCount}`);
+  return {
+    totalFound: docsToDelete.length,
+    deletedCount,
+    deletedNotificationsCount,
+    errorCount,
+    deletedDeals
+  };
+}
+
+/**
+ * 🧹 30 GÜNÜ GEÇMİŞ TÜM BİLDİRİMLERİ SİLME (Core)
+ * users/{userId}/notifications subcollection'larındaki 30 günden eski
+ * tüm bildirim dokümanlarını (collectionGroup) batch halinde siler.
+ */
+async function _purgeOldNotificationsCore(days = 30) {
+  const db = admin.firestore();
+  const cutoffDate = new Date(Date.now() - (days * 24 * 60 * 60 * 1000));
+
+  functions.logger.info(`🧹 ${days} günden eski bildirimleri temizleme başladı. Eşik tarihi: ${cutoffDate.toISOString()}`);
+
+  let totalDeleted = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const snap = await db.collectionGroup('notifications')
+      .where('createdAt', '<', cutoffDate)
+      .limit(400)
+      .get();
+
+    if (snap.empty) {
+      hasMore = false;
+      break;
+    }
+
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    totalDeleted += snap.size;
+    functions.logger.info(`🗑️ ${snap.size} adet eski bildirim silindi (Toplam: ${totalDeleted})`);
+
+    if (snap.size < 400) {
+      hasMore = false;
+    }
+  }
+
+  functions.logger.info(`✅ Eski bildirim temizliği tamamlandı. Toplam silinen bildirim sayısı: ${totalDeleted}`);
+  return { deletedNotificationsCount: totalDeleted };
 }
 
 exports.purgeOldDeals = functions
@@ -2397,7 +2454,7 @@ exports.purgeOldDeals = functions
   .pubsub.schedule('0 4 * * 0') // Her Pazar 04:00'da çalışır
   .timeZone('Europe/Istanbul')
   .onRun(wrapTrigger('purgeOldDeals', async (context) => {
-    functions.logger.info('🔥 30 günlük fırsat kalıcı silme görevi başladı...');
+    functions.logger.info('🔥 30 günlük fırsat ve bildirim kalıcı silme görevi başladı...');
     await _purgeOldDealsCore();
     return null;
   }));
@@ -2410,7 +2467,14 @@ exports.purgeOldDealsManual = functions
       throw new functions.https.HttpsError('unauthenticated', 'Giriş yapmalısınız.');
     }
     const callerDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
-    if (!callerDoc.exists || callerDoc.data().role !== 'admin') {
+    const isCallerAdmin = callerDoc.exists && (
+      callerDoc.data().isAdmin === true ||
+      callerDoc.data().isadmin === true ||
+      callerDoc.data().isAdmin === 'true' ||
+      callerDoc.data().isadmin === 'true' ||
+      callerDoc.data().role === 'admin'
+    );
+    if (!isCallerAdmin) {
       throw new functions.https.HttpsError('permission-denied', 'Admin yetkisi gerekli.');
     }
 
@@ -2418,7 +2482,36 @@ exports.purgeOldDealsManual = functions
     const result = await _purgeOldDealsCore();
     return {
       success: true,
-      message: `${result.deletedCount} fırsat kalıcı olarak silindi.`,
+      message: `${result.deletedCount} fırsat ve ${result.deletedNotificationsCount} eski bildirim kalıcı olarak silindi.`,
+      stats: result
+    };
+  }));
+
+exports.purgeOldNotificationsManual = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .https.onCall(wrapCall('purgeOldNotificationsManual', async (data, context) => {
+    // Admin kontrolü
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Giriş yapmalısınız.');
+    }
+    const callerDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
+    const isCallerAdmin = callerDoc.exists && (
+      callerDoc.data().isAdmin === true ||
+      callerDoc.data().isadmin === true ||
+      callerDoc.data().isAdmin === 'true' ||
+      callerDoc.data().isadmin === 'true' ||
+      callerDoc.data().role === 'admin'
+    );
+    if (!isCallerAdmin) {
+      throw new functions.https.HttpsError('permission-denied', 'Admin yetkisi gerekli.');
+    }
+
+    const days = (data && data.days) ? parseInt(data.days, 10) : 30;
+    functions.logger.info(`🔥 Admin ${context.auth.uid} tarafından manuel bildirim temizleme tetiklendi (${days} günlük).`);
+    const result = await _purgeOldNotificationsCore(days);
+    return {
+      success: true,
+      message: `${result.deletedNotificationsCount} adet ${days} günden eski bildirim kalıcı olarak silindi.`,
       stats: result
     };
   }));
@@ -2549,7 +2642,7 @@ exports.adminDeleteUser = functions.https.onCall(wrapCall('adminDeleteUser', asy
     callerDoc.data().isAdmin === 'true' ||
     callerDoc.data().isadmin === 'true'
   );
-  
+
   if (!isCallerAdmin) {
     throw new functions.https.HttpsError('permission-denied', 'Sadece adminler bu işlemi yapabilir.');
   }
@@ -2565,10 +2658,10 @@ exports.adminDeleteUser = functions.https.onCall(wrapCall('adminDeleteUser', asy
 
   try {
     functions.logger.info(`👮 Admin ${context.auth.uid} tarafından kullanıcı siliniyor: ${targetUid}`);
-    
+
     // Auth'dan siler (bu işlem otomatik olarak onUserDeleted Firestore tetikleyicisini çalıştıracaktır!)
     await admin.auth().deleteUser(targetUid);
-    
+
     functions.logger.info(`✅ Kullanıcı Auth'dan başarıyla silindi: ${targetUid}`);
     return { success: true };
   } catch (error) {
@@ -2593,7 +2686,7 @@ exports.generateTestData = functions.https.onCall(wrapCall('generateTestData', a
     callerDoc.data().isAdmin === 'true' ||
     callerDoc.data().isadmin === 'true'
   );
-  
+
   if (!isCallerAdmin) {
     throw new functions.https.HttpsError('permission-denied', 'Sadece adminler bu işlemi yapabilir.');
   }
@@ -2769,7 +2862,7 @@ exports.cleanupTestData = functions.https.onCall(wrapCall('cleanupTestData', asy
     callerDoc.data().isAdmin === 'true' ||
     callerDoc.data().isadmin === 'true'
   );
-  
+
   if (!isCallerAdmin) {
     throw new functions.https.HttpsError('permission-denied', 'Sadece adminler bu işlemi yapabilir.');
   }
@@ -2787,10 +2880,10 @@ exports.cleanupTestData = functions.https.onCall(wrapCall('cleanupTestData', asy
     for (const doc of testUsersSnap.docs) {
       const u = doc.data();
       const email = u.email || '';
-      
+
       if (email.endsWith('@test.firsatkolik.com')) {
         functions.logger.info(`🔥 Test kullanıcısı temizleniyor: ${doc.id} (${email})`);
-        
+
         // Auth'dan silme işlemini başlat (onUserDeleted trigger verileri temizleyecektir!)
         const promise = admin.auth().deleteUser(doc.id)
           .then(() => {
@@ -2862,7 +2955,7 @@ exports.onUserUpdated = functions.firestore
         .get();
 
       functions.logger.info(`💬 Found ${commentsSnap.size} comments for user ${userId} to sync.`);
-      
+
       for (const doc of commentsSnap.docs) {
         const updateData = {};
         if (photoChanged) updateData.userProfileImageUrl = newPhoto;
@@ -2966,7 +3059,7 @@ exports.scrapeCouponsManual = functions
       callerDoc.data().isAdmin === 'true' ||
       callerDoc.data().isadmin === 'true'
     );
-    
+
     if (!isCallerAdmin) {
       throw new functions.https.HttpsError('permission-denied', 'Sadece adminler bu işlemi yapabilir.');
     }
@@ -3010,7 +3103,7 @@ exports.scrapeCatalogsManual = functions
       callerDoc.data().isAdmin === 'true' ||
       callerDoc.data().isadmin === 'true'
     );
-    
+
     if (!isCallerAdmin) {
       throw new functions.https.HttpsError('permission-denied', 'Sadece adminler bu işlemi yapabilir.');
     }

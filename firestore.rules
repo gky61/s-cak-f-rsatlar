@@ -65,8 +65,7 @@ service cloud.firestore {
       
       // Kullanıcı bildirimleri (Bildirim Merkezi)
       match /notifications/{notificationId} {
-        allow read: if isAuthenticated() && userId() == targetUserId;
-        allow write: if isAuthenticated() && userId() == targetUserId;
+        allow read, write: if isAuthenticated() && (userId() == targetUserId || isAdmin());
       }
       
       // Kullanıcı bildirim tercihleri
@@ -309,6 +308,13 @@ service cloud.firestore {
     // TEST AUTOMATION COMMANDS
     // ========================================
     match /mobileTestCommands/{commandId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ========================================
+    // COLLECTION GROUP: NOTIFICATIONS
+    // ========================================
+    match /{path=**}/notifications/{notificationId} {
       allow read, write: if isAdmin();
     }
 

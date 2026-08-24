@@ -1,6 +1,6 @@
 # ⚡ FırsatKolik — Cloud Functions ve Backend Servisleri Rehberi
 
-Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **25 adet Cloud Function'ın** tetiklenme türlerini, çalışma amaçlarını, **projede kullanıldıkları / çağrıldıkları yerleri** ve **somut kullanım senaryolarını** detaylı bir şekilde açıklamaktadır.
+Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **26 adet Cloud Function'ın** tetiklenme türlerini, çalışma amaçlarını, **projede kullanıldıkları / çağrıldıkları yerleri** ve **somut kullanım senaryolarını** detaylı bir şekilde açıklamaktadır.
 
 ---
 
@@ -13,7 +13,7 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **25 
 | 3 | **`onCommentCreated`** | Firestore Trigger | `deals/.../comments/{id}` (Create) | 🟢 Aktif Canlı Sistem |
 | 4 | **`onAdminMessageCreated`** | Firestore Trigger | `adminMessages/{id}` (Create) | 🟢 Aktif Canlı Sistem |
 | 5 | **`onUserMessageCreated`** | Firestore Trigger | `messages/{id}` (Create) | 🟢 Aktif Canlı Sistem |
-| 6 | **`onNotificationCreated`** | Firestore Trigger | `notifications/{id}` (Create) | 🟢 Aktif Canlı Sistem |
+| 6 | **`onNotificationCreated`** | Firestore Trigger | `users/{userId}/notifications/{id}` (Create) | 🟢 Aktif Canlı Sistem |
 | 7 | **`onUserUpdated`** | Firestore Trigger | `users/{userId}` (Update) | 🟢 Aktif Canlı Sistem |
 | 8 | **`onUserDeleted`** | Firebase Auth Trigger | `auth.user().onDelete` | 🟢 Aktif Canlı Sistem |
 | 9 | **`resolveShortLink`** | HTTPS Request | Flutter App & Web Admin | 🟢 Aktif Canlı Sistem |
@@ -22,21 +22,22 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **25 
 | 12 | **`cleanupInvalidTokens`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
 | 13 | **`cleanupExpiredDeals`** | Scheduled (Cron 03:00) | GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
 | 14 | **`cleanupExpiredDealsManual`** | HTTPS Request | Manuel HTTP Endpoint | 🟡 Bakım & Test Amaçlı |
-| 15 | **`purgeOldDeals`** | Scheduled (Cron Pazar 04:00)| GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
+| 15 | **`purgeOldDeals`** | Scheduled (Cron Pazar 04:00)| GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem (Fırsatlar + Bildirimler) |
 | 16 | **`purgeOldDealsManual`** | HTTPS Callable | Web Admin Paneli & Scriptler | 🟡 Bakım & Test Amaçlı |
-| 17 | **`cleanupOldImages`** | Scheduled (Cron 00:00) | GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
-| 18 | **`cleanupOldImagesManual`** | HTTPS Request | Manuel HTTP Endpoint | 🟡 Bakım & Test Amaçlı |
-| 19 | **`adminDeleteUser`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
-| 20 | **`generateTestData`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟡 Geliştirme & Test Verisi |
-| 21 | **`cleanupTestData`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟡 Geliştirme & Test Verisi |
-| 22 | **`scrapeCouponsScheduled`** | Scheduled (Cron 6h) | GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
-| 23 | **`scrapeCouponsManual`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
-| 24 | **`scrapeCatalogsScheduled`** | Scheduled (Cron 12h) | GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
-| 25 | **`scrapeCatalogsManual`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
+| 17 | **`purgeOldNotificationsManual`** | HTTPS Callable | Web Admin & Bakım Scriptleri | 🟡 Bakım & Test Amaçlı |
+| 18 | **`cleanupOldImages`** | Scheduled (Cron 00:00) | GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
+| 19 | **`cleanupOldImagesManual`** | HTTPS Request | Manuel HTTP Endpoint | 🟡 Bakım & Test Amaçlı |
+| 20 | **`adminDeleteUser`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
+| 21 | **`generateTestData`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟡 Geliştirme & Test Verisi |
+| 22 | **`cleanupTestData`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟡 Geliştirme & Test Verisi |
+| 23 | **`scrapeCouponsScheduled`** | Scheduled (Cron 6h) | GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
+| 24 | **`scrapeCouponsManual`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
+| 25 | **`scrapeCatalogsScheduled`** | Scheduled (Cron 12h) | GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
+| 26 | **`scrapeCatalogsManual`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
 
 ---
 
-## 🔍 25 Cloud Function Detaylı İncelemesi
+## 🔍 26 Cloud Function Detaylı İncelemesi
 
 ---
 
@@ -98,78 +99,46 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **25 
 ---
 
 ### 6. `onNotificationCreated`
-* **Tetikleyici Türü:** Firestore Trigger (`notifications/{notificationId}` - Create)
+* **Tetikleyici Türü:** Firestore Trigger (`users/{userId}/notifications/{id}` - Create)
 * **Kullanıldığı / Tetiklendiği Yerler:**
-  - `functions/index.js` içerisindeki tüm bildirim üreten triggerlar
-  - `lib/services/notification_service.dart`
-* **Kullanım Amacı:** `notifications` koleksiyonuna düşen her yeni bildirim belgesini Firebase Cloud Messaging (FCM) servisine ileterek fiziksel cihaz ekranında banner olarak gösterilmesini sağlar.
-* **Somut Senaryo:**
-  > Sistem içinde herhangi bir bildirim kaydı oluştuğunda bu fonksiyon kullanıcının cihaz token'ını bulur ve FCM HTTP v1 API üzerinden cihazına iletir.
+  - Merkezi Birleşik Bildirim Motoru
+* **Kullanım Amacı:** Bildirim dokümanlarını dinler; sistem şalteri, sessiz saatler, kategori limitleri, kullanıcı tercihleri ve cihaz token kontrollerini yaparak FCM push gönderir.
 
 ---
 
 ### 7. `onUserUpdated`
 * **Tetikleyici Türü:** Firestore Trigger (`users/{userId}` - Update)
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - `lib/screens/profile_screen.dart` & `edit_profile_screen.dart` (Profil düzenleme)
-  - `lib/services/user_service.dart` (`updateUserProfile` metodu)
-* **Kullanım Amacı:** Kullanıcı profil adını (`username`) veya avatarını (`profileImageUrl`) değiştirdiğinde; eski yorumlar, mesajlar ve paylaştığı tüm aktif fırsatlardaki (`deals` dokümanlarındaki `postedByName` ve `postedByAvatar`) denormalize kullanıcı verilerini senkronize eder.
-* **Somut Senaryo:**
-  > Kullanıcı profil fotoğrafını veya kullanıcı adını değiştirdiğinde, geçmişte attığı yorumlar, mesajlar ve paylaştığı tüm fırsat kartlarındaki avatar/isim bilgisi arka planda otomatik olarak güncellenir.
+* **Kullanım Amacı:** Kullanıcı profil resmi veya kullanıcı adı değiştiğinde yorumlar ve mesajlardaki denormalize verileri senkronize eder.
 
 ---
 
 ### 8. `onUserDeleted`
 * **Tetikleyici Türü:** Firebase Auth Trigger (`auth.user().onDelete`)
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - `lib/screens/settings_screen.dart` ("Hesabımı Kalıcı Olarak Sil" işlemi)
-  - Firebase Konsol & `adminDeleteUser` servisi
-* **Kullanım Amacı:** Kullanıcı hesabı silindiğinde Firestore'daki profil, favoriler (`favorites`), oy geçmişi ve cihaz token kayıtlarını temizler.
-* **Somut Senaryo:**
-  > Kullanıcı hesabını sildiği anda arka planda devreye girerek tüm kişisel kayıtları ve favori referanslarını temizler.
+* **Kullanım Amacı:** Kullanıcı silindiğinde cihaz kayıtlarını, bildirim aboneliklerini, fırsatları ve alt koleksiyonlarını kalıcı olarak siler.
 
 ---
 
 ### 9. `resolveShortLink`
-* **Tetikleyici Türü:** HTTPS Request (HTTP GET/POST)
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - `lib/screens/deal_detail/deal_link_utils.dart` (`resolveShortLink` metodu)
-  - `lib/screens/admin_screen.dart` (`_resolveShortLink` metodu)
-  - `web/admin/app.js` (Fırsat onaylama ve link doğrulama adımı)
-* **Kullanım Amacı:** `ty.gl`, `amzn.to`, `app.hb.biz` gibi kısa yönlendirme linklerini takip ederek nihai temiz ürün URL'sini çözer.
-* **Somut Senaryo:**
-  > Kullanıcı `https://ty.gl/abc123xyz` linkini girdiğinde fonksiyon linki yönlendirip `https://www.trendyol.com/urun-p-12345` haline getirir.
+* **Tetikleyici Türü:** HTTPS Request
+* **Kullanım Amacı:** Kısa linkleri ve yönlendirmeleri (redirect) takip ederek gerçek son URL'yi çözer.
 
 ---
 
 ### 10. `analyzeProductProxy`
 * **Tetikleyici Türü:** HTTPS Request / Proxy
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - `lib/services/ai_service.dart` (`analyzeProductProxy` metodu)
-  - `lib/screens/add_deal_screen.dart` (Link yapıştırıldığında otomatik bilgi getirme)
-* **Kullanım Amacı:** Ürün linkinden HTML meta verilerini ve Gemini yapay zeka analizini çekerek başlık/fiyat/görseli otomatik doldurur.
-* **Somut Senaryo:**
-  > Fırsat ekleme kutusuna Hepsiburada linki yapıştırıldığında sayfa başlığı, indirimli fiyatı ve ürün görseli otomatik forma doldurulur.
+* **Kullanım Amacı:** Firebase App Check ve Secret Manager korumalı olarak Google Gemini API'ye güvenli proxy sağlar.
 
 ---
 
 ### 11. `sendManualNotification`
 * **Tetikleyici Türü:** HTTPS Callable
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - `web/admin/app.js` (Admin Paneli > "Bildirim Gönder" Butonu)
-* **Kullanım Amacı:** Admin panelinden seçilen kitleye/kategoriye anlık özel push bildirim gönderir.
-* **Somut Senaryo:**
-  > Admin panelinden *"Gece Fırsatları Başladı"* başlığıyla tüm kullanıcılara kampanya bildirimi gönderilir.
+* **Kullanım Amacı:** Admin panelinden tüm kullanıcılara, belirli bir kullanıcıya veya cihaza manuel push bildirim gönderir.
 
 ---
 
 ### 12. `cleanupInvalidTokens`
 * **Tetikleyici Türü:** HTTPS Callable
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - `web/admin/app.js` (Admin Paneli > "Geçersiz Bildirim Tokenlarını Temizle" Butonu)
-* **Kullanım Amacı:** Uygulamayı silmiş cihazların geçersizleşmiş FCM token'larını temizleyerek bildirim maliyetini ve log kirliliğini engeller.
-* **Somut Senaryo:**
-  > Admin panelinden tek tıkla `UNREGISTERED` dönen eski cihaz kayıtları veritabanından temizlenir.
+* **Kullanım Amacı:** Geçersiz veya süresi dolmuş FCM token'larını kuru çalıştırma (dry-run) ile test edip pasife alır.
 
 ---
 
@@ -177,9 +146,7 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **25 
 * **Tetikleyici Türü:** Scheduled Cron (Her gün gece 03:00)
 * **Kullanıldığı / Tetiklendiği Yerler:**
   - GCP Cloud Scheduler (Otomatik Cron)
-* **Kullanım Amacı:** 48 saati dolduran fırsatları bulur; dokümanı **SİLMEZ**, sadece `isExpired: true` olarak işaretler (Böylece anasayfadan düşer, kullanıcının favorilerinde 30 gün arşiv olarak kalır).
-* **Somut Senaryo:**
-  > 2 gün önce eklenen fırsat 48 saati doldurunca `isExpired: true` yapılarak anasayfadan düşürülür, favorilerde ise görseliyle yaşamaya devam eder.
+* **Kullanım Amacı:** 48 saati dolduran fırsatları bulur; dokümanı **SİLMEZ**, sadece `isExpired: true` olarak işaretler.
 
 ---
 
@@ -191,13 +158,15 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **25 
 
 ---
 
-### 15. `purgeOldDeals` (30 Günlük Derin Temizlik / Hard-Purge)
+### 15. `purgeOldDeals` (30 Günlük Derin Temizlik / Hard-Purge: Fırsatlar + Bildirimler)
 * **Tetikleyici Türü:** Scheduled Cron (Her Pazar gece 04:00)
 * **Kullanıldığı / Tetiklendiği Yerler:**
   - GCP Cloud Scheduler (Otomatik Cron)
-* **Kullanım Amacı:** 30 günden eski fırsatları, oyları, yorumları, Storage görsellerini ve kullanıcı favorilerini kalıcı olarak siler.
+* **Kullanım Amacı:** 
+  1. 30 günden eski fırsatları, oyları, yorumları, Storage görsellerini ve kullanıcı favorilerini kalıcı olarak siler.
+  2. **Tüm kullanıcılardaki (`collectionGroup('notifications')`) 30 günü geçmiş bildirim dokümanlarını** 400'lük optimize batch'ler halinde kalıcı olarak siler.
 * **Somut Senaryo:**
-  > 35 gün önceki eski bir fırsat Pazar gecesi tüm alt koleksiyonları ve favori referanslarıyla birlikte veritabanından kalıcı olarak silinir.
+  > 35 gün önceki eski bir fırsat ve kullanıcının Bildirim Merkezi'nde birikmiş 30 günden eski bildirimler Pazar gecesi veritabanından tamamen silinir.
 
 ---
 
@@ -206,39 +175,41 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **25 
 * **Kullanıldığı / Tetiklendiği Yerler:**
   - Backend Admin API (Geliştirici & Admin Scriptleri)
   - Not: Web Admin Paneli arayüzünde ayrıca doğrudan Firestore batch kullanan `purgeOldDealsWeb()` alternatifi de mevcuttur.
-* **Kullanım Amacı:** 30 günlük derin temizliği admin yetkisiyle manuel tetikler.
+* **Kullanım Amacı:** 30 günlük derin temizliği (fırsatlar + eski bildirimler) admin yetkisiyle manuel tetikler.
 
 ---
 
-### 17. `cleanupOldImages` (Storage Çöp Toplayıcı)
+### 17. `purgeOldNotificationsManual`
+* **Tetikleyici Türü:** HTTPS Callable
+* **Kullanıldığı / Tetiklendiği Yerler:**
+  - Backend Admin API / Scriptler
+* **Kullanım Amacı:** Fırsatlara dokunmadan, yalnızca `collectionGroup('notifications')` koleksiyonundaki 30 (veya parametre olarak verilen `days`) günden eski bildirimleri toplu olarak siler.
+
+---
+
+### 18. `cleanupOldImages` (Storage Çöp Toplayıcı)
 * **Tetikleyici Türü:** Scheduled Cron (Her gün gece 00:00)
 * **Kullanıldığı / Tetiklendiği Yerler:**
   - GCP Cloud Scheduler (Otomatik Cron)
 * **Kullanım Amacı:** Firebase Storage `deals/` dizinindeki 30 günden eski sahipsiz/çöp dosyaları temizler.
-* **Somut Senaryo:**
-  > Kullanıcı fırsat paylaşırken resim yükleyip vazgeçtiğinde Storage'da kalan sahipsiz dosya 30 gün sonra silinir.
 
 ---
 
-### 18. `cleanupOldImagesManual`
+### 19. `cleanupOldImagesManual`
 * **Tetikleyici Türü:** HTTPS Request
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - Manuel HTTP Endpoint (Geliştirici & Test amaçlı)
 * **Kullanım Amacı:** Storage görsel temizliğini anlık olarak test etmek için kullanılır.
 
 ---
 
-### 19. `adminDeleteUser`
+### 20. `adminDeleteUser`
 * **Tetikleyici Türü:** HTTPS Callable
 * **Kullanıldığı / Tetiklendiği Yerler:**
   - `web/admin/app.js` (Kullanıcı Yönetimi > "Kullanıcıyı Sil" Butonu)
 * **Kullanım Amacı:** Admin panelinden seçilen kullanıcının hem Firebase Auth hem de Firestore verilerini siler.
-* **Somut Senaryo:**
-  > Kural ihlali yapan bir kullanıcı admin panelinden silindiğinde Auth hesabı ve verileri anında kaldırılır.
 
 ---
 
-### 20. `generateTestData`
+### 21. `generateTestData`
 * **Tetikleyici Türü:** HTTPS Callable
 * **Kullanıldığı / Tetiklendiği Yerler:**
   - `web/admin/app.js` (Geliştirici Araçları > "Test Verisi Üret" Butonu)
@@ -246,48 +217,37 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **25 
 
 ---
 
-### 21. `cleanupTestData`
+### 22. `cleanupTestData`
 * **Tetikleyici Türü:** HTTPS Callable
 * **Kullanıldığı / Tetiklendiği Yerler:**
   - `web/admin/app.js` (Geliştirici Araçları > "Test Verilerini Temizle" Butonu)
-  - `functions/tests/` (Backend entegrasyon test scriptleri)
 * **Kullanım Amacı:** `isTest: true` bayraklı sahte verileri tek işlemle temizler.
 
 ---
 
-### 22. `scrapeCouponsScheduled`
+### 23. `scrapeCouponsScheduled`
 * **Tetikleyici Türü:** Scheduled Cron (Her 6 saatte bir)
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - GCP Cloud Scheduler (Otomatik Cron)
-* **Kullanım Amacı:** Kupon kaynaklarını (KuponBurada vb.) otonom tarayarak güncel indirim kodlarını veritabanına ekler.
+* **Kullanım Amacı:** Kupon kaynaklarını otonom tarayarak güncel indirim kodlarını veritabanına ekler.
 
 ---
 
-### 23. `scrapeCouponsManual`
+### 24. `scrapeCouponsManual`
 * **Tetikleyici Türü:** HTTPS Callable
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - `web/admin/app.js` (Kupon Yönetimi > "Kuponları Şimdi Tara" Butonu)
 * **Kullanım Amacı:** Kupon kazıma botunu admin panelinden elle çalıştırmaya yarar.
 
 ---
 
-### 24. `scrapeCatalogsScheduled`
+### 25. `scrapeCatalogsScheduled`
 * **Tetikleyici Türü:** Scheduled Cron (Her 12 saatte bir)
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - GCP Cloud Scheduler (Otomatik Cron)
 * **Kullanım Amacı:** Market aktüel afiş ve kataloglarını otonom tarar.
 
 ---
 
-### 25. `scrapeCatalogsManual`
+### 26. `scrapeCatalogsManual`
 * **Tetikleyici Türü:** HTTPS Callable
-* **Kullanıldığı / Tetiklendiği Yerler:**
-  - `web/admin/app.js` (Katalog Yönetimi > "Katalogları Şimdi Tara" Butonu)
 * **Kullanım Amacı:** Broşür kazıma botunu admin panelinden elle çalıştırmaya yarar.
 
 ---
-
-## 💡 3. Atıl / Eski / Silinmesi Gereken Fonksiyonlar Değerlendirmesi
 
 Yapılan detaylı kod taramasında:
 1. **Canlıda Aktif Kullanılanlar (21 Adet):** Trigger'lar, bildirim mekanizmaları, admin paneli butonları, cron görevleri ve botlar eksiksiz bir şekilde doğrudan projede çağrılmakta ve çalışmaktadır.
