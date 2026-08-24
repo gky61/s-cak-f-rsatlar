@@ -522,18 +522,132 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     );
   }
 
+  String _formatDealTimeAgo(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inSeconds < 60) {
+      return 'Az önce';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes} dk önce';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours} saat önce';
+    } else if (diff.inDays == 1) {
+      return 'Dün';
+    } else if (diff.inDays < 7) {
+      return '${diff.inDays} gün önce';
+    } else {
+      return DateFormat('dd.MM.yyyy', 'tr_TR').format(dt);
+    }
+  }
+
   Widget _buildAdminCard(Deal deal, _AdminListType type) {
     final bool isPending = type == _AdminListType.pending;
     final bool isUserSubmitted = type == _AdminListType.userSubmitted;
     final bool isPublished = type == _AdminListType.published;
     final bool isExpiredCard = type == _AdminListType.expired;
-    final currencyFormat = DynamicCurrencyFormatter();
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isBot = deal.isBotkolik;
+    final String sourceName = deal.sourceDisplayName;
+
+    final String timeAgoStr = _formatDealTimeAgo(deal.createdAt);
+    final String fullDateStr = DateFormat('dd.MM.yyyy HH:mm', 'tr_TR').format(deal.createdAt);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
       child: Column(
         children: [
+          // 🕒 Üst Bilgi Çubuğu: Kaynak (Bot/Sayfa/Kullanıcı) & Gönderilme Zamanı
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                  width: 0.8,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Kaynak Rozeti (Bot Kazıma Sayfası / Kanalı veya Kullanıcı)
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: (isBot ? const Color(0xFF3B82F6) : const Color(0xFFA855F7)).withValues(alpha: isDark ? 0.20 : 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isBot ? Icons.smart_toy_rounded : Icons.person_rounded,
+                          size: 13,
+                          color: isBot
+                              ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB))
+                              : (isDark ? const Color(0xFFC084FC) : const Color(0xFF9333EA)),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            sourceName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isBot
+                                  ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB))
+                                  : (isDark ? const Color(0xFFC084FC) : const Color(0xFF9333EA)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Gönderilme Zamanı (X dk önce • dd.MM.yyyy HH:mm)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      size: 13,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      timeAgoStr,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '($fullDateStr)',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
           if (isExpiredCard)
             Container(
               width: double.infinity,

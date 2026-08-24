@@ -79,11 +79,15 @@ Web Admin Paneli
 ### 2. 🏷️ Fırsatlar Görünümü (`showDealsView`)
 * **Filtreleme & Arama:** Onay Durumu (`Tümü`, `Onay Bekleyenler`, `Onaylananlar`, `Süresi Dolanlar`), Kategori seçicisi ve Anlık Arama.
 * **Fırsat Satırı (`createDealRow`):**
-  - Ürün görseli, başlık, mağaza, marka, indirimli fiyat, liste fiyatı (`originalPrice`), % indirim oranı, sıcak/soğuk oy sayıları ve onay durumu.
+  - **Detay & Görsel:** Ürün görseli, başlık, mağaza, marka, Amazon Depo rozeti, değerlendirme puanı (`ratingValue` & `ratingCount`).
+  - **Kaynak Rozeti:** Bot paylaşımı (`smart_toy` + bot/kanal adı) veya kullanıcı paylaşımı (`person` + kullanıcı rumuzu/adı).
+  - **Fiyat & İndirim:** İndirimli fiyat, liste fiyatı (`originalPrice`), % indirim oranı veya "Fiyat Gizli" rozeti.
+  - **Tarih & Zaman Damgası:** Çift katmanlı zaman damgası (Üstte: `schedule` ikonu ile `15 Dakika Önce` / `2 Saat Önce` gibi göreceli süre; Altta: `24.08.2026 22:15` gibi tam tarih/saat damgası).
+  - **Durum:** Aktif, Bekliyor, Reddedildi veya Süresi Doldu rozeti.
 * **Aksiyonlar:**
   - **Onaylama (`approveDeal`):** Fırsatın `isApproved` alanını `true` yapar; Cloud Functions `onDealCreated` tetiklenerek anında push bildirim kuyruğu çalıştırılır.
   - **Reddetme / İptal (`rejectDeal` / `handleCancelDeal`):** Fırsatı yayından kaldırır veya taslağa çeker.
-  - **Düzenleme Modalı (`showDealModal` / `saveDealChanges`):** Fiyat, başlık, açıklama, kategori, alt kategori, orijinal fiyat, marka, rating puanı ve görselleri tarayıcıdan düzenleyip kaydeder.
+  - **Düzenleme Modalı (`showDealModal` / `saveDealChanges`):** Fiyat, başlık, açıklama, kategori, alt kategori, orijinal fiyat, marka, rating puanı, görseller ve oluşturulma/güncellenme zaman damgalarını (`formatFullDateTime` + `getTimeAgo`) tarayıcıdan düzenleyip kaydeder.
   - **Görsel Büyütme Lightbox (`openImageLightbox`):** Fırsat görsellerini tam çözünürlükte modal içinde inceler.
   - **Manuel Fırsat Ekleme (`showAddDealModal`):** Yöneticinin doğrudan panelden yeni fırsat yayınlamasını sağlar.
 

@@ -43,6 +43,9 @@ class Deal {
   final bool isAmazonWarehouse; // Amazon Depo (smid=A215JX4S9CANSO) ürünü mü?
   final bool hidePrice; // Fiyat gizlensin mi? (Fiyatsız kampanya vs.)
   final String? couponCode; // Kupon Kodu (Örn: İNDİRİM50)
+  final String? telegramChatTitle; // Botun yakaladığı Telegram kanalının/sayfasının başlığı (ör. DH Sıcak Fırsatlar)
+  final String? telegramChatUsername; // Botun yakaladığı Telegram kullanıcı adı (ör. @dhsicakfirsatlar)
+  final String? botSource; // Bot kaynak kodu (ör. telegram_dhsicakfirsatlar)
 
   Deal({
     required this.id,
@@ -77,6 +80,9 @@ class Deal {
     this.isAmazonWarehouse = false,
     this.hidePrice = false,
     this.couponCode,
+    this.telegramChatTitle,
+    this.telegramChatUsername,
+    this.botSource,
   });
 
   /// Bir fırsatın Botkolik (otonom bot) tarafından paylaşılıp paylaşılmadığını döner
@@ -85,6 +91,37 @@ class Deal {
       postedBy == 'botkolik' ||
       postedBy.startsWith('telegram_') ||
       postedBy.isEmpty;
+
+  /// Fırsatın kaynak adını (Telegram Kanalı / Kazıma Sayfası veya Kullanıcı Adı) döner
+  String get sourceDisplayName {
+    if (isUserSubmitted) {
+      if (postedByName != null && postedByName!.trim().isNotEmpty) {
+        return postedByName!.trim();
+      }
+      if (postedBy.isNotEmpty && postedBy != 'admin') {
+        return postedBy;
+      }
+      return 'Kullanıcı';
+    }
+    // Bot paylaşımı (Telegram Kanalları / Kazıma Sayfaları)
+    if (telegramChatTitle != null && telegramChatTitle!.trim().isNotEmpty) {
+      return telegramChatTitle!.trim();
+    }
+    if (telegramChatUsername != null && telegramChatUsername!.trim().isNotEmpty) {
+      final username = telegramChatUsername!.trim();
+      return username.startsWith('@') ? username : '@$username';
+    }
+    if (botSource != null && botSource!.startsWith('telegram_')) {
+      return '@${botSource!.replaceFirst('telegram_', '')}';
+    }
+    if (postedBy.startsWith('telegram_')) {
+      return '@${postedBy.replaceFirst('telegram_', '')}';
+    }
+    if (postedBy.isNotEmpty && postedBy != 'botkolik' && postedBy != 'admin' && postedBy != 'Bilinmiyor') {
+      return postedBy;
+    }
+    return 'Bot (Genel)';
+  }
 
   /// Bir URL'in Amazon Depo (smid=A215JX4S9CANSO) ürünü olup olmadığını kontrol eder.
   static bool checkIsAmazonWarehouse(String urlStr) {
@@ -310,6 +347,9 @@ class Deal {
           checkIsAmazonWarehouse(data['link'] ?? data['url'] ?? ''),
       hidePrice: data['hidePrice'] == true || data['isPriceHidden'] == true,
       couponCode: data['couponCode']?.toString(),
+      telegramChatTitle: data['telegramChatTitle']?.toString(),
+      telegramChatUsername: data['telegramChatUsername']?.toString(),
+      botSource: data['botSource']?.toString(),
     );
   }
 
@@ -347,6 +387,9 @@ class Deal {
       'brand': brand,
       'isAmazonWarehouse': isAmazonWarehouse || checkIsAmazonWarehouse(link),
       'hidePrice': hidePrice,
+      if (telegramChatTitle != null) 'telegramChatTitle': telegramChatTitle,
+      if (telegramChatUsername != null) 'telegramChatUsername': telegramChatUsername,
+      if (botSource != null) 'botSource': botSource,
     };
   }
 

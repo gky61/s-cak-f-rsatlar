@@ -1456,7 +1456,7 @@ function createDealRow(deal) {
     }
 
     // Date formatting
-    const createdAt = deal.createdAt ? formatDate(deal.createdAt) : 'Bilinmiyor';
+    const createdAtFull = deal.createdAt ? formatFullDateTime(deal.createdAt) : 'Bilinmiyor';
     const timeAgo = deal.createdAt ? getTimeAgo(deal.createdAt) : 'Bilinmiyor';
 
     // Price
@@ -1512,8 +1512,11 @@ function createDealRow(deal) {
             ${(!deal.hidePrice && discount > 0) ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-100 dark:bg-emerald-500/10 px-2 py-1 rounded text-xs">%${discount} İndirim</span>` : '<span class="text-slate-400 text-xs">-</span>'}
         </td>
         <td class="p-4">
-            <p class="text-slate-700 dark:text-slate-300">${timeAgo}</p>
-            <p class="text-slate-500 dark:text-slate-500 text-xs">${createdAt}</p>
+            <div class="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-semibold text-xs whitespace-nowrap">
+                <span class="material-symbols-outlined text-[15px] text-primary">schedule</span>
+                <span>${timeAgo}</span>
+            </div>
+            <p class="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5 whitespace-nowrap font-medium">${createdAtFull}</p>
         </td>
         <td class="p-4">${statusBadge}</td>
         <td class="p-4 text-right">
@@ -1548,15 +1551,43 @@ function createDealRow(deal) {
         await showDealModal(deal);
     });
 
-
-
     return row;
 }
 
 // Helper functions
+function formatFullDateTime(date) {
+    if (!date) return 'Bilinmiyor';
+    let d;
+    if (date instanceof Date) {
+        d = date;
+    } else if (date && typeof date.toDate === 'function') {
+        d = date.toDate();
+    } else {
+        d = new Date(date);
+    }
+    if (isNaN(d.getTime())) return 'Bilinmiyor';
+    return d.toLocaleDateString('tr-TR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
 function getTimeAgo(date) {
+    if (!date) return 'Bilinmiyor';
+    let d;
+    if (date instanceof Date) {
+        d = date;
+    } else if (date && typeof date.toDate === 'function') {
+        d = date.toDate();
+    } else {
+        d = new Date(date);
+    }
+    if (isNaN(d.getTime())) return 'Bilinmiyor';
     const now = new Date();
-    const diff = now - date;
+    const diff = now - d;
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
@@ -1816,7 +1847,7 @@ async function showDealModal(deal) {
     previousView = currentView;
     currentDeal = deal;
 
-    const createdAt = deal.createdAt ? formatDate(deal.createdAt) : 'Bilinmiyor';
+    const createdAt = deal.createdAt ? `${formatFullDateTime(deal.createdAt)} (${getTimeAgo(deal.createdAt)})` : 'Bilinmiyor';
     const postedBy = deal.postedBy || 'Bilinmiyor';
     const isApproved = deal.isApproved === true;
     const isUserSubmitted = deal.isUserSubmitted === true;
@@ -2025,7 +2056,7 @@ async function showDealModal(deal) {
     // Modal Sidebar (Sağ Kolon)
     const modalSidebarEl = document.getElementById('modalSidebar');
     if (modalSidebarEl) {
-        const lastUpdate = deal.updatedAt ? formatDate(deal.updatedAt) : createdAt;
+        const lastUpdate = deal.updatedAt ? `${formatFullDateTime(deal.updatedAt)} (${getTimeAgo(deal.updatedAt)})` : createdAt;
 
         // Kullanıcı adı ve profil görseli için
         const authorName = isUserSubmitted ? userDisplayName : 'Bot';
