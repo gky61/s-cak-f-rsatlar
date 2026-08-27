@@ -1,5 +1,8 @@
 # Mağaza Scraper Metadata (Rating, Oy Sayısı, Marka) Entegrasyon Rehberi & Yol Haritası (Roadmap)
 
+> [!NOTE]
+> Bu doküman Mağaza Scraper Metadata (Rating, Oy Sayısı, Marka) entegrasyon kılavuzudur. Sistemin güncel 21 mağazalık şemaları, bypass stratejileri, platform-native HTTP tünellemesi ve deployment süreçleri için lütfen **[Scraping Mimarisi ve Otonom Botlar Master Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_mimarisi_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman, herhangi bir mağaza (Hepsiburada, Trendyol, Amazon, N11, MediaMarkt, Teknosa, PttAVM, Zara vb.) için **Rating Puanı (`ratingValue`)**, **Değerlendirme Sayısı (`ratingCount`)** ve **Marka (`brand`)** verilerinin kazınması, Firestore'a kaydedilmesi ve tüm kullanıcı arayüzlerinde (Mobil Uygulama, Detay Ekranı, Flutter Admin Paneli, Web Admin Paneli) gösterilmesi için izlenmesi gereken **genel mimari adımları ve dosya haritasını** içerir.
 
 ---

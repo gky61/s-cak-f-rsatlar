@@ -1,5 +1,8 @@
 # FırsatKolik Uçtan Uca Scraping Mimarisi ve Doğrulama Akışları Raporu
 
+> [!NOTE]
+> Bu doküman Scraping mimarisinin genel uçtan uca akış kılavuzudur. Sistemin güncel 21 mağazalık şemaları, bypass stratejileri, platform-native HTTP tünellemesi ve deployment süreçleri için lütfen **[Scraping Mimarisi ve Otonom Botlar Master Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_mimarisi_rehberi.md)** dokümanını inceleyiniz.
+
 Bu belge, FırsatKolik platformundaki iki temel scraping (veri kazıma) motorunun (Mobil İstemci ve Telegram Bot) çalışma mantığını, URL doğrulama kontrol zincirlerini, bypass stratejilerini ve altyapı/deployment süreçlerini detaylı bir şekilde açıklamaktadır.
 
 ---
@@ -114,7 +117,24 @@ Sisteme girilen her URL, scraping aşamasına geçmeden önce sıkı bir kontrol
 
 ---
 
-## 🚀 5. Altyapı ve Deployment Süreçleri
+## 🏷️ 5. Özel Üyelik ve Fiyat Etiketi Kazıma Mekanizması (priceLabel)
+
+Platformda hem istemci (`LinkPreviewService`) hem de sunucu botu (`link_scraper_service.js`) scraper'larında özel kulüp, üyelik ve sepette indirim fiyat etiketleri otomatik tespit edilerek `priceLabel` olarak normalize edilir:
+
+*   **Desteklenen Standart Mağaza Etiketleri**:
+    *   **Amazon**: `"Prime Fırsatı"` (`#primeExclusivePricingMessage`, `#primeSavingsUpsellBlock`, `apex_desktop` fiyat blokları).
+    *   **Trendyol**: `"Plus'a Özel"` (`.plus-price`, `data-plus-price`, vb.).
+    *   **Hepsiburada**: `"Premium ile"` (`.premium-price-badge`, vb.).
+    *   **Pazarama**: `"Plus ile"` (`.pazarama-plus-badge`, vb.).
+    *   **Migros**: `"Money ile"` (`.money-badge`, vb.).
+*   **Uçtan Uca İletim ve Arayüz Entegrasyonu**:
+    1.  **Kazıma Aşaması**: Link ayrıştırıldığında `priceLabel` alanı tespit edilir (örn. `"Prime Fırsatı"`).
+    2.  **Fırsat Paylaş Ekranı (`SubmitDealScreen`)**: Scraper etiketi bulduğunda minimalist toggle satırını otomatik aktif eder; kullanıcı dilerse tek tıkla işareti kaldırabilir. Canlı önizleme kartında anasayfa kartı gibi mağaza yanında kompakt `P`/`+`/`M` amblemi anlık güncellenir.
+    3.  **Veritabanı & Sunum Katmanı**: Firestore'da `priceLabel` string alanı olarak saklanır; anasayfa kartlarında satıcı yanında kompakt amblem (`StorePriceBadge(compact: true)`), fırsat detayında ise fiyatın hemen üzerinde mor-turuncu degrade rozet kapsülü olarak sunulur.
+
+---
+
+## 🚀 6. Altyapı ve Deployment Süreçleri
 
 Telegram Bot servisi, sürekli aktif (minimum 1 instance) kalacak şekilde Docker container altyapısı ile yönetilmektedir.
 
@@ -156,7 +176,7 @@ Deployment işlemi [deploy_to_vm.py](file:///d:/firsatkolik/cloud-run-bot/deploy
 
 ---
 
-## 🛠️ Sorun Giderme ve Log İzleme
+## 🛠️ 7. Sorun Giderme ve Log İzleme
 
 Deployment veya scraping sırasında yaşanabilecek aksaklıklar için GCP logları ve sağlık (health) kontrolleri kullanılır.
 

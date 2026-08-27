@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:html/dom.dart' as dom;
@@ -782,8 +783,10 @@ class HepsiburadaScraper extends BaseProductScraper {
     }
 
     // DOM Fallback
-    final breadcrumbElements = document.querySelectorAll('.breadcrumbs span[itemprop="name"]') ??
-                              document.querySelectorAll('[data-test-id="breadcrumbs"] li');
+    var breadcrumbElements = document.querySelectorAll('.breadcrumbs span[itemprop="name"]');
+    if (breadcrumbElements.isEmpty) {
+      breadcrumbElements = document.querySelectorAll('[data-test-id="breadcrumbs"] li');
+    }
     if (breadcrumbElements.isNotEmpty) {
       final List<String> list = [];
       for (final el in breadcrumbElements) {
@@ -913,4 +916,67 @@ class HepsiburadaScraper extends BaseProductScraper {
     }
     return null;
   }
+
+  @override
+  FutureOr<String?> scrapePriceLabel(dom.Document document) async {
+    // 1. DOM Kontrolü: "Premium ile", "Premium'la", "Premium'a özel" metinleri
+    final spans = document.querySelectorAll('span, div, p, b, strong, a');
+    final premiumRegExp = RegExp(r"premium['’]?\s*(ile|la|a özel|fırsat)", caseSensitive: false);
+    for (final el in spans) {
+      final text = el.text.trim();
+      if (premiumRegExp.hasMatch(text)) {
+        return 'Premium ile';
+      }
+    }
+
+    // 2. Redux Store Kontrolü (#reduxStore)
+    final script = document.getElementById('reduxStore');
+    if (script != null) {
+      try {
+        final Map<String, dynamic> reduxData = jsonDecode(script.text);
+        final product = reduxData['productState']?['product'];
+        if (product != null) {
+          // tagList ve mainProductTagList
+          final tags = <String>[];
+          final rawTags = product['tagList'] as List?;
+          if (rawTags != null) {
+            for (final t in rawTags) {
+              if (t is Map && t['tagId'] != null) {
+                tags.add(t['tagId'].toString().toLowerCase());
+              }
+            }
+          }
+          final rawMainTags = product['mainProductTagList'] as List?;
+          if (rawMainTags != null) {
+            for (final t in rawMainTags) {
+              if (t is Map && t['tagId'] != null) {
+                tags.add(t['tagId'].toString().toLowerCase());
+              }
+            }
+          }
+          final paymentTag = product['paymentTag']?.toString().toLowerCase() ?? '';
+
+          if (tags.any((t) => t.contains('premium')) || paymentTag.contains('premium')) {
+            return 'Premium ile';
+          }
+
+          // listings
+          final listings = product['listings'] as List?;
+          if (listings != null) {
+            for (final l in listings) {
+              if (l is Map) {
+                final lPayTag = l['paymentTag']?.toString().toLowerCase() ?? '';
+                if (lPayTag.contains('premium')) {
+                  return 'Premium ile';
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
 }
+

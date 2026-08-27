@@ -8,6 +8,7 @@ void _log(String message) {
 
 class Message {
   final String id;
+  final String? conversationId;
   final String senderId;
   final String senderName;
   final String senderImageUrl;
@@ -35,11 +36,21 @@ class Message {
   // Soft deletion ("Benden Sil")
   final List<String> deletedBy;
 
+  // Emoji Tepkileri (Reactions): {'userId': '❤️', 'userId2': '👍'}
+  final Map<String, String> reactions;
+
   // Optimistic UI ve durum kontrolü ('sending', 'sent', 'failed')
   final String status;
 
+  static String computeConversationId(String u1, String u2) {
+    if (u1.isEmpty || u2.isEmpty) return '';
+    final list = [u1, u2]..sort();
+    return '${list[0]}_${list[1]}';
+  }
+
   Message({
     required this.id,
+    this.conversationId,
     required this.senderId,
     required this.senderName,
     required this.senderImageUrl,
@@ -60,6 +71,7 @@ class Message {
     this.replyToSenderName,
     this.replyToText,
     this.deletedBy = const [],
+    this.reactions = const {},
     this.status = 'sent',
   });
 
@@ -93,13 +105,31 @@ class Message {
           .where((s) => s.isNotEmpty)
           .toList();
     }
+
+    // reactions haritasını güvenli parse et
+    Map<String, String> reactions = {};
+    if (data['reactions'] is Map) {
+      (data['reactions'] as Map).forEach((k, v) {
+        if (k != null && v != null && v.toString().isNotEmpty) {
+          reactions[k.toString()] = v.toString();
+        }
+      });
+    }
     
+    final senderId = data['senderId'] ?? '';
+    final receiverId = data['receiverId'] ?? '';
+    final conversationId = (data['conversationId'] as String?) ??
+        (senderId.isNotEmpty && receiverId.isNotEmpty
+            ? computeConversationId(senderId, receiverId)
+            : null);
+
     return Message(
       id: doc.id,
-      senderId: data['senderId'] ?? '',
+      conversationId: conversationId,
+      senderId: senderId,
       senderName: data['senderName'] ?? '',
       senderImageUrl: migrateAssetPath(data['senderImageUrl'] ?? ''),
-      receiverId: data['receiverId'] ?? '',
+      receiverId: receiverId,
       receiverName: data['receiverName'] ?? '',
       receiverImageUrl: migrateAssetPath(data['receiverImageUrl'] ?? ''),
       text: data['text'] ?? '',
@@ -116,6 +146,7 @@ class Message {
       replyToSenderName: data['replyToSenderName'] as String?,
       replyToText: data['replyToText'] as String?,
       deletedBy: deletedBy,
+      reactions: reactions,
       status: 'sent',
     );
   }
@@ -147,6 +178,7 @@ class Message {
 
     return Message(
       id: doc.id,
+      conversationId: 'admin_${data['userId'] ?? ''}',
       senderId: data['adminId'] ?? 'admin',
       senderName: adminName,
       senderImageUrl: 'assets/logo.webp',
@@ -158,13 +190,16 @@ class Message {
       isRead: data['isRead'] ?? false,
       isReadByAdmin: true,
       isAdminMessage: true,
+      reactions: const {},
       status: 'sent',
     );
   }
 
   // Message'i Firestore'a yazmak için Map'e dönüştürme
   Map<String, dynamic> toFirestore() {
+    final effectiveConvId = conversationId ?? computeConversationId(senderId, receiverId);
     return {
+      if (effectiveConvId.isNotEmpty) 'conversationId': effectiveConvId,
       'senderId': senderId,
       'senderName': senderName,
       'senderImageUrl': senderImageUrl,
@@ -184,11 +219,13 @@ class Message {
       if (replyToSenderName != null) 'replyToSenderName': replyToSenderName,
       if (replyToText != null) 'replyToText': replyToText,
       if (deletedBy.isNotEmpty) 'deletedBy': deletedBy,
+      if (reactions.isNotEmpty) 'reactions': reactions,
     };
   }
 
   Message copyWith({
     String? id,
+    String? conversationId,
     String? senderId,
     String? senderName,
     String? senderImageUrl,
@@ -209,10 +246,12 @@ class Message {
     String? replyToSenderName,
     String? replyToText,
     List<String>? deletedBy,
+    Map<String, String>? reactions,
     String? status,
   }) {
     return Message(
       id: id ?? this.id,
+      conversationId: conversationId ?? this.conversationId,
       senderId: senderId ?? this.senderId,
       senderName: senderName ?? this.senderName,
       senderImageUrl: senderImageUrl ?? this.senderImageUrl,
@@ -233,6 +272,7 @@ class Message {
       replyToSenderName: replyToSenderName ?? this.replyToSenderName,
       replyToText: replyToText ?? this.replyToText,
       deletedBy: deletedBy ?? this.deletedBy,
+      reactions: reactions ?? this.reactions,
       status: status ?? this.status,
     );
   }

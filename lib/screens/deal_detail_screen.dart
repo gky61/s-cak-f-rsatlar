@@ -21,7 +21,7 @@ import '../widgets/report_dialog.dart';
 import '../widgets/comments_bottom_sheet.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/deal_thermometer.dart';
-import '../widgets/money_badge.dart';
+import '../widgets/store_price_badge.dart';
 import '../widgets/deal_card/deal_card_helpers.dart';
 import 'deal_detail/deal_detail_helpers.dart';
 import 'deal_detail/deal_detail_image.dart';
@@ -987,14 +987,6 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                               ),
                                             ),
                                           ],
-                                          if (MoneyBadge.isMoneyDeal(deal)) ...[
-                                            const SizedBox(width: 6),
-                                            const MoneyBadge(
-                                              fontSize: 11,
-                                              iconSize: 13,
-                                              padding: EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
-                                            ),
-                                          ],
                                         ],
                                       ),
                                     ),
@@ -1280,101 +1272,96 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  // Money ile Rozeti (Fiyatın tam üstünde)
-                                  if (MoneyBadge.isMoneyDeal(deal)) ...[
-                                    const MoneyBadge(
-                                      fontSize: 10,
-                                      iconSize: 13,
-                                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                                    ),
-                                    const SizedBox(height: 5),
-                                  ],
                                   if (!deal.hidePrice)
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      alignment: Alignment.centerLeft,
-                                      child: Row(
-                                        crossAxisAlignment: CrossAxisAlignment.center,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          // Sol: İndirimli (Fırsat) Fiyatı
-                                          FormattedPriceText(
-                                            value: deal.price,
-                                            style: const TextStyle(
-                                              fontSize: 23,
-                                              fontWeight: FontWeight.w900,
-                                              color: AppTheme.primary,
-                                              height: 1.0,
-                                              letterSpacing: -0.5,
-                                            ),
-                                          ),
-                                          // Sağ: İndirim Etiketi üstte, İndirimsiz Fiyat altta
-                                          if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                                            const SizedBox(width: 8),
-                                            Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                // İndirim Etiketi
-                                                if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
-                                                  Container(
-                                                    margin: const EdgeInsets.only(bottom: 2),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 2),
-                                                    decoration: BoxDecoration(
-                                                      gradient: const LinearGradient(
-                                                        colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
-                                                      ),
-                                                      borderRadius: BorderRadius.circular(4),
-                                                    ),
-                                                    child: Text(
-                                                      '%${deal.effectiveDiscountRate} İndirim',
-                                                      style: const TextStyle(
-                                                        fontSize: 9,
-                                                        fontWeight: FontWeight.w900,
-                                                        color: Colors.white,
-                                                        letterSpacing: 0.2,
-                                                      ),
+                                    () {
+                                      final hasStoreBadge = StorePriceBadge.hasBadge(deal: deal);
+
+                                      return FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Row(
+                                          crossAxisAlignment: hasStoreBadge
+                                              ? CrossAxisAlignment.end
+                                              : CrossAxisAlignment.center,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            // Sol: Rozetli Sütun veya Tek Fiyat
+                                            if (hasStoreBadge)
+                                              Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  StorePriceBadge(deal: deal),
+                                                  const SizedBox(height: 3.5),
+                                                  FormattedPriceText(
+                                                    value: deal.price,
+                                                    style: const TextStyle(
+                                                      fontSize: 23,
+                                                      fontWeight: FontWeight.w900,
+                                                      color: AppTheme.primary,
+                                                      height: 1.0,
+                                                      letterSpacing: -0.5,
                                                     ),
                                                   ),
-                                                // İndirimsiz (Eski) Fiyat
-                                                FormattedPriceText(
-                                                  value: deal.originalPrice,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                                                    decoration: TextDecoration.lineThrough,
-                                                    decorationThickness: 1.5,
-                                                  ),
+                                                ],
+                                              )
+                                            else
+                                              FormattedPriceText(
+                                                value: deal.price,
+                                                style: const TextStyle(
+                                                  fontSize: 23,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: AppTheme.primary,
+                                                  height: 1.0,
+                                                  letterSpacing: -0.5,
                                                 ),
-                                              ],
-                                            ),
+                                              ),
+                                            // Sağ Sütun: İndirim Etiketi üstte, İndirimsiz Fiyat altta
+                                            if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                                              const SizedBox(width: 8),
+                                              Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  // İndirim Etiketi
+                                                  if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
+                                                    Container(
+                                                      margin: const EdgeInsets.only(bottom: 2),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        gradient: const LinearGradient(
+                                                          colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                                                        ),
+                                                        borderRadius: BorderRadius.circular(4),
+                                                      ),
+                                                      child: Text(
+                                                        '%${deal.effectiveDiscountRate} İndirim',
+                                                        style: const TextStyle(
+                                                          fontSize: 9,
+                                                          fontWeight: FontWeight.w900,
+                                                          color: Colors.white,
+                                                          letterSpacing: 0.2,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  // İndirimsiz (Eski) Fiyat
+                                                  FormattedPriceText(
+                                                    value: deal.originalPrice,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                                                      decoration: TextDecoration.lineThrough,
+                                                      decorationThickness: 1.5,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
                                           ],
-                                        ],
-                                      ),
-                                    ),
-                                  if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFFF7ED),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: const Color(0xFFFDBA74).withValues(alpha: 0.6),
-                                          width: 0.8,
                                         ),
-                                      ),
-                                      child: Text(
-                                        deal.priceLabel!,
-                                        style: const TextStyle(
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFFEA580C),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                      );
+                                    }(),
                                 ],
                               ),
                             ),

@@ -1,5 +1,8 @@
 # Fırsatkolik - Aktüel Kataloglar Modülü Yol Haritası
 
+> [!NOTE]
+> Bu doküman modülün ilk ürün tasarımı ve kullanıcı deneyimi yol haritasıdır. Sistemin canlıdaki eksiksiz mimari, veri, güvenlik ve kazıma kontratı için lütfen **[Aktüel Kataloglar ve Broşürler Master Mimari Rehberi](file:///d:/firsatkolik/documentation/aktuel/aktuel_kataloglar_modulu_rehberi.md)** dokümanını inceleyiniz.
+
 Bu yol haritası; süpermarket ve kozmetik mağazalarının dönemsel indirim kataloglarını (broşürlerini) markalarına göre gruplayıp, tek bir doğrusal akışla (Mağaza Seçimi -> Katalog Listesi -> Katalog Detay) temiz bir arayüzde listelemek için gerekli mantıksal ve teknik adımları kapsar. 
 
 Akışta hiçbir mağaza için istisna veya kısayol uygulanmayacak, tek bir katalog olsa dahi her zaman aynı adımlar takip edilecektir.

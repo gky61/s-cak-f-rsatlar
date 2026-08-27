@@ -15,6 +15,7 @@ class Comment {
   final String? quotedCommentText; // Alıntılanan yorum metni
   final List<String> userBadges; // Kullanıcının rozetleri (yorum anındaki)
   final String? userPinnedBadge; // Kullanıcının vitrine sabitlediği rozet
+  final Map<String, String> reactions; // userId -> emoji (ör: {'uid1': '❤️', 'uid2': '🔥'})
 
   Comment({
     required this.id,
@@ -30,6 +31,7 @@ class Comment {
     this.quotedCommentText,
     this.userBadges = const [],
     this.userPinnedBadge,
+    this.reactions = const {},
   });
 
   // Firestore'dan Comment oluşturma
@@ -49,6 +51,10 @@ class Comment {
       quotedCommentText: data['quotedCommentText'],
       userBadges: List<String>.from(data['userBadges'] ?? []),
       userPinnedBadge: data['userPinnedBadge']?.toString() ?? data['pinnedBadge']?.toString(),
+      reactions: (data['reactions'] as Map<dynamic, dynamic>?)?.map(
+            (key, value) => MapEntry(key.toString(), value.toString()),
+          ) ??
+          const {},
     );
   }
 
@@ -76,7 +82,44 @@ class Comment {
     if (quotedCommentText != null) {
       map['quotedCommentText'] = quotedCommentText!;
     }
+    if (reactions.isNotEmpty) {
+      map['reactions'] = reactions;
+    }
     return map;
+  }
+
+  Comment copyWith({
+    String? id,
+    String? dealId,
+    String? userId,
+    String? userName,
+    String? userEmail,
+    String? userProfileImageUrl,
+    String? text,
+    DateTime? createdAt,
+    String? parentCommentId,
+    String? replyToUserName,
+    String? quotedCommentText,
+    List<String>? userBadges,
+    String? userPinnedBadge,
+    Map<String, String>? reactions,
+  }) {
+    return Comment(
+      id: id ?? this.id,
+      dealId: dealId ?? this.dealId,
+      userId: userId ?? this.userId,
+      userName: userName ?? this.userName,
+      userEmail: userEmail ?? this.userEmail,
+      userProfileImageUrl: userProfileImageUrl ?? this.userProfileImageUrl,
+      text: text ?? this.text,
+      createdAt: createdAt ?? this.createdAt,
+      parentCommentId: parentCommentId ?? this.parentCommentId,
+      replyToUserName: replyToUserName ?? this.replyToUserName,
+      quotedCommentText: quotedCommentText ?? this.quotedCommentText,
+      userBadges: userBadges ?? this.userBadges,
+      userPinnedBadge: userPinnedBadge ?? this.userPinnedBadge,
+      reactions: reactions ?? this.reactions,
+    );
   }
 }
 

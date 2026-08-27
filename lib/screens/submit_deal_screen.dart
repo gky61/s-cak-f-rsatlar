@@ -18,6 +18,7 @@ import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
 import '../utils/asset_path_migration.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
+import '../widgets/store_price_badge.dart';
 import 'deal_detail_screen.dart';
 
 void _log(String message) {
@@ -48,6 +49,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   String? _selectedStore;
   String? _priceLabel;
+  String? _detectedPriceLabel;
+  bool _isSpecialBadgeEnabled = false;
   double? _scrapedOriginalPrice;
   bool _hidePrice = false;
   final List<String> _stores = [
@@ -379,6 +382,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _scrapedRatingCount = null;
         _scrapedBrand = null;
         _priceLabel = null;
+        _detectedPriceLabel = null;
+        _isSpecialBadgeEnabled = false;
       });
       return;
     }
@@ -398,6 +403,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       _selectedSubCategory = null;
       _isCategoryLockedByScraper = false;
       _priceLabel = null;
+      _detectedPriceLabel = null;
+      _isSpecialBadgeEnabled = false;
       _isAmazonWarehouse = false;
       _scrapedOriginalPrice = null;
       _scrapedRatingValue = null;
@@ -536,7 +543,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           final label = cleanPreview.priceLabel;
           if (label != null && label.isNotEmpty) {
             setState(() {
+              _detectedPriceLabel = label;
               _priceLabel = label;
+              _isSpecialBadgeEnabled = true;
             });
             _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel');
           }
@@ -1558,7 +1567,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     final priceText = _priceController.text.trim();
     final price = double.tryParse(priceText) ?? 0.0;
     final store = _selectedStore ?? _storeController.text.trim();
-    final category = Category.getById(_selectedCategory);
 
     final bool hasData = _previewImageUrl != null || title.isNotEmpty || price > 0 || _isAutoDetecting;
 
@@ -1615,7 +1623,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 },
                 child: _isAutoDetecting
                     ? _buildPreviewShimmerBody(isDark, shimmerBase, shimmerHighlight)
-                    : _buildPreviewLoadedBody(isDark, title, price, store, category),
+                    : _buildPreviewLoadedBody(isDark, title, price, store),
               ),
 
               // Expandable Image URL editing bar
@@ -1887,7 +1895,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     String title,
     double price,
     String store,
-    Category category,
   ) {
     return KeyedSubtree(
       key: const ValueKey('preview_loaded_body'),
@@ -1991,24 +1998,18 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                                 color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                               ),
                             ),
+                            if (_isSpecialBadgeEnabled && _priceLabel != null && _priceLabel!.isNotEmpty) ...[
+                              const SizedBox(width: 4),
+                              StorePriceBadge(
+                                label: _priceLabel,
+                                store: store,
+                                compact: true,
+                                compactSize: 13.0,
+                              ),
+                            ],
                           ],
                         ),
                       ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '${category.icon} ${category.name}',
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    ),
                     if (_scrapedBrand != null && _scrapedBrand!.isNotEmpty)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
@@ -2453,6 +2454,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 onChanged: (val) => setState(() => _isAmazonWarehouse = val),
               ),
             ],
+
+            // 3. Özel Üyelik / Fiyat Rozeti (Prime, Plus, Premium, Money vb.)
+            if (_hasStoreBadgeSupport(_selectedStore ?? _storeController.text) || (_detectedPriceLabel != null && _detectedPriceLabel!.isNotEmpty) || (_priceLabel != null && _priceLabel!.isNotEmpty)) ...[
+              _buildSpecialBadgeToggleRow(isDark),
+            ],
           ],
         ),
 
@@ -2635,6 +2641,144 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                   HapticFeedback.selectionClick();
                   onChanged(val);
                 },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _hasStoreBadgeSupport(String? store) {
+    if (store == null) return false;
+    final lower = store.toLowerCase();
+    return lower.contains('amazon') ||
+        lower.contains('trendyol') ||
+        lower.contains('hepsiburada') ||
+        lower.contains('pazarama') ||
+        lower.contains('migros');
+  }
+
+  String _getDefaultPriceLabelForStore(String? store) {
+    if (store == null) return 'Özel Fiyat';
+    final lower = store.toLowerCase();
+    if (lower.contains('amazon')) return 'Prime Fırsatı';
+    if (lower.contains('trendyol')) return "Plus'a Özel";
+    if (lower.contains('hepsiburada')) return 'Premium ile';
+    if (lower.contains('pazarama')) return 'Plus ile';
+    if (lower.contains('migros')) return 'Money ile';
+    return 'Özel Fiyat';
+  }
+
+  String _getStoreBadgeTitle(String? store, String? priceLabel) {
+    if (priceLabel != null && priceLabel.isNotEmpty) {
+      return priceLabel;
+    }
+    return _getDefaultPriceLabelForStore(store);
+  }
+
+  void _onToggleSpecialBadge(bool val) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _isSpecialBadgeEnabled = val;
+      if (val) {
+        _priceLabel = _detectedPriceLabel ?? _getDefaultPriceLabelForStore(_selectedStore ?? _storeController.text);
+      } else {
+        _priceLabel = null;
+      }
+    });
+  }
+
+  // Özel Fiyat & Üyelik Rozeti Minimalist Toggle Satırı (Prime, Plus, Premium vb.)
+  Widget _buildSpecialBadgeToggleRow(bool isDark) {
+    final effectiveStore = _selectedStore ?? _storeController.text.trim();
+    final effectiveLabel = _priceLabel ?? _detectedPriceLabel ?? _getDefaultPriceLabelForStore(effectiveStore);
+    final badgeTitle = _getStoreBadgeTitle(effectiveStore, effectiveLabel);
+
+    final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final secondaryTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    // Amblem harfi tespiti
+    String emblem = 'P';
+    final lblUpper = effectiveLabel.toUpperCase();
+    final strLower = effectiveStore.toLowerCase();
+    if (lblUpper.contains('MONEY') || strLower.contains('migros')) {
+      emblem = 'M';
+    } else if (lblUpper.contains('PLUS') || strLower.contains('trendyol') || strLower.contains('pazarama')) {
+      emblem = '+';
+    }
+
+    return InkWell(
+      onTap: () => _onToggleSpecialBadge(!_isSpecialBadgeEnabled),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        child: Row(
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.85, end: 1.0).animate(animation),
+                  child: child,
+                ),
+              ),
+              child: _isSpecialBadgeEnabled
+                  ? StorePriceBadge(
+                      key: const ValueKey('active_badge_icon'),
+                      label: effectiveLabel,
+                      store: effectiveStore,
+                      compact: true,
+                      compactSize: 17,
+                    )
+                  : Container(
+                      key: const ValueKey('inactive_badge_icon'),
+                      width: 17,
+                      height: 17,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                        border: Border.all(
+                          color: isDark ? AppTheme.darkBorder : const Color(0xFFCBD5E1),
+                          width: 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          emblem,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: secondaryTextColor,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '$badgeTitle rozeti',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: _isSpecialBadgeEnabled ? FontWeight.w700 : FontWeight.w500,
+                  color: _isSpecialBadgeEnabled
+                      ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                      : textColor.withValues(alpha: 0.85),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Transform.scale(
+              scale: 0.78,
+              child: Switch(
+                value: _isSpecialBadgeEnabled,
+                activeTrackColor: const Color(0xFF8B5CF6),
+                activeThumbColor: Colors.white,
+                onChanged: _onToggleSpecialBadge,
               ),
             ),
           ],

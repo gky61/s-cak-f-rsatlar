@@ -1,5 +1,8 @@
 # 🏗️ FırsatKolik — Sistem Mimarisi ve Teknik Veri Akışları (System Architecture & Flows)
 
+> [!NOTE]
+> Bu doküman uçtan uca sistem akışları ve sequence diyagramları kılavuzudur. 4 ana menü sıralama algoritmaları, gamification, mesajlaşma, moderasyon ve Web Admin entegrasyonu için lütfen **[Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman, FırsatKolik platformunun (Telegram Userbot, Gemini Yapay Zeka Servisleri, Firebase Altyapısı, Web Yönetim Paneli ve Flutter Mobil Uygulaması) uçtan uca teknik mimarisini, veri modellerini, iletişim protokollerini ve barındırma ortamlarını detaylandırmak amacıyla hazırlanmıştır.
 
 ---

@@ -6,7 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/asset_path_migration.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/botkolik_profile_screen.dart';
-import '../money_badge.dart';
+import '../store_price_badge.dart';
 import 'deal_card_helpers.dart';
 import 'deal_card_badge.dart';
 import '../skeletons/shimmer_box.dart';
@@ -39,45 +39,31 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
     if (deal.hidePrice) return const SizedBox.shrink();
     final hasOriginalPrice = deal.originalPrice != null && deal.originalPrice! > deal.price;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 6,
+      runSpacing: 4,
       children: [
-        if (MoneyBadge.isMoneyDeal(deal)) ...[
-          const MoneyBadge(
-            fontSize: 8,
-            iconSize: 10.5,
-            padding: EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
+        FormattedPriceText(
+          value: deal.price,
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            color: isExpired ? Colors.red[700] : AppTheme.primary,
+            letterSpacing: -0.6,
+            height: 1.0,
           ),
-          const SizedBox(height: 6),
-        ],
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 6,
-          runSpacing: 4,
-          children: [
-            FormattedPriceText(
-              value: deal.price,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w900,
-                color: isExpired ? Colors.red[700] : AppTheme.primary,
-                letterSpacing: -0.6,
-                height: 1.0,
-              ),
-            ),
-            if (hasOriginalPrice)
-              FormattedPriceText(
-                value: deal.originalPrice,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
-                  decoration: TextDecoration.lineThrough,
-                ),
-              ),
-          ],
         ),
+        if (hasOriginalPrice)
+          FormattedPriceText(
+            value: deal.originalPrice,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.grey[500] : AppTheme.textSecondary,
+              decoration: TextDecoration.lineThrough,
+            ),
+          ),
       ],
     );
   }
@@ -469,6 +455,10 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                                 ),
                                               ),
                                             ],
+                                            if (StorePriceBadge.hasBadge(deal: deal)) ...[
+                                              const SizedBox(width: 3.5),
+                                              StorePriceBadge(deal: deal, compact: true),
+                                            ],
                                              // Profil Resmi (Botkolik veya Kullanıcı paylaşımı)
                                              if (deal.isBotkolik) ...[
                                                const SizedBox(width: 6),
@@ -660,32 +650,6 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                // Kampanya açıklaması varsa üstte gösterilir
-                                if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty) ...[
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFFF3E0), // Soft orange amber container
-                                      borderRadius: BorderRadius.circular(6), // Rounded pill shape
-                                      border: Border.all(
-                                        color: const Color(0xFFFFB74D).withValues(alpha: 0.3),
-                                        width: 0.5,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      deal.priceLabel!,
-                                      style: const TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.1,
-                                        color: Color(0xFFE65100), // Clean deep orange tone
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4), // Kampanya açıklaması ile fiyat/buton arası boşluk
-                                ],
                                 // Fiyat ve İncele butonu daima aynı row'da ve dikeyde ortalıdır
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -1,7 +1,7 @@
-Harika, profil geçmişi mantığını da ekleyerek tüm sistemi kapsayan güncellenmiş ve eksiksiz `.md` yol haritasını hazırladım. Yapay zekaya doğrudan bu son halini verebilirsin:
+# 📦 FırsatKolik — Fırsat Temizlik, Favori ve Profil Geçmişi Sistemi Yol Haritası
 
-```markdown
-# Fırsatkolik - Fırsat Temizlik, Favori ve Profil Geçmişi Sistemi Yol Haritası
+> [!NOTE]
+> Bu doküman sistemin ilk tasarım aşamasındaki veri temizlik ve favori önbellekleme yol haritasıdır. Sistemin canlıdaki kesin mimarisi (`deals`, `users/{uid}/favorites/{dealId}`, 48 saatlik soft-expire ve 30 günlük hard-purge) için lütfen **[Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md)** dokümanını inceleyiniz.
 
 Bu yol haritası; Firebase maliyetlerini minimumda tutmak, veritabanını hafifletmek, kullanıcıların geçmiş başarılarını (sosyal kanıt) profillerinde sergilemek ve kullanıcı deneyimini (UX) korumak amacıyla tasarlanmış temizlik, favori ve profil yönetim sistemini kapsamaktadır.
 

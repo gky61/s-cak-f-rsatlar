@@ -10,6 +10,41 @@ class PazaramaScraper extends BaseProductScraper {
     return url.toLowerCase().includes('pazarama.com');
   }
 
+  scrapePriceLabel($) {
+    // 1. DOM: Plus ikonu veya Plus banner/linki
+    const hasPlusImg = $('img[alt*="plus-icon"], img[src*="pz-plus-icon"], img[src*="plus-icon"]').length > 0;
+    if (hasPlusImg) return "Plus ile";
+
+    const hasPlusLink = $('a[href*="pazarama-plus"]').length > 0;
+    if (hasPlusLink) return "Plus ile";
+
+    // 2. Metin bazlı DOM araması
+    let foundText = false;
+    const plusRegex = /(?:pazarama\s*)?plus['’]?\s*(?:ile|a özel|fırsat)|şimdi\s*plus['’]l[ıi]\s*ol/i;
+    $('span, div, p, b, strong, a, label').each((_, el) => {
+      const text = $(el).clone().children().remove().end().text().trim();
+      if (plusRegex.test(text)) {
+        foundText = true;
+        return false;
+      }
+    });
+    if (foundText) return "Plus ile";
+
+    // 3. Script kontrolü
+    let scriptFound = false;
+    const scriptPlusRegex = /pz-plus-icon|pazarama-plus|CART_BASKET_PLUS_PROMO|CMS_PLUS_ADVANTAGES|PLUS_USER_SUBSCRIPTION_STATUS/i;
+    $('script').each((_, el) => {
+      const text = $(el).text();
+      if (text && scriptPlusRegex.test(text)) {
+        scriptFound = true;
+        return false;
+      }
+    });
+    if (scriptFound) return "Plus ile";
+
+    return null;
+  }
+
   scrapeImage($, url) {
     // 1. JSON-LD
     const product = this.findProductJsonLd($);

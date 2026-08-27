@@ -89,8 +89,62 @@ class TrendyolScraper extends BaseProductScraper {
     return null;
   }
 
+  scrapePriceLabel($) {
+    // 1. DOM Seçicileri: Trendyol Plus fiyat/başlık öğeleri
+    const plusSelectors = [
+      '.ty-plus-price-header',
+      '.ty-plus-price',
+      '[class*="ty-plus-price"]',
+      '[class*="ty-plus"]',
+      '[class*="plus-price"]',
+      '.ty-plus-banner-desktop'
+    ];
+
+    for (const sel of plusSelectors) {
+      const el = $(sel).first();
+      if (el.length > 0) {
+        const text = el.text().trim();
+        if (/plus/i.test(text) || sel.includes('ty-plus')) {
+          return "Plus'a Özel";
+        }
+      }
+    }
+
+    // 2. Metin bazlı DOM araması (Plus'a Özel)
+    let foundText = false;
+    $('span, div, p, b, strong, a, label, h1, h2, h3').each((_, el) => {
+      const text = $(el).clone().children().remove().end().text().trim();
+      if (/(?:trendyol\s*)?plus['’]?\s*a\s*özel/i.test(text)) {
+        foundText = true;
+        return false;
+      }
+    });
+    if (foundText) return "Plus'a Özel";
+
+    // 3. Script etiketleri & initial state kontrolü
+    let scriptFound = false;
+    const scriptPlusRegex = /ty-plus|hasPlusPromotion|isPlusExclusive|plusPromotion|(?:trendyol\s*)?plus(?:\\u0027|['’])\s*a\s*özel/i;
+    $('script').each((_, el) => {
+      const text = $(el).text();
+      if (text && scriptPlusRegex.test(text)) {
+        scriptFound = true;
+        return false;
+      }
+    });
+    if (scriptFound) return "Plus'a Özel";
+
+    return null;
+  }
+
   scrapePrice($) {
-    // 1. JSON-LD şemasından (Öncelikli)
+    // 1. Plus indirimli fiyat DOM kontrolü (En spesifik güncel fiyat)
+    const plusPriceEl = $('.ty-plus-price-discounted-price, .ty-plus-price .ty-plus-price-discounted-price, [class*="ty-plus-price-discounted-price"]').first();
+    if (plusPriceEl.length) {
+      const val = this.parsePriceText(plusPriceEl.text());
+      if (val !== null && val > 0) return val;
+    }
+
+    // 2. JSON-LD şemasından (Öncelikli)
     const productJson = this.findProductJsonLd($);
     if (productJson) {
       const priceLd = this.extractPriceFromProductJson(productJson);
@@ -99,7 +153,7 @@ class TrendyolScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback 1)
+    // 3. DOM Seçicileri (Fallback 1)
     const priceSelectors = [
       '.discounted',
       '.prc-dsc',
@@ -121,7 +175,7 @@ class TrendyolScraper extends BaseProductScraper {
       }
     }
 
-    // 3. Script Search (Fallback 2: Initial State / Next Data)
+    // 4. Script Search (Fallback 2: Initial State / Next Data)
     let foundPrice = null;
     $('script').each((_, el) => {
       const text = $(el).text();

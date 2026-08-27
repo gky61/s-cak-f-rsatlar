@@ -27,6 +27,11 @@ import 'aktuel_magazalar_page.dart';
 import 'admin_notifications_screen.dart';
 import 'popular_deals_screen.dart';
 import 'keyword_tracking_screen.dart';
+import 'botkolik_profile_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../utils/asset_path_migration.dart';
+import '../utils/badge_helper.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import '../services/in_app_tutorial_service.dart';
 import '../widgets/in_app_tutorial/tutorial_spotlight_overlay.dart';
@@ -37,14 +42,18 @@ void _log(String message) {
 
 // ViewMode artık DealCard içinde CardViewMode olarak tanımlı
 
+enum SearchScope { deals, users }
+
 class HomeScreen extends StatefulWidget {
   final String? initialSearchQuery;
   final bool startTutorial;
+  final int initialTabIndex;
 
   const HomeScreen({
     super.key,
     this.initialSearchQuery,
     this.startTutorial = false,
+    this.initialTabIndex = 0,
   });
 
   @override
@@ -58,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ThemeService _themeService = ThemeService();
   final InAppTutorialService _tutorialService = InAppTutorialService();
   
+  late int _currentTabIndex;
   String _selectedCategory = 'tumu';
   String? _selectedSubCategory;
   bool _isAdmin = false;
@@ -69,7 +79,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isGeneralNotificationsEnabled = true;
   String _searchQuery = '';
   bool _isSearchMode = false;
+  SearchScope _activeSearchScope = SearchScope.deals;
   final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _matchedUsers = [];
+  bool _isSearchingUsers = false;
+  Timer? _userSearchDebounceTimer;
   final ScrollController _scrollController = ScrollController();
   final ScrollController _categoryScrollController = ScrollController();
   bool _showScrollToTop = false;
@@ -107,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _currentTabIndex = widget.initialTabIndex;
     _tutorialService.refreshKeys();
     _startInitialLoadingTimeout();
     _dealsStream = _firestoreService.getDealsStream();
@@ -151,6 +166,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didUpdateWidget(HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.initialTabIndex != oldWidget.initialTabIndex) {
+      setState(() {
+        _currentTabIndex = widget.initialTabIndex;
+      });
+    }
+
     if (widget.initialSearchQuery != null &&
         widget.initialSearchQuery != oldWidget.initialSearchQuery &&
         widget.initialSearchQuery!.trim().isNotEmpty) {
@@ -214,6 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController.dispose();
     _categoryScrollController.dispose();
     _searchController.dispose();
+    _userSearchDebounceTimer?.cancel();
     super.dispose();
   }
 
@@ -222,6 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
       if (value.isNotEmpty) {
         _handleSharedMedia(value);
+        ReceiveSharingIntent.instance.reset();
       }
     }, onError: (err) {
       _log("getIntentSharingTextList Error: $err");
@@ -233,6 +256,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _handleSharedMedia(value);
         ReceiveSharingIntent.instance.reset();
       }
+    }).catchError((err) {
+      _log("getInitialMedia Error: $err");
     });
   }
 
@@ -828,6 +853,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _isSearchMode = !_isSearchMode;
       _displayLimit = 20;
+      _activeSearchScope = SearchScope.deals;
       if (_isSearchMode) {
         _searchController.text = _searchQuery;
         // Arama modu açıldığında cursor'u sona al
@@ -840,43 +866,116 @@ class _HomeScreenState extends State<HomeScreen> {
         // Arama modu kapatıldığında sorguyu temizle
         _searchQuery = '';
         _searchController.clear();
+        _matchedUsers = [];
+        _isSearchingUsers = false;
+        _userSearchDebounceTimer?.cancel();
       }
     });
   }
 
   void _onSearchChanged(String value) {
+    if (value.startsWith('@') && _activeSearchScope != SearchScope.users) {
+      _activeSearchScope = SearchScope.users;
+    }
+
     setState(() {
       _searchQuery = value;
       _displayLimit = 20;
     });
+
+    _userSearchDebounceTimer?.cancel();
+    final query = value.replaceFirst('@', '').trim();
+    if (query.length >= 2) {
+      _userSearchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+        _searchUsers(query);
+      });
+    } else {
+      setState(() {
+        _matchedUsers = [];
+        _isSearchingUsers = false;
+      });
+    }
   }
 
   void _clearSearch() {
+    _userSearchDebounceTimer?.cancel();
     setState(() {
       _searchQuery = '';
       _searchController.clear();
+      _matchedUsers = [];
+      _isSearchingUsers = false;
       _displayLimit = 20;
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).colorScheme.primary;
-    return PopScope(
-      canPop: !_isSearchMode,
-      onPopInvokedWithResult: (bool didPop, dynamic result) {
-        if (!didPop && _isSearchMode) {
-          // Arama modu açıksa geri tuşuna basıldığında arama modunu kapat
-          _toggleSearchMode();
+  Future<void> _searchUsers(String rawQuery) async {
+    final currentUserId = _authService.currentUser?.uid;
+    final normalized = DealSearchEngine.normalizeText(rawQuery);
+    if (normalized.isEmpty) return;
+
+    setState(() => _isSearchingUsers = true);
+    try {
+      final results = <Map<String, dynamic>>[];
+
+      // 1. Botkolik kontrolü
+      if ('botkolik'.contains(normalized) || 'bot'.contains(normalized)) {
+        results.add({
+          'id': 'botkolik',
+          'name': 'Botkolik',
+          'username': 'botkolik',
+          'isBot': true,
+          'imageUrl': 'assets/botkolik.webp',
+        });
+      }
+
+      // 2. Firestore Users koleksiyonundan arama (limit 30)
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .limit(30)
+          .get();
+
+      for (final doc in snap.docs) {
+        if (doc.id == currentUserId) continue; // Kendini listede arama sonucunda gösterme
+        if (doc.id == 'botkolik' && results.any((r) => r['id'] == 'botkolik')) continue;
+
+        final data = doc.data();
+        final username = (data['username'] ?? '').toString();
+        final displayName = (data['displayName'] ?? '').toString();
+        final normUsername = DealSearchEngine.normalizeText(username);
+        final normDisplay = DealSearchEngine.normalizeText(displayName);
+
+        if (normUsername.contains(normalized) || normDisplay.contains(normalized)) {
+          results.add({
+            'id': doc.id,
+            'name': displayName.isNotEmpty ? displayName : (username.isNotEmpty ? username : 'Kullanıcı'),
+            'username': username.isNotEmpty ? username : (displayName.isNotEmpty ? displayName : 'kullanici'),
+            'isBot': false,
+            'imageUrl': migrateAssetPath(data['profileImageUrl']?.toString() ?? ''),
+            'pinnedBadge': data['pinnedBadge']?.toString(),
+          });
         }
-      },
-      child: Scaffold(
+      }
+
+      if (mounted) {
+        setState(() {
+          _matchedUsers = results;
+          _isSearchingUsers = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isSearchingUsers = false);
+      }
+    }
+  }
+
+  Widget _buildHomeScreenTab(bool isDark, Color primaryColor) {
+    return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(
           MediaQuery.of(context).padding.top +
-          (_isSearchMode ? 56 : 132),
+          (_isSearchMode ? 102 : 132),
         ),
         child: Container(
           decoration: BoxDecoration(
@@ -901,9 +1000,9 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // ─── ARAMA MODU ────────────────────────────────────────
-                if (_isSearchMode)
+                if (_isSearchMode) ...[
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 6, 12, 8),
+                    padding: const EdgeInsets.fromLTRB(14, 6, 12, 6),
                     child: Row(
                       children: [
                         Expanded(
@@ -940,7 +1039,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fontWeight: FontWeight.w600,
                               ),
                               decoration: InputDecoration(
-                                hintText: 'Fırsat, marka, mağaza veya kupon ara...',
+                                hintText: _activeSearchScope == SearchScope.users
+                                    ? 'Kullanıcı adı (@kullanıcı) veya isim ara...'
+                                    : 'Fırsat, marka, mağaza veya kupon ara...',
                                 hintStyle: TextStyle(
                                   color: isDark
                                       ? AppTheme.darkTextSecondary
@@ -992,8 +1093,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
-                  )
-                else ...[
+                  ),
+                  _buildSearchScopeSelector(isDark, primaryColor),
+                ] else ...[
                   // ─── SATIR 1: Wordmark + İkonlar ─────────────────────
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 6, 12, 4),
@@ -1310,8 +1412,10 @@ class _HomeScreenState extends State<HomeScreen> {
           const OfflineBanner(),
           // Liste
           Expanded(
-            child: StreamBuilder<DealsSnapshot>(
-              stream: _dealsStream,
+            child: (_isSearchMode && _activeSearchScope == SearchScope.users)
+                ? _buildDedicatedUserSearchResults(isDark, primaryColor)
+                : StreamBuilder<DealsSnapshot>(
+                    stream: _dealsStream,
               builder: (context, snapshot) {
                 // StreamBuilder optimizasyonu - sadece gerekli durumlarda rebuild
                 // Hata durumu
@@ -1404,40 +1508,40 @@ class _HomeScreenState extends State<HomeScreen> {
                   final normalizedQuery = _notificationService.normalizeKeyword(cleanQuery);
                   final isFollowed = _followedKeywords.contains(normalizedQuery);
 
-                  return Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(22),
-                            decoration: BoxDecoration(
-                              color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: primaryColor.withValues(alpha: 0.25),
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Icon(
-                              _searchQuery.isNotEmpty ? Icons.radar_rounded : Icons.inbox_rounded,
-                              size: 54,
-                              color: primaryColor,
+                  return SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(22),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: primaryColor.withValues(alpha: 0.25),
+                              width: 1.5,
                             ),
                           ),
-                          const SizedBox(height: 18),
-                          Text(
-                            _searchQuery.isNotEmpty
-                                ? 'Aradığın "$cleanQuery" ile ilgili taze fırsat bulamadık'
-                                : 'Henüz fırsat eklenmemiş',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: isDark ? Colors.white : AppTheme.textPrimary,
-                              fontSize: 16.5,
-                              fontWeight: FontWeight.w800,
-                            ),
+                          child: Icon(
+                            _searchQuery.isNotEmpty ? Icons.radar_rounded : Icons.inbox_rounded,
+                            size: 54,
+                            color: primaryColor,
                           ),
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          _searchQuery.isNotEmpty
+                              ? 'Aradığın "$cleanQuery" ile ilgili taze fırsat bulamadık'
+                              : 'Henüz fırsat eklenmemiş',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : AppTheme.textPrimary,
+                            fontSize: 16.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                           const SizedBox(height: 8),
                           Text(
                             _searchQuery.isNotEmpty
@@ -1553,9 +1657,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ],
                       ),
-                    ),
-                  );
-                }
+                    );
+                  }
 
                 // Pagination için gösterilecek deal'ler
                 final dealsToShow = filteredDeals.take(_displayLimit).toList();
@@ -1592,9 +1695,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   strokeWidth: 3.0,
                   child: Column(
                     children: [
-                      if (_searchQuery.trim().isNotEmpty)
+                      if (_searchQuery.trim().isNotEmpty) ...[
                         Container(
-                          margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+                          margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8.5),
                           decoration: BoxDecoration(
                             color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
@@ -1659,6 +1762,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                         ),
+                      ],
                       Expanded(
                         child: _viewMode == CardViewMode.vertical
                             ? GridView.builder(
@@ -1779,14 +1883,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   }
                                   
                                   // Reklam pozisyonunu kontrol et (5-6-5-6-5-6 pattern)
-                                  // Reklam pozisyonları: 5, 12, 18, 25, 31, 38, ...
-                                  
-                                  // Kaç reklam geçtiğini hesapla
                                   int passedAds = 0;
                                   for (int i = 0; i < adPositions.length; i++) {
                                     final adPosition = adPositions[i];
                                     if (index == adPosition) {
-                                      // Bu pozisyon bir reklam pozisyonu
                                       return RepaintBoundary(
                                         key: ValueKey('ad_card_horizontal_$i'),
                                         child: AdDealCard(
@@ -1805,7 +1905,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     return const SizedBox.shrink();
                                   }
                                   final deal = dealsToShow[actualIndex];
-                                  final listCardWidget = DealCard(
+                                  final cardWidget = DealCard(
                                     deal: deal,
                                     viewMode: CardViewMode.horizontal,
                                     onTap: () => Navigator.push(
@@ -1821,9 +1921,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     child: actualIndex == 0
                                         ? Container(
                                             key: _tutorialService.firstDealCardKey,
-                                            child: listCardWidget,
+                                            child: cardWidget,
                                           )
-                                        : listCardWidget,
+                                        : cardWidget,
                                   );
                                 },
                               ),
@@ -1835,129 +1935,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: (isDark ? AppTheme.darkSurface : Colors.white).withValues(alpha: 0.95),
-          border: Border(
-            top: BorderSide(
-              color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-              width: 1.0,
-            ),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.only(bottom: 8, top: 4),
-        child: SafeArea(
-          top: false,
-          child: Row(
-            children: [
-              // 1. Ana Sayfa - Çift tıklama ile "Tümü" kategorisine geç
-              _buildBottomNavItem(
-                icon: Icons.home_rounded,
-                label: 'Ana Sayfa',
-                isSelected: true,
-                onTap: () {
-                  final now = DateTime.now();
-                  
-                  // Her durumda listeyi en üste kaydır
-                  _scrollToTop();
-                  
-                  if (_lastHomeButtonTap != null &&
-                      now.difference(_lastHomeButtonTap!) < _doubleTapTimeLimit) {
-                    // Çift tıklama algılandı - "Tümü" kategorisine geç
-                    setState(() {
-                      _selectedCategory = 'tumu';
-                      _selectedSubCategory = null;
-                      _displayLimit = 20;
-                    });
-                    // Kategori barını başa kaydır
-                    if (_categoryScrollController.hasClients) {
-                      _categoryScrollController.animateTo(
-                        0,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      );
-                    }
-                    _lastHomeButtonTap = null;
-                  } else {
-                    // İlk tıklama
-                    _lastHomeButtonTap = now;
-                  }
-                },
-              ),
-              // 2. Kaydedilenler
-              _buildBottomNavItem(
-                targetKey: _tutorialService.bottomNavSavedKey,
-                icon: Icons.bookmark_rounded,
-                label: 'Kaydedilenler',
-                isSelected: false,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const FavoritesScreen()),
-                  );
-                },
-              ),
-              // 3. Popüler Fırsatlar (Tam Ortada)
-              _buildBottomNavItem(
-                targetKey: _tutorialService.bottomNavPopularKey,
-                icon: Icons.whatshot_rounded,
-                label: 'Popüler',
-                isSelected: false,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const PopularDealsScreen()),
-                  );
-                },
-              ),
-              // 4. Fırsat Paylaş
-              _buildBottomNavItem(
-                targetKey: _tutorialService.bottomNavAddKey,
-                icon: Icons.add_circle_outline_rounded,
-                label: 'Fırsat Paylaş',
-                isSelected: false,
-                onTap: () {
-                  final user = _authService.currentUser;
-                  if (user == null) {
-                    showGuestLoginBottomSheet(
-                      context,
-                      title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
-                      message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
-                      primaryButtonText: '🚀 Google ile Giriş Yap',
-                    );
-                    return;
-                  }
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SubmitDealScreen()),
-                  );
-                },
-              ),
-              // 5. Profil
-              _buildBottomNavItem(
-                targetKey: _tutorialService.bottomNavProfileKey,
-                icon: Icons.person_rounded,
-                label: 'Profil',
-                isSelected: false,
-                badgeCount: _unreadMessageCount + _unreadAdminMessageCount,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
       ),
       floatingActionButton: _showScrollToTop
           ? FloatingActionButton.small(
@@ -1972,12 +1949,161 @@ class _HomeScreenState extends State<HomeScreen> {
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    return PopScope(
+      canPop: !_isSearchMode && _currentTabIndex == 0,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop) {
+          if (_isSearchMode) {
+            _toggleSearchMode();
+          } else if (_currentTabIndex != 0) {
+            setState(() => _currentTabIndex = 0);
+          }
+        }
+      },
+      child: Scaffold(
+        backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+        body: IndexedStack(
+          index: _currentTabIndex,
+          children: [
+            _buildHomeScreenTab(isDark, primaryColor),
+            const PopularDealsScreen(isRootTab: true),
+            const FavoritesScreen(isRootTab: true),
+            const ProfileScreen(isRootTab: true),
+          ],
+        ),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: (isDark ? AppTheme.darkSurface : Colors.white).withValues(alpha: isDark ? 0.98 : 0.96),
+            border: Border(
+              top: BorderSide(
+                color: isDark ? const Color(0xFF262626) : const Color(0xFFF1F5F9),
+                width: 0.8,
+              ),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.03),
+                blurRadius: 12,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: SafeArea(
+            top: false,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // 1. Ana Sayfa (Index 0)
+                _buildBottomNavItem(
+                  icon: Icons.home_outlined,
+                  activeIcon: Icons.home_rounded,
+                  label: 'Ana Sayfa',
+                  isSelected: _currentTabIndex == 0,
+                  onTap: () {
+                    if (_currentTabIndex != 0) {
+                      setState(() => _currentTabIndex = 0);
+                      return;
+                    }
+                    final now = DateTime.now();
+                    _scrollToTop();
+                    if (_lastHomeButtonTap != null &&
+                        now.difference(_lastHomeButtonTap!) < _doubleTapTimeLimit) {
+                      setState(() {
+                        _selectedCategory = 'tumu';
+                        _selectedSubCategory = null;
+                        _displayLimit = 20;
+                      });
+                      if (_categoryScrollController.hasClients) {
+                        _categoryScrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
+                      }
+                      _lastHomeButtonTap = null;
+                    } else {
+                      _lastHomeButtonTap = now;
+                    }
+                  },
+                ),
+                // 2. Popüler Fırsatlar (Index 1)
+                _buildBottomNavItem(
+                  targetKey: _tutorialService.bottomNavPopularKey,
+                  icon: Icons.whatshot_outlined,
+                  activeIcon: Icons.whatshot_rounded,
+                  label: 'Popüler',
+                  isSelected: _currentTabIndex == 1,
+                  onTap: () {
+                    setState(() => _currentTabIndex = 1);
+                  },
+                ),
+                // 3. Özel Dairesel Orta Buton (Aksiyon: Fırsat Paylaş - Odak Formu)
+                _buildCenterActionButton(
+                  targetKey: _tutorialService.bottomNavAddKey,
+                  onTap: () {
+                    final user = _authService.currentUser;
+                    if (user == null) {
+                      showGuestLoginBottomSheet(
+                        context,
+                        title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
+                        message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
+                        primaryButtonText: '🚀 Google ile Giriş Yap',
+                      );
+                      return;
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SubmitDealScreen(),
+                        fullscreenDialog: true,
+                      ),
+                    );
+                  },
+                ),
+                // 4. Kaydedilenler (Index 2)
+                _buildBottomNavItem(
+                  targetKey: _tutorialService.bottomNavSavedKey,
+                  icon: Icons.bookmark_outline_rounded,
+                  activeIcon: Icons.bookmark_rounded,
+                  label: 'Kaydedilenler',
+                  isSelected: _currentTabIndex == 2,
+                  onTap: () {
+                    setState(() => _currentTabIndex = 2);
+                  },
+                ),
+                // 5. Profil (Index 3)
+                _buildBottomNavItem(
+                  targetKey: _tutorialService.bottomNavProfileKey,
+                  icon: Icons.person_outline_rounded,
+                  activeIcon: Icons.person_rounded,
+                  label: 'Profil',
+                  isSelected: _currentTabIndex == 3,
+                  badgeCount: _unreadMessageCount + _unreadAdminMessageCount,
+                  onTap: () {
+                    setState(() => _currentTabIndex = 3);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
+  /// Minimalist & Ferah Alt Menü Butonu
   Widget _buildBottomNavItem({
     required IconData icon,
+    IconData? activeIcon,
     required String label,
     required bool isSelected,
     required VoidCallback onTap,
@@ -1985,69 +2111,135 @@ class _HomeScreenState extends State<HomeScreen> {
     Key? targetKey,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inactiveColor = isDark ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93);
+    const activeColor = AppTheme.primary;
+
     return Expanded(
       child: InkWell(
         onTap: () {
           HapticFeedback.lightImpact();
           onTap();
         },
-        borderRadius: BorderRadius.circular(12),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
         child: Container(
           key: targetKey,
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: 2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Stack(
                 clipBehavior: Clip.none,
+                alignment: Alignment.center,
                 children: [
-                  Container(
-                    width: 38,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: isSelected 
-                          ? AppTheme.primary.withValues(alpha: isDark ? 0.18 : 0.12)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Icon(
-                      icon,
-                      color: isSelected 
-                          ? AppTheme.primary
-                          : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
-                      size: 18,
-                    ),
+                  Icon(
+                    isSelected ? (activeIcon ?? icon) : icon,
+                    color: isSelected ? activeColor : inactiveColor,
+                    size: 24,
                   ),
-                  // Sağ alt köşede kırmızı nokta (bildirim göstergesi)
+                  // Sağ üst köşede zarif bildirim göstergesi
                   if (badgeCount > 0)
                     Positioned(
-                      right: -2,
-                      bottom: -2,
+                      right: -3,
+                      top: -1,
                       child: Container(
-                        width: 9,
-                        height: 9,
+                        width: 7.5,
+                        height: 7.5,
                         decoration: BoxDecoration(
                           color: const Color(0xFFEF4444),
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: isDark ? AppTheme.darkSurface : Colors.white,
-                            width: 1.8,
+                            width: 1.2,
                           ),
                         ),
                       ),
                     ),
                 ],
               ),
-              const SizedBox(height: 2.5),
+              const SizedBox(height: 3.5),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                  color: isSelected 
-                      ? AppTheme.primary
-                      : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                  fontSize: 10.0,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? activeColor : inactiveColor,
                   letterSpacing: -0.1,
+                  height: 1.1,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Minimalist & Uyumlu Orta Buton (Fırsat Paylaş)
+  Widget _buildCenterActionButton({
+    required VoidCallback onTap,
+    Key? targetKey,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const activeColor = AppTheme.primary;
+
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          onTap();
+        },
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        child: Container(
+          key: targetKey,
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFFFF7A45), // Canlı Turuncu
+                      Color(0xFFFF3D00), // Ateş / Marka Turuncusu
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF5722).withValues(alpha: isDark ? 0.35 : 0.25),
+                      blurRadius: 6,
+                      offset: const Offset(0, 1.5),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.add_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 3.5),
+              Text(
+                'Fırsat Paylaş',
+                style: TextStyle(
+                  fontSize: 10.0,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? const Color(0xFFFF8C5A) : activeColor,
+                  letterSpacing: -0.1,
+                  height: 1.1,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -2510,5 +2702,702 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildSearchScopeSelector(bool isDark, Color primaryColor) {
+    final trackBg = isDark ? const Color(0xFF13161C) : const Color(0xFFF1F5F9);
+    final trackBorder = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0);
+    final activeTabBg = isDark ? const Color(0xFF252A34) : Colors.white;
+    final activeTabBorder = isDark
+        ? Border.all(color: Colors.white.withValues(alpha: 0.12), width: 0.8)
+        : Border.all(color: Colors.black.withValues(alpha: 0.04), width: 0.8);
+    final isDealsActive = _activeSearchScope == SearchScope.deals;
+    final isUsersActive = _activeSearchScope == SearchScope.users;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: trackBg,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: trackBorder,
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          children: [
+            // ─── Fırsatlar Tab ───
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (!isDealsActive) {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      _activeSearchScope = SearchScope.deals;
+                    });
+                  }
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isDealsActive ? activeTabBg : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: isDealsActive ? activeTabBorder : null,
+                    boxShadow: isDealsActive
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.local_offer_rounded,
+                        size: 13.5,
+                        color: isDealsActive
+                            ? primaryColor
+                            : (isDark ? const Color(0xFF6E7681) : const Color(0xFF94A3B8)),
+                      ),
+                      const SizedBox(width: 5.5),
+                      Text(
+                        'Fırsatlar',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: isDealsActive ? FontWeight.w600 : FontWeight.w500,
+                          letterSpacing: -0.2,
+                          color: isDealsActive
+                              ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                              : (isDark ? const Color(0xFF8B949E) : const Color(0xFF64748B)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            // ─── Kullanıcılar Tab ───
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (!isUsersActive) {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      _activeSearchScope = SearchScope.users;
+                    });
+                    final query = _searchQuery.replaceFirst('@', '').trim();
+                    if (query.length >= 2 && _matchedUsers.isEmpty && !_isSearchingUsers) {
+                      _searchUsers(query);
+                    }
+                  }
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isUsersActive ? activeTabBg : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: isUsersActive ? activeTabBorder : null,
+                    boxShadow: isUsersActive
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.people_alt_rounded,
+                        size: 13.5,
+                        color: isUsersActive
+                            ? primaryColor
+                            : (isDark ? const Color(0xFF6E7681) : const Color(0xFF94A3B8)),
+                      ),
+                      const SizedBox(width: 5.5),
+                      Text(
+                        'Kullanıcılar',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: isUsersActive ? FontWeight.w600 : FontWeight.w500,
+                          letterSpacing: -0.2,
+                          color: isUsersActive
+                              ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                              : (isDark ? const Color(0xFF8B949E) : const Color(0xFF64748B)),
+                        ),
+                      ),
+                      if (_matchedUsers.isNotEmpty) ...[
+                        const SizedBox(width: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: isUsersActive
+                                ? primaryColor.withValues(alpha: isDark ? 0.22 : 0.12)
+                                : (isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.05)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${_matchedUsers.length}',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: isUsersActive
+                                  ? (isDark ? const Color(0xFFFF9566) : primaryColor)
+                                  : (isDark ? const Color(0xFF8B949E) : const Color(0xFF64748B)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDedicatedUserSearchResults(bool isDark, Color primaryColor) {
+    // 1. Arama henüz yapılmadıysa (Arama kutusu boş)
+    if (_searchQuery.replaceFirst('@', '').trim().isEmpty) {
+      return Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.25),
+                    width: 1.5,
+                  ),
+                ),
+                child: Icon(
+                  Icons.person_search_rounded,
+                  size: 48,
+                  color: primaryColor,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Kullanıcı veya Profil Ara',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.white : AppTheme.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'FırsatKolik topluluğundaki kullanıcıları bulmak için arama çubuğuna kullanıcı adı veya isim yazabilirsiniz.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 22),
+              // Botkolik Hızlı Öneri Kartı
+              Container(
+                constraints: const BoxConstraints(maxWidth: 320),
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.darkSurface : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                      child: Row(
+                        children: [
+                          _buildUserAvatar('assets/botkolik.webp', 'Botkolik', true, primaryColor, 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Botkolik',
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark ? Colors.white : AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    _buildBotBadge(),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '@botkolik • Fırsat Asistanı',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: isDark ? Colors.grey[400] : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
+                            color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 2. Arama yapılıyorsa (Loading)
+    if (_isSearchingUsers) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 30,
+              height: 30,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: primaryColor,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Kullanıcılar aranıyor...',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. Eşleşen kullanıcılar bulunduysa (Results List)
+    if (_matchedUsers.isNotEmpty) {
+      return ListView.separated(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+        itemCount: _matchedUsers.length + 1,
+        separatorBuilder: (_, index) => index == 0 ? const SizedBox.shrink() : const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            // Sonuç Başlığı
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8.5),
+              decoration: BoxDecoration(
+                color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: primaryColor.withValues(alpha: 0.25),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.people_alt_rounded, color: primaryColor, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        text: '"${_searchQuery.trim()}" araması: ',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : AppTheme.textPrimary,
+                          fontSize: 13,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '${_matchedUsers.length} kullanıcı bulundu',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: primaryColor,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _clearSearch,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.close_rounded, size: 13, color: isDark ? Colors.white70 : Colors.black54),
+                          const SizedBox(width: 3),
+                          Text(
+                            'Temizle',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white70 : Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final user = _matchedUsers[index - 1];
+          final name = user['name'] as String;
+          final username = user['username'] as String;
+          final imageUrl = user['imageUrl'] as String;
+          final isBot = user['isBot'] == true;
+          final pinnedBadge = user['pinnedBadge'] as String?;
+
+          return Container(
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkSurface : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                width: 0.9,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _navigateToUserProfile(user),
+                borderRadius: BorderRadius.circular(14),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  child: Row(
+                    children: [
+                      _buildUserAvatar(imageUrl, name, isBot, primaryColor, 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark ? Colors.white : AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                if (isBot) ...[
+                                  const SizedBox(width: 5),
+                                  _buildBotBadge(),
+                                ] else if (pinnedBadge != null && pinnedBadge.isNotEmpty) ...[
+                                  const SizedBox(width: 5),
+                                  _buildPinnedBadge(pinnedBadge),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '@$username',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? Colors.grey[400] : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Profili Gör',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: primaryColor,
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            Icon(Icons.arrow_forward_ios_rounded, size: 10, color: primaryColor),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    // 4. Eşleşen kullanıcı bulunamadı (Empty state)
+    final cleanQuery = _searchQuery.trim();
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: isDark ? 0.15 : 0.08),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDark ? Colors.white12 : Colors.grey.shade300,
+                  width: 1.5,
+                ),
+              ),
+              child: Icon(
+                Icons.person_off_rounded,
+                size: 48,
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '"$cleanQuery" adında kullanıcı bulunamadı',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isDark ? Colors.white : AppTheme.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Kullanıcı adını veya görünen ismi kontrol ederek tekrar arayabilirsiniz.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: _clearSearch,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Aramayı Sıfırla'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: isDark ? Colors.grey[300] : AppTheme.textPrimary,
+                side: BorderSide(
+                  color: isDark ? Colors.white24 : Colors.grey[300]!,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserAvatar(String imageUrl, String name, bool isBot, Color primaryColor, double radius) {
+    if (isBot || name.toLowerCase() == 'botkolik') {
+      return Container(
+        width: radius * 2 + 4,
+        height: radius * 2 + 4,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            colors: [Color(0xFF00F0FF), Color(0xFF6366F1), Color(0xFFFF6B35)],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF00F0FF).withValues(alpha: 0.3),
+              blurRadius: 6,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(1.5),
+        child: Container(
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: Color(0xFF0F172A),
+          ),
+          child: ClipOval(
+            child: Image.asset(
+              'assets/botkolik.webp',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Icon(Icons.smart_toy_rounded, size: radius, color: const Color(0xFF00F0FF)),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (imageUrl.isNotEmpty) {
+      final isAsset = imageUrl.startsWith('assets/');
+      return Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: primaryColor.withValues(alpha: 0.4),
+            width: 1.5,
+          ),
+        ),
+        child: CircleAvatar(
+          radius: radius,
+          backgroundColor: primaryColor.withValues(alpha: 0.1),
+          backgroundImage: isAsset
+              ? AssetImage(imageUrl) as ImageProvider
+              : CachedNetworkImageProvider(imageUrl),
+          onBackgroundImageError: (_, __) {},
+        ),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: primaryColor.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+      ),
+      child: CircleAvatar(
+        radius: radius,
+        backgroundColor: primaryColor.withValues(alpha: 0.12),
+        child: Text(
+          name.isNotEmpty ? name[0].toUpperCase() : 'U',
+          style: TextStyle(
+            color: primaryColor,
+            fontWeight: FontWeight.w800,
+            fontSize: radius * 0.8,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBotBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'BOT',
+        style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.blue),
+      ),
+    );
+  }
+
+  Widget _buildPinnedBadge(String pinnedBadge) {
+    final badge = BadgeHelper.getBadgeInfo(pinnedBadge);
+    if (badge == null) return const SizedBox.shrink();
+    return Icon(badge.iconData, size: 12, color: badge.color);
+  }
+
+  void _navigateToUserProfile(Map<String, dynamic> user) {
+    HapticFeedback.lightImpact();
+    if (user['isBot'] == true) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProfileScreen(userId: user['id'] as String),
+        ),
+      );
+    }
   }
 }

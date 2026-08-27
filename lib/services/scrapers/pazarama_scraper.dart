@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:html/dom.dart' as dom;
 import 'base_scraper.dart';
@@ -5,6 +6,38 @@ import 'base_scraper.dart';
 class PazaramaScraper extends BaseProductScraper {
   @override
   String get domain => 'pazarama.com';
+
+  @override
+  FutureOr<String?> scrapePriceLabel(dom.Document document) {
+    // 1. DOM: Plus ikonu veya Plus banner/linki
+    final plusImgs = document.querySelectorAll('img[alt*="plus-icon"], img[src*="pz-plus-icon"], img[src*="plus-icon"]');
+    if (plusImgs.isNotEmpty) return 'Plus ile';
+
+    final plusLinks = document.querySelectorAll('a[href*="pazarama-plus"]');
+    if (plusLinks.isNotEmpty) return 'Plus ile';
+
+    // 2. Metin bazlı DOM araması (Plus ile / Şimdi Plus'lı Ol)
+    final plusRegex = RegExp(r'''(?:pazarama\s*)?plus['’]?\s*(?:ile|a özel|fırsat)|şimdi\s*plus['’]l[ıi]\s*ol''', caseSensitive: false);
+    final elements = document.querySelectorAll('span, div, p, b, strong, a, label');
+    for (final el in elements) {
+      final text = el.text.trim();
+      if (plusRegex.hasMatch(text)) {
+        return 'Plus ile';
+      }
+    }
+
+    // 3. Script etiketleri kontrolü
+    final scripts = document.querySelectorAll('script');
+    final scriptPlusRegex = RegExp(r'pz-plus-icon|pazarama-plus|CART_BASKET_PLUS_PROMO|CMS_PLUS_ADVANTAGES|PLUS_USER_SUBSCRIPTION_STATUS', caseSensitive: false);
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.isNotEmpty && scriptPlusRegex.hasMatch(text)) {
+        return 'Plus ile';
+      }
+    }
+
+    return null;
+  }
 
   @override
   String? scrape({

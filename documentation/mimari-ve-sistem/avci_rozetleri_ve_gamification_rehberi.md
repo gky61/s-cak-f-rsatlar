@@ -1,5 +1,8 @@
 # 🏆 FırsatKolik — Avcı Rozetleri ve Oyunlaştırma (Gamification) Mimari Rehberi
 
+> [!NOTE]
+> Bu doküman 16+ Avcı Rozeti, 5 kademe ve 10 rütbe gamification kataloğudur. Sistemin uçtan uca mimarisi, gösterim algoritmaları, mesajlaşma, moderasyon ve Web Admin entegrasyonu için lütfen **[Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman, **FırsatKolik** platformundaki kullanıcı bağlılığını, kaliteli fırsat paylaşımını ve topluluk etkileşimini sürdürülebilir kılmak amacıyla geliştirilen **Avcı Rozetleri ve Oyunlaştırma (Gamification)** mimarisinin tüm teknik detaylarını, veri modellerini, otomatik kazanma algoritmalarını, dinamik rütbe gösterimini ve hile önleme kurallarını belgeler.
 
 ---

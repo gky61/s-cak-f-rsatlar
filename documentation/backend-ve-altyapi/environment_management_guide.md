@@ -1,5 +1,8 @@
 # ⚙️ FırsatKolik — Ortam Yönetimi ve Canlıya Geçiş Kılavuzu (Environment Management)
 
+> [!NOTE]
+> Bu doküman Ortam Yönetimi ve Canlıya Geçiş operasyonel el kitabıdır. Sistemin güncel güvenlik kuralları, 26 Cloud Function envanteri, sıfır maliyet VM mimarisi ve test süitleri için lütfen **[Backend ve Bulut Altyapısı Master Mimari Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/backend_ve_altyapi_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman, FırsatKolik projesinde Geliştirme (DEV) ve Canlı (PROD) ortamlarının mobil, web, cloud functions ve bot katmanlarında nasıl yönetileceğini ve hangi komutlarla operasyon yapılacağını açıklayan operasyonel el kitabıdır.
 
 ---

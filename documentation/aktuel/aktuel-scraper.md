@@ -1,3 +1,8 @@
+# Akakçe Broşür Kazıma ve Doğrulama Notları
+
+> [!NOTE]
+> Bu doküman Akakçe DOM kazıma referans notlarıdır. Sistemin canlıdaki eksiksiz mimari, 5 aşamalı WAF bypass motoru, veri, güvenlik ve kazıma kontratı için lütfen **[Aktüel Kataloglar ve Broşürler Master Mimari Rehberi](file:///d:/firsatkolik/documentation/aktuel/aktuel_kataloglar_modulu_rehberi.md)** dokümanını inceleyiniz.
+
 Yeni scraping mekanizması:
 
 scrape edilecek link: https://www.akakce.com/brosurler/
@@ -29,6 +34,17 @@ Bizim Toptan: https://www.akakce.com/brosurler/bizimtoptan
 Teknosa: https://www.akakce.com/brosurler/teknosacom
 Vatan Bilgisayar: https://www.akakce.com/brosurler/vatanbilgisayar
 Vestel: https://www.akakce.com/brosurler/vestel
+Arçelik: https://www.akakce.com/brosurler/arcelik
+Beko: https://www.akakce.com/brosurler/beko
+Bosch: https://www.akakce.com/brosurler/bosch-home
+Bauhaus: https://www.akakce.com/brosurler/bauhaus
+Siemens: https://www.akakce.com/brosurler/siemens-home
+Mopaş: https://www.akakce.com/brosurler/mopas
+Koçtaş: https://www.akakce.com/brosurler/koctascom
+Özkuruşlar: https://www.akakce.com/brosurler/ozkuruslargida
+Tedi: https://www.akakce.com/brosurler/tedi
+Tahtakale: https://www.akakce.com/brosurler/tahtakalespot
+Tekzen: https://www.akakce.com/brosurler/tekzen
 
 
 Tüm linklerde yapı benzer zaten. Tekbir tanesi için eğer kuponları çekebilirsen diğerleri için de çalışacaktır. Şimdi sana  tek bir tanesi üzerinden nasıl bilgileri çekmen gerektiğini anlatacağım.

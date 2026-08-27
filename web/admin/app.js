@@ -1370,6 +1370,39 @@ function renderDeals() {
     });
 }
 
+// Rozet ve Özel Fiyat Etiketi (priceLabel) HTML üretici
+function getPriceBadgeHtml(priceLabel, store = '') {
+    if (!priceLabel || priceLabel.trim() === '') {
+        return '<span class="text-xs italic text-slate-400 dark:text-slate-500">Rozet Yok (Standart Ürün)</span>';
+    }
+    const label = priceLabel.trim();
+    const labelUpper = label.toUpperCase();
+    const storeLower = (store || '').toLowerCase();
+    
+    if (labelUpper.includes('MONEY') || storeLower.includes('migros')) {
+        return `
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-300 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-500 text-amber-950 text-xs font-bold shadow-sm" style="box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);">
+                <img src="../assets/money.webp" class="w-4 h-4 rounded-full object-cover shadow-sm ring-1 ring-black/20" onerror="this.outerHTML='<span class=\\'inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-950 text-[10px] text-amber-400 font-bold\\'>M</span>';"/>
+                <span class="tracking-tight text-amber-950 font-bold">${escapeHtml(label)}</span>
+            </div>
+        `;
+    }
+
+    let emblem = 'P';
+    if (labelUpper.includes('PLUS') || storeLower.includes('trendyol') || storeLower.includes('pazarama')) {
+        emblem = '+';
+    } else if (labelUpper.includes('PRIME') || labelUpper.includes('PREMIUM')) {
+        emblem = 'P';
+    }
+    
+    return `
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300 text-xs font-bold shadow-sm">
+            <span class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-black text-white" style="background: linear-gradient(135deg, #FF6000, #8B5CF6); line-height: 1;">${emblem}</span>
+            <span>${escapeHtml(label)}</span>
+        </div>
+    `;
+}
+
 // Create deal table row
 function createDealRow(deal) {
     const row = document.createElement('tr');
@@ -1483,6 +1516,11 @@ function createDealRow(deal) {
                     <p class="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
                         ${escapeHtml(deal.category || 'Genel')} • ${escapeHtml(deal.store || 'Bilinmeyen')}
                         ${deal.brand ? ` • <span class="font-semibold text-slate-700 dark:text-slate-300">Marka: ${escapeHtml(deal.brand)}</span>` : ''}
+                        ${deal.priceLabel ? (
+                            (deal.priceLabel.toUpperCase().includes('MONEY') || (deal.store && deal.store.toLowerCase().includes('migros')))
+                            ? ` • <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-amber-300 bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 shadow-sm" style="box-shadow: 0 1px 4px rgba(245, 158, 11, 0.3);"><img src="../assets/money.webp" class="w-3.5 h-3.5 rounded-full object-cover ring-1 ring-black/20" onerror="this.outerHTML='<span class=\\'inline-flex items-center justify-center w-2.5 h-2.5 rounded-full bg-amber-950 text-[7px] text-amber-400\\'>M</span>';"/><span class="font-bold text-amber-950">${escapeHtml(deal.priceLabel)}</span></span>`
+                            : ` • <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-600/40"><span class="inline-flex items-center justify-center w-2.5 h-2.5 rounded-full text-[7px] text-white" style="background:linear-gradient(135deg,#FF6000,#8B5CF6);line-height:1;">${deal.priceLabel.toUpperCase().includes('PLUS') ? '+' : 'P'}</span>${escapeHtml(deal.priceLabel)}</span>`
+                        ) : ''}
                         ${deal.isAmazonWarehouse ? ` • <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-600/40"><span class="material-symbols-outlined text-[12px]">inventory_2</span>Depo</span>` : ''}
                     </p>
                     ${(deal.ratingValue || deal.ratingCount) ? `
@@ -2050,6 +2088,43 @@ async function showDealModal(deal) {
                     </label>
                 </div>
             </div>
+
+            <!-- Special Price & Badges (priceLabel) -->
+            <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary text-[20px]">local_offer</span>
+                        <h3 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Özel Fiyat & Rozet Yönetimi (priceLabel)</h3>
+                    </div>
+                </div>
+                
+                <!-- Live Preview -->
+                <div class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Canlı Önizleme:</span>
+                    <div id="badgePreviewContainer" class="flex items-center">
+                        ${getPriceBadgeHtml(deal.priceLabel, deal.store)}
+                    </div>
+                </div>
+
+                <!-- Quick Presets -->
+                <div class="space-y-2">
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Hızlı Seçim Şablonları:</span>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400" data-label="Prime Fırsatı">Prime Fırsatı</button>
+                        <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400" data-label="Plus'a Özel">Plus'a Özel</button>
+                        <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400" data-label="Premium ile">Premium ile</button>
+                        <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400" data-label="Plus ile">Plus ile</button>
+                        <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" data-label="Money ile">Money ile</button>
+                        <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300" data-label="">✕ Temizle</button>
+                    </div>
+                </div>
+
+                <!-- Input Field -->
+                <label class="flex flex-col gap-2">
+                    <span class="text-sm font-semibold text-gray-900 dark:text-white">Özel Fiyat Etiketi / Metin (priceLabel)</span>
+                    <input id="editPriceLabel" class="form-input w-full rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-11 px-4 text-sm font-medium" placeholder="Örn: Plus'a Özel, Prime Fırsatı, Sepette %20..." type="text" value="${escapeHtml(deal.priceLabel || '')}"/>
+                </label>
+            </div>
         `;
     }
 
@@ -2393,6 +2468,38 @@ async function showDealModal(deal) {
         } else {
             console.warn('⚠️ Image upload input not found!');
         }
+
+        // Price label live preview & preset buttons listener
+        const editPriceLabelInput = document.getElementById('editPriceLabel');
+        const badgePreviewContainer = document.getElementById('badgePreviewContainer');
+        const editStoreInput = document.getElementById('editStore');
+
+        function refreshBadgePreview() {
+            if (badgePreviewContainer) {
+                const currentLabel = editPriceLabelInput ? editPriceLabelInput.value : '';
+                const currentStore = editStoreInput ? editStoreInput.value : '';
+                badgePreviewContainer.innerHTML = getPriceBadgeHtml(currentLabel, currentStore);
+            }
+        }
+
+        if (editPriceLabelInput) {
+            editPriceLabelInput.addEventListener('input', refreshBadgePreview);
+        }
+        if (editStoreInput) {
+            editStoreInput.addEventListener('input', refreshBadgePreview);
+        }
+
+        const presetButtons = document.querySelectorAll('.preset-badge-btn');
+        presetButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetLabel = btn.getAttribute('data-label') || '';
+                if (editPriceLabelInput) {
+                    editPriceLabelInput.value = targetLabel;
+                    refreshBadgePreview();
+                }
+            });
+        });
     }, 150);
 
     // Butonlara direkt event listener ekle (modal gösterildikten sonra)
@@ -2613,6 +2720,7 @@ async function saveDealChanges() {
         const store = document.getElementById('editStore')?.value?.trim() || (currentDeal && currentDeal.store) || 'Bilinmeyen';
         const couponCode = document.getElementById('editCouponCode')?.value || '';
         const brand = document.getElementById('editBrand')?.value?.trim() || null;
+        const priceLabel = document.getElementById('editPriceLabel')?.value?.trim() || null;
         const ratingValStr = document.getElementById('editRatingValue')?.value;
         const ratingValue = (ratingValStr !== undefined && ratingValStr !== '') ? parseFloat(ratingValStr) : null;
         const ratingCntStr = document.getElementById('editRatingCount')?.value;
@@ -2689,6 +2797,7 @@ async function saveDealChanges() {
             createdAt: isNewDeal ? firebase.firestore.FieldValue.serverTimestamp() : (isCreatedAtValid ? firebase.firestore.Timestamp.fromDate(createdAtDate) : firebase.firestore.FieldValue.serverTimestamp()),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
             brand: brand,
+            priceLabel: priceLabel,
             ratingValue: (ratingValue !== null && !isNaN(ratingValue)) ? ratingValue : null,
             ratingCount: (ratingCount !== null && !isNaN(ratingCount)) ? ratingCount : null,
             isAmazonWarehouse: document.getElementById('editIsAmazonWarehouse')?.checked || false,
@@ -6662,7 +6771,7 @@ async function purgeOldDealsWeb() {
     // 1. Önce Cloud Function (purgeOldDealsManual) üzerinden güvenli ve tam yetkili backend silmesini dene
     try {
         console.log('⚡ Cloud Function (purgeOldDealsManual) çağrılıyor...');
-        const purgeFunc = firebase.functions().httpsCallable('purgeOldDealsManual');
+        const purgeFunc = firebase.functions().httpsCallable('purgeOldDealsManual', { timeout: 540000 });
         const res = await purgeFunc({});
         if (res && res.data && res.data.success) {
             const stats = res.data.stats || {};
@@ -10199,7 +10308,7 @@ function initCouponsListeners() {
                 <span class="hidden sm:inline">Kazınıyor...</span>
             `;
 
-            const scrapeCouponsManual = firebase.functions().httpsCallable('scrapeCouponsManual');
+            const scrapeCouponsManual = firebase.functions().httpsCallable('scrapeCouponsManual', { timeout: 540000 });
             scrapeCouponsManual()
                 .then((res) => {
                     scrapeCouponsBtn.disabled = false;

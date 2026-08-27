@@ -1,5 +1,8 @@
 # İndirimsiz Ürün Fiyatı (`originalPrice`) Scraper Entegrasyon Rehberi & Yol Haritası (Roadmap)
 
+> [!NOTE]
+> Bu doküman İndirimsiz Fiyat (`originalPrice`) ve İndirim Oranı (`discountRate`) entegrasyon kılavuzudur. Sistemin güncel 21 mağazalık şemaları, bypass stratejileri, platform-native HTTP tünellemesi ve deployment süreçleri için lütfen **[Scraping Mimarisi ve Otonom Botlar Master Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_mimarisi_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman, yeni eklenecek veya güncellenecek herhangi bir e-ticaret mağazasında (Hepsiburada, Trendyol, Amazon, N11, MediaMarkt vb.) **İndirimsiz Liste Fiyatı (`originalPrice`)** ve **İndirim Oranının (`effectiveDiscountRate`)** otomatik tespit edilmesi, kazınması (scraping), veritabanına kaydedilmesi ve tüm kullanıcı arayüzlerinde gösterilmesi için izlenecek **teknik adımları ve mimari yol haritasını** içerir.
 
 ---

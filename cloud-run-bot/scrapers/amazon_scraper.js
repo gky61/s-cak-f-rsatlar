@@ -14,6 +14,34 @@ class AmazonScraper extends BaseProductScraper {
            lower.includes('amzlinks.');
   }
 
+  scrapePriceLabel($) {
+    // 1. Prime Özel/Fırsatı metin ve element kontrolleri
+    const dealBadge = $('#dealBadgeSupportingText, .dealBadgeSupportingText, [data-badge-text*="Prime"]').text().trim();
+    if (/prime\s*(?:fırsat|özel|deal)/i.test(dealBadge)) {
+      return "Prime Fırsatı";
+    }
+
+    // 2. #primeExclusivePricingMessage ve upsell konteynerleri
+    const primeMsg = $('#primeExclusivePricingMessage, [id*="primeExclusivePricing"], [id*="primeSavingsUpsell"]').text().trim();
+    if (primeMsg && (/prime\s*(?:ile|’a|'a|\s*üyeleri)/i.test(primeMsg) || /fırsat yalnızca amazon prime/i.test(primeMsg))) {
+      return "Prime Fırsatı";
+    }
+
+    // 3. Genel Prime Fırsatı / Prime'a Özel metin kontrolü
+    let found = false;
+    const primeRegex = /(?:amazon\s*)?prime\s*fırsatı|(?:amazon\s*)?prime['’]?\s*(?:a|’a|'a)?\s*özel|bu fırsat yalnızca amazon prime/i;
+    $('span, div, p, b, strong, i, a').each((_, el) => {
+      const txt = $(el).clone().children().remove().end().text().trim();
+      if (primeRegex.test(txt)) {
+        found = true;
+        return false;
+      }
+    });
+    if (found) return "Prime Fırsatı";
+
+    return null;
+  }
+
   scrapeImage($, url) {
     // 1. data-a-dynamic-image
     const dynImgs = $('[data-a-dynamic-image]');

@@ -1,5 +1,8 @@
 # 🔔 FırsatKolik — Bildirim Sistemi Kapsamlı Mimari ve Referans Kılavuzu
 
+> [!NOTE]
+> Bu doküman Bildirim Sisteminin kapsamlı mimari referans kılavuzudur. Sistemin güncel şemaları, 10 temel senaryo matrisi, Cloud Functions tetikleyicileri, güvenlik kuralları ve test süitleri için lütfen **[Bildirim Sistemi ve Push Motoru Master Mimari Rehberi](file:///d:/firsatkolik/documentation/bildirimler/bildirim_sistemi_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman; **FırsatKolik** platformunun mobil (Flutter), sunucu (Firebase Cloud Functions), veritabanı (Cloud Firestore) ve yönetim paneli (Web Admin) katmanlarındaki tüm bildirim mekanizmasının çalışma prensiplerini, veri modellerini, akış diyagramlarını, kanal yapılandırmalarını, derin link yönlendirmelerini, akıllı filtreleme kurallarını, bağlamsal izin isteme mimarisini ve sorun giderme (troubleshooting) adımlarını eksiksiz olarak belgeler.
 
 ---
@@ -58,7 +61,7 @@ Modern mobil UX ve Apple/Google yönergeleri doğrultusunda, uygulamanın ilk a�
 2. **Yüksek Ret Oranı:** Kullanıcı henüz uygulamanın faydasını görmeden açılan dialoglarda %70 ret veriyordu.
 3. **Kalıcı İzin Kaybı:** iOS ve Android 13+'ta kullanıcı sistem penceresini reddettiğinde, işletim sistemi bir daha otomatik pencere açmamaktadır.
 
-### 4 Organik Bağlamsal Tetikleyici Nokta:
+### 5 Organik Bağlamsal Tetikleyici Nokta:
 | Tetikleyici Ekran / Bileşen | Kullanıcı Eylemi | İzin İsteme Mantığı |
 | :--- | :--- | :--- |
 | **Arama Çubuğu Radarı** (`HomeScreen`) | Bir arama kelimesini radar simgesiyle takibe ekleme | `_addKeywordFromSearch` ➔ `requestPermission()` |

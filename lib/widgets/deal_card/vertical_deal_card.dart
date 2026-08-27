@@ -6,7 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/asset_path_migration.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/botkolik_profile_screen.dart';
-import '../money_badge.dart';
+import '../store_price_badge.dart';
 import 'deal_card_helpers.dart';
 import 'deal_card_badge.dart';
 import '../skeletons/shimmer_box.dart';
@@ -22,7 +22,7 @@ class VerticalDealCard extends StatefulWidget {
     required this.deal,
     required this.onTap,
     this.effectiveImageUrl,
-    required this.isLoadingImage,
+    this.isLoadingImage = false,
   });
 
   @override
@@ -33,50 +33,37 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
   bool _showVoteCount = false; // Oy sayısını göster/gizle
   bool _isHovered = false; // Hover durumu takibi
   bool _isPressed = false; // Dokunma durumu takibi
+  
+  Deal get deal => widget.deal;
 
   Widget _buildPriceAndBadgeSection(bool isDark, bool isExpired) {
-    final deal = widget.deal;
     if (deal.hidePrice) return const SizedBox.shrink();
     final hasOriginalPrice = deal.originalPrice != null && deal.originalPrice! > deal.price;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 4,
+      runSpacing: 2,
       children: [
-        if (MoneyBadge.isMoneyDeal(deal)) ...[
-          const MoneyBadge(
-            fontSize: 8,
-            iconSize: 10,
-            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+        FormattedPriceText(
+          value: deal.price,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            color: isExpired ? Colors.red[700] : AppTheme.primary,
           ),
-          const SizedBox(height: 6),
-        ],
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 4,
-          runSpacing: 2,
-          children: [
-            FormattedPriceText(
-              value: deal.price,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
-                color: isExpired ? Colors.red[700] : AppTheme.primary,
-              ),
-            ),
-            if (hasOriginalPrice)
-              FormattedPriceText(
-                value: deal.originalPrice,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                  decoration: TextDecoration.lineThrough,
-                  decorationThickness: 1.5,
-                ),
-              ),
-          ],
         ),
+        if (hasOriginalPrice)
+          FormattedPriceText(
+            value: deal.originalPrice,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+              decoration: TextDecoration.lineThrough,
+              decorationThickness: 1.5,
+            ),
+          ),
       ],
     );
   }
@@ -472,6 +459,10 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                             ),
                                           ),
                                         ],
+                                        if (StorePriceBadge.hasBadge(deal: deal)) ...[
+                                          const SizedBox(width: 3.5),
+                                          StorePriceBadge(deal: deal, compact: true),
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -660,38 +651,10 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ),
                               ],
-                               const SizedBox(height: 7),
-                               _buildPriceAndBadgeSection(isDark, isExpired),
+                              const SizedBox(height: 7),
+                              _buildPriceAndBadgeSection(isDark, isExpired),
                             ],
                           ),
-                           if (deal.priceLabel != null && deal.priceLabel!.isNotEmpty)
-                             Padding(
-                               padding: const EdgeInsets.only(top: 2.5),
-                               child: Container(
-                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF3E0), // Soft orange amber container
-                                  borderRadius: BorderRadius.circular(6), // Rounded pill shape
-                                  border: Border.all(
-                                    color: const Color(0xFFFFB74D).withValues(alpha: 0.3),
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: Text(
-                                  deal.priceLabel!,
-                                  style: const TextStyle(
-                                    fontSize: 9.5, // Font size reduced to fit perfectly and look neat
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.1,
-                                    color: Color(0xFFE65100), // Clean deep orange tone
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                          else
-                            const SizedBox.shrink(),
                         ],
                       ),
                     ),

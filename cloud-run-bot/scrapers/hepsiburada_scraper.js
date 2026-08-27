@@ -707,6 +707,52 @@ class HepsiburadaScraper extends BaseProductScraper {
     }
     return null;
   }
+
+  scrapePriceLabel($) {
+    // 1. DOM Kontrolü: "Premium ile", "Premium'la", "Premium'a özel" metinleri
+    let hasDomPremium = false;
+    $('span, div, p, b, strong, a').each((_, el) => {
+      const text = $(el).text().trim();
+      if (/premium['’]?\s*(ile|la|a özel|fırsat)/i.test(text)) {
+        hasDomPremium = true;
+        return false;
+      }
+    });
+    if (hasDomPremium) return 'Premium ile';
+
+    // 2. Redux Store Kontrolü (#reduxStore)
+    const reduxScript = $('#reduxStore');
+    if (reduxScript.length) {
+      try {
+        const reduxData = JSON.parse(reduxScript.text());
+        const product = reduxData?.productState?.product;
+        if (product) {
+          // tagList ve mainProductTagList
+          const tags = (product.tagList || []).map(t => (t.tagId || '').toString().toLowerCase());
+          const mainTags = (product.mainProductTagList || []).map(t => (t.tagId || '').toString().toLowerCase());
+          const paymentTag = (product.paymentTag || '').toString().toLowerCase();
+
+          const hasTag = [...tags, ...mainTags].some(t => t.includes('premium'));
+          if (hasTag || paymentTag.includes('premium')) {
+            return 'Premium ile';
+          }
+
+          // listings
+          if (Array.isArray(product.listings)) {
+            for (const l of product.listings) {
+              const lPayTag = (l?.paymentTag || '').toString().toLowerCase();
+              if (lPayTag.includes('premium')) {
+                return 'Premium ile';
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
 }
 
 module.exports = HepsiburadaScraper;
+

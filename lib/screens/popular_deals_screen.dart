@@ -10,7 +10,12 @@ import '../widgets/deal_card_skeleton.dart';
 import 'deal_detail_screen.dart';
 
 class PopularDealsScreen extends StatefulWidget {
-  const PopularDealsScreen({super.key});
+  final bool isRootTab;
+
+  const PopularDealsScreen({
+    super.key,
+    this.isRootTab = false,
+  });
 
   @override
   State<PopularDealsScreen> createState() => _PopularDealsScreenState();
@@ -76,7 +81,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = _themeService.isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
     final bgColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
     final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
@@ -85,6 +90,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
+        automaticallyImplyLeading: !widget.isRootTab,
         backgroundColor: surfaceColor,
         elevation: 0,
         centerTitle: true,

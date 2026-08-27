@@ -1,5 +1,8 @@
 # Multi-Source Kupon Scraper Dokümantasyonu
 
+> [!NOTE]
+> Bu doküman 3 kaynaklı kupon kazıma motorunun teknik referans kılavuzudur. Sistemin canlıdaki eksiksiz mimari, 3 kademeli Wilson Score sıralama algoritması, idempotent oylama motoru, veri şeması, güvenlik kuralları ve şalter kontratı için lütfen **[Kuponlar ve İndirim Kodları Master Mimari Rehberi](file:///d:/firsatkolik/documentation/kuponlar/kuponlar_modulu_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman, FırsatKolik uygulamasındaki birden fazla web kaynağından otomatik ve manuel olarak indirim kuponlarını scrape eden (kazıyan) sistemin teknik mimarisini ve çalışma mantığını açıklamaktadır.
 
 ---

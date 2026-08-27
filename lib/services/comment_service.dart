@@ -193,4 +193,42 @@ class CommentService {
     await batch.commit();
     return snapshot.docs.length;
   }
+
+  /// Yorum için emoji tepkisini aç/kapat (Toggle)
+  Future<void> toggleCommentReaction({
+    required String dealId,
+    required String commentId,
+    required String userId,
+    required String emoji,
+  }) async {
+    try {
+      final docRef = _firestore
+          .collection('deals')
+          .doc(dealId)
+          .collection('comments')
+          .doc(commentId);
+
+      final doc = await docRef.get();
+      if (!doc.exists) return;
+
+      final data = doc.data();
+      final currentReactions = Map<String, dynamic>.from(data?['reactions'] ?? {});
+      final currentEmoji = currentReactions[userId];
+
+      if (currentEmoji == emoji) {
+        // Toggle off - emoji kaldır
+        await docRef.update({
+          'reactions.$userId': FieldValue.delete(),
+        });
+      } else {
+        // Yeni emoji ekle veya güncelle
+        await docRef.update({
+          'reactions.$userId': emoji,
+        });
+      }
+    } catch (e) {
+      _log('Yorum tepki değiştirme hatası: $e');
+      rethrow;
+    }
+  }
 }

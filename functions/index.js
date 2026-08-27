@@ -963,6 +963,19 @@ exports.onUserMessageCreated = functions.firestore
     } catch (imgErr) {
       functions.logger.warn('⚠️ Gönderen profil resmi alınamadı:', imgErr);
     }
+    try {
+      const receiverDoc = await admin.firestore().collection('users').doc(receiverId).get();
+      if (receiverDoc.exists) {
+        const receiverData = receiverDoc.data();
+        const blockedUsers = receiverData?.blockedUsers || [];
+        if (Array.isArray(blockedUsers) && blockedUsers.includes(senderId)) {
+          functions.logger.info(`🚫 Alıcı (${receiverId}) göndereni (${senderId}) engellemiş, push bildirim iptal edildi.`);
+          return null;
+        }
+      }
+    } catch (blockErr) {
+      functions.logger.warn('⚠️ Alıcı blok listesi kontrolü sırasında hata:', blockErr);
+    }
 
     try {
       // Alıcının tüm aktif cihaz token'larını al

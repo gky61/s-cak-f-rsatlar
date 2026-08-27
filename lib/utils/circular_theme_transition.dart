@@ -49,7 +49,7 @@ class CircularThemeTransition {
 
       // 2. Read screen metrics and overlay before async capture
       final mediaQuery = MediaQuery.of(context);
-      final pixelRatio = mediaQuery.devicePixelRatio;
+      final pixelRatio = math.min(mediaQuery.devicePixelRatio, 2.0);
       final screenSize = mediaQuery.size;
       final overlay = Overlay.of(context);
 
@@ -81,7 +81,7 @@ class CircularThemeTransition {
           image: image,
           center: center,
           maxRadius: maxRadius,
-          duration: const Duration(milliseconds: 480),
+          duration: const Duration(milliseconds: 400),
           onCompleted: () {
             try {
               overlayEntry.remove();
@@ -138,7 +138,7 @@ class _CircularRevealOverlayState extends State<_CircularRevealOverlay>
     _radiusAnimation = Tween<double>(begin: 0.0, end: widget.maxRadius).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: Curves.easeInOutCubic,
+        curve: Curves.fastOutSlowIn,
       ),
     );
 
@@ -167,18 +167,21 @@ class _CircularRevealOverlayState extends State<_CircularRevealOverlay>
       child: IgnorePointer(
         child: AnimatedBuilder(
           animation: _radiusAnimation,
+          child: RepaintBoundary(
+            child: RawImage(
+              image: widget.image,
+              fit: BoxFit.fill,
+              width: double.infinity,
+              height: double.infinity,
+            ),
+          ),
           builder: (context, child) {
             return ClipPath(
               clipper: _InvertedCircleClipper(
                 center: widget.center,
                 radius: _radiusAnimation.value,
               ),
-              child: RawImage(
-                image: widget.image,
-                fit: BoxFit.fill,
-                width: double.infinity,
-                height: double.infinity,
-              ),
+              child: child,
             );
           },
         ),

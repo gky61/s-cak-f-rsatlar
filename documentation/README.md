@@ -79,6 +79,7 @@ graph TD
 ```
 
 ### 📚 İlgili Derinlemesine Mimari Dokümanları:
+* 🔗 [Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md) — Uçtan uca sistem mimarisi, 4 ana menü Wilson formülü, P2P sohbet, 16+ rozet, moderasyon, reklam uyumu ve Web Admin master kontratı.
 * 🔗 [Sistem Mimarisi ve Veri Akışları Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/system_architecture_and_flows.md) — Sıralı diyagramlar, fırsat yaşam döngüsü, bot ve moderasyon akışları.
 * 🔗 [Fırsat Gösterim Algoritmaları Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/firsat_gosterim_algoritmalari_rehberi.md) — Anasayfa, Popüler, Wilson Score ve FOMO ceza formülleri.
 * 🔗 [Web Admin Paneli Kapsamlı Mimari ve Operasyon Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/web_admin_paneli_rehberi.md) — 10 yönetim görünümü, canlı simülatör, bot kontrolü ve moderasyon kuyruğu.
@@ -111,6 +112,8 @@ FırsatKolik'te Geliştirme (DEV) ve Canlı (PROD) ortamları veri, bot, kimlik 
 | **Android Keystore** | Varsayılan Debug Keystore | `android/app/upload-keystore.jks` *(Alias: upload)* |
 
 ### 📚 İlgili Ortam ve Güvenlik Dokümanları:
+* 🔗 [Backend ve Bulut Altyapısı Master Mimari Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/backend_ve_altyapi_rehberi.md) — 26 Cloud Function, Firestore/Storage güvenlik kuralları, DEV/PROD ortam yönetimi, Free Tier VM ve sıfır maliyet mimarisi.
+* 🔗 [Cloud Functions ve Backend Servisleri Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/cloud_functions_rehberi.md) — 26 Cloud Function detaylı tetikleme ve kullanım envanteri.
 * 🔗 [Firestore ve Storage Güvenlik Kuralları Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/firestore_ve_storage_guvenlik_kurallari_rehberi.md) — `firestore.rules` ve `storage.rules` erişim politikaları, RBAC ve alan farkı doğrulaması.
 * 🔗 [Ortam Yönetimi ve Canlıya Geçiş Kılavuzu](file:///d:/firsatkolik/documentation/backend-ve-altyapi/environment_management_guide.md) — Flavor yapılandırması ve operasyonel komutlar.
 * 🔗 [Güncellenmiş Gizli Bilgiler ve Anahtarlar Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/project_secrets_and_credentials_updated.md) — API anahtarları, oturumlar, keystore ve token envanteri.
@@ -140,6 +143,7 @@ Fırsat paylaşımlarındaki en büyük teknik engel olan Cloudflare/Akamai bot 
 3. **Temiz Link ve Affiliate Koruması (`cleanUrl`):** Mükerrer fırsatları önlemek için takip/affiliate parametreleri temizlenmiş `cleanUrl` alanı kullanılır; kullanıcının tıklayacağı orijinal link (`url`) komisyon kaybını önlemek için aynen korunur.
 
 ### 📚 İlgili Kazıma ve Bot Dokümanları:
+* 🔗 [Scraping Mimarisi ve Otonom Botlar Master Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_mimarisi_rehberi.md) — 21 entegre mağaza, WAF bypass, platform-native HTTP tünellemesi, metadata katmanı, kategori tespiti ve VM deployment.
 * 🔗 [Cloud Run Telegram Bot Scraping Kuralları ve Stratejileri](file:///d:/firsatkolik/documentation/scraping-ve-botlar/bot_scraping_rules_and_strategies.md) — Sunucu tarafı WAF bypass stratejileri ve teşhis yöntemleri.
 * 🔗 [Uçtan Uca Scraping Mimarisi ve Doğrulama Akışları](file:///d:/firsatkolik/documentation/scraping-ve-botlar/end_to_end_scraping_architecture.md) — İstemci ve sunucu kazıma karşılaştırması ve VM deploy akışı.
 * 🔗 [İndirimsiz Ürün Fiyatı (originalPrice) Entegrasyon Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/original_price_scraper_integration_guide.md) — Eski fiyat ve % indirim tespiti için 5 aşamalı yol haritası.
@@ -182,6 +186,7 @@ FırsatKolik bildirim sistemi, kullanıcı memnuniyetini en üstte tutmak ve spa
 * **Data-Only Sohbet Bildirimleri:** Birebir sohbet mesajları `data-only` olarak gönderilir; alıcı aktif sohbet ekranındaysa bildirim sessizce bastırılır.
 
 ### 📚 İlgili Bildirim Dokümanları:
+* 🔗 [Bildirim Sistemi ve Push Motoru Master Mimari Rehberi](file:///d:/firsatkolik/documentation/bildirimler/bildirim_sistemi_rehberi.md) — Uçtan uca mimari, 10 senaryo, bağlamsal izin isteme, Firestore şeması, Cloud Functions push motoru ve test süiti.
 * 🔗 [Bildirim Sistemi Mimari ve Referans Kılavuzu](file:///d:/firsatkolik/documentation/bildirimler/NOTIFICATION_SYSTEM_ARCHITECT.md) — Firestore şemaları, FCM HTTP v1 yapılandırması ve hata ayıklama.
 * 🔗 [Bildirim ve Push Bildirim Senaryoları Rehberi](file:///d:/firsatkolik/documentation/bildirimler/notification_scenarios.md) — 10 senaryoluk tam matris, kademeli UI kilitleri ve test süitleri.
 
@@ -200,6 +205,8 @@ FırsatKolik bildirim sistemi, kullanıcı memnuniyetini en üstte tutmak ve spa
 * **Akakçe Entegrasyonu ve Dinamik Filtreleme:** Akakçe broşür sayfalarından yüksek çözünürlüklü görseller çekilir; sadece aktif broşürü olan mağazalar arayüzde dinamik listelenir.
 
 ### 📚 İlgili Kupon ve Aktüel Dokümanları:
+* 🔗 [Kuponlar ve İndirim Kodları Master Mimari Rehberi](file:///d:/firsatkolik/documentation/kuponlar/kuponlar_modulu_rehberi.md) — 2 sekmeli UX, Wilson Score & 3 kademeli sıralama, idempotent oylama transaction motoru, multi-source kazıma ve modül şalteri.
+* 🔗 [Aktüel Kataloglar ve Broşürler Master Mimari Rehberi](file:///d:/firsatkolik/documentation/aktuel/aktuel_kataloglar_modulu_rehberi.md) — 3 seviyeli doğrusal UX, 36 mağaza matrisi, 5 katmanlı WAF bypass, Firestore şeması ve Cloud Functions mimarisi.
 * 🔗 [Kupon Listeleme ve Oylama Sistemi Yol Haritası](file:///d:/firsatkolik/documentation/kuponlar/kupon-new-feature.md) — İki sekmeli mimari, oylama mantığı ve arşivleme algoritması.
 * 🔗 [Multi-Source Kupon Scraper Dokümantasyonu](file:///d:/firsatkolik/documentation/kuponlar/multi-source-kupon-scraper.md) — 3 kaynaktan kupon kazıma, deduplication ve zamanlanmış fonksiyonlar.
 * 🔗 [Aktüel Kataloglar Modülü Yol Haritası](file:///d:/firsatkolik/documentation/aktuel/aktuel-new-feature.md) — 3 seviyeli doğrusal UX ve Firestore veri modeli.
@@ -310,6 +317,7 @@ documentation/
 ├── 📄 README.md                                             # Bu ana dokümantasyon indeksi
 │
 ├── 📁 mimari-ve-sistem/                                      # Mimari, Algoritmalar, Moderasyon ve Genel Sistem
+│   ├── 📄 mimari_ve_sistem_rehberi.md                        # [MASTER KONTRAT] Sistem Mimarisi, Wilson Sıralama, Gamification, Moderasyon & Web Admin Rehberi
 │   ├── 📄 project_knowledge_base_manifest.md                 # Ana Proje Bilgi Bankası ve Altyapı Manifestosu
 │   ├── 📄 system_architecture_and_flows.md                   # Uçtan Uca Sistem Mimarisi, Akış ve Yaşam Döngüsü
 │   ├── 📄 firsat_gosterim_algoritmalari_rehberi.md           # Anasayfa, Popüler, Wilson Score & FOMO Puanlama Formülleri
@@ -322,13 +330,15 @@ documentation/
 │   └── 📄 data-share-algorithm.md                            # Silinen İlanların Kullanıcı Profillerinde Önbelleklenmesi
 │
 ├── 📁 backend-ve-altyapi/                                    # Firebase, Cloud Functions, Güvenlik & Sırlar
-│   ├── 📄 cloud_functions_rehberi.md                         # 25 Adet Cloud Function Detaylı Kullanım ve Tetikleme Rehberi
+│   ├── 📄 backend_ve_altyapi_rehberi.md                      # [MASTER KONTRAT] 26 Cloud Function, Güvenlik, DEV/PROD, Free Tier VM & Maliyet Rehberi
+│   ├── 📄 cloud_functions_rehberi.md                         # 26 Adet Cloud Function Detaylı Kullanım ve Tetikleme Rehberi
 │   ├── 📄 firestore_ve_storage_guvenlik_kurallari_rehberi.md # [YENİ] firestore.rules & storage.rules Güvenlik Mimarisi
 │   ├── 📄 environment_management_guide.md                    # DEV vs PROD Ortam Yönetimi ve Flavor El Kitabı
 │   ├── 📄 google_cloud_cost_analysis.md                      # GCP Maliyet Analizi ve Free Tier VM Tasarruf Raporu
 │   └── 📄 project_secrets_and_credentials_updated.md         # API Anahtarları, Oturumlar, Portlar ve Keystore Envanteri
 │
 ├── 📁 scraping-ve-botlar/                                    # Web Kazıma, Telegram Botu & WAF Bypass
+│   ├── 📄 scraping_mimarisi_rehberi.md                       # [MASTER KONTRAT] 21 Mağaza Kazıma Mimarisi, WAF Bypass, Metadata & Bot Rehberi
 │   ├── 📄 bot_scraping_rules_and_strategies.md               # Sunucu Tarafı WAF (Cloudflare/Akamai) Bypass Stratejileri
 │   ├── 📄 end_to_end_scraping_architecture.md                # Uçtan Uca Kazıma Mimarisi ve VM Deploy Süreçleri
 │   ├── 📄 original_price_scraper_integration_guide.md        # İndirimsiz Fiyat (originalPrice) ve % İndirim Yol Haritası
@@ -350,15 +360,18 @@ documentation/
 │       └── 📄 zara.md
 │
 ├── 📁 bildirimler/                                           # Bildirim Merkezi & Push Altyapısı
+│   ├── 📄 bildirim_sistemi_rehberi.md                        # [MASTER KONTRAT] Bildirim ve Push Motoru Master Mimari, Veri Şeması & Senaryo Kontratı
 │   ├── 📄 NOTIFICATION_SYSTEM_ARCHITECT.md                   # 3 Katmanlı Bildirim Mimarisi, Şemalar & FCM HTTP v1
 │   └── 📄 notification_scenarios.md                          # 10 Senaryoluk Bildirim Matrisi ve Otomatik Testler
 │
 ├── 📁 kuponlar/                                              # İndirim Kodları & Kupon Radarı
+│   ├── 📄 kuponlar_modulu_rehberi.md                         # [MASTER KONTRAT] Kuponlar Modülü Uçtan Uca Mimari, Veri, Oylama & Kazıma Kontratı
 │   ├── 📄 kupon-feature.md                                   # Kupon Listeleme ve Paylaşım Sistemi İlk Yol Haritası
 │   ├── 📄 kupon-new-feature.md                               # İki Sekmeli Kupon Radarı, Sıcak/Soğuk Oylama ve Arşiv
 │   └── 📄 multi-source-kupon-scraper.md                      # 3 Kaynaklı (DH, Kuponla, Kuponburada) Kupon Kazıyıcı
 │
 ├── 📁 aktuel/                                                # Süpermarket & Kozmetik Katalogları
+│   ├── 📄 aktuel_kataloglar_modulu_rehberi.md                # [MASTER KONTRAT] Aktüel Modülü Uçtan Uca Mimari, Veri & Sistem Kontratı
 │   ├── 📄 aktuel-new-feature.md                              # Aktüel Kataloglar 3 Seviyeli Doğrusal UX Yol Haritası
 │   ├── 📄 aktuel-scraper.md                                  # Akakçe Broşür Kazıma, Doğrulama ve Dinamik Listeleme
 │   └── 📁 logs/                                              # 200 Canlı Ürün Test Linki Veri Tabanı

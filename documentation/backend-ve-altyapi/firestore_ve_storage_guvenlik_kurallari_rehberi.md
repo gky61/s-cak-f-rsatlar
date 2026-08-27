@@ -1,5 +1,8 @@
 # 🔒 FırsatKolik — Firestore ve Storage Güvenlik Kuralları Rehberi (Security Rules)
 
+> [!NOTE]
+> Bu doküman Firestore ve Storage Güvenlik Kuralları referans kılavuzudur. Sistemin güncel 26 Cloud Function envanteri, ortam yönetimi, sıfır maliyet VM mimarisi ve test süitleri için lütfen **[Backend ve Bulut Altyapısı Master Mimari Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/backend_ve_altyapi_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman, FırsatKolik platformunun veritabanı (`firestore.rules`) ve dosya depolama (`storage.rules`) katmanlarındaki güvenlik politikalarını, rol tabanlı erişim denetimlerini (RBAC), alan bazlı kısıtlamaları (Field-Level Diffing) ve potansiyel güvenlik açıklarını engelleyen koruma mekanizmalarını açıklamaktadır.
 
 ---

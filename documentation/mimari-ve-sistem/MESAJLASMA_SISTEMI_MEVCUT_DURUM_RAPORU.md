@@ -1,5 +1,8 @@
 # 📬 FırsatKolik — Mesajlaşma Sistemi Kapsamlı Teknik Durum ve Mimari Analiz Raporu
 
+> [!NOTE]
+> Bu doküman P2P Sohbet ve Admin Mesajlaşma Sistemi detaylı durum raporudur. Sistemin uçtan uca mimarisi, gösterim algoritmaları, gamification, moderasyon ve Web Admin entegrasyonu için lütfen **[Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md)** dokümanını inceleyiniz.
+
 **Rapor Tarihi:** 13 Ağustos 2026  
 **Kapsam:** Dart / Flutter (Mobil & Web UI), Cloud Functions (Backend), Firebase Firestore (Veritabanı & Güvenlik Kuralları), Firebase Cloud Messaging (FCM Push Bildirimleri), Web Admin Paneli, Veri Senkronizasyonu ve Yaşam Döngüsü.
 

@@ -63,8 +63,10 @@ class MessageService {
         receiverImageUrl = migrateAssetPath((rData?['profileImageUrl'] ?? rData?['photoURL'] ?? '').toString());
       }
 
+      final convId = getConversationId(senderId, receiverId);
       final message = Message(
         id: '',
+        conversationId: convId,
         senderId: senderId,
         senderName: senderName,
         senderImageUrl: senderImageUrl,
@@ -198,6 +200,36 @@ class MessageService {
       await batch.commit();
     } catch (e) {
       _log('markConversationAsRead error: $e');
+    }
+  }
+
+  // Mesaja Tepki Ekle / Kaldır (Toggle Emoji Reaction)
+  Future<void> toggleReaction({
+    required String messageId,
+    required String userId,
+    required String emoji,
+  }) async {
+    try {
+      final docRef = _firestore.collection('messages').doc(messageId);
+      final doc = await docRef.get();
+      if (!doc.exists) return;
+
+      final data = doc.data() ?? {};
+      final reactions = Map<String, dynamic>.from(data['reactions'] ?? {});
+
+      if (reactions[userId] == emoji) {
+        // Kullanıcı aynı emojiyi seçti -> tepkiyi kaldır (toggle off)
+        await docRef.update({
+          'reactions.$userId': FieldValue.delete(),
+        });
+      } else {
+        // Farklı emoji seçti veya yeni tepki verdi -> kaydet / güncelle
+        await docRef.update({
+          'reactions.$userId': emoji,
+        });
+      }
+    } catch (e) {
+      _log('toggleReaction error: $e');
     }
   }
 

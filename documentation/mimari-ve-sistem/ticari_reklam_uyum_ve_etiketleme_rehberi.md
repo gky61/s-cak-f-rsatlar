@@ -1,5 +1,8 @@
 # ⚖️ FırsatKolik — Ticari Reklam Yönetmeliği Uyum ve Etiketleme Rehberi
 
+> [!NOTE]
+> Bu doküman Ticaret Bakanlığı reklam uyumu ve `#tanıtım` standartları kılavuzudur. Sistemin uçtan uca mimarisi, gösterim algoritmaları, gamification, mesajlaşma ve Web Admin entegrasyonu için lütfen **[Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman, T.C. Ticaret Bakanlığı'nın **Ticari Reklam ve Haksız Ticari Uygulamalar Yönetmeliği** (özellikle 1 Ağustos düzenlemeleri ve Sosyal Medya Etkileyicileri Kılavuzu) kapsamında FırsatKolik platformundaki tüm içeriklerde uygulanan **Otomatik Reklam/Tanıtım Etiketleme Standartları**'nı ve teknik altyapısını açıklamaktadır.
 
 ---

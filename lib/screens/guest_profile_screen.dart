@@ -13,10 +13,12 @@ import 'category_preferences_screen.dart';
 /// Misafir (oturum açmamış) kullanıcılar için modern, modüler ve zengin profil ekranı.
 class GuestProfileScreen extends StatefulWidget {
   final VoidCallback? onLoginSuccess;
+  final bool isRootTab;
 
   const GuestProfileScreen({
     super.key,
     this.onLoginSuccess,
+    this.isRootTab = false,
   });
 
   @override
@@ -28,6 +30,24 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
   final ThemeService _themeService = ThemeService();
   final GlobalKey _themeButtonKey = GlobalKey();
   bool _isSigningIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _themeService.addListener(_onThemeChanged);
+  }
+
+  void _onThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _themeService.removeListener(_onThemeChanged);
+    super.dispose();
+  }
 
   Future<void> _handleGoogleSignIn() async {
     if (_isSigningIn) return;
@@ -140,7 +160,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 110), // Bottom nav padding
+                SizedBox(height: widget.isRootTab ? 16 : 110), // Bottom nav padding
               ],
             ),
           ),
@@ -155,14 +175,15 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
             accentBlue: accentBlue,
           ),
 
-          // Bottom Navigation Bar
-          _buildBottomNav(
-            context,
-            isDark: isDark,
-            surfaceColor: surfaceColor,
-            borderColor: borderColor,
-            activeColor: isDark ? accentBlue : primaryColor,
-          ),
+          // Bottom Navigation Bar (Sadece bağımsız açıldığında gösterilir)
+          if (!widget.isRootTab)
+            _buildBottomNav(
+              context,
+              isDark: isDark,
+              surfaceColor: surfaceColor,
+              borderColor: borderColor,
+              activeColor: isDark ? accentBlue : primaryColor,
+            ),
         ],
       ),
     );

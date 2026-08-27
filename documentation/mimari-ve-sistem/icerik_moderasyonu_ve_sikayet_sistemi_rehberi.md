@@ -1,5 +1,8 @@
 # 🛡️ FırsatKolik — İçerik Moderasyonu, Şikayet ve Raporlama Sistemi Rehberi
 
+> [!NOTE]
+> Bu doküman 3 katmanlı içerik moderasyonu ve şikayet havuzu kılavuzudur. Sistemin uçtan uca mimarisi, gösterim algoritmaları, gamification, mesajlaşma ve Web Admin entegrasyonu için lütfen **[Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md)** dokümanını inceleyiniz.
+
 Bu doküman, FırsatKolik platformunda kullanıcı deneyimini, topluluk huzurunu ve platform güvenliğini korumak amacıyla kurulan **Otomatik İçerik Moderasyonu**, **Kullanıcı Şikayet/Raporlama Altyapısı** ve **Yönetici Denetim Mekanizması**'nın mimari ve operasyonel prensiplerini açıklamaktadır.
 
 ---

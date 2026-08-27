@@ -6,6 +6,7 @@ import '../../../services/firestore_service.dart';
 import '../../../services/link_preview_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/category_selector_widget.dart';
+import '../../../widgets/store_price_badge.dart';
 import 'category_selector.dart';
 
 /// Topluluk ve Admin ortamlarında Fırsat Düzenleme Modal Sheet'ini açan merkezi fonksiyon.
@@ -39,6 +40,8 @@ void showAdminEditSheet({
   final discountController = TextEditingController(
     text: effDisc != null ? effDisc.toString() : '',
   );
+
+  final priceLabelController = TextEditingController(text: deal.priceLabel ?? '');
 
   final rValue = deal.ratingValue;
   final ratingValueController = TextEditingController(
@@ -185,6 +188,7 @@ void showAdminEditSheet({
               'price': price ?? 0.0,
               'originalPrice': (originalPrice ?? 0) > 0 ? originalPrice : null,
               'discountRate': (discountRate ?? 0) > 0 ? discountRate : null,
+              'priceLabel': priceLabelController.text.trim().isNotEmpty ? priceLabelController.text.trim() : null,
               'ratingValue': parseDouble(ratingValueController.text),
               'ratingCount': parseInt(ratingCountController.text),
               'isEditorPick': isEditorPick,
@@ -380,6 +384,124 @@ void showAdminEditSheet({
                               activeColor: Colors.blue,
                               icon: Icons.visibility_off_rounded,
                               onChanged: (val) => setSheetState(() => isHidePrice = val),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Section: Özel Fiyat & Rozet Yönetimi (priceLabel)
+                        _buildSectionCard(
+                          isDark: isDark,
+                          title: 'Özel Fiyat & Rozet (priceLabel)',
+                          icon: Icons.local_offer_rounded,
+                          children: [
+                            // Canlı Rozet Önizleme
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    'Önizleme: ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  if (priceLabelController.text.trim().isNotEmpty) ...[
+                                    StorePriceBadge(
+                                      label: priceLabelController.text.trim(),
+                                      store: storeController.text.trim(),
+                                    ),
+                                  ] else ...[
+                                    Text(
+                                      'Rozet Yok (Standart Ürün)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                        color: isDark ? Colors.grey[500] : Colors.grey[400],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            // Hızlı Seçim Şablonları
+                            Text(
+                              'Hızlı Seçim Şablonları:',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? AppTheme.darkTextSecondary : Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                _buildBadgeChip(
+                                  label: 'Prime Fırsatı',
+                                  color: const Color(0xFFFF6000),
+                                  isSelected: priceLabelController.text == 'Prime Fırsatı',
+                                  onTap: () => setSheetState(() => priceLabelController.text = 'Prime Fırsatı'),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
+                                  label: "Plus'a Özel",
+                                  color: const Color(0xFFF97316),
+                                  isSelected: priceLabelController.text == "Plus'a Özel",
+                                  onTap: () => setSheetState(() => priceLabelController.text = "Plus'a Özel"),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
+                                  label: 'Premium ile',
+                                  color: const Color(0xFF8B5CF6),
+                                  isSelected: priceLabelController.text == 'Premium ile',
+                                  onTap: () => setSheetState(() => priceLabelController.text = 'Premium ile'),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
+                                  label: 'Plus ile',
+                                  color: const Color(0xFF06B6D4),
+                                  isSelected: priceLabelController.text == 'Plus ile',
+                                  onTap: () => setSheetState(() => priceLabelController.text = 'Plus ile'),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
+                                  label: 'Money ile',
+                                  color: const Color(0xFF10B981),
+                                  isSelected: priceLabelController.text == 'Money ile',
+                                  onTap: () => setSheetState(() => priceLabelController.text = 'Money ile'),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
+                                  label: '✕ Temizle',
+                                  color: Colors.grey,
+                                  isSelected: priceLabelController.text.isEmpty,
+                                  onTap: () => setSheetState(() => priceLabelController.text = ''),
+                                  isDark: isDark,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            _buildStyledTextField(
+                              context: context,
+                              label: 'Özel Fiyat Etiketi / Metin (priceLabel)',
+                              controller: priceLabelController,
+                              placeholder: "Örn: Plus'a Özel, Prime Fırsatı, Sepette %20...",
+                              onChanged: (_) => setSheetState(() {}),
                             ),
                           ],
                         ),
@@ -744,6 +866,7 @@ Widget _buildStyledTextField({
   String placeholder = '',
   int maxLines = 1,
   TextInputType keyboardType = TextInputType.text,
+  ValueChanged<String>? onChanged,
 }) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   final primaryColor = Theme.of(context).colorScheme.primary;
@@ -766,6 +889,7 @@ Widget _buildStyledTextField({
           controller: controller,
           maxLines: maxLines,
           keyboardType: keyboardType,
+          onChanged: onChanged,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -796,6 +920,44 @@ Widget _buildStyledTextField({
           ),
         ),
       ],
+    ),
+  );
+}
+
+Widget _buildBadgeChip({
+  required String label,
+  required Color color,
+  required bool isSelected,
+  required VoidCallback onTap,
+  required bool isDark,
+}) {
+  return InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(8),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? color.withValues(alpha: isDark ? 0.3 : 0.15)
+            : (isDark ? AppTheme.darkSurfaceElevated : Colors.grey[100]),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isSelected
+              ? color
+              : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+          width: isSelected ? 1.5 : 1.0,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+          color: isSelected
+              ? (isDark ? Colors.white : color)
+              : (isDark ? Colors.grey[300] : Colors.grey[700]),
+        ),
+      ),
     ),
   );
 }

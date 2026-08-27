@@ -65,13 +65,23 @@ class StoreAssetHelper {
     'tarimkredi': 'assets/kooperatif.webp',
     'tarimkredikooperatif': 'assets/kooperatif.webp',
     'tarimkredikooperatifmarket': 'assets/kooperatif.webp',
+    'mopas': 'assets/mopas.webp',
+    'ozkuruslar': 'assets/ozkuruslar.webp',
+    'ozkuruslargida': 'assets/ozkuruslar.webp',
+    'tahtakale': 'assets/tahtakale.webp',
+    'tahtakalespot': 'assets/tahtakale.webp',
 
     // Kozmetik & Bakım
     'watsons': 'assets/watsons.webp',
     'gratis': 'assets/gratis.webp',
     'rossmann': 'assets/rossmann.webp',
 
-    // Giyim / Yaşam / Anne & Bebek
+    // Giyim / Yaşam / Anne & Bebek / Yapı Market
+    'bauhaus': 'assets/bauhaus.webp',
+    'koctas': 'assets/koctas.webp',
+    'koctascom': 'assets/koctas.webp',
+    'tekzen': 'assets/tekzen.webp',
+    'tedi': 'assets/tedi.webp',
     'cetinkaya': 'assets/cetinkaya.webp',
     'civil': 'assets/civil.webp',
     'civilim': 'assets/civil.webp',
@@ -79,7 +89,13 @@ class StoreAssetHelper {
     'mrdiy': 'assets/mrdiy.webp',
     'misterdiy': 'assets/mrdiy.webp',
 
-    // Elektronik / Teknoloji
+    // Elektronik / Teknoloji / Beyaz Eşya
+    'arcelik': 'assets/arcelik.webp',
+    'beko': 'assets/beko.webp',
+    'bosch': 'assets/bosch.webp',
+    'boschhome': 'assets/bosch.webp',
+    'siemens': 'assets/siemens.webp',
+    'siemenshome': 'assets/siemens.webp',
     'teknosa': 'assets/teknosa.webp',
     'vatan': 'assets/vatan.webp',
     'vatanbilgisayar': 'assets/vatan.webp',
@@ -141,13 +157,23 @@ class StoreAssetHelper {
     'tarimkredi': Color(0xFF00755F),
     'tarimkredikooperatif': Color(0xFF00755F),
     'tarimkredikooperatifmarket': Color(0xFF00755F),
+    'mopas': Color(0xFFE31E24),
+    'ozkuruslar': Color(0xFFD32F2F),
+    'ozkuruslargida': Color(0xFFD32F2F),
+    'tahtakale': Color(0xFFD32F2F),
+    'tahtakalespot': Color(0xFFD32F2F),
 
     // Kozmetik & Bakım
     'watsons': Color(0xFF00A19B),
     'gratis': Color(0xFF8B1E87),
     'rossmann': Color(0xFFE2001A),
 
-    // Giyim / Yaşam / Anne & Bebek
+    // Giyim / Yaşam / Anne & Bebek / Yapı Market
+    'bauhaus': Color(0xFFE30613),
+    'koctas': Color(0xFFEA5906),
+    'koctascom': Color(0xFFEA5906),
+    'tekzen': Color(0xFF008CD2),
+    'tedi': Color(0xFF0088CC),
     'cetinkaya': Color(0xFFE31E24),
     'civil': Color(0xFFFF6600),
     'civilim': Color(0xFFFF6600),
@@ -155,7 +181,13 @@ class StoreAssetHelper {
     'mrdiy': Color(0xFFFFD100),
     'misterdiy': Color(0xFFFFD100),
 
-    // Elektronik / Teknoloji
+    // Elektronik / Teknoloji / Beyaz Eşya
+    'arcelik': Color(0xFFE30613),
+    'beko': Color(0xFF003087),
+    'bosch': Color(0xFFE20015),
+    'boschhome': Color(0xFFE20015),
+    'siemens': Color(0xFF00646E),
+    'siemenshome': Color(0xFF00646E),
     'teknosa': Color(0xFFFF5F00),
     'vatan': Color(0xFF005691),
     'vatanbilgisayar': Color(0xFF005691),

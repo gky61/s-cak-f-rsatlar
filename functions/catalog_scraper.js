@@ -28,7 +28,18 @@ const STORES = [
   { code: 'bizim', name: 'Bizim', url: 'https://www.akakce.com/brosurler/bizimtoptan', keywords: ['bizim'] },
   { code: 'teknosa', name: 'Teknosa', url: 'https://www.akakce.com/brosurler/teknosacom', keywords: ['teknosa'] },
   { code: 'vatan', name: 'Vatan', url: 'https://www.akakce.com/brosurler/vatanbilgisayar', keywords: ['vatan'] },
-  { code: 'vestel', name: 'Vestel', url: 'https://www.akakce.com/brosurler/vestel', keywords: ['vestel'] }
+  { code: 'vestel', name: 'Vestel', url: 'https://www.akakce.com/brosurler/vestel', keywords: ['vestel'] },
+  { code: 'arcelik', name: 'Arçelik', url: 'https://www.akakce.com/brosurler/arcelik', keywords: ['arcelik', 'arçelik'] },
+  { code: 'beko', name: 'Beko', url: 'https://www.akakce.com/brosurler/beko', keywords: ['beko'] },
+  { code: 'bosch', name: 'Bosch', url: 'https://www.akakce.com/brosurler/bosch-home', keywords: ['bosch'] },
+  { code: 'bauhaus', name: 'Bauhaus', url: 'https://www.akakce.com/brosurler/bauhaus', keywords: ['bauhaus'] },
+  { code: 'siemens', name: 'Siemens', url: 'https://www.akakce.com/brosurler/siemens-home', keywords: ['siemens'] },
+  { code: 'mopas', name: 'Mopaş', url: 'https://www.akakce.com/brosurler/mopas', keywords: ['mopas', 'mopaş'] },
+  { code: 'koctas', name: 'Koçtaş', url: 'https://www.akakce.com/brosurler/koctascom', keywords: ['koctas', 'koçtaş'] },
+  { code: 'ozkuruslar', name: 'Özkuruşlar', url: 'https://www.akakce.com/brosurler/ozkuruslargida', keywords: ['ozkuruslar', 'özkuruşlar', 'kuruslar', 'kuruşlar'] },
+  { code: 'tedi', name: 'Tedi', url: 'https://www.akakce.com/brosurler/tedi', keywords: ['tedi'] },
+  { code: 'tahtakale', name: 'Tahtakale', url: 'https://www.akakce.com/brosurler/tahtakalespot', keywords: ['tahtakale', 'tahtakalespot'] },
+  { code: 'tekzen', name: 'Tekzen', url: 'https://www.akakce.com/brosurler/tekzen', keywords: ['tekzen'] }
 ];
 
 /**
@@ -251,32 +262,34 @@ async function scrapeAndSaveCatalogs() {
         const aTag = $list(el);
         let href = aTag.attr('href') || '';
         
-        if (href.includes('.translate.goog')) {
+        // Clean translate.goog if present
+        let cleanPath = href;
+        if (cleanPath.includes('.translate.goog')) {
           try {
-            const u = new URL(href);
-            href = u.pathname;
+            const u = new URL(cleanPath.startsWith('http') ? cleanPath : `https://${cleanPath}`);
+            cleanPath = u.pathname;
           } catch (e) {}
         }
+        // Strip query string, hash and trailing slashes
+        cleanPath = cleanPath.split('?')[0].split('#')[0].replace(/\/+$/, '');
 
-        if (href.includes('/brosurler/')) {
+        if (cleanPath.includes('/brosurler/')) {
           const storeNameText = (aTag.find('.blid b').text() || '').toLowerCase();
-          const hrefLower = href.toLowerCase();
+          const pathLower = cleanPath.toLowerCase();
 
           // Exclude check
-          if (store.excludeKeywords && store.excludeKeywords.some(ex => hrefLower.includes(ex) || storeNameText.includes(ex))) {
+          if (store.excludeKeywords && store.excludeKeywords.some(ex => pathLower.includes(ex) || storeNameText.includes(ex))) {
             return;
           }
 
-          // Store Validation: Ensure brochure actually matches the target store
-          const matchesStore = store.keywords.some(kw => 
-            hrefLower.includes(`/${kw}`) || 
-            hrefLower.includes(`${kw}-`) || 
-            hrefLower.includes(`-${kw}`) || 
-            storeNameText.includes(kw)
-          );
+          // Robust Store Validation: Ensure brochure matches the target store
+          const matchesStore = store.keywords.some(kw => {
+            const k = kw.toLowerCase();
+            return pathLower.includes(k) || storeNameText.includes(k);
+          });
 
           if (!matchesStore) {
-            functions.logger.debug(`Skipping unrelated brochure on ${store.name} page: ${href}`);
+            functions.logger.debug(`Skipping unrelated brochure on ${store.name} page: ${cleanPath}`);
             return;
           }
 
@@ -289,11 +302,13 @@ async function scrapeAndSaveCatalogs() {
           }
 
           const titleSuffix = aTag.find('.blid .bn').text().trim() || 'Aktüel Kataloğu';
-          const idMatch = href.match(/(\d+)$/);
+          
+          // Match digits after last dash or at end of path
+          const idMatch = cleanPath.match(/[-_](\d+)$/) || cleanPath.match(/(\d+)$/);
           const brochureId = idMatch ? idMatch[1] : '';
 
           if (brochureId) {
-            catalogItems.push({ brochureId, href, coverImage, titleSuffix });
+            catalogItems.push({ brochureId, href: cleanPath, coverImage, titleSuffix });
           }
         }
       });
@@ -302,7 +317,7 @@ async function scrapeAndSaveCatalogs() {
 
       const storeBrochures = await mapConcurrent(catalogItems, 2, async (item) => {
         try {
-          const detailUrl = item.href.startsWith('http') ? item.href : `https://www.akakce.com${item.href}`;
+          const detailUrl = item.href.startsWith('http') ? item.href : `https://www.akakce.com${item.href.startsWith('/') ? '' : '/'}${item.href}`;
           functions.logger.info(`   📄 Scraping detail page: ${detailUrl}`);
 
           const detailHtml = await fetchHtmlWithRetry(detailUrl, 3);
@@ -311,16 +326,16 @@ async function scrapeAndSaveCatalogs() {
             const $detail = cheerio.load(detailHtml);
             
             const sayfaResimleri = [];
-            const imgElements = $detail('#BP_W .p img').length > 0 
-              ? $detail('#BP_W .p img') 
-              : ($detail('.p img').length > 0 ? $detail('.p img') : $detail('#BP_W img'));
+            const imgElements = $detail('#BP_W .p img, .p img, #BP_W img, .bpgc img, img[src*="_bro"], img[data-src*="_bro"]');
 
             imgElements.each((i, el) => {
               let src = $detail(el).attr('data-src') || $detail(el).attr('src') || $detail(el).attr('data-original');
               if (src && !src.includes('t.gif')) {
                 if (src.startsWith('//')) src = 'https:' + src;
                 src = src.replace('/_bro/l/', '/_bro/u/').replace('/_bro/y/', '/_bro/u/').replace('/_bro/m/', '/_bro/u/');
-                sayfaResimleri.push(src);
+                if (!sayfaResimleri.includes(src)) {
+                  sayfaResimleri.push(src);
+                }
               }
             });
 
@@ -361,6 +376,8 @@ async function scrapeAndSaveCatalogs() {
       });
 
       allScrapedCatalogs.push(...storeBrochures.filter(Boolean));
+      // Mağazalar arası kısa bekleme (Rate limit koruması)
+      await new Promise(r => setTimeout(r, 200));
     } catch (storeErr) {
       functions.logger.error(`❌ Error scraping store ${store.name}:`, storeErr.message);
     }

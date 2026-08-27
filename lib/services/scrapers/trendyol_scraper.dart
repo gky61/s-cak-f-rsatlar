@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:html/dom.dart' as dom;
 import 'base_scraper.dart';
@@ -10,6 +11,54 @@ class TrendyolScraper extends BaseProductScraper {
   bool canHandle(String url) {
     final lowerUrl = url.toLowerCase();
     return lowerUrl.contains('trendyol.com') || lowerUrl.contains('ty.gl');
+  }
+
+  @override
+  FutureOr<String?> scrapePriceLabel(dom.Document document) {
+    // 1. DOM Seçicileri: Trendyol Plus fiyat/başlık öğeleri
+    final plusSelectors = [
+      '.ty-plus-price-header',
+      '.ty-plus-price',
+      '[class*="ty-plus-price"]',
+      '[class*="ty-plus"]',
+      '[class*="plus-price"]',
+      '.ty-plus-banner-desktop',
+    ];
+
+    for (final sel in plusSelectors) {
+      final el = document.querySelector(sel);
+      if (el != null) {
+        final text = el.text.trim();
+        if (text.toLowerCase().contains('plus') || sel.contains('ty-plus')) {
+          return "Plus'a Özel";
+        }
+      }
+    }
+
+    // 2. Metin bazlı DOM araması (Plus'a Özel)
+    final plusRegex = RegExp(r"(?:trendyol\s*)?plus['’]?\s*a\s*özel", caseSensitive: false);
+    final elements = document.querySelectorAll('span, div, p, b, strong, a, label, h1, h2, h3');
+    for (final el in elements) {
+      final text = el.text.trim();
+      if (plusRegex.hasMatch(text)) {
+        return "Plus'a Özel";
+      }
+    }
+
+    // 3. Script etiketleri & initial state kontrolü
+    final scripts = document.querySelectorAll('script');
+    final scriptPlusRegex = RegExp(
+      r'''ty-plus|hasPlusPromotion|isPlusExclusive|plusPromotion|(?:trendyol\s*)?plus(?:\u0027|\\u0027|['’])\s*a\s*özel''',
+      caseSensitive: false,
+    );
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.isNotEmpty && scriptPlusRegex.hasMatch(text)) {
+        return "Plus'a Özel";
+      }
+    }
+
+    return null;
   }
 
   @override
@@ -79,7 +128,16 @@ class TrendyolScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. JSON-LD şemasından (Öncelikli)
+    // 1. Plus indirimli fiyat DOM kontrolü (En spesifik güncel fiyat)
+    final plusPriceEl = document.querySelector('.ty-plus-price-discounted-price') ??
+                        document.querySelector('.ty-plus-price .ty-plus-price-discounted-price') ??
+                        document.querySelector('[class*="ty-plus-price-discounted-price"]');
+    if (plusPriceEl != null) {
+      final val = parsePriceText(plusPriceEl.text);
+      if (val != null && val > 0) return val;
+    }
+
+    // 2. JSON-LD şemasından (Öncelikli)
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
       final priceLd = extractPriceFromProductJson(productJson);
@@ -88,7 +146,7 @@ class TrendyolScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
+    // 3. DOM Seçicileri (Fallback)
     final priceEl = document.querySelector('.discounted') ??
                     document.querySelector('.prc-dsc') ??
                     document.querySelector('.price-container span');

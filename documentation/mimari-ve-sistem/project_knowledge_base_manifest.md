@@ -1,5 +1,8 @@
 # 🧠 FırsatKolik — Proje Bilgi Bankası ve Yapay Zeka Hafıza Dosyası (Project Context Manifest)
 
+> [!NOTE]
+> Bu doküman yapay zeka oturumları için hızlı hafıza manifestosu ve deployment kılavuzudur. Sistemin güncel gösterim algoritmaları, gamification, mesajlaşma, moderasyon ve Web Admin entegrasyonu için lütfen **[Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md)** dokümanını inceleyiniz.
+
 Bu belge, **FırsatKolik** projesinin tüm teknik altyapısını, mimarisini, veri akışlarını, ortam konfigürasyonlarını ve canlı/geliştirme sistemlerini tek bir çatı altında toplar. **Amaç; yeni bir yapay zeka oturumunda bu belgenin doğrudan okunarak projenin A'dan Z'ye tüm detaylarının yapay zeka hafızasına aktarılmasıdır.**
 
 ---

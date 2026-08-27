@@ -1,5 +1,8 @@
 # ⚡ FırsatKolik — Cloud Functions ve Backend Servisleri Rehberi
 
+> [!NOTE]
+> Bu doküman Cloud Functions servislerinin detaylı envanter kılavuzudur. Sistemin güncel güvenlik kuralları, ortam yönetimi, sıfır maliyet VM mimarisi ve test süitleri için lütfen **[Backend ve Bulut Altyapısı Master Mimari Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/backend_ve_altyapi_rehberi.md)** dokümanını inceleyiniz.
+
 Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **26 adet Cloud Function'ın** tetiklenme türlerini, çalışma amaçlarını, **projede kullanıldıkları / çağrıldıkları yerleri** ve **somut kullanım senaryolarını** detaylı bir şekilde açıklamaktadır.
 
 ---

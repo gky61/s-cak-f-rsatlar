@@ -1,5 +1,8 @@
 # FırsatKolik Cloud Run Telegram Bot Scraping Kuralları ve Stratejileri
 
+> [!NOTE]
+> Bu doküman Telegram Bot scraping kuralları ve bypass stratejileri kılavuzudur. Sistemin güncel 21 mağazalık şemaları, bypass stratejileri, platform-native HTTP tünellemesi ve deployment süreçleri için lütfen **[Scraping Mimarisi ve Otonom Botlar Master Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_mimarisi_rehberi.md)** dokümanını inceleyiniz.
+
 Bu belge, Google Cloud Run üzerinde çalışan Telegram Bot servisinin (`cloud-run-bot`) entegre e-ticaret mağazalarından ürün bilgilerini çekerken kullandığı scraping mimarisini, bypass stratejilerini ve teknik çözüm yollarını detaylıca açıklamaktadır.
 
 ---

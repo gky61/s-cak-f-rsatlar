@@ -1,5 +1,8 @@
 # Google Cloud Cost Analysis & Optimization Report
 
+> [!NOTE]
+> Bu doküman GCP Maliyet Analizi ve Sıfır Maliyet VM Dönüşümü raporudur. Sistemin güncel 26 Cloud Function envanteri, güvenlik kuralları, ortam yönetimi ve test süitleri için lütfen **[Backend ve Bulut Altyapısı Master Mimari Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/backend_ve_altyapi_rehberi.md)** dokümanını inceleyiniz.
+
 Bu rapor, projenizin Google Cloud Platform (GCP) üzerindeki mevcut durumunu, yüksek faturalandırma (billing) sebeplerini ve Google Cloud sınırları içerisinde kalarak bu maliyetleri nasıl sıfıra veya en aza indirebileceğinizi açıklamaktadır.
 
 ---

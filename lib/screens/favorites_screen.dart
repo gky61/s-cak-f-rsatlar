@@ -14,7 +14,12 @@ import 'category_preferences_screen.dart';
 import 'deal_detail_screen.dart';
 
 class FavoritesScreen extends StatefulWidget {
-  const FavoritesScreen({super.key});
+  final bool isRootTab;
+
+  const FavoritesScreen({
+    super.key,
+    this.isRootTab = false,
+  });
 
   @override
   State<FavoritesScreen> createState() => _FavoritesScreenState();
@@ -50,6 +55,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     _followedCategoriesScrollController.addListener(_scrollListener);
 
     _tabController.addListener(_tabListener);
+    _themeService.addListener(_onThemeChanged);
 
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (mounted) {
@@ -57,6 +63,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         setState(() {});
       }
     });
+  }
+
+  void _onThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _scrollListener() {
@@ -121,6 +133,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   @override
   void dispose() {
     _authSub?.cancel();
+    _themeService.removeListener(_onThemeChanged);
     _tabController.removeListener(_tabListener);
     _tabController.dispose();
     _myFavoritesScrollController.removeListener(_scrollListener);
@@ -171,7 +184,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    final isDark = _themeService.isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
     final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -181,6 +194,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
       appBar: AppBar(
+        automaticallyImplyLeading: !widget.isRootTab,
         backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
         elevation: 0,
         surfaceTintColor: Colors.transparent,

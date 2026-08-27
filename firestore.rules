@@ -114,7 +114,9 @@ service cloud.firestore {
         allow read: if true;
         allow create: if canWrite();
         allow update: if canWrite() && 
-                      (resource.data.userId == userId() || isAdmin());
+                      (resource.data.userId == userId() || 
+                       isAdmin() ||
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
         allow delete: if isAuthenticated() && 
                       (resource.data.userId == userId() || isAdmin());
       }
@@ -134,9 +136,11 @@ service cloud.firestore {
       // Giriş yapmış kullanıcılar mesaj gönderilebilir; admin herhangi bir gönderen adına simüle edebilir
       allow create: if canWrite() && (request.resource.data.senderId == userId() || isAdmin());
       
-      // Alıcı veya admin güncelleyebilir
+      // Alıcı, gönderen veya admin güncelleyebilir
       allow update: if isAuthenticated() && 
-                    (resource.data.receiverId == userId() || isAdmin());
+                    (resource.data.receiverId == userId() || 
+                     resource.data.senderId == userId() || 
+                     isAdmin());
       
       // Gönderen, alıcı veya admin silebilir
       allow delete: if isAuthenticated() && 

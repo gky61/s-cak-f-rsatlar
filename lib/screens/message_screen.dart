@@ -16,6 +16,8 @@ import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_dialog.dart';
 import '../widgets/skeletons/chat_messages_skeleton.dart';
+import '../widgets/swipe_to_reply.dart';
+import '../widgets/reaction_picker_sheet.dart';
 import 'profile_screen.dart';
 import 'deal_detail_screen.dart';
 import 'botkolik_profile_screen.dart';
@@ -487,148 +489,6 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     }
   }
 
-  void _showMessageOptionsModal(Message message, bool isMe) {
-    if (widget.isAdminMessage) return;
-    HapticFeedback.mediumImpact();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).colorScheme.primary;
-    final currentUserId = _authService.currentUser?.uid;
-
-    final diffMinutes = DateTime.now().difference(message.createdAt).inMinutes;
-    final canDeleteForEveryone = isMe && diffMinutes <= 15;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Tutamaç (Handle)
-                Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[700] : Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                // Mesaj Önizleme
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F3F5),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[300]!,
-                    ),
-                  ),
-                  child: Text(
-                    message.text,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? Colors.grey[300] : Colors.grey[800],
-                    ),
-                  ),
-                ),
-                // 1. Kopyala
-                ListTile(
-                  leading: Icon(Icons.copy_rounded, color: primaryColor),
-                  title: const Text('Metni Kopyala', style: TextStyle(fontWeight: FontWeight.w600)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Clipboard.setData(ClipboardData(text: message.text));
-                    HapticFeedback.selectionClick();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('📋 Mesaj panoya kopyalandı'),
-                        duration: const Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        margin: const EdgeInsets.all(16),
-                      ),
-                    );
-                  },
-                ),
-                // 2. Yanıtla / Alıntı
-                ListTile(
-                  leading: Icon(Icons.reply_rounded, color: primaryColor),
-                  title: const Text('Yanıtla', style: TextStyle(fontWeight: FontWeight.w600)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    setState(() {
-                      _replyingToMessage = message;
-                    });
-                    _focusNode.requestFocus();
-                  },
-                ),
-                // 3. Mesajı Sil
-                ListTile(
-                  leading: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                  title: const Text('Mesajı Sil', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Mesaj kalıcı olarak silinir', style: TextStyle(fontSize: 11)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await _firestoreService.deleteUserMessage(message.id);
-                  },
-                ),
-                // 4. Herkesten Sil (15 Dakika kuralı)
-                if (canDeleteForEveryone)
-                  ListTile(
-                    leading: const Icon(Icons.delete_forever_rounded, color: Colors.red),
-                    title: const Text('Herkesten Sil (Geri Al)', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
-                    subtitle: Text('İlk 15 dakika içinde silinebilir (${15 - diffMinutes} dk kaldı)', style: const TextStyle(fontSize: 11)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      final ok = await _firestoreService.deleteMessageForEveryone(message.id, currentUserId!);
-                      if (!ok && mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Süre dolduğu için herkesten silinemedi.')),
-                        );
-                      }
-                    },
-                  ),
-                // 5. Şikayet Et
-                if (!isMe)
-                  ListTile(
-                    leading: const Icon(Icons.flag_outlined, color: Colors.redAccent),
-                    title: const Text('Mesajı Şikayet Et', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      showReportDialog(
-                        context,
-                        reportedId: message.id,
-                        type: 'message',
-                        targetContent: message.text,
-                        targetAuthor: message.senderName,
-                        targetAuthorId: message.senderId,
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   void _showAppBarOverflowMenu() {
     final currentUserId = _authService.currentUser?.uid;
     if (currentUserId == null || widget.isAdminMessage) return;
@@ -1036,10 +896,33 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                             allMessages[index].createdAt.month != allMessages[index + 1].createdAt.month ||
                             allMessages[index].createdAt.year != allMessages[index + 1].createdAt.year;
 
+                        final messageWidget = _buildMessageRow(
+                          message,
+                          isMe,
+                          isDark,
+                          primaryColor,
+                          surfaceColor,
+                          textMain,
+                          textSub,
+                          currentUserId,
+                        );
+
                         return Column(
                           children: [
                             if (showDate) _buildDateBadge(message.createdAt, isDark),
-                            _buildMessageRow(message, isMe, isDark, primaryColor, surfaceColor, textMain, textSub),
+                            if (widget.isAdminMessage)
+                              messageWidget
+                            else
+                              SwipeToReply(
+                                key: ValueKey('msg_swipe_${message.id}'),
+                                onReply: () {
+                                  setState(() {
+                                    _replyingToMessage = message;
+                                  });
+                                  _focusNode.requestFocus();
+                                },
+                                child: messageWidget,
+                              ),
                           ],
                         );
                       },
@@ -1558,6 +1441,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     Color surfaceColor,
     Color textMain,
     Color? textSub,
+    String? currentUserId,
   ) {
     // Gönderilen mesajlar: Açık modda Primary Turuncu (#FF6B35), Koyu modda zarif Gece Mavisi / Midnight Indigo (#1E3A5F)
     // Alınan mesajlar: Açık modda Slate 100 (#F1F5F9), Koyu modda DarkSurface (#1E242B)
@@ -1601,103 +1485,567 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
             const SizedBox(width: 8),
           ],
           Flexible(
-            child: GestureDetector(
-              onLongPress: () => _showMessageOptionsModal(message, isMe),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isMe ? myBubbleColor : otherBubbleColor,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(18),
-                    topRight: const Radius.circular(18),
-                    bottomLeft: Radius.circular(isMe ? 18 : 4),
-                    bottomRight: Radius.circular(isMe ? 4 : 18),
-                  ),
-                  border: isMe
-                      ? (isDark ? Border.all(color: Colors.white.withValues(alpha: 0.12), width: 0.8) : null)
-                      : Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : const Color(0xFFCBD5E1),
-                          width: 0.8,
-                        ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isMe
-                          ? (isDark ? const Color(0xFF1E3A5F).withValues(alpha: 0.4) : primaryColor.withValues(alpha: 0.22))
-                          : Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                  children: [
-                    // Alıntı Önizleme Bloğu
-                    if (message.replyToSenderName != null && message.replyToText != null)
-                      _buildQuotedBlock(message.replyToSenderName!, message.replyToText!, isMe, isDark, primaryColor),
-
-                    // Gömülü Fırsat Kartı (Deal Context veya Paylaşılan Link)
-                    if (message.dealId != null && message.dealId!.isNotEmpty)
-                      _buildEmbeddedDealCard(
-                        dealId: message.dealId!,
-                        dealTitle: message.dealTitle ?? 'Fırsat',
-                        dealImageUrl: message.dealImageUrl,
-                        dealPrice: message.dealPrice,
-                        dealStore: message.dealStore,
-                        isMe: isMe,
-                        isDark: isDark,
-                        primaryColor: primaryColor,
-                      )
-                    else
-                      _buildParsedDealLinkPreview(message.text, isMe, isDark, primaryColor),
-
-                    // Mesaj Metni (Keskin, net ve yüksek kontrastlı)
-                    Text(
-                      message.text,
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        height: 1.38,
-                        fontWeight: FontWeight.w500,
-                        color: isMe ? myTextColor : otherTextColor,
-                        letterSpacing: 0.1,
+            child: Column(
+              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onLongPress: () => _showMessageOptionsModal(message, isMe),
+                  onDoubleTap: () {
+                    if (widget.isAdminMessage) return;
+                    HapticFeedback.lightImpact();
+                    _showExtendedEmojiPicker(message);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isMe ? myBubbleColor : otherBubbleColor,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(18),
+                        topRight: const Radius.circular(18),
+                        bottomLeft: Radius.circular(isMe ? 18 : 4),
+                        bottomRight: Radius.circular(isMe ? 4 : 18),
                       ),
-                    ),
-
-                    // Rich Link Preview
-                    _buildLinkPreviewSection(message.text, isMe, isDark, surfaceColor, primaryColor),
-
-                    const SizedBox(height: 4),
-
-                    // Saat & Durum İkonu
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _formatTime(message.createdAt),
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w500,
-                            color: isMe
-                                ? Colors.white.withValues(alpha: 0.88)
-                                : (isDark ? Colors.grey[400] : const Color(0xFF64748B)),
-                          ),
+                      border: isMe
+                          ? (isDark ? Border.all(color: Colors.white.withValues(alpha: 0.12), width: 0.8) : null)
+                          : Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : const Color(0xFFCBD5E1),
+                              width: 0.8,
+                            ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isMe
+                              ? (isDark ? const Color(0xFF1E3A5F).withValues(alpha: 0.4) : primaryColor.withValues(alpha: 0.22))
+                              : Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                        if (isMe) ...[
-                          const SizedBox(width: 4),
-                          _buildStatusIcon(message),
-                        ],
                       ],
                     ),
-                  ],
+                    child: Column(
+                      crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                      children: [
+                        // Alıntı Önizleme Bloğu
+                        if (message.replyToSenderName != null && message.replyToText != null)
+                          _buildQuotedBlock(message.replyToSenderName!, message.replyToText!, isMe, isDark, primaryColor),
+
+                        // Gömülü Fırsat Kartı (Deal Context veya Paylaşılan Link)
+                        if (message.dealId != null && message.dealId!.isNotEmpty)
+                          _buildEmbeddedDealCard(
+                            dealId: message.dealId!,
+                            dealTitle: message.dealTitle ?? 'Fırsat',
+                            dealImageUrl: message.dealImageUrl,
+                            dealPrice: message.dealPrice,
+                            dealStore: message.dealStore,
+                            isMe: isMe,
+                            isDark: isDark,
+                            primaryColor: primaryColor,
+                          )
+                        else
+                          _buildParsedDealLinkPreview(message.text, isMe, isDark, primaryColor),
+
+                        // Mesaj Metni (Keskin, net ve yüksek kontrastlı)
+                        Text(
+                          message.text,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            height: 1.38,
+                            fontWeight: FontWeight.w500,
+                            color: isMe ? myTextColor : otherTextColor,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+
+                        // Rich Link Preview
+                        _buildLinkPreviewSection(message.text, isMe, isDark, surfaceColor, primaryColor),
+
+                        const SizedBox(height: 4),
+
+                        // Saat & Durum İkonu
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _formatTime(message.createdAt),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                                color: isMe
+                                    ? Colors.white.withValues(alpha: 0.88)
+                                    : (isDark ? Colors.grey[400] : const Color(0xFF64748B)),
+                              ),
+                            ),
+                            if (isMe) ...[
+                              const SizedBox(width: 4),
+                              _buildStatusIcon(message),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                // Emoji Tepkileri (Rozetler)
+                if (message.reactions.isNotEmpty)
+                  _buildReactionChips(message, isMe, isDark, primaryColor, currentUserId),
+              ],
             ),
           ),
           if (isMe) const SizedBox(width: 4),
         ],
       ),
+    );
+  }
+
+  void _toggleReaction(String messageId, String emoji) {
+    final currentUserId = _authService.currentUser?.uid;
+    if (currentUserId == null || currentUserId.isEmpty) return;
+    _firestoreService.toggleReaction(
+      messageId: messageId,
+      userId: currentUserId,
+      emoji: emoji,
+    );
+  }
+
+  void _showExtendedEmojiPicker(Message message) {
+    if (widget.isAdminMessage) return;
+    final currentUserId = _authService.currentUser?.uid;
+    final myReaction = currentUserId != null ? message.reactions[currentUserId] : null;
+
+    showReactionPickerBottomSheet(
+      context: context,
+      title: 'Mesaja Tepki Ver',
+      currentEmoji: myReaction,
+      onEmojiSelected: (emoji) => _toggleReaction(message.id, emoji),
+    );
+  }
+
+  void _showMessageOptionsModal(Message message, bool isMe) {
+    if (widget.isAdminMessage) return;
+    HapticFeedback.mediumImpact();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final currentUserId = _authService.currentUser?.uid;
+    final myReaction = currentUserId != null ? message.reactions[currentUserId] : null;
+
+    const quickEmojis = ['👍', '❤️', '🔥', '😂', '😮', '😢'];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Tutma Çubuğu
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey[700] : Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+
+                // Hızlı Emoji Barı (WhatsApp / Telegram Stili)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      ...quickEmojis.map((emoji) {
+                        final isSelected = myReaction == emoji;
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              Navigator.pop(ctx);
+                              _toggleReaction(message.id, emoji);
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? primaryColor.withValues(alpha: isDark ? 0.35 : 0.2)
+                                    : Colors.transparent,
+                                shape: BoxShape.circle,
+                                border: isSelected
+                                    ? Border.all(color: primaryColor, width: 1.5)
+                                    : null,
+                              ),
+                              child: Text(
+                                emoji,
+                                style: const TextStyle(fontSize: 24),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                      // Daha Fazla Emoji (+) Butonu
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _showExtendedEmojiPicker(message);
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.add_rounded,
+                              size: 24,
+                              color: isDark ? Colors.white70 : const Color(0xFF475569),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Mesaj Önizleme Kutusu
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border(left: BorderSide(color: primaryColor, width: 3.5)),
+                  ),
+                  child: Text(
+                    message.text,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.grey[300] : const Color(0xFF334155),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+
+                // İşlem Seçenekleri
+                // 1. Metni Kopyala
+                ListTile(
+                  leading: const Icon(Icons.copy_rounded, size: 20),
+                  title: const Text('Metni Kopyala', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  dense: true,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Clipboard.setData(ClipboardData(text: message.text));
+                    HapticFeedback.lightImpact();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Mesaj panoya kopyalandı 📋'),
+                        duration: Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                ),
+
+                // 2. Yanıtla
+                ListTile(
+                  leading: Icon(Icons.reply_rounded, color: primaryColor, size: 20),
+                  title: Text(
+                    'Yanıtla',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: primaryColor),
+                  ),
+                  dense: true,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _replyingToMessage = message;
+                    });
+                    _focusNode.requestFocus();
+                  },
+                ),
+
+                // 3. Mesajı Sil (Her iki taraftan kalıcı)
+                if (isMe)
+                  ListTile(
+                    leading: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                    title: const Text(
+                      'Mesajı Sil',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.red),
+                    ),
+                    dense: true,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _deleteMessagePermanently(message);
+                    },
+                  ),
+
+                // 4. Şikayet Et (Karşı tarafın mesajı ise)
+                if (!isMe)
+                  ListTile(
+                    leading: const Icon(Icons.flag_outlined, color: Colors.orange, size: 20),
+                    title: const Text(
+                      'Mesajı Şikayet Et',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.orange),
+                    ),
+                    dense: true,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      showReportDialog(
+                        context,
+                        reportedId: message.id,
+                        type: 'message',
+                        targetContent: message.text,
+                        targetAuthor: message.senderName,
+                        targetAuthorId: message.senderId,
+                      );
+                    },
+                  ),
+
+                const SizedBox(height: 6),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteMessagePermanently(Message message) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mesajı Sil'),
+        content: const Text('Bu mesajı silmek istediğinize emin misiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final currentUserId = _authService.currentUser?.uid ?? '';
+      final success = await _firestoreService.deleteMessageForEveryone(message.id, currentUserId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Mesaj silindi' : 'Mesaj silinirken hata oluştu'),
+            backgroundColor: success ? Colors.green : Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildReactionChips(
+    Message message,
+    bool isMe,
+    bool isDark,
+    Color primaryColor,
+    String? currentUserId,
+  ) {
+    if (message.reactions.isEmpty) return const SizedBox.shrink();
+
+    final Map<String, int> counts = {};
+    for (var emoji in message.reactions.values) {
+      if (emoji.isNotEmpty) {
+        counts[emoji] = (counts[emoji] ?? 0) + 1;
+      }
+    }
+    if (counts.isEmpty) return const SizedBox.shrink();
+
+    final myReaction = currentUserId != null ? message.reactions[currentUserId] : null;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4, left: 4, right: 4),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        alignment: isMe ? WrapAlignment.end : WrapAlignment.start,
+        children: counts.entries.map((entry) {
+          final emoji = entry.key;
+          final count = entry.value;
+          final isMine = myReaction == emoji;
+
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                _toggleReaction(message.id, emoji);
+              },
+              onLongPress: () => _showReactionDetailsModal(message),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isMine
+                      ? (isDark
+                          ? primaryColor.withValues(alpha: 0.32)
+                          : primaryColor.withValues(alpha: 0.18))
+                      : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isMine
+                        ? primaryColor
+                        : (isDark ? Colors.white.withValues(alpha: 0.15) : const Color(0xFFCBD5E1)),
+                    width: isMine ? 1.2 : 0.8,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      emoji,
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                    if (count > 1) ...[
+                      const SizedBox(width: 3.5),
+                      Text(
+                        '$count',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: isMine ? FontWeight.w800 : FontWeight.w600,
+                          color: isMine
+                              ? (isDark ? Colors.white : primaryColor)
+                              : (isDark ? Colors.grey[300] : const Color(0xFF475569)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  void _showReactionDetailsModal(Message message) {
+    if (message.reactions.isEmpty) return;
+    HapticFeedback.selectionClick();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentUserId = _authService.currentUser?.uid;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey[700] : Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Text(
+                  'Mesaj Tepkileri (${message.reactions.length})',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...message.reactions.entries.map((entry) {
+                  final uid = entry.key;
+                  final emoji = entry.value;
+                  final isMe = uid == currentUserId;
+                  final name = isMe ? 'Siz' : (uid == widget.otherUserId ? widget.otherUserName : 'Kullanıcı');
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Text(emoji, style: const TextStyle(fontSize: 22)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isMe ? FontWeight.w700 : FontWeight.w500,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        ),
+                        if (isMe)
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _toggleReaction(message.id, emoji);
+                            },
+                            child: const Text('Kaldır', style: TextStyle(color: Colors.red, fontSize: 12)),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

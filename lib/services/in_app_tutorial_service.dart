@@ -150,23 +150,7 @@ class InAppTutorialService {
         padding: const EdgeInsets.all(4),
       ),
 
-      // 5. ADIM: KAYDEDİLENLER & FAVORİ KATEGORİLERİM (Zümrüt Yeşili)
-      TutorialStep(
-        id: 'saved_and_categories',
-        categoryTag: 'KAYDEDİLENLER & TAKİP',
-        title: 'Kaydedilenler & Özel Akışın',
-        description:
-            '📌 Fırsatları favorilerine ekle, takip ettiğin kategorilere özel indirim akışını oluştur.',
-        buttonText: 'Sıradaki',
-        icon: Icons.bookmark_rounded,
-        accentColor: const Color(0xFF34D399),
-        targetKey: bottomNavSavedKey,
-        borderRadius: 20,
-        padding: const EdgeInsets.all(6),
-        isCircle: true,
-      ),
-
-      // 6. ADIM: POPÜLER FIRSATLAR (Alev Turuncusu)
+      // 5. ADIM: POPÜLER FIRSATLAR (Alev Turuncusu)
       TutorialStep(
         id: 'popular_deals',
         categoryTag: 'POPÜLER FIRSATLAR',
@@ -182,7 +166,7 @@ class InAppTutorialService {
         isCircle: true,
       ),
 
-      // 7. ADIM: AKILLI LİNK ANALİZİ (Pembe Gül)
+      // 6. ADIM: AKILLI LİNK ANALİZİ & FIRSAT PAYLAŞ (Pembe Gül)
       TutorialStep(
         id: 'submit_deal',
         categoryTag: 'AKILLI LİNK ANALİZİ',
@@ -193,6 +177,22 @@ class InAppTutorialService {
         icon: Icons.add_circle_outline_rounded,
         accentColor: const Color(0xFFF472B6),
         targetKey: bottomNavAddKey,
+        borderRadius: 20,
+        padding: const EdgeInsets.all(6),
+        isCircle: true,
+      ),
+
+      // 7. ADIM: KAYDEDİLENLER & FAVORİ KATEGORİLERİM (Zümrüt Yeşili)
+      TutorialStep(
+        id: 'saved_and_categories',
+        categoryTag: 'KAYDEDİLENLER & TAKİP',
+        title: 'Kaydedilenler & Özel Akışın',
+        description:
+            '📌 Fırsatları favorilerine ekle, takip ettiğin kategorilere özel indirim akışını oluştur.',
+        buttonText: 'Sıradaki',
+        icon: Icons.bookmark_rounded,
+        accentColor: const Color(0xFF34D399),
+        targetKey: bottomNavSavedKey,
         borderRadius: 20,
         padding: const EdgeInsets.all(6),
         isCircle: true,

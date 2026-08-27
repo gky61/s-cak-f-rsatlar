@@ -488,6 +488,8 @@ class FirestoreService {
         senderSub = firestore
             .collection('messages')
             .where('senderId', isEqualTo: userId)
+            .orderBy('createdAt', descending: true)
+            .limit(100)
             .snapshots()
             .listen(
           (snap) {
@@ -504,6 +506,8 @@ class FirestoreService {
         receiverSub = firestore
             .collection('messages')
             .where('receiverId', isEqualTo: userId)
+            .orderBy('createdAt', descending: true)
+            .limit(100)
             .snapshots()
             .listen(
           (snap) {
@@ -520,6 +524,8 @@ class FirestoreService {
         adminSub = firestore
             .collection('adminToUserMessages')
             .where('userId', isEqualTo: userId)
+            .orderBy('createdAt', descending: true)
+            .limit(50)
             .snapshots()
             .listen(
           (snap) {
@@ -545,6 +551,8 @@ class FirestoreService {
   
   Stream<List<Message>> getConversationStream(String u1, String u2, {int limit = 60}) =>
       _messageService.getConversationStream(u1, u2, limit: limit);
+  Future<void> toggleReaction({required String messageId, required String userId, required String emoji}) =>
+      _messageService.toggleReaction(messageId: messageId, userId: userId, emoji: emoji);
   Future<void> markMessageAsRead(String id) => _messageService.markMessageAsRead(id);
   Future<void> markConversationAsRead(String u1, String u2) => _messageService.markConversationAsRead(u1, u2);
   Future<void> softDeleteMessageForUser(String messageId, String userId) => _messageService.softDeleteMessageForUser(messageId, userId);
@@ -616,6 +624,17 @@ class FirestoreService {
 
   Stream<List<Comment>> getCommentsStream(String dealId) => _commentService.getCommentsStream(dealId);
   Future<bool> deleteComment(String commentId, String dealId) => _commentService.deleteComment(commentId, dealId);
+  Future<void> toggleCommentReaction({
+    required String dealId,
+    required String commentId,
+    required String userId,
+    required String emoji,
+  }) => _commentService.toggleCommentReaction(
+        dealId: dealId,
+        commentId: commentId,
+        userId: userId,
+        emoji: emoji,
+      );
   
   Stream<List<Map<String, dynamic>>> getCommentReplyNotificationsStream(String userId) => 
       _commentService.getCommentReplyNotificationsStream(userId);

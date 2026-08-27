@@ -34,6 +34,8 @@ class NotificationService {
   static String? activeChatUserId;
 
   static bool _notificationListenersSetup = false;
+  static bool _isLocalNotificationsInitialized = false;
+  static bool _hasHandledColdStartNotification = false;
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -82,6 +84,12 @@ class NotificationService {
       _log('⚠️ Web platformunda local notifications desteklenmiyor');
       return;
     }
+
+    if (_isLocalNotificationsInitialized) {
+      _log('📬 Local notifications zaten başlatılmış, tekrar başlatma atlanıyor.');
+      return;
+    }
+    _isLocalNotificationsInitialized = true;
     
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
@@ -104,18 +112,21 @@ class NotificationService {
       },
     );
 
-    // Uygulama tamamen kapalıyken (cold start) tıklanan yerel bildirimi yakala
-    try {
-      final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
-      if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
-        final payload = launchDetails.notificationResponse?.payload;
-        if (payload != null && payload.isNotEmpty) {
-          _log('🚀 Uygulama kapalıyken tıklanan yerel bildirim (cold start): $payload');
-          _handlePayloadString(payload);
+    // Uygulama tamamen kapalıyken (cold start) tıklanan yerel bildirimi yakala (SADECE BİR KEZ)
+    if (!_hasHandledColdStartNotification) {
+      _hasHandledColdStartNotification = true;
+      try {
+        final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
+        if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
+          final payload = launchDetails.notificationResponse?.payload;
+          if (payload != null && payload.isNotEmpty) {
+            _log('🚀 Uygulama kapalıyken tıklanan yerel bildirim (cold start): $payload');
+            _handlePayloadString(payload);
+          }
         }
+      } catch (e) {
+        _log('⚠️ Cold start yerel bildirim kontrol hatası: $e');
       }
-    } catch (e) {
-      _log('⚠️ Cold start yerel bildirim kontrol hatası: $e');
     }
 
     // Android notification channel oluştur (genel bildirimler)
@@ -256,8 +267,10 @@ class NotificationService {
       _log('Kullanıcı bildirimleri kabul etti');
     }
 
-    // Local notifications izinleri
-    await initializeLocalNotifications();
+    // Local notifications izinleri (yalnızca ilk seferde başlat)
+    if (!_isLocalNotificationsInitialized) {
+      await initializeLocalNotifications();
+    }
 
     // Android 13+ (API 33+): Bildirim iznini runtime'da iste (mesaj vb. bildirimler için gerekli)
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {

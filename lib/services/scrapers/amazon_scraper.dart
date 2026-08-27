@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:html/dom.dart' as dom;
 import 'base_scraper.dart';
@@ -12,6 +13,42 @@ class AmazonScraper extends BaseProductScraper {
     return lowerUrl.contains('amazon.') || 
            lowerUrl.contains('amzn.') || 
            lowerUrl.contains('link.amazon');
+  }
+
+  @override
+  FutureOr<String?> scrapePriceLabel(dom.Document document) {
+    // 1. Prime Özel/Fırsatı metin ve element kontrolleri
+    final dealBadgeEl = document.querySelector('#dealBadgeSupportingText, .dealBadgeSupportingText, [data-badge-text*="Prime"]');
+    if (dealBadgeEl != null) {
+      final text = dealBadgeEl.text.trim();
+      if (RegExp(r'prime\s*(?:fırsat|özel|deal)', caseSensitive: false).hasMatch(text)) {
+        return 'Prime Fırsatı';
+      }
+    }
+
+    // 2. #primeExclusivePricingMessage ve upsell konteynerleri
+    final primeMsgEl = document.querySelector('#primeExclusivePricingMessage, [id*="primeExclusivePricing"], [id*="primeSavingsUpsell"]');
+    if (primeMsgEl != null) {
+      final text = primeMsgEl.text.trim();
+      if (RegExp(r'''prime\s*(?:ile|’a|'a|\s*üyeleri)|fırsat yalnızca amazon prime''', caseSensitive: false).hasMatch(text)) {
+        return 'Prime Fırsatı';
+      }
+    }
+
+    // 3. Genel Prime Fırsatı / Prime'a Özel DOM araması
+    final primeRegex = RegExp(
+      r'''(?:amazon\s*)?prime\s*fırsatı|(?:amazon\s*)?prime['’]?\s*(?:a|’a|'a)?\s*özel|bu fırsat yalnızca amazon prime''',
+      caseSensitive: false,
+    );
+    final elements = document.querySelectorAll('span, div, p, b, strong, i, a');
+    for (final el in elements) {
+      final text = el.text.trim();
+      if (primeRegex.hasMatch(text)) {
+        return 'Prime Fırsatı';
+      }
+    }
+
+    return null;
   }
 
   @override

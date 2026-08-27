@@ -1,6 +1,9 @@
 # FırsatKolik Mağaza Özel Scraping Kuralları ve Stratejileri
 
-Bu belge, FırsatKolik uygulamasında yer alan 13 adet entegre mağaza için geliştirilen scraping (veri kazıma) stratejilerini, karşılaşılan bot koruması (WAF/Akamai/Cloudflare) engellerini ve bunların nasıl aşıldığını detaylıca açıklamaktadır.
+> [!NOTE]
+> Bu doküman Mağaza Özel Scraping Kuralları kılavuzudur. Sistemin güncel 21 mağazalık şemaları, bypass stratejileri, platform-native HTTP tünellemesi ve deployment süreçleri için lütfen **[Scraping Mimarisi ve Otonom Botlar Master Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_mimarisi_rehberi.md)** dokümanını inceleyiniz.
+
+Bu belge, FırsatKolik uygulamasında yer alan 21 adet entegre mağaza için geliştirilen scraping (veri kazıma) stratejilerini, karşılaşılan bot koruması (WAF/Akamai/Cloudflare) engellerini ve bunların nasıl aşıldığını detaylıca açıklamaktadır.
 
 ---
 

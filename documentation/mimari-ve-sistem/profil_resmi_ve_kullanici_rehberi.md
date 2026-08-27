@@ -1,5 +1,8 @@
 # 📸 FırsatKolik - Profil Resmi ve Kullanıcı Bilgileri Master Referans Rehberi
 
+> [!NOTE]
+> Bu doküman profil resimleri, WebP assetleri ve denormalize senkronizasyon referans kılavuzudur. Sistemin uçtan uca mimarisi, gösterim algoritmaları, gamification, mesajlaşma, moderasyon ve Web Admin entegrasyonu için lütfen **[Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md)** dokümanını inceleyiniz.
+
 > **Bu dokümanın amacı:** Proje genelinde profil fotoğraflarının, avatarların ve kullanıcı adlarının tanımlandığı, işlendiği, depolandığı, senkronize edildiği ve render edildiği **istisnasız tüm noktaları** kayıt altına almaktır. Profil resmi veya kullanıcı adı altyapısında herhangi bir değişiklik, yeni avatar ekleme veya görsel formatı güncellemesi yapılacağında bu doküman doğrudan referans alınmalıdır.
 
 ---

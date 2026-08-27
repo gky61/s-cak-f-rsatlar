@@ -33,12 +33,25 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
   @override
   void initState() {
     super.initState();
+    _themeService.addListener(_onThemeChanged);
     _userDealsStream = _firestoreService.getUserDealsStream(widget.userId, limit: widget.limit);
+  }
+
+  void _onThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _themeService.removeListener(_onThemeChanged);
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = _themeService.isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final title = widget.isOwnProfile ? 'Paylaştığım Fırsatlar' : '${widget.username} Fırsatları';
 
     return Scaffold(

@@ -1,5 +1,7 @@
-```markdown
 # Fırsatkolik - Kupon Listeleme, Sayfa İçi Paylaşım ve Sade Oylama Sistemi
+
+> [!NOTE]
+> Bu doküman iki sekmeli kupon mimarisinin ilk ürün yol haritasıdır. Sistemin canlıdaki eksiksiz mimari, 3 kademeli Wilson Score sıralama algoritması, idempotent oylama motoru, multi-source kazıyıcı ve şalter kontratı için lütfen **[Kuponlar ve İndirim Kodları Master Mimari Rehberi](file:///d:/firsatkolik/documentation/kuponlar/kuponlar_modulu_rehberi.md)** dokümanını inceleyiniz.
 
 Bu yol haritası; uygulamaya çok fazla göz önünde olmayan, minimalist bir "Kuponlar" alanı eklemek, kupon listeleme sayfasını oluşturmak ve kuponların doğruluğunu Fırsatkolik'in özü olan kalıcı "Sıcak/Soğuk" (Çalıştı/Çalışmadı) butonlarıyla topluluğa oylatmak için gerekli teknik ve mantıksal adımları kapsar.
 
@@ -73,5 +75,3 @@ Kupon kartları yatay (horizontal) bir yapıda olacak ve tam olarak şu 3 ana b�
 5. **Son Kullanma Tarihi:** Kuponun geçerlilik süresi (DatePicker - Opsiyonel).
 
 * **Yayınlama:** "Kuponu Paylaş" butonuna basıldığında kaynak tipi "topluluk", sayaçlar ise "0" olarak ayarlanıp veritabanına yazılır. Form kapatılarak liste otomatik yenilenir.
-
-```

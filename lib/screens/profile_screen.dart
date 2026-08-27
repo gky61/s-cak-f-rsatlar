@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/user.dart';
 import '../services/auth_service.dart';
@@ -16,10 +15,6 @@ import '../utils/asset_path_migration.dart';
 import 'guest_profile_screen.dart';
 import 'notification_settings_screen.dart';
 import 'auth_screen.dart';
-import 'home_screen.dart';
-import '../services/in_app_tutorial_service.dart';
-import 'privacy_policy_screen.dart';
-import 'faq_screen.dart';
 import 'category_preferences_screen.dart';
 import 'admin_screen.dart';
 import 'keyword_tracking_screen.dart';
@@ -46,8 +41,9 @@ void _log(String message) {
 
 class ProfileScreen extends StatefulWidget {
   final String? userId; // Belirli bir kullanıcının profilini görüntülemek için
+  final bool isRootTab;
   
-  const ProfileScreen({super.key, this.userId});
+  const ProfileScreen({super.key, this.userId, this.isRootTab = false});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -76,6 +72,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _themeService.addListener(_onThemeChanged);
     _checkIfOwnProfile();
     _checkAdminStatus();
     _loadUserData();
@@ -91,6 +88,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } else {
       _loadFollowStatus();
     }
+  }
+
+  void _onThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _themeService.removeListener(_onThemeChanged);
+    _messageCountSubscription?.cancel();
+    _adminMessageCountSubscription?.cancel();
+    _userDataSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadFollowStatus() async {
@@ -165,14 +177,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _unreadAdminMessageCount = unreadCount;
       });
     });
-  }
-
-  @override
-  void dispose() {
-    _messageCountSubscription?.cancel();
-    _adminMessageCountSubscription?.cancel();
-    _userDataSubscription?.cancel();
-    super.dispose();
   }
 
   void _checkIfOwnProfile() {
@@ -1041,6 +1045,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Misafir (Giriş yapmamış kullanıcı) kendi profiline bakıyorsa:
     if (_isOwnProfile && _authService.currentUser == null) {
       return GuestProfileScreen(
+        isRootTab: widget.isRootTab,
         onLoginSuccess: () {
           _checkIfOwnProfile();
           _checkAdminStatus();
@@ -1129,9 +1134,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     textMain: textMain,
                     textSub: textSub,
                   ),
+                  const SizedBox(height: 14),
                 ],
-
-                if (_isOwnProfile) const SizedBox(height: 12),
 
                 // If Other User's Profile: Shared Deals Feed
                 if (!_isOwnProfile && _user != null) ...[
@@ -1163,7 +1167,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
 
-                SizedBox(height: _isOwnProfile ? 100 : 40), // Bottom nav padding
+                SizedBox(height: widget.isRootTab ? 16 : (_isOwnProfile ? 100 : 40)), // Bottom nav padding
               ],
             ),
           ),
@@ -1178,8 +1182,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             primaryColor: primaryColor,
           ),
 
-          // Bottom Navigation Bar (Sadece kendi profilinde)
-          if (_isOwnProfile)
+          // Bottom Navigation Bar (Sadece kendi profilinde ve bağımsız açıldığında)
+          if (_isOwnProfile && !widget.isRootTab)
             _buildBottomNav(
               context,
               isDark: isDark,
@@ -2304,25 +2308,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Row(
           children: [
             // Glass Back Button
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => Navigator.pop(context),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    size: 18,
-                    color: textMain,
+            if (!widget.isRootTab && Navigator.canPop(context))
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => Navigator.pop(context),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                      color: textMain,
+                    ),
                   ),
                 ),
-              ),
-            ),
+              )
+            else
+              const SizedBox(width: 34),
 
             Expanded(
               child: Text(

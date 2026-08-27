@@ -65,19 +65,30 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
     Magaza(code: 'hakmar', name: 'Hakmar', logoAsset: 'assets/hakmar.webp', brandColor: Color(0xFFD32F2F), kategori: MagazaKategori.market),
     Magaza(code: 'cagri', name: 'Çağrı Hipermarket', logoAsset: 'assets/cagri.webp', brandColor: Color(0xFFE31B23), kategori: MagazaKategori.market),
     Magaza(code: 'kooperatifmarket', name: 'Kooperatif Market', logoAsset: 'assets/kooperatif.webp', brandColor: Color(0xFF00755F), kategori: MagazaKategori.market),
+    Magaza(code: 'mopas', name: 'Mopaş', logoAsset: 'assets/mopas.webp', brandColor: Color(0xFFE31E24), kategori: MagazaKategori.market),
+    Magaza(code: 'ozkuruslar', name: 'Özkuruşlar', logoAsset: 'assets/ozkuruslar.webp', brandColor: Color(0xFFD32F2F), kategori: MagazaKategori.market),
+    Magaza(code: 'tahtakale', name: 'Tahtakale Spot', logoAsset: 'assets/tahtakale.webp', brandColor: Color(0xFFD32F2F), kategori: MagazaKategori.market),
 
     // 2. Öncelik – Makyaj / Kişisel Bakım
     Magaza(code: 'watsons', name: 'Watsons', logoAsset: 'assets/watsons.webp', brandColor: Color(0xFF00A19B), kategori: MagazaKategori.kozmetik),
     Magaza(code: 'gratis', name: 'Gratis', logoAsset: 'assets/gratis.webp', brandColor: Color(0xFF8B1E87), kategori: MagazaKategori.kozmetik),
     Magaza(code: 'rossmann', name: 'Rossmann', logoAsset: 'assets/rossmann.webp', brandColor: Color(0xFFE2001A), kategori: MagazaKategori.kozmetik),
 
-    // 3. Öncelik – Giyim / Ev / Yaşam / Anne & Bebek
+    // 3. Öncelik – Giyim / Ev / Yaşam / Anne & Bebek / Yapı Market
+    Magaza(code: 'bauhaus', name: 'Bauhaus', logoAsset: 'assets/bauhaus.webp', brandColor: Color(0xFFE30613), kategori: MagazaKategori.giyimYasam),
+    Magaza(code: 'koctas', name: 'Koçtaş', logoAsset: 'assets/koctas.webp', brandColor: Color(0xFFEA5906), kategori: MagazaKategori.giyimYasam),
+    Magaza(code: 'tekzen', name: 'Tekzen', logoAsset: 'assets/tekzen.webp', brandColor: Color(0xFF008CD2), kategori: MagazaKategori.giyimYasam),
+    Magaza(code: 'tedi', name: 'Tedi', logoAsset: 'assets/tedi.webp', brandColor: Color(0xFF0088CC), kategori: MagazaKategori.giyimYasam),
     Magaza(code: 'cetinkaya', name: 'Çetinkaya', logoAsset: 'assets/cetinkaya.webp', brandColor: Color(0xFFE31E24), kategori: MagazaKategori.giyimYasam),
     Magaza(code: 'civil', name: 'Civil', logoAsset: 'assets/civil.webp', brandColor: Color(0xFFFF6600), kategori: MagazaKategori.giyimYasam),
     Magaza(code: 'evkur', name: 'Evkur', logoAsset: 'assets/evkur.webp', brandColor: Color(0xFF003399), kategori: MagazaKategori.giyimYasam),
     Magaza(code: 'mrdiy', name: 'MR.DIY', logoAsset: 'assets/mrdiy.webp', brandColor: Color(0xFFFFD100), kategori: MagazaKategori.giyimYasam),
 
-    // 4. Öncelik – Teknoloji & Elektronik
+    // 4. Öncelik – Teknoloji & Elektronik & Beyaz Eşya
+    Magaza(code: 'arcelik', name: 'Arçelik', logoAsset: 'assets/arcelik.webp', brandColor: Color(0xFFE30613), kategori: MagazaKategori.teknoloji),
+    Magaza(code: 'beko', name: 'Beko', logoAsset: 'assets/beko.webp', brandColor: Color(0xFF003087), kategori: MagazaKategori.teknoloji),
+    Magaza(code: 'bosch', name: 'Bosch', logoAsset: 'assets/bosch.webp', brandColor: Color(0xFFE20015), kategori: MagazaKategori.teknoloji),
+    Magaza(code: 'siemens', name: 'Siemens', logoAsset: 'assets/siemens.webp', brandColor: Color(0xFF00646E), kategori: MagazaKategori.teknoloji),
     Magaza(code: 'teknosa', name: 'Teknosa', logoAsset: 'assets/teknosa.webp', brandColor: Color(0xFFFF5F00), kategori: MagazaKategori.teknoloji),
     Magaza(code: 'vatan', name: 'Vatan Bilgisayar', logoAsset: 'assets/vatan.webp', brandColor: Color(0xFF005691), kategori: MagazaKategori.teknoloji),
     Magaza(code: 'vestel', name: 'Vestel', logoAsset: 'assets/vestel.webp', brandColor: Color(0xFFCC0000), kategori: MagazaKategori.teknoloji),

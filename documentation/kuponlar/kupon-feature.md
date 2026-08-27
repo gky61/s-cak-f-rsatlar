@@ -1,5 +1,8 @@
 # Fırsatkolik - Kupon Listeleme ve Sayfa İçi Paylaşım Sistemi Yol Haritası
 
+> [!NOTE]
+> Bu doküman Kuponlar modülünün ilk ürün tasarımı ve kullanıcı deneyimi yol haritasıdır. Sistemin canlıdaki eksiksiz mimari, 3 kademeli Wilson Score sıralama algoritması, idempotent oylama motoru, multi-source kazıyıcı ve şalter kontratı için lütfen **[Kuponlar ve İndirim Kodları Master Mimari Rehberi](file:///d:/firsatkolik/documentation/kuponlar/kuponlar_modulu_rehberi.md)** dokümanını inceleyiniz.
+
 Bu yol haritası; uygulamaya çok fazla göz önünde olmayan, minimalist bir *Kuponlar* alanı eklemek, kupon listeleme sayfasını oluşturmak ve kupon paylaşma eylemini tamamen bu yeni sayfanın içerisine konumlandırmak için gerekli teknik ve mantıksal adımları kapsar.
 
 Ana menüdeki ana ***Fırsat Paylaş*** butonu bu süreçten tamamen bağımsız kalacak ve sadece ürün fırsatı paylaşmaya devam edecektir.
