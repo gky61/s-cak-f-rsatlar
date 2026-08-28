@@ -35,16 +35,40 @@ async function run() {
   assert.strictEqual(ratingDom.ratingCount, 16, 'ratingCount should be 16');
   assert.strictEqual(scraper.scrapeBrand($dom), 'iFFALCON', 'brand should be iFFALCON');
 
-  // 3. Real HTML file test
-  const filePath = path.join(__dirname, '../../scratch/amazon-page.html');
-  if (fs.existsSync(filePath)) {
-    const htmlReal = fs.readFileSync(filePath, 'utf8');
-    const $real = cheerio.load(htmlReal);
-    const ratingReal = scraper.scrapeRating($real);
-    assert.strictEqual(ratingReal.ratingValue, 4.3, 'Real ratingValue should be 4.3');
-    assert.strictEqual(ratingReal.ratingCount, 16, 'Real ratingCount should be 16');
-    assert.strictEqual(scraper.scrapeBrand($real), 'iFFALCON', 'Real brand should be iFFALCON');
-  }
+  // 4. priceLabel Prime Delivery Exclusion (Prime ile Ücretsiz Teslimat Prime Fırsatı rozeti vermemeli!)
+  const htmlDelivery = `
+    <html>
+      <body>
+        <div id="navbar"><a href="/prime">Prime Fırsat Günleri</a></div>
+        <div id="mir-layout-DELIVERY_BLOCK">
+          <span>Prime ile ÜCRETSİZ teslimat: Yarın</span>
+        </div>
+        <div class="a-section">Normal Fiyat: 500 TL</div>
+      </body>
+    </html>
+  `;
+  const $delivery = cheerio.load(htmlDelivery);
+  assert.strictEqual(scraper.scrapePriceLabel($delivery), null, 'Prime teslimat veya header bannerları Prime Fırsatı rozeti vermemeli!');
+
+  // 5. priceLabel True Prime Deal (dealBadgeSupportingText veya primeExclusivePricing)
+  const htmlPrimeDeal = `
+    <html>
+      <body>
+        <div id="apex_desktop">
+          <span id="dealBadgeSupportingText">Prime Fırsatı</span>
+          <span class="a-price">299,00 TL</span>
+        </div>
+      </body>
+    </html>
+  `;
+  const $prime = cheerio.load(htmlPrimeDeal);
+  assert.strictEqual(scraper.scrapePriceLabel($prime), 'Prime Fırsatı', 'Gerçek Prime Fırsatı doğru algılanmalı!');
+  console.log('✅ Amazon priceLabel testleri başarıyla geçti!');
 }
 
 module.exports = { run };
+
+if (require.main === module) {
+  run();
+}
+

@@ -92,5 +92,64 @@ void main() {
       final brand = scraper.scrapeBrand(doc);
       expect(brand, equals('Apple'));
     });
+
+    test('should NOT mark deal as Premium for generic coupon/installment tags (False Positive Prevention)', () async {
+      final html = '''
+      <script id="reduxStore" type="application/json">
+      {
+        "productState": {
+          "product": {
+            "name": "Pepsi Strawberries Zero Sugar",
+            "tagList": [
+              {"tagId": "premiumlulara-ozel-gida-icecek-urunlerinde-50-tl-uzeri-15-indirim"},
+              {"tagId": "premium-a-ozel-supermarket-urunlerinde-750-tl-ye-150-tl-kupon-firsati"},
+              {"tagId": "premiuma-gec-50-tl-indirim-kazanma-firsati"},
+              {"tagId": "premium-vade-farksiz"}
+            ],
+            "mainProductTagList": [
+              {"tagId": "premium-vade-farksiz"}
+            ],
+            "paymentTag": "premium-vade-farksiz"
+          }
+        }
+      }
+      </script>
+      <header><a class="sf-TopLinks-P85WSaCVLc_4UmgwMQJt">Hepsiburada Premium</a></header>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final priceLabel = await scraper.scrapePriceLabel(doc);
+      expect(priceLabel, isNull);
+    });
+
+    test('should mark deal as Premium when DOM contains direct Premium price or seller-specific Premium discount tag', () async {
+      final htmlDom = '''
+      <div>
+        <span class="premium-price">Premium ile <b>1.411,83 TL</b></span>
+      </div>
+      ''';
+      final docDom = html_parser.parse(htmlDom);
+      final priceLabelDom = await scraper.scrapePriceLabel(docDom);
+      expect(priceLabelDom, equals('Premium ile'));
+
+      final htmlRedux = '''
+      <script id="reduxStore" type="application/json">
+      {
+        "productState": {
+          "product": {
+            "name": "Altınyıldız Polo Tişört",
+            "tagList": [
+              {"tagId": "92520395-premium-a-ozel-altinyildiz-classics-saticili-secili-urunlerde-10-indirim"}
+            ]
+          }
+        }
+      }
+      </script>
+      ''';
+      final docRedux = html_parser.parse(htmlRedux);
+      final priceLabelRedux = await scraper.scrapePriceLabel(docRedux);
+      expect(priceLabelRedux, equals('Premium ile'));
+    });
   });
 }
+

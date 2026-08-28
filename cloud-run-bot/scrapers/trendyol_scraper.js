@@ -90,13 +90,11 @@ class TrendyolScraper extends BaseProductScraper {
   }
 
   scrapePriceLabel($) {
-    // 1. DOM Seçicileri: Trendyol Plus fiyat/başlık öğeleri
+    // 1. DOM Seçicileri: Trendyol Plus gerçek fiyat & banner elemanları
     const plusSelectors = [
       '.ty-plus-price-header',
+      '.ty-plus-price-discounted-price',
       '.ty-plus-price',
-      '[class*="ty-plus-price"]',
-      '[class*="ty-plus"]',
-      '[class*="plus-price"]',
       '.ty-plus-banner-desktop'
     ];
 
@@ -104,34 +102,39 @@ class TrendyolScraper extends BaseProductScraper {
       const el = $(sel).first();
       if (el.length > 0) {
         const text = el.text().trim();
-        if (/plus/i.test(text) || sel.includes('ty-plus')) {
+        if (text.length > 0) {
           return "Plus'a Özel";
         }
       }
     }
 
-    // 2. Metin bazlı DOM araması (Plus'a Özel)
+    // 2. Metin bazlı DOM araması (Plus'a Özel / Trendyol Plus'a Özel)
     let foundText = false;
     $('span, div, p, b, strong, a, label, h1, h2, h3').each((_, el) => {
       const text = $(el).clone().children().remove().end().text().trim();
-      if (/(?:trendyol\s*)?plus['’]?\s*a\s*özel/i.test(text)) {
+      if (text.length <= 60 && /^(?:trendyol\s*)?plus['’]?\s*(?:a\s*özel|la\s*daha\s*az\s*öde|ile)/i.test(text)) {
         foundText = true;
         return false;
       }
     });
     if (foundText) return "Plus'a Özel";
 
-    // 3. Script etiketleri & initial state kontrolü
-    let scriptFound = false;
-    const scriptPlusRegex = /ty-plus|hasPlusPromotion|isPlusExclusive|plusPromotion|(?:trendyol\s*)?plus(?:\\u0027|['’])\s*a\s*özel/i;
+    // 3. Script etiketleri: SADECE açık boolean TRUE koşulları (window condition=true veya JSON true)
+    let scriptTrue = false;
     $('script').each((_, el) => {
       const text = $(el).text();
-      if (text && scriptPlusRegex.test(text)) {
-        scriptFound = true;
-        return false;
+      if (text) {
+        if (/__envoy_ty-plus-banner__CONDITION["']?\s*\]?\s*=\s*true/i.test(text)) {
+          scriptTrue = true;
+          return false;
+        }
+        if (/"hasPlusPromotion"\s*:\s*true|"isPlusExclusive"\s*:\s*true/i.test(text)) {
+          scriptTrue = true;
+          return false;
+        }
       }
     });
-    if (scriptFound) return "Plus'a Özel";
+    if (scriptTrue) return "Plus'a Özel";
 
     return null;
   }

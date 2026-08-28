@@ -35,15 +35,22 @@ class AmazonScraper extends BaseProductScraper {
       }
     }
 
-    // 3. Genel Prime Fırsatı / Prime'a Özel DOM araması
+    // 3. Ürün ana gövdesinde Prime Fırsatı / Prime'a Özel DOM araması (Header/Footer hariç)
     final primeRegex = RegExp(
       r'''(?:amazon\s*)?prime\s*fırsatı|(?:amazon\s*)?prime['’]?\s*(?:a|’a|'a)?\s*özel|bu fırsat yalnızca amazon prime''',
       caseSensitive: false,
     );
-    final elements = document.querySelectorAll('span, div, p, b, strong, i, a');
+    final elements = document.querySelectorAll('#centerCol, #dp-container, #apex_desktop, #corePrice_desktop, #desktop_buybox, span, div, p, b, strong, i, a');
     for (final el in elements) {
+      // Header ve footer alanlarını yoksay (Prime Day banner vb. false positive önleme)
+      final id = el.id.toLowerCase();
+      final cls = el.className.toLowerCase();
+      if (id.contains('navbar') || id.contains('navfooter') || id.contains('nav-belt') || cls.contains('nav-subnav') || cls.contains('nav-footer')) {
+        continue;
+      }
+
       final text = el.text.trim();
-      if (primeRegex.hasMatch(text)) {
+      if (text.length <= 120 && primeRegex.hasMatch(text)) {
         return 'Prime Fırsatı';
       }
     }

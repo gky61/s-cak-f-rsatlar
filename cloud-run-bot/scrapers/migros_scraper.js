@@ -293,14 +293,7 @@ class MigrosScraper extends BaseProductScraper {
   }
 
   async scrapePriceLabel($) {
-    // 1. Check DOM
-    const crmEl = $('.product-label.crm').first();
-    if (crmEl.length) {
-      const crmText = crmEl.text().trim().toLocaleUpperCase('tr-TR');
-      if (crmText) return crmText;
-    }
-
-    // 2. API fallback
+    // 1. Screens API (En doğru ve net veri kaynağı)
     try {
       let imageUrl = '';
       const product = this.findProductJsonLd($);
@@ -322,10 +315,46 @@ class MigrosScraper extends BaseProductScraper {
           });
           if (apiRes.ok) {
             const json = await apiRes.json();
-            const crmTags = json.data?.storeProductInfoDTO?.crmDiscountTags;
-            if (Array.isArray(crmTags) && crmTags.length > 0) {
-              if (crmTags[0].tag) {
-                return crmTags[0].tag.trim().toLocaleUpperCase('tr-TR');
+            const info = json.data?.storeProductInfoDTO;
+            if (info) {
+              // A. crmDiscountTags (Örn: "3 Al 2'si Money Hediye", "1 ALANA 1 BEDAVA", "50 TL Sepette İndirim")
+              const crmTags = info.crmDiscountTags;
+              if (Array.isArray(crmTags) && crmTags.length > 0 && crmTags[0]?.tag) {
+                const rawTag = crmTags[0].tag.trim();
+                const upperTag = rawTag.toLocaleUpperCase('tr-TR');
+                if (upperTag && upperTag !== 'İYİ FİYAT' && upperTag !== 'IYI FIYAT' && !upperTag.includes('SADECE MİGROS')) {
+                  return rawTag;
+                }
+              }
+
+              // B. badges listesi (CROSS_PROMOTED vs PRICE_PROMOTED)
+              const badges = Array.isArray(info.badges) ? info.badges : [];
+              for (const b of badges) {
+                if (b) {
+                  const bName = (b.name || '').toString();
+                  const bValue = (b.value || '').toString().trim();
+                  // Çoklu alım / kampanya rozeti (Örn: "3 Al 2 Öde", "2 Al 1 Öde", "2.'si %50 İndirimli")
+                  if (bName === 'CROSS_PROMOTED' && bValue) {
+                    return bValue;
+                  }
+                  // Fiyat indirimi / Money rozeti
+                  if (bName === 'PRICE_PROMOTED') {
+                    return 'Money ile';
+                  }
+                }
+              }
+
+              // C. Sadakat/Money fiyat farkı kontrolü
+              const shownPrice = typeof info.shownPrice === 'number' ? info.shownPrice : null;
+              const regularPrice = typeof info.regularPrice === 'number' ? info.regularPrice : null;
+              const salePrice = typeof info.salePrice === 'number' ? info.salePrice : null;
+              const loyaltyPrice = typeof info.loyaltyPrice === 'number' ? info.loyaltyPrice : null;
+
+              if ((loyaltyPrice && regularPrice && loyaltyPrice < regularPrice) ||
+                  (loyaltyPrice && salePrice && loyaltyPrice < salePrice) ||
+                  (shownPrice && salePrice && shownPrice < salePrice) ||
+                  (shownPrice && regularPrice && shownPrice < regularPrice)) {
+                return 'Money ile';
               }
             }
           }
@@ -334,6 +363,17 @@ class MigrosScraper extends BaseProductScraper {
     } catch (err) {
       console.warn(`[MigrosScraper] CRM tag API fetch failed: ${err.message}`);
     }
+
+    // 2. DOM Kontrolü (Header/Footer menüleri hariç ürünün kendi CRM etiketi)
+    const crmEl = $('.product-label.crm, .product-badges .badge').first();
+    if (crmEl.length) {
+      const rawText = crmEl.text().trim();
+      const upper = rawText.toLocaleUpperCase('tr-TR');
+      if (upper && upper !== 'İYİ FİYAT' && upper !== 'IYI FIYAT' && !upper.includes('SADECE MİGROS') && upper.length <= 50) {
+        return rawText;
+      }
+    }
+
     return null;
   }
 

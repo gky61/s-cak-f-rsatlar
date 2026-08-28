@@ -118,5 +118,44 @@ void main() {
       final brand = scraper.scrapeBrand(doc);
       expect(brand, equals('KTC'));
     });
+
+    test('should NOT mark deal as Plus when script condition is false or page contains generic ty-plus bundle code', () async {
+      const html = '''
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <script>window["__envoy_ty-plus-banner__CONDITION"]=false</script>
+        <script>function tyPlusHelper() { return "ty-plus plusPromotion isPlusExclusive"; }</script>
+      </head>
+      <body>
+        <div>Normal Ürün Başlığı</div>
+        <span>299 TL</span>
+      </body>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+      final priceLabel = await scraper.scrapePriceLabel(doc);
+      expect(priceLabel, isNull);
+    });
+
+    test('should mark deal as Plus when page contains true plus price header or condition=true', () async {
+      const htmlDom = '''
+      <div>
+        <div class="ty-plus-price-header">Trendyol Plus'a Özel</div>
+        <span class="ty-plus-price-discounted-price">178,64 TL</span>
+      </div>
+      ''';
+      final docDom = html_parser.parse(htmlDom);
+      final priceLabelDom = await scraper.scrapePriceLabel(docDom);
+      expect(priceLabelDom, equals("Plus'a Özel"));
+
+      const htmlScript = '''
+      <script>window["__envoy_ty-plus-banner__CONDITION"]=true</script>
+      ''';
+      final docScript = html_parser.parse(htmlScript);
+      final priceLabelScript = await scraper.scrapePriceLabel(docScript);
+      expect(priceLabelScript, equals("Plus'a Özel"));
+    });
   });
 }
+

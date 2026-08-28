@@ -78,5 +78,41 @@ void main() {
       final brand = scraper.scrapeBrand(doc);
       expect(brand, equals('Apple'));
     });
+
+    test('should NOT mark deal as Plus for generic menu links or script payloads (False Positive Prevention)', () async {
+      const html = '''
+      <html>
+        <body>
+          <div class="bg-gradient-to-r Pazarama Plus">Pazarama Plus</div>
+          <span class="text-xxs text-pink-500">Plus'ı Keşfet</span>
+          <a href="https://www.pazarama.com/pazarama-plus">Pazarama Plus</a>
+          <script>window.__NUXT__ = { plusPrice: { currency: "TL" }, CART_BASKET_PLUS_PROMO: true };</script>
+          <div>Standart Fiyat: 1.500 TL</div>
+        </body>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+      final priceLabel = await scraper.scrapePriceLabel(doc);
+
+      expect(priceLabel, isNull);
+    });
+
+    test('should mark deal as Plus when DOM contains pz-plus-icon or Şimdi Plus\'lı Ol CTA', () async {
+      const html = '''
+      <html>
+        <body>
+          <div class="product-price">
+            <img src="https://img.pzrmcdn.com/asset/_pzweb/img/pz-plus-icon.634982094b1176b6.png" alt="plus-icon" />
+            <a class="btn">Şimdi Plus'lı Ol</a>
+          </div>
+        </body>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+      final priceLabel = await scraper.scrapePriceLabel(doc);
+
+      expect(priceLabel, equals('Plus ile'));
+    });
   });
 }
+

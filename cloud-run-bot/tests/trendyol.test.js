@@ -63,6 +63,38 @@ function run() {
   assert.strictEqual(rating2.ratingValue, 4.5);
   assert.strictEqual(rating2.ratingCount, 33);
   assert.strictEqual(scraper.scrapeBrand($2), 'KTC');
+
+  // 4. priceLabel Tests (False Positive Prevention vs True Plus)
+  const htmlFalse = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <script>window["__envoy_ty-plus-banner__CONDITION"]=false</script>
+      <script>function tyPlusHelper() { return "ty-plus plusPromotion isPlusExclusive"; }</script>
+    </head>
+    <body>
+      <div>Normal Ürün Başlığı</div>
+      <span>299 TL</span>
+    </body>
+    </html>
+  `;
+  const $false = cheerio.load(htmlFalse);
+  assert.strictEqual(scraper.scrapePriceLabel($false), null, 'ty-plus genel bundle kodları Plus olarak algılanmamalıdır!');
+
+  const htmlTrueDom = `
+    <div>
+      <div class="ty-plus-price-header">Trendyol Plus'a Özel</div>
+      <span class="ty-plus-price-discounted-price">178,64 TL</span>
+    </div>
+  `;
+  const $trueDom = cheerio.load(htmlTrueDom);
+  assert.strictEqual(scraper.scrapePriceLabel($trueDom), "Plus'a Özel", 'DOM Plus fiyatı algılanmalı');
+
+  const htmlTrueScript = `
+    <script>window["__envoy_ty-plus-banner__CONDITION"]=true</script>
+  `;
+  const $trueScript = cheerio.load(htmlTrueScript);
+  assert.strictEqual(scraper.scrapePriceLabel($trueScript), "Plus'a Özel", 'Script condition=true algılanmalı');
 }
 
 module.exports = { run };

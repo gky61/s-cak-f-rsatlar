@@ -11,36 +11,20 @@ class PazaramaScraper extends BaseProductScraper {
   }
 
   scrapePriceLabel($) {
-    // 1. DOM: Plus ikonu veya Plus banner/linki
-    const hasPlusImg = $('img[alt*="plus-icon"], img[src*="pz-plus-icon"], img[src*="plus-icon"]').length > 0;
-    if (hasPlusImg) return "Plus ile";
+    // 1. DOM: Plus ikon görseli (Yalnızca ürün fiyat alanındaki pz-plus-icon)
+    const hasPlusIcon = $('img[alt="plus-icon"], img[src*="pz-plus-icon"]').length > 0;
+    if (hasPlusIcon) return "Plus ile";
 
-    const hasPlusLink = $('a[href*="pazarama-plus"]').length > 0;
-    if (hasPlusLink) return "Plus ile";
-
-    // 2. Metin bazlı DOM araması
-    let foundText = false;
-    const plusRegex = /(?:pazarama\s*)?plus['’]?\s*(?:ile|a özel|fırsat)|şimdi\s*plus['’]l[ıi]\s*ol/i;
-    $('span, div, p, b, strong, a, label').each((_, el) => {
+    // 2. DOM: "Şimdi Plus'lı Ol" CTA butonu veya "Plus'a Özel Fiyat"
+    let hasSimdiPlus = false;
+    $('a, button, span, div').each((_, el) => {
       const text = $(el).clone().children().remove().end().text().trim();
-      if (plusRegex.test(text)) {
-        foundText = true;
+      if (/şimdi\s*plus['’]?l[ıi]\s*ol/i.test(text) || /plus['’]a\s*özel\s*fiyat/i.test(text)) {
+        hasSimdiPlus = true;
         return false;
       }
     });
-    if (foundText) return "Plus ile";
-
-    // 3. Script kontrolü
-    let scriptFound = false;
-    const scriptPlusRegex = /pz-plus-icon|pazarama-plus|CART_BASKET_PLUS_PROMO|CMS_PLUS_ADVANTAGES|PLUS_USER_SUBSCRIPTION_STATUS/i;
-    $('script').each((_, el) => {
-      const text = $(el).text();
-      if (text && scriptPlusRegex.test(text)) {
-        scriptFound = true;
-        return false;
-      }
-    });
-    if (scriptFound) return "Plus ile";
+    if (hasSimdiPlus) return "Plus ile";
 
     return null;
   }

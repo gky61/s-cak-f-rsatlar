@@ -709,42 +709,89 @@ class HepsiburadaScraper extends BaseProductScraper {
   }
 
   scrapePriceLabel($) {
-    // 1. DOM Kontrolü: "Premium ile", "Premium'la", "Premium'a özel" metinleri
-    let hasDomPremium = false;
-    $('span, div, p, b, strong, a').each((_, el) => {
-      const text = $(el).text().trim();
-      if (/premium['’]?\s*(ile|la|a özel|fırsat)/i.test(text)) {
-        hasDomPremium = true;
+    // 1. DOM Kontrolü: Özel Premium Fiyat/Rozet Seçicileri
+    const ignoredParents = 'header, footer, nav, [class*="TopLinks"], [class*="topLinks"], [class*="installment"], [class*="Installment"], [data-test-id*="installment"], [class*="footer"], [class*="navigation"]';
+    const premiumSelectors = [
+      '[data-test-id*="premium-price"]',
+      '[class*="PremiumPrice"]',
+      '[class*="premium-price"]',
+      '[class*="premiumPrice"]',
+      '[data-test-id="loyalty-discount"]',
+      '[class*="loyalty-discount"]',
+      '[class*="loyaltyDiscount"]'
+    ];
+
+    for (const sel of premiumSelectors) {
+      const el = $(sel).first();
+      if (el.length && el.closest(ignoredParents).length === 0) {
+        const text = el.text().trim();
+        if (text.length > 0 && !text.toLowerCase().includes('taksit')) {
+          return 'Premium ile';
+        }
+      }
+    }
+
+    // 2. DOM Metin Taraması: Header/Footer/Navigasyon/Taksit hariç doğrudan yaprak etiket kontrolü
+    let domFound = false;
+    $('span, div, p, b, strong, label, a').each((_, el) => {
+      const $el = $(el);
+      if ($el.closest(ignoredParents).length > 0) return;
+
+      const directText = $el.clone().children().remove().end().text().trim();
+      const fullText = $el.text().trim();
+
+      const strictRegex = /^(?:hepsiburada\s*)?premium['’]?\s*(?:ile|la|’la|'la|a\s*özel\s*fiyat|üyelerine\s*özel)/i;
+      const priceWithPremiumRegex = /premium['’]?\s*(?:ile|la|’la|'la)\s*[\d.,]+\s*tl/i;
+
+      if (strictRegex.test(directText) || priceWithPremiumRegex.test(directText)) {
+        domFound = true;
+        return false;
+      }
+
+      if (fullText.length <= 60 && (strictRegex.test(fullText) || priceWithPremiumRegex.test(fullText))) {
+        domFound = true;
         return false;
       }
     });
-    if (hasDomPremium) return 'Premium ile';
 
-    // 2. Redux Store Kontrolü (#reduxStore)
+    if (domFound) return 'Premium ile';
+
+    // 3. Redux Store Kontrolü: Yalnızca doğrudan satıcı/ürün Premium indirim etiketleri
     const reduxScript = $('#reduxStore');
     if (reduxScript.length) {
       try {
         const reduxData = JSON.parse(reduxScript.text());
         const product = reduxData?.productState?.product;
         if (product) {
-          // tagList ve mainProductTagList
-          const tags = (product.tagList || []).map(t => (t.tagId || '').toString().toLowerCase());
-          const mainTags = (product.mainProductTagList || []).map(t => (t.tagId || '').toString().toLowerCase());
-          const paymentTag = (product.paymentTag || '').toString().toLowerCase();
+          const allTags = [
+            ...(product.tagList || []).map(t => (t.tagId || t || '').toString().toLowerCase()),
+            ...(product.mainProductTagList || []).map(t => (t.tagId || t || '').toString().toLowerCase())
+          ];
 
-          const hasTag = [...tags, ...mainTags].some(t => t.includes('premium'));
-          if (hasTag || paymentTag.includes('premium')) {
+          // Hariç tutulacak genel sepet kuponları ve taksitler
+          const isExcludedTag = (tag) => {
+            return (
+              tag.includes('vade-farksiz') ||
+              tag.includes('taksit') ||
+              tag.includes('kupon') ||
+              tag.includes('premiuma-gec') ||
+              tag.includes('supermarket') ||
+              tag.includes('gida-icecek') ||
+              tag.includes('saglik-ve-kisisel')
+            );
+          };
+
+          // Doğrudan satıcıya veya ürüne özel Premium indirim etiketi deseni
+          const isDirectSellerPremiumTag = (tag) => {
+            if (isExcludedTag(tag)) return false;
+            if (/premium['’]?[-_]?a[-_]?ozel.*saticili/i.test(tag)) return true;
+            if (/premiuma[-_]?ozel.*saticili/i.test(tag)) return true;
+            if (/premium[-_]?fiyatlar/i.test(tag)) return true;
+            return false;
+          };
+
+          if (allTags.some(isDirectSellerPremiumTag)) {
             return 'Premium ile';
-          }
-
-          // listings
-          if (Array.isArray(product.listings)) {
-            for (const l of product.listings) {
-              const lPayTag = (l?.paymentTag || '').toString().toLowerCase();
-              if (lPayTag.includes('premium')) {
-                return 'Premium ile';
-              }
-            }
           }
         }
       } catch (_) {}

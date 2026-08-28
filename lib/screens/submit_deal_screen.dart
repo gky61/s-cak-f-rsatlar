@@ -543,12 +543,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
           final label = cleanPreview.priceLabel;
           if (label != null && label.isNotEmpty) {
+            final isClubMembership = _isMembershipBadgeLabel(label);
             setState(() {
               _detectedPriceLabel = label;
               _priceLabel = label;
-              _isSpecialBadgeEnabled = true;
+              _isSpecialBadgeEnabled = isClubMembership;
             });
-            _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel');
+            _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel (Rozet switch: $isClubMembership)');
           }
 
           if (cleanPreview.ratingValue != null || cleanPreview.ratingCount != null || cleanPreview.brand != null || cleanPreview.originalPrice != null) {
@@ -2619,6 +2620,31 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         lower.contains('migros');
   }
 
+  bool _isMembershipBadgeLabel(String label) {
+    final upper = label.trim().toUpperCase();
+    // Çoklu alım / sepet / hediye / TL üzeri kampanyaları üyelik rozeti switch'i değildir
+    if (upper.contains('AL') ||
+        upper.contains('HEDİYE') ||
+        upper.contains('HEDIYE') ||
+        upper.contains('SEPETTE') ||
+        upper.contains('ÖDE') ||
+        upper.contains('ODE') ||
+        upper.contains('ADET') ||
+        upper.contains('TL ÜZERİ')) {
+      return false;
+    }
+    return upper == 'MONEY İLE' ||
+        upper == 'MONEY ILE' ||
+        upper == 'MONEY KART İLE' ||
+        upper == 'MONEY KART ILE' ||
+        upper == 'MONEY İNDİRİMLİ' ||
+        upper == 'MONEY INDIRIMLI' ||
+        upper == 'MONEY' ||
+        upper.contains('PRIME') ||
+        upper.contains('PLUS') ||
+        upper.contains('PREMIUM');
+  }
+
   String _getDefaultPriceLabelForStore(String? store) {
     if (store == null) return 'Özel Fiyat';
     final lower = store.toLowerCase();
@@ -2631,7 +2657,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   }
 
   String _getStoreBadgeTitle(String? store, String? priceLabel) {
-    if (priceLabel != null && priceLabel.isNotEmpty) {
+    if (priceLabel != null && priceLabel.isNotEmpty && _isMembershipBadgeLabel(priceLabel)) {
       return priceLabel;
     }
     return _getDefaultPriceLabelForStore(store);
@@ -2642,9 +2668,16 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     setState(() {
       _isSpecialBadgeEnabled = val;
       if (val) {
-        _priceLabel = _detectedPriceLabel ?? _getDefaultPriceLabelForStore(_selectedStore ?? _storeController.text);
+        _priceLabel = (_detectedPriceLabel != null && _isMembershipBadgeLabel(_detectedPriceLabel!))
+            ? _detectedPriceLabel
+            : _getDefaultPriceLabelForStore(_selectedStore ?? _storeController.text);
       } else {
-        _priceLabel = null;
+        // Eğer detectedPriceLabel genel kampanya metni ise (örn: 3 Al 2 Öde) onu koru, değilse null yap
+        if (_detectedPriceLabel != null && !_isMembershipBadgeLabel(_detectedPriceLabel!)) {
+          _priceLabel = _detectedPriceLabel;
+        } else {
+          _priceLabel = null;
+        }
       }
     });
   }
@@ -2652,7 +2685,11 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   // Özel Fiyat & Üyelik Rozeti Minimalist Toggle Satırı (Prime, Plus, Premium vb.)
   Widget _buildSpecialBadgeToggleRow(bool isDark) {
     final effectiveStore = _selectedStore ?? _storeController.text.trim();
-    final effectiveLabel = _priceLabel ?? _detectedPriceLabel ?? _getDefaultPriceLabelForStore(effectiveStore);
+    final effectiveLabel = (_priceLabel != null && _isMembershipBadgeLabel(_priceLabel!))
+        ? _priceLabel!
+        : (_detectedPriceLabel != null && _isMembershipBadgeLabel(_detectedPriceLabel!))
+            ? _detectedPriceLabel!
+            : _getDefaultPriceLabelForStore(effectiveStore);
     final badgeTitle = _getStoreBadgeTitle(effectiveStore, effectiveLabel);
 
     final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
@@ -2720,7 +2757,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                '$badgeTitle rozeti',
+                badgeTitle,
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: _isSpecialBadgeEnabled ? FontWeight.w700 : FontWeight.w500,

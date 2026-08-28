@@ -327,15 +327,7 @@ class MigrosScraper extends BaseProductScraper {
 
   @override
   FutureOr<String?> scrapePriceLabel(dom.Document document) async {
-    final crmEl = document.querySelector('.product-label.crm');
-    if (crmEl != null) {
-      final crmText = crmEl.text.trim().toUpperCase();
-      if (crmText.isNotEmpty) {
-        return crmText;
-      }
-    }
-
-    // Screens API fallback
+    // 1. Screens API (En doğru ve net veri kaynağı)
     try {
       String imageUrl = '';
       final productJson = findProductJsonLd(document);
@@ -367,16 +359,50 @@ class MigrosScraper extends BaseProductScraper {
                 final data = json['data'];
                 if (data is Map && data['storeProductInfoDTO'] != null) {
                   final info = data['storeProductInfoDTO'];
-                  if (info is Map && info['crmDiscountTags'] != null) {
-                    final crmTags = info['crmDiscountTags'];
-                    if (crmTags is List && crmTags.isNotEmpty) {
-                      final tagObj = crmTags[0];
-                      if (tagObj is Map && tagObj['tag'] != null) {
-                        final crmText = tagObj['tag'].toString().trim().toUpperCase();
-                        if (crmText.isNotEmpty) {
-                          return crmText;
+                  if (info is Map) {
+                    // A. crmDiscountTags (Örn: "3 Al 2'si Money Hediye", "1 ALANA 1 BEDAVA", "50 TL Sepette İndirim")
+                    if (info['crmDiscountTags'] != null) {
+                      final crmTags = info['crmDiscountTags'];
+                      if (crmTags is List && crmTags.isNotEmpty) {
+                        final tagObj = crmTags[0];
+                        if (tagObj is Map && tagObj['tag'] != null) {
+                          final rawTag = tagObj['tag'].toString().trim();
+                          final upperTag = rawTag.toUpperCase();
+                          if (upperTag != 'İYİ FİYAT' && upperTag != 'IYI FIYAT' && !upperTag.contains('SADECE MİGROS') && rawTag.isNotEmpty) {
+                            return rawTag;
+                          }
                         }
                       }
+                    }
+
+                    // B. badges listesi (CROSS_PROMOTED vs PRICE_PROMOTED)
+                    final badges = info['badges'] is List ? (info['badges'] as List) : [];
+                    for (final b in badges) {
+                      if (b is Map) {
+                        final bName = (b['name'] ?? '').toString();
+                        final bValue = (b['value'] ?? '').toString().trim();
+                        // 3 Al 2 Öde, 2 Al 1 Öde, 2.'si %50 İndirimli vb.
+                        if (bName == 'CROSS_PROMOTED' && bValue.isNotEmpty) {
+                          return bValue;
+                        }
+                        // Money indirimli fiyat rozeti
+                        if (bName == 'PRICE_PROMOTED') {
+                          return 'Money ile';
+                        }
+                      }
+                    }
+
+                    // C. Sadakat/Money fiyat farkı kontrolü
+                    final shownPrice = info['shownPrice'] is num ? (info['shownPrice'] as num).toDouble() : null;
+                    final regularPrice = info['regularPrice'] is num ? (info['regularPrice'] as num).toDouble() : null;
+                    final salePrice = info['salePrice'] is num ? (info['salePrice'] as num).toDouble() : null;
+                    final loyaltyPrice = info['loyaltyPrice'] is num ? (info['loyaltyPrice'] as num).toDouble() : null;
+
+                    if ((loyaltyPrice != null && regularPrice != null && loyaltyPrice < regularPrice) ||
+                        (loyaltyPrice != null && salePrice != null && loyaltyPrice < salePrice) ||
+                        (shownPrice != null && salePrice != null && shownPrice < salePrice) ||
+                        (shownPrice != null && regularPrice != null && shownPrice < regularPrice)) {
+                      return 'Money ile';
                     }
                   }
                 }
@@ -386,6 +412,17 @@ class MigrosScraper extends BaseProductScraper {
         }
       }
     } catch (_) {}
+
+    // 2. DOM Kontrolü (Header/Footer menüleri hariç ürünün kendi CRM etiketi)
+    final crmEl = document.querySelector('.product-label.crm, .product-badges .badge');
+    if (crmEl != null) {
+      final rawText = crmEl.text.trim();
+      final crmText = rawText.toUpperCase();
+      if (crmText.isNotEmpty && crmText != 'İYİ FİYAT' && crmText != 'IYI FIYAT' && !crmText.contains('SADECE MİGROS') && crmText.length <= 50) {
+        return rawText;
+      }
+    }
+
     return null;
   }
 

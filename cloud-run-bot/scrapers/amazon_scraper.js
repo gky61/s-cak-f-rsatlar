@@ -27,12 +27,18 @@ class AmazonScraper extends BaseProductScraper {
       return "Prime Fırsatı";
     }
 
-    // 3. Genel Prime Fırsatı / Prime'a Özel metin kontrolü
+    // 3. Ürün ana gövdesinde Prime Fırsatı / Prime'a Özel metin kontrolü (Header/Footer hariç)
     let found = false;
     const primeRegex = /(?:amazon\s*)?prime\s*fırsatı|(?:amazon\s*)?prime['’]?\s*(?:a|’a|'a)?\s*özel|bu fırsat yalnızca amazon prime/i;
-    $('span, div, p, b, strong, i, a').each((_, el) => {
+    $('#centerCol, #dp-container, #apex_desktop, #corePrice_desktop, #desktop_buybox, span, div, p, b, strong, i, a').each((_, el) => {
+      const id = ($(el).attr('id') || '').toLowerCase();
+      const cls = ($(el).attr('class') || '').toLowerCase();
+      if (id.includes('navbar') || id.includes('navfooter') || id.includes('nav-belt') || cls.includes('nav-subnav') || cls.includes('nav-footer')) {
+        return;
+      }
+
       const txt = $(el).clone().children().remove().end().text().trim();
-      if (primeRegex.test(txt)) {
+      if (txt.length <= 120 && primeRegex.test(txt)) {
         found = true;
         return false;
       }

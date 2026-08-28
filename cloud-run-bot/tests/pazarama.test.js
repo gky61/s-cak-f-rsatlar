@@ -59,6 +59,41 @@ function run() {
   assert.strictEqual(rating3.ratingValue, 4.5);
   assert.strictEqual(rating3.ratingCount, 158);
   assert.strictEqual(scraper.scrapeBrand($3), 'Apple');
+
+  // 5. priceLabel False Positive Prevention (Menüde/Headerda Plus olsa bile null dönmeli)
+  const htmlFalsePositive = `
+    <html>
+      <body>
+        <div class="bg-gradient-to-r Pazarama Plus">Pazarama Plus</div>
+        <span class="text-xxs text-pink-500">Plus'ı Keşfet</span>
+        <a href="https://www.pazarama.com/pazarama-plus">Pazarama Plus</a>
+        <script>window.__NUXT__ = { plusPrice: { currency: "TL" }, CART_BASKET_PLUS_PROMO: true };</script>
+        <div>Standart Fiyat: 1.500 TL</div>
+      </body>
+    </html>
+  `;
+  const $false = cheerio.load(htmlFalsePositive);
+  assert.strictEqual(scraper.scrapePriceLabel($false), null, 'Header/Footer/Script Plus içerikleri Plus rozeti vermemeli!');
+
+  // 6. priceLabel True Positive (DOM'da plus-icon veya Şimdi Plus'lı Ol varsa Plus ile dönmeli)
+  const htmlTrueDom = `
+    <html>
+      <body>
+        <div class="product-price">
+          <img src="https://img.pzrmcdn.com/asset/_pzweb/img/pz-plus-icon.634982094b1176b6.png" alt="plus-icon" />
+          <a class="btn">Şimdi Plus'lı Ol</a>
+        </div>
+      </body>
+    </html>
+  `;
+  const $trueDom = cheerio.load(htmlTrueDom);
+  assert.strictEqual(scraper.scrapePriceLabel($trueDom), 'Plus ile', 'Gerçek Plus ürünü Plus ile dönmeli!');
+  console.log('✅ Pazarama priceLabel testleri başarıyla geçti!');
 }
 
 module.exports = { run };
+
+if (require.main === module) {
+  run();
+}
+

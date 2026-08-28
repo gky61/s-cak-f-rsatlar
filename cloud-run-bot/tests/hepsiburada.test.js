@@ -66,7 +66,60 @@ async function run() {
   assert.strictEqual(rating3.ratingCount, 1173);
   assert.strictEqual(scraper.scrapeBrand($3), 'Apple');
 
-  // 5. hb.biz kısa link çözümleme testi (Adjust fallback → hepsiburada.com)
+  // 5. priceLabel Tests (False Positive Prevention vs True Premium)
+  console.log('\n--- priceLabel (Premium) testleri ---');
+  // 5.1. False Positive Prevention (Genel kupon/taksit tag'leri Premium sayılmamalı)
+  const htmlFalse = `
+    <script id="reduxStore" type="application/json">
+    {
+      "productState": {
+        "product": {
+          "name": "Pepsi Strawberries",
+          "tagList": [
+            {"tagId": "premiumlulara-ozel-gida-icecek-urunlerinde-50-tl-uzeri-15-indirim"},
+            {"tagId": "premium-a-ozel-supermarket-urunlerinde-750-tl-ye-150-tl-kupon-firsati"},
+            {"tagId": "premiuma-gec-50-tl-indirim-kazanma-firsati"},
+            {"tagId": "premium-vade-farksiz"}
+          ],
+          "mainProductTagList": [
+            {"tagId": "premium-vade-farksiz"}
+          ],
+          "paymentTag": "premium-vade-farksiz"
+        }
+      }
+    }
+    </script>
+    <header><a class="sf-TopLinks-P85WSaCVLc_4UmgwMQJt">Hepsiburada Premium</a></header>
+  `;
+  const $false = cheerio.load(htmlFalse);
+  assert.strictEqual(scraper.scrapePriceLabel($false), null, 'Genel kupon ve taksit tagleri Premium olarak algılanmamalıdır!');
+
+  // 5.2. True Premium (DOM Eşleşmesi)
+  const htmlTrueDom = `
+    <div><span class="premium-price">Premium ile <b>1.411,83 TL</b></span></div>
+  `;
+  const $trueDom = cheerio.load(htmlTrueDom);
+  assert.strictEqual(scraper.scrapePriceLabel($trueDom), 'Premium ile', 'DOM Premium ile algılanmalı');
+
+  // 5.3. True Premium (Doğrudan Satıcı İndirim Etiketi)
+  const htmlTrueRedux = `
+    <script id="reduxStore" type="application/json">
+    {
+      "productState": {
+        "product": {
+          "name": "Altınyıldız Polo Tişört",
+          "tagList": [
+            {"tagId": "92520395-premium-a-ozel-altinyildiz-classics-saticili-secili-urunlerde-10-indirim"}
+          ]
+        }
+      }
+    }
+    </script>
+  `;
+  const $trueRedux = cheerio.load(htmlTrueRedux);
+  assert.strictEqual(scraper.scrapePriceLabel($trueRedux), 'Premium ile', 'Satıcıya özel Premium etiketi algılanmalı');
+
+  // 6. hb.biz kısa link çözümleme testi (Adjust fallback → hepsiburada.com)
   console.log('\n--- hb.biz kısa link çözümleme testleri ---');
   const hbBizTestUrls = [
     'https://app.hb.biz/ycpwZNyv7dFK',
@@ -84,3 +137,4 @@ async function run() {
 }
 
 module.exports = { run };
+

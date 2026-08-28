@@ -155,10 +155,30 @@ class MigrosMoneyBadge extends StatelessWidget {
     final store = (deal.store ?? '').toString().toLowerCase();
     if (!store.contains('migros')) return false;
 
-    // Fiyat farkı veya priceLabel içinde MONEY bulunması
-    final hasDiscount = deal.originalPrice != null && deal.originalPrice > deal.price;
-    final hasMoneyLabel = deal.priceLabel != null && deal.priceLabel.toString().toUpperCase().contains('MONEY');
+    if (deal.priceLabel == null) return false;
+    final label = deal.priceLabel.toString().trim().toUpperCase();
 
-    return hasDiscount || hasMoneyLabel;
+    // Çoklu alım, hediye veya sepet kampanyaları kart üstünde Money rozeti basmamalıdır
+    if (label.contains('AL') ||
+        label.contains('HEDİYE') ||
+        label.contains('HEDIYE') ||
+        label.contains('SEPETTE') ||
+        label.contains('ÖDE') ||
+        label.contains('ODE') ||
+        label.contains('ADET') ||
+        label.contains('TL ÜZERİ')) {
+      return false;
+    }
+
+    final isDirectMoneyBadge = label == 'MONEY İLE' ||
+        label == 'MONEY ILE' ||
+        label == 'MONEY KART İLE' ||
+        label == 'MONEY KART ILE' ||
+        label == 'MONEY İNDİRİMLİ' ||
+        label == 'MONEY INDIRIMLI' ||
+        label == 'MONEY';
+
+    return isDirectMoneyBadge;
   }
 }
+

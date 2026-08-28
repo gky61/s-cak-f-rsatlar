@@ -67,5 +67,41 @@ void main() {
       print('Parsed brand from amazon-page.html: $brand');
       expect(brand, equals('iFFALCON'));
     });
+
+    test('should NOT mark deal as Prime Fırsatı for generic delivery or navbar text (False Positive Prevention)', () async {
+      const html = '''
+      <html>
+        <body>
+          <div id="navbar"><a href="/prime">Prime Fırsat Günleri</a></div>
+          <div id="mir-layout-DELIVERY_BLOCK">
+            <span>Prime ile ÜCRETSİZ teslimat: Yarın</span>
+          </div>
+          <div class="a-section">Normal Fiyat: 500 TL</div>
+        </body>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+      final priceLabel = await scraper.scrapePriceLabel(doc);
+
+      expect(priceLabel, isNull);
+    });
+
+    test('should mark deal as Prime Fırsatı when dealBadgeSupportingText or primeExclusivePricing exists', () async {
+      const html = '''
+      <html>
+        <body>
+          <div id="apex_desktop">
+            <span id="dealBadgeSupportingText">Prime Fırsatı</span>
+            <span class="a-price">299,00 TL</span>
+          </div>
+        </body>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+      final priceLabel = await scraper.scrapePriceLabel(doc);
+
+      expect(priceLabel, equals('Prime Fırsatı'));
+    });
   });
 }
+

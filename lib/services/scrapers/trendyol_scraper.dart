@@ -15,13 +15,11 @@ class TrendyolScraper extends BaseProductScraper {
 
   @override
   FutureOr<String?> scrapePriceLabel(dom.Document document) {
-    // 1. DOM Seçicileri: Trendyol Plus fiyat/başlık öğeleri
-    final plusSelectors = [
+    // 1. DOM Seçicileri: Trendyol Plus gerçek fiyat & banner elemanları
+    const plusSelectors = [
       '.ty-plus-price-header',
+      '.ty-plus-price-discounted-price',
       '.ty-plus-price',
-      '[class*="ty-plus-price"]',
-      '[class*="ty-plus"]',
-      '[class*="plus-price"]',
       '.ty-plus-banner-desktop',
     ];
 
@@ -29,32 +27,33 @@ class TrendyolScraper extends BaseProductScraper {
       final el = document.querySelector(sel);
       if (el != null) {
         final text = el.text.trim();
-        if (text.toLowerCase().contains('plus') || sel.contains('ty-plus')) {
+        if (text.isNotEmpty) {
           return "Plus'a Özel";
         }
       }
     }
 
-    // 2. Metin bazlı DOM araması (Plus'a Özel)
-    final plusRegex = RegExp(r"(?:trendyol\s*)?plus['’]?\s*a\s*özel", caseSensitive: false);
+    // 2. Metin bazlı DOM araması (Plus'a Özel / Trendyol Plus'a Özel)
+    final plusRegex = RegExp(r"^(?:trendyol\s*)?plus['’]?\s*(?:a\s*özel|la\s*daha\s*az\s*öde|ile)", caseSensitive: false);
     final elements = document.querySelectorAll('span, div, p, b, strong, a, label, h1, h2, h3');
     for (final el in elements) {
       final text = el.text.trim();
-      if (plusRegex.hasMatch(text)) {
+      if (text.isNotEmpty && text.length <= 60 && plusRegex.hasMatch(text)) {
         return "Plus'a Özel";
       }
     }
 
-    // 3. Script etiketleri & initial state kontrolü
+    // 3. Script etiketleri: SADECE açık boolean TRUE koşulları (window condition=true veya JSON true)
     final scripts = document.querySelectorAll('script');
-    final scriptPlusRegex = RegExp(
-      r'''ty-plus|hasPlusPromotion|isPlusExclusive|plusPromotion|(?:trendyol\s*)?plus(?:\u0027|\\u0027|['’])\s*a\s*özel''',
-      caseSensitive: false,
-    );
     for (final script in scripts) {
       final text = script.text;
-      if (text.isNotEmpty && scriptPlusRegex.hasMatch(text)) {
-        return "Plus'a Özel";
+      if (text.isNotEmpty) {
+        if (RegExp(r'''__envoy_ty-plus-banner__CONDITION["']?\s*\]?\s*=\s*true''', caseSensitive: false).hasMatch(text)) {
+          return "Plus'a Özel";
+        }
+        if (RegExp(r'''"hasPlusPromotion"\s*:\s*true|"isPlusExclusive"\s*:\s*true''', caseSensitive: false).hasMatch(text)) {
+          return "Plus'a Özel";
+        }
       }
     }
 
