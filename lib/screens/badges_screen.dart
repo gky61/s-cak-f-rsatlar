@@ -34,11 +34,11 @@ class _BadgesScreenState extends State<BadgesScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const primaryColor = AppTheme.primary;
-    final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final backgroundColor = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    final textMain = isDark ? Colors.white : const Color(0xFF0F172A);
-    final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final backgroundColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
+    final textMain = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final textSub = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
 
     final totalCount = BadgeHelper.badges.length;
     final earnedCount = BadgeHelper.badges.values.where((b) => _user.badges.contains(b.id)).length;
@@ -82,7 +82,7 @@ class _BadgesScreenState extends State<BadgesScreen> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isDark
-                      ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                      ? [AppTheme.darkSurfaceElevated, AppTheme.darkSurface]
                       : [Colors.white, const Color(0xFFF8FAFC)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -295,12 +295,12 @@ class _BadgesScreenState extends State<BadgesScreen> {
         decoration: BoxDecoration(
           color: isSelected
               ? primaryColor
-              : (isDark ? const Color(0xFF1E293B) : Colors.white),
+              : (isDark ? AppTheme.darkSurfaceElevated : Colors.white),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
                 ? primaryColor
-                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
             width: 1,
           ),
         ),
@@ -361,8 +361,8 @@ class _BadgesScreenState extends State<BadgesScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isUnlocked
-              ? (isDark ? const Color(0xFF1E293B) : Colors.white)
-              : (isDark ? const Color(0xFF0F172A).withValues(alpha: 0.6) : const Color(0xFFF8FAFC)),
+              ? (isDark ? AppTheme.darkSurface : Colors.white)
+              : (isDark ? AppTheme.darkSurfaceElevated.withValues(alpha: 0.5) : const Color(0xFFF8FAFC)),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isUnlocked
@@ -553,8 +553,8 @@ class _BadgesScreenState extends State<BadgesScreen> {
                     colors: isUnlocked
                         ? badge.tier.gradientColors
                         : [
-                            isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                            isDark ? const Color(0xFF1E293B) : const Color(0xFFCBD5E1),
+                            isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                            isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFCBD5E1),
                           ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,

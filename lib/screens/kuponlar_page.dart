@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1259,127 +1260,14 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   Widget _buildRadarInfoBanner(bool isDark) {
     if (_hideRadarBanner) return const SizedBox.shrink();
 
-    final bannerBg = isDark
-        ? AppTheme.darkSurfaceElevated
-        : const Color(0xFFEFF6FF);
-    final borderColor = isDark
-        ? AppTheme.primary.withValues(alpha: 0.3)
-        : const Color(0xFFBFDBFE);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-      decoration: BoxDecoration(
-        color: bannerBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor, width: 0.9),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primary.withValues(alpha: isDark ? 0.15 : 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 1.5),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 1),
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppTheme.primary.withValues(alpha: 0.6),
-                width: 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primary.withValues(alpha: 0.2),
-                  blurRadius: 5,
-                  offset: const Offset(0, 1.5),
-                ),
-              ],
-            ),
-            child: ClipOval(
-              child: Image.asset('assets/botkolik.webp', fit: BoxFit.cover),
-            ),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'Bot',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w900,
-                              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const TextSpan(
-                            text: 'kolik',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w900,
-                              color: AppTheme.primary,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          TextSpan(
-                            text: ' Radar Doğrulaması',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E3A8A),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        setState(() => _hideRadarBanner = true);
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.close_rounded,
-                          size: 13,
-                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Bu sekmedeki kuponlar Botkolik Radarı tarafından e-ticaret sitelerinden taranır. Çalışıp çalışmadığını oylayarak topluluğa destek olabilirsiniz.',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF475569),
-                    height: 1.25,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: _BotkolikRadarAnimatedBanner(
+        isDark: isDark,
+        onClose: () {
+          HapticFeedback.lightImpact();
+          setState(() => _hideRadarBanner = true);
+        },
       ),
     );
   }
@@ -2304,5 +2192,359 @@ class _KuponVoteButtonState extends State<_KuponVoteButton> with SingleTickerPro
         ),
       ),
     );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🌟 BOTKOLIK RADAR ANIMATED BANNER (COUPONS RADAR VERIFICATION)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BotkolikRadarAnimatedBanner extends StatefulWidget {
+  final bool isDark;
+  final VoidCallback onClose;
+
+  const _BotkolikRadarAnimatedBanner({
+    required this.isDark,
+    required this.onClose,
+  });
+
+  @override
+  State<_BotkolikRadarAnimatedBanner> createState() =>
+      _BotkolikRadarAnimatedBannerState();
+}
+
+class _BotkolikRadarAnimatedBannerState
+    extends State<_BotkolikRadarAnimatedBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _glowAnimation;
+  late final Animation<double> _shimmerAngleAnimation;
+  late final Animation<double> _breatheAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    // 3.5 saniyelik akıcı ve göz alıcı mikro-animasyon
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3500),
+    );
+
+    // Işıma / Gradient Parlaklık Eğrisi (Zarifçe parlar, döner ve son 1.5 saniyede ipeksi bir şekilde sönümlenir)
+    _glowAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 15,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<double>(1.0),
+        weight: 42,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeInOutCubic)),
+        weight: 43,
+      ),
+    ]).animate(_controller);
+
+    // Shimmer / Gradient rotasyon açısı
+    _shimmerAngleAnimation = Tween<double>(begin: 0.0, end: 1.6).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
+    );
+
+    // Botkolik avatar hafif nabız (pulse) efekti
+    _breatheAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 1.16)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.16, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 1.10)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.10, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 25,
+      ),
+    ]).animate(_controller);
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final glow = _glowAnimation.value;
+        final angle = _shimmerAngleAnimation.value;
+        final breathe = _breatheAnimation.value;
+
+        // Canlı ve Zengin Gradient Renkleri (FırsatKolik Turuncu + Altın Amber + Parlak Mavi)
+        final gradientColors = isDark
+            ? [
+                const Color(0xFFFF6B35),
+                const Color(0xFFFBBF24),
+                const Color(0xFF38BDF8),
+                const Color(0xFFFF6B35),
+              ]
+            : [
+                const Color(0xFFFF4500),
+                const Color(0xFFF59E0B),
+                const Color(0xFF0284C7),
+                const Color(0xFFFF4500),
+              ];
+
+        // Sönümlenmiş durağan sınır rengi (Aydınlık modda sıcak ve belirgin şeftali tonu)
+        final settledBorderColor = isDark
+            ? AppTheme.primary.withValues(alpha: 0.25)
+            : const Color(0xFFFFD5C0);
+
+        // Dinamik Zemin Rengi
+        final baseBgColor = isDark
+            ? AppTheme.darkSurfaceElevated
+            : Colors.white;
+
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              // Taban yumuşak kart gölgesi
+              BoxShadow(
+                color: Colors.black.withValues(
+                    alpha: isDark ? 0.20 : 0.05 * (1.0 - 0.5 * glow)),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+              // Animasyonlu canlı dış ışıma (glow)
+              if (glow > 0.01) ...[
+                BoxShadow(
+                  color: (isDark
+                          ? const Color(0xFFFF6B35)
+                          : const Color(0xFFFF5722))
+                      .withValues(alpha: (isDark ? 0.22 : 0.28) * glow),
+                  blurRadius: (isDark ? 12.0 : 15.0) * glow,
+                  spreadRadius: (isDark ? 1.0 : 1.5) * glow,
+                  offset: const Offset(0, 2),
+                ),
+                BoxShadow(
+                  color: (isDark
+                          ? const Color(0xFF38BDF8)
+                          : const Color(0xFF0284C7))
+                      .withValues(alpha: (isDark ? 0.12 : 0.16) * glow),
+                  blurRadius: 18 * glow,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ],
+          ),
+          child: CustomPaint(
+            painter: _RadarGradientBorderPainter(
+              borderRadius: 14,
+              borderWidth: 1.1 + (0.7 * glow),
+              gradientColors: gradientColors,
+              glowProgress: glow,
+              rotationTurns: angle,
+              settledBorderColor: settledBorderColor,
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+              decoration: BoxDecoration(
+                color: baseBgColor,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Botkolik AI Avatar (Nefes Alma & Işıma Efekti)
+                  Transform.scale(
+                    scale: breathe,
+                    child: Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: glow > 0.01
+                            ? [
+                                BoxShadow(
+                                  color: AppTheme.primary
+                                      .withValues(alpha: 0.40 * glow),
+                                  blurRadius: 8 * glow,
+                                  spreadRadius: 1 * glow,
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/botkolik.webp',
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.smart_toy_rounded,
+                            size: 20,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+
+                  // 2. Metin Alanı
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 🌟 "Bot" + "kolik" + " Radar Doğrulaması" Tipografisi
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Bot',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.2,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF334155),
+                                ),
+                              ),
+                              const TextSpan(
+                                text: 'kolik',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.2,
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' Radar Doğrulaması',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.2,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF334155),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Bu sekmedeki kuponlar Botkolik Radarı tarafından e-ticaret sitelerinden taranır. Çalışıp çalışmadığını oylayarak topluluğa destek olabilirsiniz.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            height: 1.38,
+                            color: isDark
+                                ? const Color(0xFFCBD5E1)
+                                : const Color(0xFF334155),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // 3. Kapatma Butonu
+                  InkWell(
+                    onTap: widget.onClose,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(3.0),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: isDark
+                            ? AppTheme.darkTextSecondary
+                            : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RadarGradientBorderPainter extends CustomPainter {
+  final double borderRadius;
+  final double borderWidth;
+  final List<Color> gradientColors;
+  final double glowProgress;
+  final double rotationTurns;
+  final Color settledBorderColor;
+
+  _RadarGradientBorderPainter({
+    required this.borderRadius,
+    required this.borderWidth,
+    required this.gradientColors,
+    required this.glowProgress,
+    required this.rotationTurns,
+    required this.settledBorderColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(borderRadius));
+
+    // 1. Zemin Durağan Çerçeveyi Çiz (Sürekli ve Kesintisiz)
+    final basePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1
+      ..color = settledBorderColor;
+    canvas.drawRRect(rrect, basePaint);
+
+    // 2. Canlı Dönen Gradient Katmanı
+    if (glowProgress > 0.001) {
+      final activeColors = gradientColors
+          .map((c) => c.withValues(alpha: c.a * glowProgress))
+          .toList();
+
+      final angle = rotationTurns * math.pi * 2;
+      final gradient = SweepGradient(
+        colors: activeColors,
+        transform: GradientRotation(angle),
+      );
+
+      final glowPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = borderWidth
+        ..shader = gradient.createShader(rect);
+
+      canvas.drawRRect(rrect, glowPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RadarGradientBorderPainter oldDelegate) {
+    return oldDelegate.glowProgress != glowProgress ||
+        oldDelegate.rotationTurns != rotationTurns ||
+        oldDelegate.settledBorderColor != settledBorderColor;
   }
 }

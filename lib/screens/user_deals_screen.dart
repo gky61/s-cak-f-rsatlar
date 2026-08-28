@@ -187,7 +187,7 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
 
   Widget _buildInfoBanner(bool isDark) {
     final bgColor = isDark 
-        ? const Color(0xFF1E293B).withValues(alpha: 0.7) 
+        ? AppTheme.darkSurfaceElevated 
         : const Color(0xFFF0F7FF);
     final borderColor = isDark 
         ? Colors.blue.withValues(alpha: 0.22) 

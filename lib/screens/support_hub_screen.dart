@@ -40,10 +40,10 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
   Future<void> _signOut() async {
     final email = _authService.currentUser?.email;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    final textMain = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
-    final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
+    final textMain = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final textSub = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -186,10 +186,10 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
   Future<void> _deleteAccount() async {
     final email = _authService.currentUser?.email;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    final textMain = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
-    final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
+    final textMain = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final textSub = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -349,11 +349,11 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-    final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    final textMain = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
-    final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final backgroundColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
+    final textMain = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final textSub = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
 
     return PopScope(
       canPop: true,

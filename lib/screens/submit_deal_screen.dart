@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:shimmer/shimmer.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
@@ -1438,50 +1439,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               ),
               if (_showInfoBanner) ...[
                 const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark ? AppTheme.primary.withValues(alpha: 0.25) : const Color(0xFFBFDBFE),
-                      width: 0.9,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 22,
-                        height: 22,
-                        decoration: const BoxDecoration(shape: BoxShape.circle),
-                        child: ClipOval(
-                          child: Image.asset('assets/botkolik.webp', fit: BoxFit.cover),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Linki yapıştırdığınızda Botkolik ürün bilgilerini otomatik çeker. İnceleyip eksikleri tamamlayabilirsiniz.',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            height: 1.35,
-                            color: isDark ? const Color(0xFFE4E4E7) : const Color(0xFF1E3A8A),
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () => setState(() => _showInfoBanner = false),
-                        child: Padding(
-                          padding: const EdgeInsets.all(3.0),
-                          child: Icon(
-                            Icons.close_rounded,
-                            size: 16,
-                            color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                _BotkolikAnimatedAttentionBanner(
+                  isDark: isDark,
+                  onClose: () => setState(() => _showInfoBanner = false),
                 ),
               ],
             ],
@@ -2851,5 +2811,366 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         ),
       ),
     );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🌟 BOTKOLIK ANIMATED ATTENTION BANNER (MINIMALIST & RADIANT MICRO-INTERACTION)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BotkolikAnimatedAttentionBanner extends StatefulWidget {
+  final bool isDark;
+  final VoidCallback onClose;
+
+  const _BotkolikAnimatedAttentionBanner({
+    required this.isDark,
+    required this.onClose,
+  });
+
+  @override
+  State<_BotkolikAnimatedAttentionBanner> createState() =>
+      _BotkolikAnimatedAttentionBannerState();
+}
+
+class _BotkolikAnimatedAttentionBannerState
+    extends State<_BotkolikAnimatedAttentionBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _glowAnimation;
+  late final Animation<double> _shimmerAngleAnimation;
+  late final Animation<double> _breatheAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    // 3.5 saniyelik akıcı ve göz alıcı mikro-animasyon
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3500),
+    );
+
+    // Işıma / Gradient Parlaklık Eğrisi (Zarifçe parlar, döner ve son 1.5 saniyede ipeksi bir şekilde sönümlenir)
+    _glowAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 15, // 0 - 525ms
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<double>(1.0),
+        weight: 42, // 525ms - 2000ms
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeInOutCubic)),
+        weight: 43, // 2000ms - 3500ms (1.5 sn ultra yumuşak sönümleme)
+      ),
+    ]).animate(_controller);
+
+    // Shimmer / Gradient rotasyon açısı
+    _shimmerAngleAnimation = Tween<double>(begin: 0.0, end: 1.6).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
+    );
+
+    // Botkolik avatar hafif nabız (pulse) efekti
+    _breatheAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 1.16)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.16, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 1.10)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 25,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.10, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 25,
+      ),
+    ]).animate(_controller);
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final glow = _glowAnimation.value;
+        final angle = _shimmerAngleAnimation.value;
+        final breathe = _breatheAnimation.value;
+
+        // Canlı ve Zengin Gradient Renkleri (FırsatKolik Turuncu + Altın Amber + Parlak Mavi)
+        final gradientColors = isDark
+            ? [
+                const Color(0xFFFF6B35),
+                const Color(0xFFFBBF24),
+                const Color(0xFF38BDF8),
+                const Color(0xFFFF6B35),
+              ]
+            : [
+                const Color(0xFFFF4500),
+                const Color(0xFFF59E0B),
+                const Color(0xFF0284C7),
+                const Color(0xFFFF4500),
+              ];
+
+        // Sönümlenmiş durağan sınır rengi (Aydınlık modda sıcak ve belirgin şeftali tonu)
+        final settledBorderColor = isDark
+            ? AppTheme.primary.withValues(alpha: 0.25)
+            : const Color(0xFFFFD5C0);
+
+        // Dinamik Zemin Rengi
+        final baseBgColor = isDark
+            ? AppTheme.darkSurfaceElevated
+            : Colors.white;
+
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              // Taban yumuşak kart gölgesi
+              BoxShadow(
+                color: Colors.black.withValues(
+                    alpha: isDark ? 0.20 : 0.05 * (1.0 - 0.5 * glow)),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+              // Animasyonlu canlı dış ışıma (glow)
+              if (glow > 0.01) ...[
+                BoxShadow(
+                  color: (isDark
+                          ? const Color(0xFFFF6B35)
+                          : const Color(0xFFFF5722))
+                      .withValues(alpha: (isDark ? 0.22 : 0.28) * glow),
+                  blurRadius: (isDark ? 12.0 : 15.0) * glow,
+                  spreadRadius: (isDark ? 1.0 : 1.5) * glow,
+                  offset: const Offset(0, 2),
+                ),
+                BoxShadow(
+                  color: (isDark
+                          ? const Color(0xFF38BDF8)
+                          : const Color(0xFF0284C7))
+                      .withValues(alpha: (isDark ? 0.12 : 0.16) * glow),
+                  blurRadius: 18 * glow,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ],
+          ),
+          child: CustomPaint(
+            painter: _GradientBorderPainter(
+              borderRadius: 14,
+              borderWidth: 1.1 + (0.7 * glow),
+              gradientColors: gradientColors,
+              glowProgress: glow,
+              rotationTurns: angle,
+              settledBorderColor: settledBorderColor,
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+              decoration: BoxDecoration(
+                color: baseBgColor,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Botkolik AI Avatar (Nefes Alma & Işıma Efekti)
+                  Transform.scale(
+                    scale: breathe,
+                    child: Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: glow > 0.01
+                            ? [
+                                BoxShadow(
+                                  color: AppTheme.primary
+                                      .withValues(alpha: 0.40 * glow),
+                                  blurRadius: 8 * glow,
+                                  spreadRadius: 1 * glow,
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/botkolik.webp',
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.smart_toy_rounded,
+                            size: 20,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+
+                  // 2. Metin Alanı
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 🌟 "Bot" + "kolik" + " Akıllı Asistan" Tipografisi
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Bot',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.2,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF334155),
+                                ),
+                              ),
+                              const TextSpan(
+                                text: 'kolik',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.2,
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' Akıllı Asistan',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.2,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF334155),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              height: 1.38,
+                              color: isDark
+                                  ? const Color(0xFFCBD5E1)
+                                  : const Color(0xFF334155),
+                            ),
+                            children: const [
+                              TextSpan(
+                                  text:
+                                      'Linki yapıştırdığınızda ürün detayları yapay zeka ile otomatik çekilir. İnceleyip eksikleri tamamlayabilirsiniz.'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // 3. Kapatma Butonu
+                  InkWell(
+                    onTap: widget.onClose,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(3.0),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: isDark
+                            ? AppTheme.darkTextSecondary
+                            : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _GradientBorderPainter extends CustomPainter {
+  final double borderRadius;
+  final double borderWidth;
+  final List<Color> gradientColors;
+  final double glowProgress;
+  final double rotationTurns;
+  final Color settledBorderColor;
+
+  _GradientBorderPainter({
+    required this.borderRadius,
+    required this.borderWidth,
+    required this.gradientColors,
+    required this.glowProgress,
+    required this.rotationTurns,
+    required this.settledBorderColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(borderRadius));
+
+    // 1. Zemin Durağan Çerçeveyi Çiz (Sürekli ve Kesintisiz)
+    final basePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1
+      ..color = settledBorderColor;
+    canvas.drawRRect(rrect, basePaint);
+
+    // 2. Canlı Dönen Gradient Katmanı (glowProgress ile kusursuz alfa çarpımı)
+    if (glowProgress > 0.001) {
+      // Renklerin şeffaflığı glowProgress ile pürüzsüzce sıfıra iner
+      final activeColors = gradientColors
+          .map((c) => c.withValues(alpha: c.a * glowProgress))
+          .toList();
+
+      final angle = rotationTurns * math.pi * 2;
+      final gradient = SweepGradient(
+        colors: activeColors,
+        transform: GradientRotation(angle),
+      );
+
+      final glowPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = borderWidth
+        ..shader = gradient.createShader(rect);
+
+      canvas.drawRRect(rrect, glowPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GradientBorderPainter oldDelegate) {
+    return oldDelegate.glowProgress != glowProgress ||
+        oldDelegate.rotationTurns != rotationTurns ||
+        oldDelegate.settledBorderColor != settledBorderColor;
   }
 }

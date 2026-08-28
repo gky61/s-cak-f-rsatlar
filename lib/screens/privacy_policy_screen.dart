@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../firebase_options.dart';
+import '../theme/app_theme.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
@@ -17,13 +18,13 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-    final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    final primaryColor = isDark ? const Color(0xFFEA580C) : const Color(0xFFFF6B35);
+    final backgroundColor = isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC);
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
+    const primaryColor = AppTheme.primary;
     final accentBlue = isDark ? const Color(0xFF38BDF8) : const Color(0xFF004E92);
-    final textMain = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
-    final textSub = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final textMain = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final textSub = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
 
     return Scaffold(
       backgroundColor: backgroundColor,
