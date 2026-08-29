@@ -135,12 +135,15 @@ Platform bünyesinde tam desteklenen 21 e-ticaret mağazası ve uygulanan özel 
 
 ### 2. Hepsiburada (`hepsiburada.com`, `hb.biz`, `app.hb.biz`)
 - **Kısa Link Çözümleme (`hb.biz`):** Akamai engeline takılmamak için `redirect: 'manual'` yöntemiyle HTTP GET/HEAD atılır, ilk 301 yönlendirmesindeki `Location` başlığından `adj.st` URL'i yakalanır ve `adjust_fallback` / `adj_fallback` parametresinden gerçek ürün linki çıkarılır.
-- **Canlı Fiyat API Entegrasyonu:** Hepsiburada normal, Premium ve sepetteki indirimli fiyatları HTML DOM'da gizler. Scraper:
-  1. `<script id="reduxStore">` verisinden `sku`, `listingId`, `merchantId`, `productId` ayıklar.
-  2. Hepsiburada'nın resmi `withoutAffordability` (birincil buybox satıcısı) ve `otherMerchants` (tüm diğer satıcılar) POST API'lerine paralel (`Future.wait`) istek atar.
-  3. Sepetteki indirimleri ve Premium fiyatlarını alabilmek için `x-gotham_is_include_premium_clubs` ve `x-gotham_is_enabled_evaluate_coupon` gateway başlıklarını gönderir.
-  4. Gelen API yanıtındaki `evaluateAsPremiumResult` (Premium fiyatı) veya `campaignEvaluateResult` (Sepette indirimli fiyat) alanlarından en ucuz fiyatı seçer.
-- **Fiyat Rozeti:** Premium indirimi aktif ise `priceLabel: "Premium ile"` atanır.
+- **Canlı Fiyat API Entegrasyonu & `_HbApiPriceResult` Modeli:** Hepsiburada normal, Premium ve sepetteki indirimli fiyatları HTML DOM'da gizler. Scraper:
+  1. `<script id="reduxStore">` verisinden `sku`, `listingId`, `merchantId`, `productId`, `tagList`, `rootCategoryList` ayıklar.
+  2. Hepsiburada'nın resmi `withoutAffordability` (birincil buybox satıcısı) ve `otherMerchants` (tüm diğer satıcılar) POST API'lerine paralel (`Future.wait` / `Promise.all`) istek atar.
+  3. Sepetteki indirimleri ve Premium kulüp fiyatlarını alabilmek için `x-gotham_app-key: All`, `x-gotham_is_include_premium_clubs: true`, `x-gotham_is_enabled_evaluate_coupon: true`, `x-gotham_is_enabled_next_eligible_campaign: true` ve `x-gotham_is_include_payment_campaigns: true` gateway başlıklarını gönderir.
+  4. Gelen API yanıtındaki `evaluateAsPremiumResult` (`isPremium: true`) ile `evaluateResult` (`isPremium: false`) nesnelerini karşılaştırarak en ucuz/en avantajlı sonucu `_lastApiResult` alanında saklar.
+- **3 Kademeli Hiyerarşik Premium Rozet Tespiti (`scrapePriceLabel`):**
+  1. *Yetkili Kaynak (API):* `_lastApiResult` üzerinden doğrudan `isPremium` bayrağı okunur (`true` ise `priceLabel: "Premium ile"`, değilse `null`). Böylece sepet baremleri (örn: 1000 TL'ye 100 TL) veya 2. ürün indirimleri sahte rozet üretmez.
+  2. *Özel DOM Rozetleri (Offline/Statik):* API çağrısı yapılamadığında `[data-test-id*="premium-price"]`, `[class*="PremiumPrice"]`, `[data-test-id="loyalty-discount"]` seçicileri taranır.
+  3. *Katı Fiyat Regex:* Sadece açık fiyat içeren `^(?:hepsiburada\s*)?premium['’]?\s*(?:ile|la)\s*[\d.,]+\s*(?:tl|₺)?$` yaprak metinleri kabul edilir.
 - **Sunucu Bypass:** Akamai Bot Manager, Google Translate ve Googlebot IP'lerini Captcha sayfasına (`HBBlockandCaptcha.html`) yönlendirir. Sunucuda `spawnSync('curl', [...])` + `WhatsApp` UA ile doğrudan erişilir.
 
 ### 3. Trendyol (`trendyol.com`, `ty.gl`)

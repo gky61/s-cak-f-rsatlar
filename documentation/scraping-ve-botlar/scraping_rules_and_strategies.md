@@ -49,15 +49,19 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 *   **Çözüm:** Sayfadaki `window.PRODUCT_DETAIL_LASTVISITED` script bloğu regex ile taranır. `DiscountPrice` (Sepetteki asıl indirimli fiyat) ve `CampaignDiscountedPrice` alanları tırnaksız/tırnaklı Javascript key desteğiyle aranarak tam net fiyat çözülür.
 *   **Unicode Karakter Çözümü:** script bloğundan gelen başlıklar (`ProductVariantMiniProductName`) `&#x131;` (ı) gibi HTML varlıkları veya `\uXXXX` kaçış dizileri içerebilir. Bunlar özel bir kod çözücü (`_decodeUnicode`) ile temizlenip Türkçe karakterlere çevrilir.
 
-### 3. Hepsiburada (`hepsiburada.com`)
-*   **En Karmaşık Altyapı:** Hepsiburada hem normal fiyatı, hem Premium fiyatını, hem de sepete özel indirimli fiyatları HTML dokümanından tamamen gizlemektedir.
-*   **Çözüm (Canlı API Entegrasyonu):** 
-    1. HTML içerisindeki `<script id="reduxStore">` verisi parse edilir.
-    2. Buradan `sku`, `listingId`, `merchantId`, `productId` gibi parametreler ayıklanır.
-    3. Hepsiburada'nın resmi `withoutAffordability` (birincil buybox satıcısı) ve `otherMerchants` (tüm diğer satıcılar) POST API'lerine paralel (`Future.wait`) istek atılır.
-    4. **Gotham API Gateway ve Kampanya Başlıkları:** İsteklerin sepetteki Premium indirimleri (`evaluateAsPremiumResult`) ve kuponları doğru hesaplayabilmesi için `x-gotham_is_include_premium_clubs` ve `x-gotham_is_enabled_evaluate_coupon` gibi Gotham gateway başlıkları (headers) mutlaka gönderilir.
-    5. Gelen API yanıtındaki `evaluateAsPremiumResult` (Premium fiyatı) veya `campaignEvaluateResult` (Sepette indirimli fiyat) alanları çözümlenerek en ucuz fiyat tespit edilir.
-*   **DOM Fallback:** API servisinin ulaşılamaz olması durumunda DOM üzerindeki `Premium ile` yazılı span'lardan regex ile fiyat ayıklanır.
+### 3. Hepsiburada (`hepsiburada.com`, `hb.biz`, `app.hb.biz`)
+*   **Kısa Link Çözümleme (`hb.biz`):** Akamai WAF engeline takılmamak adına `redirect: 'manual'` GET/HEAD isteğiyle ilk 301 yönlendirmesindeki `Location` başlığından `adj.st` yakalanır ve `adjust_fallback` / `adj_fallback` parametresi çözümlenerek gerçek ürün URL'i elde edilir.
+*   **Canlı Fiyat API Entegrasyonu & `_HbApiPriceResult` Modeli:** Hepsiburada normal, Premium ve sepetteki indirimli fiyatları HTML dokümanında gizler. Scraper:
+    1. HTML içerisindeki `<script id="reduxStore">` JSON verisini parse eder.
+    2. `sku`, `listingId`, `merchantId`, `productId`, `tagList`, `rootCategoryList` parametrelerini ayıklar.
+    3. Hepsiburada'nın resmi `withoutAffordability` (birincil buybox satıcısı) ve `otherMerchants` (tüm diğer satıcılar) POST API'lerine paralel (`Future.wait` / `Promise.all`) istek atar.
+    4. **Gotham Gateway Başlıkları:** İstek başlıklarına `x-gotham_app-key: All`, `x-gotham_is_include_premium_clubs: true`, `x-gotham_is_enabled_evaluate_coupon: true`, `x-gotham_is_enabled_next_eligible_campaign: true` ve `x-gotham_is_include_payment_campaigns: true` enjekte edilir.
+    5. **Premium vs Normal İndirim Ayrıştırması:** Gelen API yanıtındaki `evaluateAsPremiumResult` (`isPremium: true`) ile `evaluateResult` (`isPremium: false`) nesneleri karşılaştırılır. Fiyatlar eşit olsa dahi Premium avantajı önceliklendirilerek en avantajlı sonuç `_lastApiResult` referansına kaydedilir.
+*   **3 Kademeli Hiyerarşik Premium Rozet Tespiti (`scrapePriceLabel`):**
+    1. **Kademe 1 (Yetkili Kaynak - Canlı API):** API başarıyla sorgulandıysa doğrudan `_lastApiResult.isPremium` referans alınır (`true` ise `'Premium ile'`, değilse `null`). Sepet baremleri ve çoklu alım kuponlarının sahte pozitif üretmesi %100 engellenir.
+    2. **Kademe 2 (Özel DOM Rozetleri - Offline/Statik):** API'ye ulaşılamayan durumlarda `[data-test-id*="premium-price"]`, `[class*="PremiumPrice"]`, `[data-test-id="loyalty-discount"]` DOM düğümleri taranır.
+    3. **Kademe 3 (Katı Metin Regex):** Sadece doğrudan yaprak fiyat içeren `^(?:hepsiburada\s*)?premium['’]?\s*(?:ile|la)\s*[\d.,]+\s*(?:tl|₺)?$` desenleri kabul edilir. Header/footer/toplinks/taksit blokları elenir.
+*   **Sunucu Bypass (Node.js / VM):** Akamai Bot Manager Google datacenter IP'lerini engellediğinden, Cloud Run / VM ortamında sistem `spawnSync('curl', [...])` + `WhatsApp` UA kullanılarak istekler atılır.
 
 ### 4. Mavi (`mavi.com`)
 *   **User-Agent Politikası:** `WhatsApp/2.23.4.15 A` kullanılır.
