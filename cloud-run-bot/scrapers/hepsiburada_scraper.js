@@ -120,7 +120,7 @@ class HepsiburadaScraper extends BaseProductScraper {
     }
 
     // 2. Canlı API Çağrıları (Dinamik Fiyat Sorguları - DOM'da Premium fiyat bulunamadıysa)
-    let lowestApiPrice = null;
+    let bestApiResult = null;
     const script = $('#reduxStore');
     if (script.length) {
       try {
@@ -133,15 +133,19 @@ class HepsiburadaScraper extends BaseProductScraper {
             this._fetchOtherMerchantsPrice(reduxData),
           ]);
 
-          const withoutAffordabilityPrice = results[0];
-          const otherMerchantsPrice = results[1];
+          const withoutAffordabilityRes = results[0];
+          const otherMerchantsRes = results[1];
 
-          if (withoutAffordabilityPrice !== null && withoutAffordabilityPrice > 0) {
-            lowestApiPrice = withoutAffordabilityPrice;
+          if (withoutAffordabilityRes && withoutAffordabilityRes.price > 0) {
+            bestApiResult = withoutAffordabilityRes;
           }
-          if (otherMerchantsPrice !== null && otherMerchantsPrice > 0) {
-            if (lowestApiPrice === null || otherMerchantsPrice < lowestApiPrice) {
-              lowestApiPrice = otherMerchantsPrice;
+          if (otherMerchantsRes && otherMerchantsRes.price > 0) {
+            if (
+              bestApiResult === null ||
+              otherMerchantsRes.price < bestApiResult.price ||
+              (otherMerchantsRes.price === bestApiResult.price && otherMerchantsRes.isPremium && !bestApiResult.isPremium)
+            ) {
+              bestApiResult = otherMerchantsRes;
             }
           }
         }
@@ -149,15 +153,13 @@ class HepsiburadaScraper extends BaseProductScraper {
     } else {
       // reduxStore bulunamadıysa fallback olarak withoutAffordability API'sini doğrudan dene
       try {
-        const withoutAffordabilityPrice = await this._fetchWithoutAffordabilityPrice({});
-        if (withoutAffordabilityPrice !== null && withoutAffordabilityPrice > 0) {
-          lowestApiPrice = withoutAffordabilityPrice;
-        }
+        bestApiResult = await this._fetchWithoutAffordabilityPrice({});
       } catch (_) {}
     }
 
-    if (lowestApiPrice !== null && lowestApiPrice > 0) {
-      return lowestApiPrice;
+    this._lastApiResult = bestApiResult;
+    if (bestApiResult && bestApiResult.price > 0) {
+      return bestApiResult.price;
     }
 
     // 3. JSON-LD şemasından (Öncelikli normal fiyat)
@@ -407,12 +409,21 @@ class HepsiburadaScraper extends BaseProductScraper {
         const productResult = resJson['data']?.['result']?.['product'];
         if (productResult) {
           let lowestCalculatedPrice = null;
-          const updateLowest = (priceVal) => {
+          let isPremium = false;
+          let campaignName = null;
+
+          const updateLowest = (priceVal, premium, name) => {
             if (priceVal != null) {
               const p = parseFloat(priceVal);
               if (!isNaN(p) && p > 0) {
-                if (lowestCalculatedPrice === null || p < lowestCalculatedPrice) {
+                if (
+                  lowestCalculatedPrice === null ||
+                  p < lowestCalculatedPrice ||
+                  (p === lowestCalculatedPrice && premium && !isPremium)
+                ) {
                   lowestCalculatedPrice = p;
+                  isPremium = !!premium;
+                  campaignName = name || null;
                 }
               }
             }
@@ -420,28 +431,36 @@ class HepsiburadaScraper extends BaseProductScraper {
 
           const priceData = productResult['priceData'];
           if (priceData) {
-            updateLowest(priceData['discountedPrice']);
-            updateLowest(priceData['price']);
+            const pPrem = priceData['isPremium'] === true;
+            updateLowest(priceData['discountedPrice'], pPrem, priceData['priceText']);
+            updateLowest(priceData['price'], false, null);
           }
 
           const promoData = productResult['promoData']?.['data'];
           if (promoData) {
-            const premiumResult = promoData['campaignEvaluateResult']?.['evaluateAsPremiumResult'];
-            if (premiumResult) {
-              updateLowest(premiumResult['discountedPrice']);
-            }
-            const evalResult = promoData['campaignEvaluateResult']?.['evaluateResult'];
-            if (evalResult) {
-              updateLowest(evalResult['discountedPrice']);
-            }
-            const normalResult = promoData['campaignEvaluateResult'];
-            if (normalResult) {
-              updateLowest(normalResult['discountedPrice']);
+            const campEval = promoData['campaignEvaluateResult'];
+            if (campEval) {
+              const premiumResult = campEval['evaluateAsPremiumResult'];
+              if (premiumResult) {
+                updateLowest(premiumResult['discountedPrice'], true, premiumResult['campaignText']);
+              }
+              const evalResult = campEval['evaluateResult'];
+              if (evalResult) {
+                updateLowest(evalResult['discountedPrice'], false, evalResult['campaignText']);
+              }
+              const normalPrice = campEval['discountedPrice'];
+              if (normalPrice != null) {
+                updateLowest(normalPrice, false, campEval['campaignText']);
+              }
             }
           }
 
           if (lowestCalculatedPrice !== null && lowestCalculatedPrice > 0) {
-            return lowestCalculatedPrice;
+            return {
+              price: lowestCalculatedPrice,
+              isPremium: isPremium,
+              campaignName: campaignName
+            };
           }
         }
       }
@@ -614,15 +633,23 @@ class HepsiburadaScraper extends BaseProductScraper {
         const listingsResult = resJson['data']?.['result']?.['products']?.['otherMerchants'] || resJson['data']?.['result']?.['listings'] || [];
         
         let lowestPrice = null;
+        let isPremium = false;
+        let campaignName = null;
+
         for (const listingObj of listingsResult) {
           if (listingObj && typeof listingObj === 'object') {
-            let listingPrice = null;
-            const updateListingLowest = (priceVal) => {
-              if (priceVal != null) {
-                const p = parseFloat(priceVal);
+            const updateListingLowest = (pVal, premium, name) => {
+              if (pVal != null) {
+                const p = parseFloat(pVal);
                 if (!isNaN(p) && p > 0) {
-                  if (listingPrice === null || p < listingPrice) {
-                    listingPrice = p;
+                  if (
+                    lowestPrice === null ||
+                    p < lowestPrice ||
+                    (p === lowestPrice && premium && !isPremium)
+                  ) {
+                    lowestPrice = p;
+                    isPremium = !!premium;
+                    campaignName = name || null;
                   }
                 }
               }
@@ -630,35 +657,37 @@ class HepsiburadaScraper extends BaseProductScraper {
 
             const priceData = listingObj['priceData'];
             if (priceData) {
-              updateListingLowest(priceData['discountedPrice']);
-              updateListingLowest(priceData['price']);
+              const pPrem = priceData['isPremium'] === true;
+              updateListingLowest(priceData['discountedPrice'], pPrem, priceData['priceText']);
+              updateListingLowest(priceData['price'], false, null);
             }
 
             const promoData = listingObj['promoData']?.['data'];
             if (promoData) {
-              const premiumResult = promoData['campaignEvaluateResult']?.['evaluateAsPremiumResult'];
-              if (premiumResult) {
-                updateListingLowest(premiumResult['discountedPrice']);
-              }
-              const evalResult = promoData['campaignEvaluateResult']?.['evaluateResult'];
-              if (evalResult) {
-                updateListingLowest(evalResult['discountedPrice']);
-              }
-              const normalResult = promoData['campaignEvaluateResult'];
-              if (normalResult) {
-                updateListingLowest(normalResult['discountedPrice']);
-              }
-            }
-
-            if (listingPrice !== null && listingPrice > 0) {
-              if (lowestPrice === null || listingPrice < lowestPrice) {
-                lowestPrice = listingPrice;
+              const campEval = promoData['campaignEvaluateResult'];
+              if (campEval) {
+                const premiumResult = campEval['evaluateAsPremiumResult'];
+                if (premiumResult) {
+                  updateListingLowest(premiumResult['discountedPrice'], true, premiumResult['campaignText']);
+                }
+                const evalResult = campEval['evaluateResult'];
+                if (evalResult) {
+                  updateListingLowest(evalResult['discountedPrice'], false, evalResult['campaignText']);
+                }
+                const normalPrice = campEval['discountedPrice'];
+                if (normalPrice != null) {
+                  updateListingLowest(normalPrice, false, campEval['campaignText']);
+                }
               }
             }
           }
         }
         if (lowestPrice !== null && lowestPrice > 0) {
-          return lowestPrice;
+          return {
+            price: lowestPrice,
+            isPremium: isPremium,
+            campaignName: campaignName
+          };
         }
       }
     } catch (_) {}
@@ -709,7 +738,12 @@ class HepsiburadaScraper extends BaseProductScraper {
   }
 
   scrapePriceLabel($) {
-    // 1. DOM Kontrolü: Özel Premium Fiyat/Rozet Seçicileri
+    // 1. Canlı API Sonucu Kontrolü (Birincil ve En Güvenilir Kaynak)
+    if (this._lastApiResult) {
+      return this._lastApiResult.isPremium ? 'Premium ile' : null;
+    }
+
+    // 2. DOM Kontrolü: Özel Premium Fiyat/Rozet Seçicileri (Statik HTML / Offline Test durumları için)
     const ignoredParents = 'header, footer, nav, [class*="TopLinks"], [class*="topLinks"], [class*="installment"], [class*="Installment"], [data-test-id*="installment"], [class*="footer"], [class*="navigation"]';
     const premiumSelectors = [
       '[data-test-id*="premium-price"]',
@@ -731,7 +765,7 @@ class HepsiburadaScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Metin Taraması: Header/Footer/Navigasyon/Taksit hariç doğrudan yaprak etiket kontrolü
+    // 3. DOM Metin Taraması: SADECE doğrudan fiyat içeren açık Premium etiketleri
     let domFound = false;
     $('span, div, p, b, strong, label, a').each((_, el) => {
       const $el = $(el);
@@ -740,62 +774,21 @@ class HepsiburadaScraper extends BaseProductScraper {
       const directText = $el.clone().children().remove().end().text().trim();
       const fullText = $el.text().trim();
 
-      const strictRegex = /^(?:hepsiburada\s*)?premium['’]?\s*(?:ile|la|’la|'la|a\s*özel\s*fiyat|üyelerine\s*özel)/i;
-      const priceWithPremiumRegex = /premium['’]?\s*(?:ile|la|’la|'la)\s*[\d.,]+\s*tl/i;
+      const strictRegex = /^(?:hepsiburada\s*)?premium['’]?\s*(?:ile|la|’la|'la|a\s*özel\s*fiyat|üyelerine\s*özel)\s*[\d.,]+\s*(?:tl|₺)?$/i;
+      const priceWithPremiumRegex = /premium['’]?\s*(?:ile|la|’la|'la)\s*[\d.,]+\s*(?:tl|₺)/i;
 
       if (strictRegex.test(directText) || priceWithPremiumRegex.test(directText)) {
         domFound = true;
         return false;
       }
 
-      if (fullText.length <= 60 && (strictRegex.test(fullText) || priceWithPremiumRegex.test(fullText))) {
+      if (fullText.length <= 50 && (strictRegex.test(fullText) || priceWithPremiumRegex.test(fullText))) {
         domFound = true;
         return false;
       }
     });
 
     if (domFound) return 'Premium ile';
-
-    // 3. Redux Store Kontrolü: Yalnızca doğrudan satıcı/ürün Premium indirim etiketleri
-    const reduxScript = $('#reduxStore');
-    if (reduxScript.length) {
-      try {
-        const reduxData = JSON.parse(reduxScript.text());
-        const product = reduxData?.productState?.product;
-        if (product) {
-          const allTags = [
-            ...(product.tagList || []).map(t => (t.tagId || t || '').toString().toLowerCase()),
-            ...(product.mainProductTagList || []).map(t => (t.tagId || t || '').toString().toLowerCase())
-          ];
-
-          // Hariç tutulacak genel sepet kuponları ve taksitler
-          const isExcludedTag = (tag) => {
-            return (
-              tag.includes('vade-farksiz') ||
-              tag.includes('taksit') ||
-              tag.includes('kupon') ||
-              tag.includes('premiuma-gec') ||
-              tag.includes('supermarket') ||
-              tag.includes('gida-icecek') ||
-              tag.includes('saglik-ve-kisisel')
-            );
-          };
-
-          // Doğrudan satıcıya veya ürüne özel Premium indirim etiketi deseni
-          const isDirectSellerPremiumTag = (tag) => {
-            if (isExcludedTag(tag)) return false;
-            if (/premium['’]?[-_]?a[-_]?ozel.*saticili/i.test(tag)) return true;
-            if (/premiuma[-_]?ozel.*saticili/i.test(tag)) return true;
-            if (/premium[-_]?fiyatlar/i.test(tag)) return true;
-            return false;
-          };
-
-          if (allTags.some(isDirectSellerPremiumTag)) {
-            return 'Premium ile';
-          }
-        }
-      } catch (_) {}
-    }
 
     return null;
   }

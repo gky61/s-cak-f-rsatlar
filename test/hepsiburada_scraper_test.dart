@@ -122,7 +122,7 @@ void main() {
       expect(priceLabel, isNull);
     });
 
-    test('should mark deal as Premium when DOM contains direct Premium price or seller-specific Premium discount tag', () async {
+    test('should mark deal as Premium when DOM contains direct Premium price or loyalty badge', () async {
       final htmlDom = '''
       <div>
         <span class="premium-price">Premium ile <b>1.411,83 TL</b></span>
@@ -132,23 +132,14 @@ void main() {
       final priceLabelDom = await scraper.scrapePriceLabel(docDom);
       expect(priceLabelDom, equals('Premium ile'));
 
-      final htmlRedux = '''
-      <script id="reduxStore" type="application/json">
-      {
-        "productState": {
-          "product": {
-            "name": "Altınyıldız Polo Tişört",
-            "tagList": [
-              {"tagId": "92520395-premium-a-ozel-altinyildiz-classics-saticili-secili-urunlerde-10-indirim"}
-            ]
-          }
-        }
-      }
-      </script>
+      final htmlLoyalty = '''
+      <div>
+        <div data-test-id="premium-price">Hepsiburada Premium ile 299,90 TL</div>
+      </div>
       ''';
-      final docRedux = html_parser.parse(htmlRedux);
-      final priceLabelRedux = await scraper.scrapePriceLabel(docRedux);
-      expect(priceLabelRedux, equals('Premium ile'));
+      final docLoyalty = html_parser.parse(htmlLoyalty);
+      final priceLabelLoyalty = await scraper.scrapePriceLabel(docLoyalty);
+      expect(priceLabelLoyalty, equals('Premium ile'));
     });
   });
 }

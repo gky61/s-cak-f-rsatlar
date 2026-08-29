@@ -4,7 +4,21 @@ import 'dart:io';
 import 'package:html/dom.dart' as dom;
 import 'base_scraper.dart';
 
+class _HbApiPriceResult {
+  final double? price;
+  final bool isPremium;
+  final String? campaignName;
+
+  _HbApiPriceResult({
+    this.price,
+    this.isPremium = false,
+    this.campaignName,
+  });
+}
+
 class HepsiburadaScraper extends BaseProductScraper {
+  _HbApiPriceResult? _lastApiResult;
+
   @override
   String get domain => 'hepsiburada.com';
 
@@ -144,7 +158,7 @@ class HepsiburadaScraper extends BaseProductScraper {
     // 2. Canlı API Çağrıları (Dinamik Fiyat Sorguları - DOM'da Premium fiyat bulunamadıysa)
     // Hepsiburada canlı bot istekleri için Premium fiyatını HTML'e gömmediğinden
     // backend API'lerini (withoutAffordability & otherMerchants) paralel sorgularız.
-    double? lowestApiPrice;
+    _HbApiPriceResult? bestApiResult;
     final script = document.getElementById('reduxStore');
     if (script != null) {
       try {
@@ -157,29 +171,29 @@ class HepsiburadaScraper extends BaseProductScraper {
             _fetchOtherMerchantsPrice(document, productState, product),
           ]);
 
-          final withoutAffordabilityPrice = results[0];
-          final otherMerchantsPrice = results[1];
+          final withoutAffordabilityRes = results[0];
+          final otherMerchantsRes = results[1];
 
-          if (withoutAffordabilityPrice != null && withoutAffordabilityPrice > 0) {
-            lowestApiPrice = withoutAffordabilityPrice;
+          if (withoutAffordabilityRes != null && withoutAffordabilityRes.price != null && withoutAffordabilityRes.price! > 0) {
+            bestApiResult = withoutAffordabilityRes;
           }
-          if (otherMerchantsPrice != null && otherMerchantsPrice > 0) {
-            if (lowestApiPrice == null || otherMerchantsPrice < lowestApiPrice) {
-              lowestApiPrice = otherMerchantsPrice;
+          if (otherMerchantsRes != null && otherMerchantsRes.price != null && otherMerchantsRes.price! > 0) {
+            if (bestApiResult == null ||
+                otherMerchantsRes.price! < bestApiResult.price! ||
+                (otherMerchantsRes.price! == bestApiResult.price! && otherMerchantsRes.isPremium && !bestApiResult.isPremium)) {
+              bestApiResult = otherMerchantsRes;
             }
           }
         }
       } catch (_) {}
     } else {
       // reduxStore bulunamadıysa fallback olarak withoutAffordability API'sini doğrudan dene
-      final withoutAffordabilityPrice = await _fetchWithoutAffordabilityPrice(document);
-      if (withoutAffordabilityPrice != null && withoutAffordabilityPrice > 0) {
-        lowestApiPrice = withoutAffordabilityPrice;
-      }
+      bestApiResult = await _fetchWithoutAffordabilityPrice(document);
     }
 
-    if (lowestApiPrice != null && lowestApiPrice > 0) {
-      return lowestApiPrice;
+    _lastApiResult = bestApiResult;
+    if (bestApiResult != null && bestApiResult.price != null && bestApiResult.price! > 0) {
+      return bestApiResult.price;
     }
 
     // 3. JSON-LD şemasından (Öncelikli normal fiyat)
@@ -313,7 +327,7 @@ class HepsiburadaScraper extends BaseProductScraper {
 
   // --- Private Helper Methods for API Calls ---
 
-  Future<double?> _fetchWithoutAffordabilityPrice(dom.Document document) async {
+  Future<_HbApiPriceResult?> _fetchWithoutAffordabilityPrice(dom.Document document) async {
     final script = document.getElementById('reduxStore');
     if (script == null) return null;
 
@@ -454,14 +468,19 @@ class HepsiburadaScraper extends BaseProductScraper {
         final productResult = resJson['data']?['result']?['product'];
         if (productResult != null) {
           double? lowestCalculatedPrice;
+          bool isPremium = false;
+          String? campName;
 
-          void updateLowest(double? priceVal) {
+          void updateLowest(double? priceVal, bool premium, String? name) {
             if (priceVal != null) {
               final double p = priceVal;
               if (p > 0) {
-                final currentLowest = lowestCalculatedPrice;
-                if (currentLowest == null || p < currentLowest) {
+                if (lowestCalculatedPrice == null ||
+                    p < lowestCalculatedPrice! ||
+                    (p == lowestCalculatedPrice! && premium && !isPremium)) {
                   lowestCalculatedPrice = p;
+                  isPremium = premium;
+                  campName = name;
                 }
               }
             }
@@ -470,38 +489,44 @@ class HepsiburadaScraper extends BaseProductScraper {
           final priceData = productResult['priceData'];
           if (priceData != null) {
             final discountedPrice = double.tryParse(priceData['discountedPrice']?.toString() ?? '');
-            updateLowest(discountedPrice);
+            final bool pPrem = priceData['isPremium'] == true;
+            updateLowest(discountedPrice, pPrem, priceData['priceText']?.toString());
             
             final price = double.tryParse(priceData['price']?.toString() ?? '');
-            updateLowest(price);
+            updateLowest(price, false, null);
           }
 
           final promoData = productResult['promoData']?['data'];
           if (promoData != null) {
-            final premiumResult = promoData['campaignEvaluateResult']?['evaluateAsPremiumResult'];
-            if (premiumResult != null) {
-              final premiumPrice = double.tryParse(premiumResult['discountedPrice']?.toString() ?? '');
-              updateLowest(premiumPrice);
-            }
-            
-            final evalResult = promoData['campaignEvaluateResult']?['evaluateResult'];
-            if (evalResult != null) {
-              final evalPrice = double.tryParse(evalResult['discountedPrice']?.toString() ?? '');
-              updateLowest(evalPrice);
-            }
+            final campEval = promoData['campaignEvaluateResult'];
+            if (campEval != null) {
+              final premiumResult = campEval['evaluateAsPremiumResult'];
+              if (premiumResult != null) {
+                final premiumPrice = double.tryParse(premiumResult['discountedPrice']?.toString() ?? '');
+                final cText = premiumResult['campaignText']?.toString();
+                updateLowest(premiumPrice, true, cText);
+              }
+              
+              final evalResult = campEval['evaluateResult'];
+              if (evalResult != null) {
+                final evalPrice = double.tryParse(evalResult['discountedPrice']?.toString() ?? '');
+                final cText = evalResult['campaignText']?.toString();
+                updateLowest(evalPrice, false, cText);
+              }
 
-            final normalResult = promoData['campaignEvaluateResult'];
-            if (normalResult != null) {
-              final normalPrice = double.tryParse(normalResult['discountedPrice']?.toString() ?? '');
-              updateLowest(normalPrice);
+              final normalPrice = double.tryParse(campEval['discountedPrice']?.toString() ?? '');
+              if (normalPrice != null) {
+                updateLowest(normalPrice, false, campEval['campaignText']?.toString());
+              }
             }
           }
 
-          if (lowestCalculatedPrice != null) {
-            final double finalLowest = lowestCalculatedPrice!;
-            if (finalLowest > 0) {
-              return finalLowest;
-            }
+          if (lowestCalculatedPrice != null && lowestCalculatedPrice! > 0) {
+            return _HbApiPriceResult(
+              price: lowestCalculatedPrice,
+              isPremium: isPremium,
+              campaignName: campName,
+            );
           }
         }
       }
@@ -514,7 +539,7 @@ class HepsiburadaScraper extends BaseProductScraper {
     return null;
   }
 
-  Future<double?> _fetchOtherMerchantsPrice(dom.Document document, Map<String, dynamic> productState, Map<String, dynamic> product) async {
+  Future<_HbApiPriceResult?> _fetchOtherMerchantsPrice(dom.Document document, Map<String, dynamic> productState, Map<String, dynamic> product) async {
     final sku = product['sku']?.toString() ?? '';
     final productId = product['productId']?.toString() ?? '';
     final brand = product['brand']?.toString() ?? '';
@@ -696,64 +721,68 @@ class HepsiburadaScraper extends BaseProductScraper {
         final listingsResult = (resJson['data']?['result']?['products']?['otherMerchants'] ?? resJson['data']?['result']?['listings']) as List?;
         if (listingsResult != null) {
           double? lowestPrice;
+          bool isPremium = false;
+          String? campName;
+
+          void updateLowest(double? p, bool premium, String? name) {
+            if (p != null && p > 0) {
+              if (lowestPrice == null ||
+                  p < lowestPrice! ||
+                  (p == lowestPrice! && premium && !isPremium)) {
+                lowestPrice = p;
+                isPremium = premium;
+                campName = name;
+              }
+            }
+          }
+
           for (final listingObj in listingsResult) {
             if (listingObj is Map) {
-              double? listingPrice;
-
-              void updateListingLowest(double? priceVal) {
-                if (priceVal != null) {
-                  final double p = priceVal;
-                  if (p > 0) {
-                    final currentListing = listingPrice;
-                    if (currentListing == null || p < currentListing) {
-                      listingPrice = p;
-                    }
-                  }
-                }
-              }
-
               final priceData = listingObj['priceData'];
               if (priceData != null) {
                 final discountedPrice = double.tryParse(priceData['discountedPrice']?.toString() ?? '');
-                updateListingLowest(discountedPrice);
+                final bool pPrem = priceData['isPremium'] == true;
+                updateLowest(discountedPrice, pPrem, priceData['priceText']?.toString());
                 
                 final price = double.tryParse(priceData['price']?.toString() ?? '');
-                updateListingLowest(price);
+                updateLowest(price, false, null);
               }
 
               final promoData = listingObj['promoData']?['data'];
               if (promoData != null) {
-                final premiumResult = promoData['campaignEvaluateResult']?['evaluateAsPremiumResult'];
-                if (premiumResult != null) {
-                  final premiumPrice = double.tryParse(premiumResult['discountedPrice']?.toString() ?? '');
-                  updateListingLowest(premiumPrice);
-                }
-                
-                final evalResult = promoData['campaignEvaluateResult']?['evaluateResult'];
-                if (evalResult != null) {
-                  final evalPrice = double.tryParse(evalResult['discountedPrice']?.toString() ?? '');
-                  updateListingLowest(evalPrice);
-                }
+                final campEval = promoData['campaignEvaluateResult'];
+                if (campEval != null) {
+                  final premiumResult = campEval['evaluateAsPremiumResult'];
+                  if (premiumResult != null) {
+                    final premiumPrice = double.tryParse(premiumResult['discountedPrice']?.toString() ?? '');
+                    final cText = premiumResult['campaignText']?.toString();
+                    updateLowest(premiumPrice, true, cText);
+                  }
+                  
+                  final evalResult = campEval['evaluateResult'];
+                  if (evalResult != null) {
+                    final evalPrice = double.tryParse(evalResult['discountedPrice']?.toString() ?? '');
+                    final cText = evalResult['campaignText']?.toString();
+                    updateLowest(evalPrice, false, cText);
+                  }
 
-                final normalResult = promoData['campaignEvaluateResult'];
-                if (normalResult != null) {
-                  final normalPrice = double.tryParse(normalResult['discountedPrice']?.toString() ?? '');
-                  updateListingLowest(normalPrice);
-                }
-              }
-
-              if (listingPrice != null) {
-                final double lPrice = listingPrice!;
-                if (lPrice > 0) {
-                  final currentLowest = lowestPrice;
-                  if (currentLowest == null || lPrice < currentLowest) {
-                    lowestPrice = lPrice;
+                  final normalResult = promoData['campaignEvaluateResult'];
+                  if (normalResult != null) {
+                    final normalPrice = double.tryParse(normalResult['discountedPrice']?.toString() ?? '');
+                    updateLowest(normalPrice, false, campEval['campaignText']?.toString());
                   }
                 }
               }
             }
           }
-          if (lowestPrice != null) return lowestPrice;
+
+          if (lowestPrice != null && lowestPrice! > 0) {
+            return _HbApiPriceResult(
+              price: lowestPrice,
+              isPremium: isPremium,
+              campaignName: campName,
+            );
+          }
         }
       }
     } catch (_) {
@@ -919,7 +948,14 @@ class HepsiburadaScraper extends BaseProductScraper {
 
   @override
   FutureOr<String?> scrapePriceLabel(dom.Document document) async {
-    // 1. DOM Kontrolü: Özel Premium Fiyat/Rozet Seçicileri
+    // 1. Canlı API Sonucu Kontrolü (Birincil ve En Güvenilir Kaynak)
+    if (_lastApiResult != null) {
+      return _lastApiResult!.isPremium ? 'Premium ile' : null;
+    }
+
+    // 2. DOM Kontrolü: Özel Premium Fiyat/Rozet Seçicileri (Statik HTML / Offline Test durumları için)
+    final ignoredParents = RegExp(r'header|footer|nav|toplinks|installment', caseSensitive: false);
+
     const premiumSelectors = [
       '[data-test-id*="premium-price"]',
       '[class*="PremiumPrice"]',
@@ -940,81 +976,24 @@ class HepsiburadaScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Metin Taraması: Header/Footer/Navigasyon/Taksit hariç doğrudan yaprak etiket kontrolü
-    final strictRegex = RegExp(r"^(?:hepsiburada\s*)?premium['’]?\s*(?:ile|la|’la|'la|a\s*özel\s*fiyat|üyelerine\s*özel)", caseSensitive: false);
-    final priceWithPremiumRegex = RegExp(r"premium['’]?\s*(?:ile|la|’la|'la)\s*[\d.,]+\s*tl", caseSensitive: false);
+    // 3. DOM Metin Taraması: SADECE doğrudan fiyat içeren açık Premium etiketleri
+    final strictRegex = RegExp(r"^(?:hepsiburada\s*)?premium['’]?\s*(?:ile|la|’la|'la|a\s*özel\s*fiyat|üyelerine\s*özel)\s*[\d.,]+\s*(?:tl|₺)?$", caseSensitive: false);
+    final priceWithPremiumRegex = RegExp(r"premium['’]?\s*(?:ile|la|’la|'la)\s*[\d.,]+\s*(?:tl|₺)", caseSensitive: false);
 
-    final elements = document.querySelectorAll('span, b, strong, p, label, a, div');
+    final elements = document.querySelectorAll('span, b, strong, p, label');
     for (final el in elements) {
-      // Header, footer, nav, taksit/installment alanlarını filtrele
       final parentClass = (el.parent?.attributes['class'] ?? '').toLowerCase();
       final selfClass = (el.attributes['class'] ?? '').toLowerCase();
-      if (selfClass.contains('toplinks') || selfClass.contains('installment') || parentClass.contains('toplinks') || parentClass.contains('installment')) {
+      if (ignoredParents.hasMatch(parentClass) || ignoredParents.hasMatch(selfClass)) {
         continue;
       }
 
       final text = el.text.trim();
-      if (text.isEmpty || text.length > 60) continue;
+      if (text.isEmpty || text.length > 50) continue;
 
       if (strictRegex.hasMatch(text) || priceWithPremiumRegex.hasMatch(text)) {
         return 'Premium ile';
       }
-    }
-
-    // 3. Redux Store Kontrolü: Yalnızca doğrudan satıcı/ürün Premium indirim etiketleri
-    final script = document.getElementById('reduxStore');
-    if (script != null) {
-      try {
-        final Map<String, dynamic> reduxData = jsonDecode(script.text);
-        final product = reduxData['productState']?['product'];
-        if (product != null) {
-          final allTags = <String>[];
-          final rawTags = product['tagList'] as List?;
-          if (rawTags != null) {
-            for (final t in rawTags) {
-              if (t is Map && t['tagId'] != null) {
-                allTags.add(t['tagId'].toString().toLowerCase());
-              } else if (t is String) {
-                allTags.add(t.toLowerCase());
-              }
-            }
-          }
-          final rawMainTags = product['mainProductTagList'] as List?;
-          if (rawMainTags != null) {
-            for (final t in rawMainTags) {
-              if (t is Map && t['tagId'] != null) {
-                allTags.add(t['tagId'].toString().toLowerCase());
-              } else if (t is String) {
-                allTags.add(t.toLowerCase());
-              }
-            }
-          }
-
-          // Hariç tutulacak genel sepet kuponları ve taksitler
-          bool isExcludedTag(String tag) {
-            return tag.contains('vade-farksiz') ||
-                tag.contains('taksit') ||
-                tag.contains('kupon') ||
-                tag.contains('premiuma-gec') ||
-                tag.contains('supermarket') ||
-                tag.contains('gida-icecek') ||
-                tag.contains('saglik-ve-kisisel');
-          }
-
-          // Doğrudan satıcıya veya ürüne özel Premium indirim etiketi deseni
-          bool isDirectSellerPremiumTag(String tag) {
-            if (isExcludedTag(tag)) return false;
-            if (RegExp(r"premium['’]?[-_]?a[-_]?ozel.*saticili", caseSensitive: false).hasMatch(tag)) return true;
-            if (RegExp(r"premiuma[-_]?ozel.*saticili", caseSensitive: false).hasMatch(tag)) return true;
-            if (RegExp(r"premium[-_]?fiyatlar", caseSensitive: false).hasMatch(tag)) return true;
-            return false;
-          }
-
-          if (allTags.any(isDirectSellerPremiumTag)) {
-            return 'Premium ile';
-          }
-        }
-      } catch (_) {}
     }
 
     return null;
