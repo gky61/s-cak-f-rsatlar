@@ -256,11 +256,14 @@ match /adminMessages/{messageId} {
 
 Tüm kritik aksaklıklar çözülmüş ve talep edilen tüm UI/UX senaryoları mevcut mimariyle tam uyumlu olarak sisteme kazandırılmıştır:
 
-### 🔔 1. Bildirim & Derin Bağlantı (Deep Link) & In-App Toast
-- **In-App Toast/Banner ([lib/widgets/in_app_message_banner.dart](file:///d:/firsatkolik/lib/widgets/in_app_message_banner.dart)):** Uygulama açıkken başka bir ekrandayken mesaj veya admin mesajı geldiğinde ekranın üstünden kayarak inen şık bir toast gösterilir; tıklandığında sohbete yönlendirir, yukarı kaydırılarak kapatılabilir.
+### 🔔 1. Bildirim, Derin Bağlantı (Deep Link), In-App Toast & Anti-Spam
+- **In-App Toast/Banner ([lib/widgets/in_app_message_banner.dart](file:///d:/firsatkolik/lib/widgets/in_app_message_banner.dart)):** Uygulama açıkken başka bir ekrandayken mesaj veya admin mesajı geldiğinde ekranın üstünden kayarak inen şık bir toast gösterilir; tıklandığında sohbete yönlendirir, yukarı kaydırılarak kapatılabilir. Hızlı mesajlarda 1.5s haptic debouncing uygulanır.
 - **Admin Mesajı Yönlendirmesi ([notification_service.dart](file:///d:/firsatkolik/lib/services/notification_service.dart) & [admin_notifications_screen.dart](file:///d:/firsatkolik/lib/screens/admin_notifications_screen.dart)):** Admin panelinden kullanıcıya doğrudan mesaj gönderildiğinde, kullanıcı dışarıdan bildirime tıkladığında veya Bildirim Merkezi'ndeki admin mesajına dokunduğunda popup yerine doğrudan mesaj kutusundaki resmi **Admin Sohbet Odasına** (`MessageScreen(isAdminMessage: true)`) yönlendirilir.
 - **Akıllı Bildirim Bastırma ([notification_service.dart](file:///d:/firsatkolik/lib/services/notification_service.dart)):** Kullanıcı zaten o kişiyle veya admin sohbet ekranındaysa (`activeChatUserId == senderId`), push ve in-app bildirimleri bastırılır; mesaj doğrudan akışa yansır.
-- **Derin Bağlantı & Scroll-to-Bottom:** Dış bildirim tıklandığında sohbet açılır, otomatik olarak en son mesaja yumuşakça kaydırılır ve okunmamış mesajlar okunmuş işaretlenir.
+- **🚀 Cold Start & Instant Optimistic Seeding:** Uygulama tamamen kapalıyken bildirime tıklandığında, mesaj ilk karede (`initState`) `_optimisticMessages` içine eklenerek sıfır gecikmeyle (iskelet ve boş ekran olmadan) anında ekrana çizilir.
+- **🛡️ Gönderici Anti-Spam (Sliding Window):** İstemci tarafında `MessageScreen` 5 saniyede en fazla 3 mesaj gönderilmesine izin verir; aşım durumunda SnackBar uyarısı verilir.
+- **⚡ Backend FCM Collapse Key & APNs:** Android'de `collapseKey: "msg_" + senderId`, iOS'ta `apns-collapse-id: "msg_" + senderId` ve `thread-id: "conv_" + senderId` ile kilit ekranında sohbet bazlı sıkıştırma yapılır.
+- **📱 OS Bildirim Yığınlama (Stacking):** `notifId = senderId.hashCode % 100000`, `tag = 'msg_$senderId'` ve `onlyAlertOnce: true` ile bildirim çekmecesinde tek kart güncellenir.
 
 ---
 
@@ -298,9 +301,12 @@ Tüm kritik aksaklıklar çözülmüş ve talep edilen tüm UI/UX senaryoları m
 | **Model** | [lib/models/admin_to_user_message.dart](file:///d:/firsatkolik/lib/models/admin_to_user_message.dart) | Admin resmi duyuru/mesaj modeli | ✅ Aktif & Kararlı |
 | **Servis** | [lib/services/message_service.dart](file:///d:/firsatkolik/lib/services/message_service.dart) | Çift yönlü reaktif stream, typing, block, mute, soft delete, 15 dk geri alma | ✅ Zenginleştirildi |
 | **Servis** | [lib/services/firestore_service.dart](file:///d:/firsatkolik/lib/services/firestore_service.dart) | 3'lü StreamController ile birleşik mesaj akışı ve chat yardımcıları | ✅ Aktif & Tam Uyumlu |
-| **Bildirim** | [lib/widgets/in_app_message_banner.dart](file:///d:/firsatkolik/lib/widgets/in_app_message_banner.dart) | Uygulama açıkken üstten kayan modern In-App Toast/Banner | ✅ Yeni Eklendi |
-| **Bildirim** | [lib/services/notification_service.dart](file:///d:/firsatkolik/lib/services/notification_service.dart) | `activeChatUserId` denetimi ve In-App Banner entegrasyonu | ✅ Güncellendi |
+| **Bildirim** | [lib/widgets/in_app_message_banner.dart](file:///d:/firsatkolik/lib/widgets/in_app_message_banner.dart) | Uygulama açıkken üstten kayan modern In-App Toast/Banner & Haptic debouncing | ✅ Yeni Eklendi |
+| **Bildirim** | [lib/services/notification_service.dart](file:///d:/firsatkolik/lib/services/notification_service.dart) | `activeChatUserId` denetimi, cold-start kuyruğu ve In-App Banner entegrasyonu | ✅ Güncellendi |
 | **Mobil UI** | [lib/screens/messages_list_screen.dart](file:///d:/firsatkolik/lib/screens/messages_list_screen.dart) | Sayaç rozetleri, swipe silme/sessize alma, misafir koruması | ✅ Yenilendi |
-| **Mobil UI** | [lib/screens/message_screen.dart](file:///d:/firsatkolik/lib/screens/message_screen.dart) | Pinned Fırsat Kartı, Optimistic UI, Link Preview, Typing, Alıntı, "Yeni Mesaj ↓" butonu | ✅ Eksiksiz Yenilendi |
+| **Mobil UI** | [lib/screens/message_screen.dart](file:///d:/firsatkolik/lib/screens/message_screen.dart) | Sliding-window anti-spam (5s/max 3), instant optimistic message seeding, Pinned Fırsat Kartı, Link Preview, Typing | ✅ Eksiksiz Yenilendi |
 | **Mobil UI** | [lib/screens/deal_detail_screen.dart](file:///d:/firsatkolik/lib/screens/deal_detail_screen.dart) | Fırsat sahibine tüm fırsat kartı verileriyle doğrudan mesaj başlatma | ✅ Entegre Edildi |
+| **Arka Plan** | [lib/main.dart](file:///d:/firsatkolik/lib/main.dart) | Arka plan mesaj yakalama, deterministik ID/tag ve `onlyAlertOnce` yığınlama | ✅ Güncellendi |
+| **Cloud Functions** | [functions/index.js](file:///d:/firsatkolik/functions/index.js) | `onUserMessageCreated` FCM collapseKey & APNs collapse-id desteği | ✅ Güncellendi |
 | **Güvenlik** | [firestore.rules](file:///d:/firsatkolik/firestore.rules) | `messages` (gönderen + alıcı silme izni), `adminToUserMessages`, `adminMessages` | ✅ Güvenli & Aktif |
+| **Birim Test** | [test/messaging_and_anti_spam_test.dart](file:///d:/firsatkolik/test/messaging_and_anti_spam_test.dart) | 11 senaryoluk anti-spam, stacking, parser ve dedup birim testleri | ✅ %100 Başarılı |

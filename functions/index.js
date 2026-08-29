@@ -953,15 +953,26 @@ exports.onUserMessageCreated = functions.firestore
 
     functions.logger.info('📨 Yeni kullanıcı mesajı:', { messageId, senderId, receiverId });
 
-    // Gönderenin profil resmini al
-    let senderImageUrl = '';
-    try {
-      const senderDoc = await admin.firestore().collection('users').doc(senderId).get();
-      if (senderDoc.exists) {
-        senderImageUrl = senderDoc.data().profileImageUrl || senderDoc.data().photoURL || '';
+    // Gönderenin profil resmini ve ismini al
+    let senderImageUrl = message.senderImageUrl || '';
+    let resolvedSenderName = senderName;
+
+    if (senderId === 'admin') {
+      resolvedSenderName = 'FırsatKolik Yönetim';
+      senderImageUrl = 'assets/logo.webp';
+    } else if (senderId === 'botkolik') {
+      resolvedSenderName = 'Botkolik';
+      senderImageUrl = 'assets/botkolik.webp';
+    } else {
+      try {
+        const senderDoc = await admin.firestore().collection('users').doc(senderId).get();
+        if (senderDoc.exists) {
+          senderImageUrl = senderDoc.data().profileImageUrl || senderDoc.data().photoURL || senderImageUrl;
+          resolvedSenderName = senderDoc.data().username || senderDoc.data().displayName || resolvedSenderName;
+        }
+      } catch (imgErr) {
+        functions.logger.warn('⚠️ Gönderen profil resmi alınamadı:', imgErr);
       }
-    } catch (imgErr) {
-      functions.logger.warn('⚠️ Gönderen profil resmi alınamadı:', imgErr);
     }
     try {
       const receiverDoc = await admin.firestore().collection('users').doc(receiverId).get();
@@ -1002,22 +1013,24 @@ exports.onUserMessageCreated = functions.firestore
             type: 'message',
             messageId: messageId,
             senderId: senderId,
-            senderName: senderName,
+            senderName: resolvedSenderName,
             senderImageUrl: senderImageUrl,
             messageText: notificationBody,
             receiverId: receiverId,
-            notification_title: `💬 ${senderName}`,
+            notification_title: `💬 ${resolvedSenderName}`,
             notification_body: notificationBody,
             click_action: 'FLUTTER_NOTIFICATION_CLICK',
           },
           android: {
             priority: 'high',
             ttl: 86400000, // 24 saat
+            collapseKey: `msg_${senderId}`,
           },
           apns: {
             headers: {
               'apns-priority': '10',
               'apns-expiration': String(Math.floor(Date.now() / 1000) + 86400),
+              'apns-collapse-id': `msg_${senderId}`,
             },
             payload: {
               aps: {
@@ -1026,6 +1039,7 @@ exports.onUserMessageCreated = functions.firestore
                 'content-available': 1,
                 'interruption-level': 'active',
                 category: 'USER_MESSAGE',
+                'thread-id': `conv_${senderId}`,
               },
             },
           },

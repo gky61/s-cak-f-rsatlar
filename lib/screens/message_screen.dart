@@ -44,6 +44,8 @@ class MessageScreen extends StatefulWidget {
   final String otherUserImageUrl;
   final bool isAdminMessage;
   final String? initialText;
+  final String? initialIncomingMessageText;
+  final String? initialIncomingMessageId;
   final String? initialDealTitle;
   final String? initialDealId;
   final String? initialDealImageUrl;
@@ -57,6 +59,8 @@ class MessageScreen extends StatefulWidget {
     required this.otherUserImageUrl,
     this.isAdminMessage = false,
     this.initialText,
+    this.initialIncomingMessageText,
+    this.initialIncomingMessageId,
     this.initialDealTitle,
     this.initialDealId,
     this.initialDealImageUrl,
@@ -86,6 +90,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   final Set<String> _markedAsRead = {};
   Message? _replyingToMessage;
   final List<Message> _optimisticMessages = [];
+  final List<DateTime> _recentMessageTimestamps = [];
   final Map<String, LinkPreviewResult?> _urlPreviews = {};
   final Map<String, Deal?> _parsedDealsCache = {};
   final Set<String> _fetchingDealIds = {};
@@ -113,13 +118,53 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     super.initState();
     NotificationService.activeChatUserId = widget.otherUserId;
 
-    if (widget.otherUserId == 'botkolik') {
+    if (widget.otherUserId == 'admin') {
+      _liveOtherUserImageUrl = 'assets/logo.webp';
+      _liveOtherUserName = 'FırsatKolik Yönetim';
+      _liveIsUserDeleted = false;
+    } else if (widget.otherUserId == 'botkolik') {
       _liveOtherUserImageUrl = 'assets/botkolik.webp';
       _liveOtherUserName = 'Botkolik';
       _liveIsUserDeleted = false;
+    } else if (widget.otherUserId == 'test_user_ahmet') {
+      _liveOtherUserImageUrl = '';
+      _liveOtherUserName = 'Ahmet Yılmaz (Test)';
+      _liveIsUserDeleted = false;
+    } else if (widget.otherUserId == 'test_user_zeynep') {
+      _liveOtherUserImageUrl = 'assets/profil.jpg';
+      _liveOtherUserName = 'Zeynep Kaya (Test)';
+      _liveIsUserDeleted = false;
     } else {
       _liveOtherUserImageUrl = widget.otherUserImageUrl;
-      _liveOtherUserName = widget.otherUserName;
+      _liveOtherUserName = widget.otherUserName.isNotEmpty ? widget.otherUserName : 'Kullanıcı';
+    }
+
+    // Push bildiriminden açıldığında gelen son mesajı anında (Firestore bağlantısı beklenmeden) göster
+    if (widget.initialIncomingMessageText != null &&
+        widget.initialIncomingMessageText!.trim().isNotEmpty &&
+        !widget.isAdminMessage) {
+      final currentUid = _authService.currentUser?.uid ?? '';
+      final incomingText = widget.initialIncomingMessageText!.trim();
+      final initialMessage = Message(
+        id: widget.initialIncomingMessageId ?? 'incoming_${DateTime.now().millisecondsSinceEpoch}',
+        conversationId: Message.computeConversationId(currentUid, widget.otherUserId),
+        senderId: widget.otherUserId,
+        senderName: _liveOtherUserName,
+        senderImageUrl: _liveOtherUserImageUrl,
+        receiverId: currentUid,
+        receiverName: '',
+        receiverImageUrl: '',
+        text: incomingText,
+        createdAt: DateTime.now(),
+        isRead: true,
+        dealId: widget.initialDealId,
+        dealTitle: widget.initialDealTitle,
+        dealImageUrl: widget.initialDealImageUrl,
+        dealPrice: widget.initialDealPrice,
+        dealStore: widget.initialDealStore,
+        status: 'sent',
+      );
+      _optimisticMessages.add(initialMessage);
     }
 
     if (widget.initialDealId != null && widget.initialDealId!.isNotEmpty) {
@@ -145,8 +190,11 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
 
   void _initStreams() {
     final currentUserId = _authService.currentUser?.uid;
+    final isSystemPersona = widget.otherUserId == 'admin' ||
+        widget.otherUserId == 'botkolik' ||
+        widget.otherUserId.startsWith('test_user_');
 
-    if (!widget.isAdminMessage && widget.otherUserId.isNotEmpty && widget.otherUserId != 'botkolik') {
+    if (!widget.isAdminMessage && widget.otherUserId.isNotEmpty && !isSystemPersona) {
       _otherUserStream = FirebaseFirestore.instance
           .collection('users')
           .doc(widget.otherUserId)
@@ -165,11 +213,21 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
               _liveIsUserDeleted = false;
             });
           } else {
-            setState(() {
-              _liveIsUserDeleted = true;
-              _liveOtherUserName = 'Silinmiş Kullanıcı';
-              _liveOtherUserImageUrl = '';
-            });
+            if (widget.otherUserName.isNotEmpty &&
+                widget.otherUserName != 'Kullanıcı' &&
+                widget.otherUserName != 'Silinmiş Kullanıcı') {
+              setState(() {
+                _liveIsUserDeleted = false;
+                _liveOtherUserName = widget.otherUserName;
+                _liveOtherUserImageUrl = widget.otherUserImageUrl;
+              });
+            } else {
+              setState(() {
+                _liveIsUserDeleted = true;
+                _liveOtherUserName = 'Silinmiş Kullanıcı';
+                _liveOtherUserImageUrl = '';
+              });
+            }
           }
         }
       });
@@ -376,6 +434,39 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       return;
     }
 
+    // Anti-Spam Rate Limiter: 5 saniyede en fazla 3 mesaj
+    final now = DateTime.now();
+    _recentMessageTimestamps.removeWhere((ts) => now.difference(ts).inSeconds >= 5);
+
+    if (_recentMessageTimestamps.length >= 3) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Çok hızlı mesaj gönderiyorsunuz. Lütfen birkaç saniye bekleyin.',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFE65100),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+      return;
+    }
+
+    _recentMessageTimestamps.add(now);
+
     final reply = _replyingToMessage;
     final attached = _attachedDeal;
     final dealId = attached?.id;
@@ -509,14 +600,25 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(2)),
               ),
-              ListTile(
-                leading: const Icon(Icons.person_outline_rounded),
-                title: const Text('Profili Görüntüle'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen(userId: widget.otherUserId)));
-                },
-              ),
+              if (widget.otherUserId == 'botkolik') ...[
+                ListTile(
+                  leading: const Icon(Icons.smart_toy_outlined),
+                  title: const Text('Botkolik Profilini Görüntüle'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const BotkolikProfileScreen()));
+                  },
+                ),
+              ] else if (widget.otherUserId != 'admin' && !widget.otherUserId.startsWith('test_user_')) ...[
+                ListTile(
+                  leading: const Icon(Icons.person_outline_rounded),
+                  title: const Text('Profili Görüntüle'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen(userId: widget.otherUserId)));
+                  },
+                ),
+              ],
               ListTile(
                 leading: Icon(_isMuted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined),
                 title: Text(_isMuted ? 'Bildirimleri Aç' : 'Sohbeti Sessize Al 🔕'),
@@ -531,51 +633,53 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                   }
                 },
               ),
-              ListTile(
-                leading: Icon(_isBlockedByMe ? Icons.lock_open_rounded : Icons.block_rounded, color: Colors.orange),
-                title: Text(_isBlockedByMe ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle 🚫', style: const TextStyle(color: Colors.orange)),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  if (_isBlockedByMe) {
-                    await _firestoreService.unblockUserForChat(currentUserId, widget.otherUserId);
-                    setState(() => _isBlockedByMe = false);
-                  } else {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (c) => AlertDialog(
-                        title: const Text('Kullanıcıyı Engelle'),
-                        content: Text('${widget.otherUserName} kullanıcısını engellemek istediğinize emin misiniz?'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                            onPressed: () => Navigator.pop(c, true),
-                            child: const Text('Engelle'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirm == true) {
-                      await _firestoreService.blockUserForChat(currentUserId, widget.otherUserId);
-                      setState(() => _isBlockedByMe = true);
+              if (widget.otherUserId != 'admin' && widget.otherUserId != 'botkolik') ...[
+                ListTile(
+                  leading: Icon(_isBlockedByMe ? Icons.lock_open_rounded : Icons.block_rounded, color: Colors.orange),
+                  title: Text(_isBlockedByMe ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle 🚫', style: const TextStyle(color: Colors.orange)),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    if (_isBlockedByMe) {
+                      await _firestoreService.unblockUserForChat(currentUserId, widget.otherUserId);
+                      setState(() => _isBlockedByMe = false);
+                    } else {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (c) => AlertDialog(
+                          title: const Text('Kullanıcıyı Engelle'),
+                          content: Text('${widget.otherUserName} kullanıcısını engellemek istediğinize emin misiniz?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                              onPressed: () => Navigator.pop(c, true),
+                              child: const Text('Engelle'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await _firestoreService.blockUserForChat(currentUserId, widget.otherUserId);
+                        setState(() => _isBlockedByMe = true);
+                      }
                     }
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.flag_outlined, color: Colors.red),
-                title: const Text('Kullanıcıyı Şikayet Et', style: TextStyle(color: Colors.red)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  showReportDialog(
-                    context,
-                    reportedId: widget.otherUserId,
-                    type: 'user',
-                    targetAuthor: widget.otherUserName,
-                    targetAuthorId: widget.otherUserId,
-                  );
-                },
-              ),
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined, color: Colors.red),
+                  title: const Text('Kullanıcıyı Şikayet Et', style: TextStyle(color: Colors.red)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    showReportDialog(
+                      context,
+                      reportedId: widget.otherUserId,
+                      type: 'user',
+                      targetAuthor: widget.otherUserName,
+                      targetAuthorId: widget.otherUserId,
+                    );
+                  },
+                ),
+              ],
               ListTile(
                 leading: const Icon(Icons.delete_forever_rounded, color: Colors.red),
                 title: const Text('Sohbeti Sil', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
@@ -650,27 +754,46 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
             String otherUserName = widget.otherUserName;
             bool isUserDeleted = false;
 
-            if (!widget.isAdminMessage) {
+            final isSystemAdmin = widget.isAdminMessage || widget.otherUserId == 'admin';
+
+            if (widget.otherUserId == 'admin') {
+              otherUserName = 'FırsatKolik Yönetim';
+              otherUserImageUrl = 'assets/logo.webp';
+              isUserDeleted = false;
+            } else if (widget.otherUserId == 'botkolik') {
+              otherUserName = 'Botkolik';
+              otherUserImageUrl = 'assets/botkolik.webp';
+              isUserDeleted = false;
+            } else if (widget.otherUserId == 'test_user_ahmet') {
+              otherUserName = 'Ahmet Yılmaz (Test)';
+              otherUserImageUrl = '';
+              isUserDeleted = false;
+            } else if (widget.otherUserId == 'test_user_zeynep') {
+              otherUserName = 'Zeynep Kaya (Test)';
+              otherUserImageUrl = 'assets/profil.jpg';
+              isUserDeleted = false;
+            } else if (!widget.isAdminMessage) {
               if (otherUserSnapshot.hasData && otherUserSnapshot.data!.exists) {
                 final data = otherUserSnapshot.data!.data();
                 otherUserImageUrl = migrateAssetPath(data?['profileImageUrl'] ?? otherUserImageUrl);
                 otherUserName = data?['username'] ?? data?['displayName'] ?? otherUserName;
               } else if (otherUserSnapshot.connectionState == ConnectionState.active &&
                   (!otherUserSnapshot.hasData || !otherUserSnapshot.data!.exists)) {
-                isUserDeleted = true;
-                otherUserName = 'Silinmiş Kullanıcı';
-                otherUserImageUrl = '';
+                if (widget.otherUserName.isNotEmpty &&
+                    widget.otherUserName != 'Kullanıcı' &&
+                    widget.otherUserName != 'Silinmiş Kullanıcı') {
+                  isUserDeleted = false;
+                  otherUserName = widget.otherUserName;
+                } else {
+                  isUserDeleted = true;
+                  otherUserName = 'Silinmiş Kullanıcı';
+                  otherUserImageUrl = '';
+                }
               }
             }
 
-            if (widget.otherUserId == 'botkolik') {
-              otherUserName = 'Botkolik';
-              otherUserImageUrl = 'assets/botkolik.webp';
-              isUserDeleted = false;
-            }
-
             return InkWell(
-              onTap: widget.isAdminMessage || isUserDeleted
+              onTap: isSystemAdmin || isUserDeleted
                   ? null
                   : () {
                       if (widget.otherUserId == 'botkolik') {
@@ -701,12 +824,14 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                         ),
                       ),
                       child: ClipOval(
-                        child: widget.isAdminMessage
+                        child: isSystemAdmin
                             ? Container(
                                 color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
                                 child: Icon(Icons.shield_outlined, color: primaryColor, size: 22),
                               )
-                            : _buildAvatar(otherUserImageUrl, 40, isDeleted: isUserDeleted),
+                            : (widget.otherUserId == 'botkolik'
+                                ? Image.asset('assets/botkolik.webp', width: 40, height: 40, fit: BoxFit.cover)
+                                : _buildAvatar(otherUserImageUrl, 40, isDeleted: isUserDeleted)),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -718,7 +843,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                             children: [
                               Flexible(
                                 child: Text(
-                                  widget.isAdminMessage ? 'FırsatKolik Yönetim' : otherUserName,
+                                  isSystemAdmin ? 'FırsatKolik Yönetim' : otherUserName,
                                   style: TextStyle(
                                     fontSize: 15.5,
                                     fontWeight: FontWeight.w700,
@@ -727,7 +852,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (widget.isAdminMessage) ...[
+                              if (isSystemAdmin) ...[
                                 const SizedBox(width: 5),
                                 Icon(Icons.verified_user_rounded, color: primaryColor, size: 15),
                               ],
@@ -742,7 +867,16 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                             ],
                           ),
                           // Typing veya Durum
-                          if (widget.otherUserId == 'botkolik')
+                          if (widget.otherUserId == 'admin')
+                            Text(
+                              '🛡️ Resmi Yönetim & Destek',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: primaryColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          else if (widget.otherUserId == 'botkolik')
                             Text(
                               '⚡ Otonom AI & Topluluk İletişimi',
                               style: TextStyle(
@@ -825,7 +959,9 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                 child: StreamBuilder<List<Message>>(
                   stream: _messagesStream,
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting && _lastKnownMessageCount == 0) {
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        _lastKnownMessageCount == 0 &&
+                        _optimisticMessages.isEmpty) {
                       return const ChatMessagesSkeleton();
                     }
 
@@ -840,26 +976,29 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     }
 
                     // Optimistic mesajları server mesajları ile birleştir
-                    // Dedup: 'sending' durumundaki optimistic mesajı, aynı içerikte server mesajı zaten varsa ekleme
-                    // (Firestore stream, sendMessage'ın docId dönüşünden önce yayınlayabilir → anlık çift görünme önlemi)
+                    // Dedup: 'sending' veya 'incoming' durumundaki optimistic mesajı, aynı içerikte server mesajı zaten varsa ekleme
                     final Map<String, Message> mergedMap = {};
                     for (var m in serverMessages) {
                       mergedMap[m.id] = m;
                     }
                     for (var m in _optimisticMessages) {
-                      if (m.status == 'sending') {
-                        final hasDuplicate = serverMessages.any((sm) =>
-                          sm.senderId == m.senderId &&
-                          sm.text == m.text &&
-                          sm.createdAt.difference(m.createdAt).inSeconds.abs() < 30
-                        );
-                        if (hasDuplicate) continue; // Server zaten bu mesajı yayınladı, optimistic kopyayı atla
+                      final hasDuplicate = serverMessages.any((sm) =>
+                        sm.id == m.id ||
+                        (sm.senderId == m.senderId &&
+                         sm.text.trim() == m.text.trim() &&
+                         sm.createdAt.difference(m.createdAt).inSeconds.abs() < 120)
+                      );
+                      if (!hasDuplicate) {
+                        mergedMap[m.id] = m;
                       }
-                      mergedMap[m.id] = m;
                     }
                     // reverse: true için YENİDEN ESKİYE (Descending) sıralama
                     final allMessages = mergedMap.values.toList()
                       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+                    if (allMessages.isEmpty && snapshot.connectionState == ConnectionState.waiting) {
+                      return const ChatMessagesSkeleton();
+                    }
 
                     if (allMessages.isEmpty) {
                       return _buildEmptyState(widget.otherUserName, widget.otherUserImageUrl, isDark, primaryColor, textMain, textSub);

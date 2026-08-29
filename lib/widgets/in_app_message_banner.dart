@@ -10,6 +10,7 @@ import '../main.dart'; // navigatorKey
 
 class InAppMessageBanner {
   static OverlayEntry? _currentEntry;
+  static DateTime? _lastHapticTime;
 
   static void show({
     required BuildContext? context,
@@ -37,7 +38,11 @@ class InAppMessageBanner {
     _currentEntry?.remove();
     _currentEntry = null;
 
-    HapticFeedback.lightImpact();
+    final now = DateTime.now();
+    if (_lastHapticTime == null || now.difference(_lastHapticTime!).inMilliseconds > 1500) {
+      _lastHapticTime = now;
+      HapticFeedback.lightImpact();
+    }
 
     late OverlayEntry entry;
     entry = OverlayEntry(
@@ -184,7 +189,7 @@ class _InAppBannerWidgetState extends State<_InAppBannerWidget>
                     widget.onDismiss();
                     final nav = navigatorKey.currentState;
                     if (nav != null) {
-                      if (widget.isAdminMessage || widget.senderId == 'admin') {
+                      if (widget.isAdminMessage) {
                         nav.push(
                           MaterialPageRoute(
                             builder: (_) => const MessageScreen(
@@ -196,14 +201,27 @@ class _InAppBannerWidgetState extends State<_InAppBannerWidget>
                           ),
                         );
                       } else if (widget.senderId.isNotEmpty) {
+                        final resolvedName = widget.senderName.isNotEmpty
+                            ? widget.senderName
+                            : (widget.senderId == 'admin'
+                                ? 'FırsatKolik Yönetim'
+                                : (widget.senderId == 'botkolik' ? 'Botkolik' : 'Kullanıcı'));
+                        final resolvedImage = widget.senderImageUrl.isNotEmpty
+                            ? widget.senderImageUrl
+                            : (widget.senderId == 'admin'
+                                ? 'assets/logo.webp'
+                                : (widget.senderId == 'botkolik' ? 'assets/botkolik.webp' : ''));
+
                         nav.push(
                           MaterialPageRoute(
                             builder: (_) => MessageScreen(
                               otherUserId: widget.senderId,
-                              otherUserName: widget.senderName.isNotEmpty ? widget.senderName : 'Kullanıcı',
-                              otherUserImageUrl: widget.senderImageUrl,
+                              otherUserName: resolvedName,
+                              otherUserImageUrl: resolvedImage,
+                              initialIncomingMessageText: widget.messageText,
                               initialDealTitle: widget.dealTitle,
                               initialDealId: widget.dealId,
+                              isAdminMessage: false,
                             ),
                           ),
                         );

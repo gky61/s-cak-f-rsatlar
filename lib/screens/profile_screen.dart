@@ -2093,7 +2093,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
           borderRadius: BorderRadius.circular(20),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeInOutCubic,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: isDark
@@ -2108,7 +2109,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
+              duration: const Duration(milliseconds: 450),
+              switchInCurve: Curves.easeInOutCubic,
+              switchOutCurve: Curves.easeInOutCubic,
               transitionBuilder: (child, anim) => RotationTransition(
                 turns: anim,
                 child: ScaleTransition(scale: anim, child: child),

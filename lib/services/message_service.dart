@@ -36,6 +36,14 @@ class MessageService {
       if (senderId == 'botkolik') {
         senderName = 'Botkolik';
         senderImageUrl = 'assets/botkolik.webp';
+      } else if (senderId == 'admin') {
+        senderName = 'FırsatKolik Yönetim';
+        senderImageUrl = 'assets/logo.webp';
+      } else if (senderId == 'test_user_ahmet') {
+        senderName = 'Ahmet Yılmaz (Test)';
+      } else if (senderId == 'test_user_zeynep') {
+        senderName = 'Zeynep Kaya (Test)';
+        senderImageUrl = 'assets/profil.jpg';
       } else {
         final senderDoc = await _firestore.collection('users').doc(senderId).get();
         if (!senderDoc.exists) return null;
@@ -49,6 +57,14 @@ class MessageService {
       if (receiverId == 'botkolik') {
         receiverName = 'Botkolik';
         receiverImageUrl = 'assets/botkolik.webp';
+      } else if (receiverId == 'admin') {
+        receiverName = 'FırsatKolik Yönetim';
+        receiverImageUrl = 'assets/logo.webp';
+      } else if (receiverId == 'test_user_ahmet') {
+        receiverName = 'Ahmet Yılmaz (Test)';
+      } else if (receiverId == 'test_user_zeynep') {
+        receiverName = 'Zeynep Kaya (Test)';
+        receiverImageUrl = 'assets/profil.jpg';
       } else {
         final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
         if (!receiverDoc.exists) return null;

@@ -304,9 +304,16 @@ Uygulama arka planda, kapalıyken (cold start) veya ön plandayken bildirime tı
 | :--- | :--- | :--- |
 | `type == 'deal'` veya `dealId` | **`DealDetailScreen`** | `dealId` ile detay ekranı açılır |
 | `type == 'comment_reply'` | **`DealDetailScreen`** | `dealId` açılır ve `commentId`'ye otomatik odaklanır |
-| `type == 'message'` | **`MessageScreen`** | `senderId` ve `senderName` ile sohbet odası açılır |
+| `type == 'message'` | **`MessageScreen`** | `senderId`, `senderName`, `messageText`, `dealId` vb. ile sohbet odası anında açılır |
 | `type == 'admin_deal'` | **`AdminScreen`** | Admin onay paneli açılır |
-| `type == 'admin_message'` | **`AdminNotificationsScreen`** | Yönetici duyuruları listesi açılır |
+| `type == 'admin_message'` | **`MessageScreen`** / **`AdminNotificationsScreen`** | Yönetici duyuruları / destek sohbeti açılır |
+
+### 6.3 🚀 Cold Start (Uygulama Kapalıyken) Bildirim Kuyruğu ve Akıcı Yönlendirme Mimarisi
+Uygulama tamamen kapalıyken bildirime tıklandığında:
+1. `main()` içinde `initializeLocalNotifications()` ve `getNotificationAppLaunchDetails()` payload'ı yakalar.
+2. `navigatorKey.currentState` henüz `null` olduğu için bildirim `_startPendingNotificationCheck` kuyruğuna alınır.
+3. Kontrol periyodu **200ms**'dir. Fırsat ve genel bildirimler için `currentUser` beklenmez; mesaj bildirimlerinde `_auth.currentUser` oturumu diskten yüklendiği anda kuyruk çözülür.
+4. **Çift Tıklama (Duplicate) Filtre Koruması:** `_lastHandledTapTime` damgası kuyruğa alınırken değil, **yalnızca `navigator.push` fiilen icra edildiğinde** kaydedilir. Kuyruktan gelen çağrılar `isFromPending: true` bayrağı ile duplicate filtresini bypass ederek asla yutulmaz.
 
 ---
 
@@ -327,27 +334,38 @@ Uygulama arka planda, kapalıyken (cold start) veya ön plandayken bildirime tı
 * **Ses & Rozet:** `sound: 'default'`, `badge: 1`.
 * **Kategori & Öncelik:** `apns-priority: 10`, `interruption-level: active` (Admin mesajlarında `time-sensitive`).
 * **Content Available:** Arka plan veri senkronizasyonu için `content-available: 1`.
+* **APNs Collapse ID & Thread ID:** `apns-collapse-id: "msg_" + senderId` ve `thread-id: "conv_" + senderId` ile kilit ekranında sohbet bazlı gruplama.
 
 ---
 
-## 8. 💬 Birebir Mesajlaşma ve Aktif Sohbette Bildirim Bastırma
+## 8. 💬 Birebir Mesajlaşma, Anti-Spam ve Bildirim Yığınlama Mimarisi
 
-Kullanıcılar arası mesajlaşmada bildirim deneyimini kusursuz kılmak için **Data-Only Payload** yaklaşımı kullanılır:
+Kullanıcılar arası mesajlaşmada bildirim deneyimini kusursuz kılmak ve spam durumlarını profesyonelce yönetmek için **5 Katmanlı İleri Seviye Mimari** uygulanır:
 
-1. **Cloud Functions (`onUserMessageCreated`):** FCM payload'ında `notification` alanı gönderilmez; yalnızca `data` alanı gönderilir.
-2. **Flutter `FirebaseMessaging.onMessage` Handler:**
-   ```dart
-   if (data['type'] == 'message') {
-     final senderId = data['senderId'];
-     // Eğer kullanıcı şu an o kişiyle sohbet ekranındaysa BASTIR:
-     if (NotificationService.activeChatUserId == senderId) {
-       return; // Ses ve banner üretilmez
-     }
-     // Başka bir ekrandaysa zarif InAppMessageBanner göster:
-     InAppMessageBanner.show(...);
-   }
-   ```
-3. **Uygulama Arka Plandaysa:** `FirebaseMessaging.onBackgroundMessage` devreye girerek yerel bildirim (`_showLocalNotification`) oluşturur.
+### 8.1 🛡️ Gönderici Anti-Spam Rate Limiter (Sliding Window)
+- `MessageScreen` içinde `_recentMessageTimestamps` listesi tutulur.
+- **Kural:** **5 saniyede maksimum 3 mesaj.**
+- Kullanıcı 5 saniye içinde 3'ten fazla mesaj atmaya çalışırsa mesaj Firestore'a gönderilmez ve ekranda *"Çok hızlı mesaj gönderiyorsunuz. Lütfen birkaç saniye bekleyin."* uyarısı gösterilir. 5 saniye sonra pencere otomatik temizlenir.
+
+### 8.2 ⚡ Backend FCM Collapse Key & APNs Sıkıştırma (`onUserMessageCreated`)
+- Android FCM payload'ında `android.collapseKey: "msg_" + senderId` tanımlıdır.
+- iOS APNs payload'ında `headers['apns-collapse-id']: "msg_" + senderId` ve `aps['thread-id']: "conv_" + senderId` tanımlıdır.
+- **Sonuç:** Cihaz kapalıyken veya internet yavaşken gelen 20 mesaj, sunucu seviyesinde tek bildirim halinde sıkıştırılır.
+
+### 8.3 📱 İşletim Sistemi Bildirim Yığınlama (OS Stacking) & `onlyAlertOnce`
+- **Deterministik ID & Tag:** `notifId = senderId.hashCode % 100000` ve `tag = 'msg_$senderId'`.
+- **`onlyAlertOnce: true`:** Yeni mesaj geldiğinde mevcut bildirim kartı sessizce güncellenir; telefon her saniye tekrar tekrar çalmaz/titremez.
+- **`groupKey: 'group_messages'`:** Android sisteminde sohbet bildirimleri diğer bildirimlerden ayrı, temiz bir grupta tutulur.
+
+### 8.4 🚀 Instant Optimistic Seeding (Sıfır Gecikmeyle Akıcı Chat Açılışı)
+- Push bildiriminden veya In-App banner'dan sohbete geçildiğinde gelen son mesaj metni ve ilişkili fırsat verisi `MessageScreen`'e parametre olarak iletilir.
+- `MessageScreen.initState` anında bu mesaj `_optimisticMessages` listesine eklenir.
+- Firestore WebSocket ağ bağlantısı henüz kurulmamış olsa bile ilk karede (`frame 0`) mesaj ekranda gösterilir (iskelet ve boş ekran sıfırlanır).
+- Firestore 1 saniye sonra bağlandığında `mergedMap` dedup algoritması sunucu mesajıyla geçici mesajı dikişsiz olarak birleştirir.
+
+### 8.5 🔕 Aktif Sohbette Bildirim Bastırma & Haptic Debounce
+- **Aktif Chat Bastırma:** `NotificationService.activeChatUserId == senderId` ise ön planda ne push ne de In-App banner üretilir.
+- **In-App Banner Titreşim Koruması:** Hızlı mesaj akışlarında haptic motorunu korumak için 1.5 saniyelik Haptic Debounce uygulanır.
 
 ---
 
@@ -364,10 +382,11 @@ Web yönetim paneli (`web/admin/`), bildirim sistemini yönetmek için şu araç
 
 ## 10. 🧪 Otomatik Test Süitleri ve Doğrulama
 
-Tüm bildirim sistemi ve senaryoları 3 ayrı test paketiyle tam kapsamlı (%100) doğrulanmaktadır:
+Tüm bildirim sistemi ve senaryoları 4 ayrı test paketiyle tam kapsamlı (%100) doğrulanmaktadır:
 
 | Test Dosyası | Kapsam | Komut |
 | :--- | :--- | :--- |
+| **`test/messaging_and_anti_spam_test.dart`** | Anti-spam (5s/max 3 msg), deterministik notifId & tag, payload parser, instant seeding & dedup birim testleri (11 Test) | `flutter test test/messaging_and_anti_spam_test.dart` |
 | **`test/notification_logic_test.dart`** | Flutter birim testleri, serileştirme (toMap/fromFirestore), Master Switch State Preservation | `flutter test test/notification_logic_test.dart` |
 | **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
 | **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |

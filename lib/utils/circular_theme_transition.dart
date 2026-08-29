@@ -21,6 +21,8 @@ class CircularThemeTransition {
     required GlobalKey buttonKey,
     required bool isCurrentlyDark,
     required Future<void> Function() onToggleTheme,
+    Duration duration = const Duration(milliseconds: 750),
+    Curve curve = Curves.easeInOutCubic,
   }) async {
     if (_isTransitioning) return;
 
@@ -81,7 +83,8 @@ class CircularThemeTransition {
           image: image,
           center: center,
           maxRadius: maxRadius,
-          duration: const Duration(milliseconds: 400),
+          duration: duration,
+          curve: curve,
           onCompleted: () {
             try {
               overlayEntry.remove();
@@ -108,6 +111,7 @@ class _CircularRevealOverlay extends StatefulWidget {
   final Offset center;
   final double maxRadius;
   final Duration duration;
+  final Curve curve;
   final VoidCallback onCompleted;
 
   const _CircularRevealOverlay({
@@ -115,6 +119,7 @@ class _CircularRevealOverlay extends StatefulWidget {
     required this.center,
     required this.maxRadius,
     required this.duration,
+    required this.curve,
     required this.onCompleted,
   });
 
@@ -138,7 +143,7 @@ class _CircularRevealOverlayState extends State<_CircularRevealOverlay>
     _radiusAnimation = Tween<double>(begin: 0.0, end: widget.maxRadius).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: Curves.fastOutSlowIn,
+        curve: widget.curve,
       ),
     );
 

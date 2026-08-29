@@ -66,14 +66,14 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } else if (type == 'admin_message') {
     title = data['notification_title'] ?? data['title'] ?? '📩 Yeni Admin Mesajı';
     body = data['notification_body'] ?? 'Bir mesajınız var. Dokunun.';
-    payload = 'message:${data['senderId'] ?? 'admin'}:${data['senderName'] ?? 'FırsatKolik Yönetim'}';
+    payload = 'admin_message';
     channelId = 'admin_messages_channel_v3';
   } else if (type == 'message') {
     final senderId = data['senderId']?.toString() ?? '';
     final senderName = data['senderName']?.toString() ?? 'Kullanıcı';
     title = data['notification_title'] ?? '💬 $senderName';
     body = data['notification_body'] ?? data['messageText'] ?? 'Yeni mesaj';
-    payload = 'message:$senderId:$senderName';
+    payload = 'message:$senderId:$senderName:$body';
     channelId = 'messages_channel';
   }
 
@@ -117,21 +117,38 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await plugin?.createNotificationChannel(androidChannelMessages);
   await plugin?.createNotificationChannel(androidChannelUserMsg);
 
-  // Bildirimi göster
+  // Bildirimi göster (Spam stacking önleyici sabit ID ve tag)
   try {
+    final senderId = (data['senderId'] ?? '').toString();
+    final dealId = (data['dealId'] ?? '').toString();
+    final isMessage = type == 'message' || type == 'user_message' || type == 'admin_message';
+    
+    final notifId = isMessage
+        ? ((senderId.isNotEmpty ? senderId : 'admin').hashCode % 100000)
+        : (dealId.isNotEmpty ? dealId.hashCode % 100000 : DateTime.now().millisecondsSinceEpoch % 100000);
+        
+    final tag = isMessage
+        ? 'msg_${senderId.isNotEmpty ? senderId : "admin"}'
+        : (dealId.isNotEmpty ? 'deal_$dealId' : null);
+
     await flutterLocalNotificationsPlugin.show(
-      DateTime.now().millisecondsSinceEpoch % 100000,
+      notifId,
       title,
       body,
       NotificationDetails(
         android: AndroidNotificationDetails(
           channelId,
-          channelId == 'admin_messages_channel_v3' ? 'Admin Mesajları' : (channelId == 'messages_channel' ? 'Mesajlar' : 'Admin Bildirimleri'),
+          channelId == 'admin_messages_channel_v3'
+              ? 'Admin Mesajları'
+              : (channelId == 'messages_channel' ? 'Mesajlar' : 'Admin Bildirimleri'),
           channelDescription: 'Bildirim',
           importance: Importance.max,
           priority: Priority.max,
           icon: '@mipmap/ic_launcher',
           color: const Color(0xFF2196F3),
+          tag: tag,
+          onlyAlertOnce: isMessage,
+          groupKey: isMessage ? 'group_messages' : null,
         ),
       ),
       payload: payload,

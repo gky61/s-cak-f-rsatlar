@@ -284,16 +284,31 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                           final isUnread = unreadCount > 0;
                           final isMuted = _mutedUserIds.contains(otherUserId);
 
+                          final isSystemUser = otherUserId == 'admin' || otherUserId == 'botkolik' || otherUserId.startsWith('test_user_');
+
                           return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                            stream: FirebaseFirestore.instance.collection('users').doc(otherUserId).snapshots(),
+                            stream: isSystemUser
+                                ? null
+                                : FirebaseFirestore.instance.collection('users').doc(otherUserId).snapshots(),
                             builder: (context, userSnapshot) {
                               String displayName = otherUserName;
                               String profileImageUrl = otherUserImageUrl;
                               bool isDeleted = false;
 
-                              if (otherUserId == 'botkolik') {
+                              if (otherUserId == 'admin') {
+                                displayName = 'FırsatKolik Yönetim';
+                                profileImageUrl = 'assets/logo.webp';
+                                isDeleted = false;
+                              } else if (otherUserId == 'botkolik') {
                                 displayName = 'Botkolik';
                                 profileImageUrl = 'assets/botkolik.webp';
+                                isDeleted = false;
+                              } else if (otherUserId == 'test_user_ahmet') {
+                                displayName = 'Ahmet Yılmaz (Test)';
+                                isDeleted = false;
+                              } else if (otherUserId == 'test_user_zeynep') {
+                                displayName = 'Zeynep Kaya (Test)';
+                                profileImageUrl = 'assets/profil.jpg';
                                 isDeleted = false;
                               } else if (userSnapshot.hasData && userSnapshot.data!.exists) {
                                 final userData = userSnapshot.data!.data();
@@ -302,9 +317,15 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                               } else if (userSnapshot.connectionState == ConnectionState.active &&
                                   (!userSnapshot.hasData || !userSnapshot.data!.exists) &&
                                   !message.isAdminMessage) {
-                                isDeleted = true;
-                                displayName = 'Silinmiş Kullanıcı';
-                                profileImageUrl = '';
+                                if (otherUserName.isNotEmpty && otherUserName != 'Kullanıcı' && otherUserName != 'Silinmiş Kullanıcı') {
+                                  displayName = otherUserName;
+                                  profileImageUrl = migrateAssetPath(otherUserImageUrl);
+                                  isDeleted = false;
+                                } else {
+                                  isDeleted = true;
+                                  displayName = 'Silinmiş Kullanıcı';
+                                  profileImageUrl = '';
+                                }
                               }
 
                               return _buildSwipeableConversationCard(
@@ -391,8 +412,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
     required Color? textSub,
     required Color surfaceColor,
   }) {
-    final isAdmin = message.isAdminMessage;
-    final cardDisplayName = isAdmin ? 'FırsatKolik Yönetim' : displayName;
+    final isSystemAdmin = message.isAdminMessage || otherUserId == 'admin';
+    final cardDisplayName = isSystemAdmin ? 'FırsatKolik Yönetim' : (otherUserId == 'botkolik' ? 'Botkolik' : displayName);
 
     return Dismissible(
       key: Key('conv_${otherUserId}_${message.id}'),
@@ -445,10 +466,12 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => MessageScreen(
-                    otherUserId: isAdmin ? 'admin' : otherUserId,
+                    otherUserId: otherUserId,
                     otherUserName: cardDisplayName,
-                    otherUserImageUrl: isAdmin ? 'assets/logo.webp' : profileImageUrl,
-                    isAdminMessage: isAdmin,
+                    otherUserImageUrl: isSystemAdmin
+                        ? 'assets/logo.webp'
+                        : (otherUserId == 'botkolik' ? 'assets/botkolik.webp' : profileImageUrl),
+                    isAdminMessage: message.isAdminMessage,
                   ),
                 ),
               );
@@ -475,12 +498,14 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                               : null,
                         ),
                         child: ClipOval(
-                          child: isAdmin
+                          child: isSystemAdmin
                               ? Container(
                                   color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
                                   child: Icon(Icons.shield_outlined, color: primaryColor, size: 22),
                                 )
-                              : _buildAvatar(profileImageUrl, 48, isDeleted: isDeleted),
+                              : (otherUserId == 'botkolik'
+                                  ? Image.asset('assets/botkolik.webp', width: 48, height: 48, fit: BoxFit.cover)
+                                  : _buildAvatar(profileImageUrl, 48, isDeleted: isDeleted)),
                         ),
                       ),
                       if (isUnread)
@@ -526,9 +551,13 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  if (isAdmin) ...[
+                                  if (isSystemAdmin) ...[
                                     const SizedBox(width: 4),
                                     Icon(Icons.verified_user_rounded, color: primaryColor, size: 14),
+                                  ],
+                                  if (otherUserId == 'botkolik') ...[
+                                    const SizedBox(width: 4),
+                                    Icon(Icons.smart_toy_rounded, color: primaryColor, size: 14),
                                   ],
                                   if (isMuted) ...[
                                     const SizedBox(width: 4),

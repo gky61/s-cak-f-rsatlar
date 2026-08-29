@@ -1112,19 +1112,24 @@ class NotificationService {
     _pendingNotificationTapData = data;
     _pendingTimer?.cancel();
     int attempts = 0;
-    _pendingTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) {
+    _pendingTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
       attempts++;
       final navigator = navigatorKey.currentState;
       final currentUser = _auth.currentUser;
-      if (navigator != null && currentUser != null) {
+      final type = (data['type'] ?? 'deal').toString();
+      final isAuthRequired = type == 'message' || type == 'user_message';
+
+      final isReady = navigator != null && (!isAuthRequired || currentUser != null);
+
+      if (isReady) {
         timer.cancel();
         if (_pendingNotificationTapData != null) {
           final pendingData = _pendingNotificationTapData!;
           _pendingNotificationTapData = null;
           _log('🚀 Navigator ve Oturum aktifleşti, bekleyen bildirim açılıyor: $pendingData');
-          _handleNotificationTap(pendingData);
+          _handleNotificationTap(pendingData, isFromPending: true);
         }
-      } else if (attempts > 30) {
+      } else if (attempts > 75) {
         timer.cancel();
         _pendingNotificationTapData = null;
       }
@@ -1145,8 +1150,14 @@ class NotificationService {
     } else if (payload.startsWith('message:')) {
       final parts = payload.split(':');
       final senderId = parts.length > 1 ? parts[1] : '';
-      final senderName = parts.length > 2 ? parts.sublist(2).join(':') : 'Kullanıcı';
-      _handleNotificationTap({'type': 'message', 'senderId': senderId, 'senderName': senderName});
+      final senderName = parts.length > 2 ? parts[2] : 'Kullanıcı';
+      final messageText = parts.length > 3 ? parts.sublist(3).join(':') : '';
+      _handleNotificationTap({
+        'type': 'message',
+        'senderId': senderId,
+        'senderName': senderName,
+        'messageText': messageText,
+      });
     } else {
       _handleNotificationTap({'type': 'deal', 'dealId': payload});
     }
@@ -1157,9 +1168,9 @@ class NotificationService {
   }
 
   // Bildirime tıklandığında yönlendirme yap
-  void _handleNotificationTap(Map<String, dynamic> data) {
+  void _handleNotificationTap(Map<String, dynamic> data, {bool isFromPending = false}) {
     final type = (data['type'] ?? 'deal').toString();
-    _log('🔔 Bildirim tipi: $type, data: $data');
+    _log('🔔 Bildirim yönlendirmesi işleniyor: $type, isFromPending: $isFromPending, data: $data');
     
     final senderId = (
       data['senderId'] ??
@@ -1173,19 +1184,36 @@ class NotificationService {
       ''
     ).toString().trim();
 
-    final tapKey = '$type:$senderId';
+    final dealId = (data['dealId'] ?? data['deal_id'] ?? '').toString().trim();
+    final commentId = (data['commentId'] ?? data['comment_id'] ?? '').toString().trim();
+    final messageId = (data['messageId'] ?? data['message_id'] ?? '').toString().trim();
+
+    final tapKey = '$type:$senderId:$dealId:$commentId:$messageId';
     final now = DateTime.now();
 
-    // 2.5 saniye içinde aynı bildirim tıklaması geldiyse es geç (Çift açılış ve geri gitme saçmalamasını engeller)
-    if (_lastHandledTapKey == tapKey && _lastHandledTapTime != null) {
+    // 2.5 saniye içinde aynı bildirim tıklaması geldiyse es geç (Sadece direkt kullanıcı tıklamaları için; kuyruktan gelenler engellenmez)
+    if (!isFromPending && _lastHandledTapKey == tapKey && _lastHandledTapTime != null) {
       if (now.difference(_lastHandledTapTime!).inMilliseconds < 2500) {
         _log('⚠️ Mükerrer bildirim tıklaması engellendi: $tapKey');
         return;
       }
     }
 
+    final navigator = navigatorKey.currentState;
+    final currentUser = _auth.currentUser;
+    final isAuthRequired = type == 'message' || type == 'user_message';
+
+    if (navigator == null || (isAuthRequired && currentUser == null)) {
+      _log('⏳ Navigator veya Oturum henüz hazır değil (${navigator == null ? "Navigator yok" : "Oturum bekleniyor"}), bildirim tıklaması sıraya alındı: $data');
+      _startPendingNotificationCheck(data);
+      return;
+    }
+
+    // Yönlendirme şimdi icra edilecek -> duplicate damgasını güncelle
     _lastHandledTapKey = tapKey;
     _lastHandledTapTime = now;
+    _pendingNotificationTapData = null;
+    _pendingTimer?.cancel();
 
     final senderName = (
       data['senderName'] ??
@@ -1200,21 +1228,48 @@ class NotificationService {
       ''
     ).toString().trim();
 
-    final navigator = navigatorKey.currentState;
-    final currentUser = _auth.currentUser;
-    if (navigator == null || currentUser == null) {
-      _log('⏳ Navigator veya Oturum henüz hazır değil, bildirim tıklaması sıraya alındı: $data');
-      _startPendingNotificationCheck(data);
+    final messageText = (
+      data['messageText'] ??
+      data['message_text'] ??
+      data['notification_body'] ??
+      data['body'] ??
+      ''
+    ).toString().trim();
+
+    final dealTitle = (data['dealTitle'] ?? data['deal_title'] ?? '').toString().trim();
+    final dealImageUrl = (data['dealImageUrl'] ?? data['deal_image_url'] ?? '').toString().trim();
+    final dealPrice = (data['dealPrice'] ?? data['deal_price'] ?? '').toString().trim();
+    final dealStore = (data['dealStore'] ?? data['deal_store'] ?? '').toString().trim();
+
+    if (type == 'admin_message') {
+      _navigateToAdminChat();
       return;
     }
 
-    _pendingNotificationTapData = null;
-
-    if (type == 'message' || type == 'user_message' || type == 'admin_message' || (senderId.isNotEmpty && type != 'deal' && type != 'comment_reply' && type != 'admin_deal')) {
-      if (senderId == 'admin' || type == 'admin_message') {
-        _navigateToAdminChat();
-      } else if (senderId.isNotEmpty) {
-        _navigateToChat(senderId, senderName, userImageUrl: senderImageUrl);
+    if (type == 'message' || type == 'user_message' || (senderId.isNotEmpty && type != 'deal' && type != 'comment_reply' && type != 'admin_deal')) {
+      if (senderId.isNotEmpty) {
+        final resolvedName = senderName.isNotEmpty
+            ? senderName
+            : (senderId == 'admin'
+                ? 'FırsatKolik Yönetim'
+                : (senderId == 'botkolik' ? 'Botkolik' : 'Kullanıcı'));
+        final resolvedImage = senderImageUrl.isNotEmpty
+            ? senderImageUrl
+            : (senderId == 'admin'
+                ? 'assets/logo.webp'
+                : (senderId == 'botkolik' ? 'assets/botkolik.webp' : null));
+        _navigateToChat(
+          senderId,
+          resolvedName,
+          userImageUrl: resolvedImage,
+          messageText: messageText.isNotEmpty ? messageText : null,
+          messageId: messageId.isNotEmpty ? messageId : null,
+          dealId: dealId.isNotEmpty ? dealId : null,
+          dealTitle: dealTitle.isNotEmpty ? dealTitle : null,
+          dealImageUrl: dealImageUrl.isNotEmpty ? dealImageUrl : null,
+          dealPrice: dealPrice.isNotEmpty ? dealPrice : null,
+          dealStore: dealStore.isNotEmpty ? dealStore : null,
+        );
       } else {
         _navigateToMessagesList();
       }
@@ -1227,8 +1282,6 @@ class NotificationService {
         break;
         
       case 'comment_reply':
-        final dealId = (data['dealId'] ?? '').toString();
-        final commentId = (data['commentId'] ?? '').toString();
         if (dealId.isNotEmpty) {
           _navigateToDeal(dealId, commentId: commentId.isNotEmpty ? commentId : null);
         }
@@ -1238,7 +1291,6 @@ class NotificationService {
       case 'follow':
       case 'deal':
       default:
-        final dealId = (data['dealId'] ?? '').toString();
         if (dealId.isNotEmpty) {
           _navigateToDeal(dealId);
         }
@@ -1260,7 +1312,18 @@ class NotificationService {
   }
 
   // Sohbet sayfasına yönlendirme
-  void _navigateToChat(String userId, String userName, {String? userImageUrl}) {
+  void _navigateToChat(
+    String userId,
+    String userName, {
+    String? userImageUrl,
+    String? messageText,
+    String? messageId,
+    String? dealId,
+    String? dealTitle,
+    String? dealImageUrl,
+    String? dealPrice,
+    String? dealStore,
+  }) {
     final navigator = navigatorKey.currentState;
     if (navigator != null) {
       _log('🔔 Sohbet sayfasına yönlendiriliyor: $userId ($userName)');
@@ -1270,6 +1333,13 @@ class NotificationService {
             otherUserId: userId,
             otherUserName: userName.isNotEmpty ? userName : 'Kullanıcı',
             otherUserImageUrl: userImageUrl ?? '',
+            initialIncomingMessageText: messageText,
+            initialIncomingMessageId: messageId,
+            initialDealId: dealId,
+            initialDealTitle: dealTitle,
+            initialDealImageUrl: dealImageUrl,
+            initialDealPrice: dealPrice,
+            initialDealStore: dealStore,
           ),
         ),
       );
@@ -1280,6 +1350,13 @@ class NotificationService {
         'senderId': userId,
         'senderName': userName,
         'senderImageUrl': userImageUrl,
+        'messageText': messageText,
+        'messageId': messageId,
+        'dealId': dealId,
+        'dealTitle': dealTitle,
+        'dealImageUrl': dealImageUrl,
+        'dealPrice': dealPrice,
+        'dealStore': dealStore,
       });
     }
   }
@@ -1458,19 +1535,11 @@ class NotificationService {
       _handleNotificationTap(message.data);
     });
     
-    // Uygulama kapalıyken bildirime tıklanırsa
+    // Uygulama kapalıyken bildirime tıklanırsa (FCM Initial Message)
     FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
-        _log('🔔 Uygulama kapalıyken bildirim açıldı: ${message.data}');
-        void attemptNavigation(int retries) {
-          if (navigatorKey.currentState != null) {
-            _handleNotificationTap(message.data);
-          } else if (retries > 0) {
-            Future.delayed(const Duration(milliseconds: 500), () => attemptNavigation(retries - 1));
-          }
-        }
-        // Splash animasyonu (~1.7s) tamamlandıktan sonra sohbet sayfasına yönlendir
-        Future.delayed(const Duration(milliseconds: 2000), () => attemptNavigation(5));
+        _log('🔔 Uygulama kapalıyken FCM bildirimiyle açıldı: ${message.data}');
+        _handleNotificationTap(message.data);
       }
     });
   }
@@ -1551,8 +1620,10 @@ class NotificationService {
         tag = 'msg_$senderId';
         notifId = (senderId.isNotEmpty ? senderId.hashCode : 8888) % 100000;
         title = data['notification_title'] ?? message.notification?.title ?? '💬 $senderName';
-        payload = 'message:$senderId:$senderName';
+        payload = 'message:$senderId:$senderName:$body';
       }
+
+      final isMessage = type == 'message' || type == 'user_message' || type == 'admin_message';
 
       final androidDetails = AndroidNotificationDetails(
         channelId,
@@ -1563,6 +1634,8 @@ class NotificationService {
         playSound: true,
         enableVibration: true,
         tag: tag,
+        onlyAlertOnce: isMessage,
+        groupKey: isMessage ? 'group_messages' : null,
       );
 
       await _localNotifications.show(
