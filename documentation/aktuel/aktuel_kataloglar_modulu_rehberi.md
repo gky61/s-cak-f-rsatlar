@@ -243,42 +243,52 @@ Katalog kazıma ve veritabanı senkronizasyonu iki ayrı Cloud Function üzerind
 
 Katalog kazıma motoru ([catalog_scraper.js](file:///d:/firsatkolik/functions/catalog_scraper.js)), Akakçe'nin anti-bot ve Cloudflare korumalarını aşmak üzere tasarlanmış çok katmanlı bir mimariye sahiptir.
 
-### 7.1. 5 Katmanlı WAF Bypass Stratejisi (`fetchHtmlWithRetry`)
-Her bir URL isteği için en fazla 3 tam deneme yapılır ve her denemede aşağıdaki 5 strateji sırayla işletilir:
+### 7.1. Gelişmiş Çok Katmanlı WAF Bypass Stratejisi (`fetchHtmlWithRetry`)
+Her bir URL isteği için en fazla 3 tam deneme yapılır ve her denemede aşağıdaki stratejiler sırayla işletilir:
 
 ```mermaid
 graph TD
-    Start[🌐 Hedef URL İstegi] --> S1{Strateji A: Google Translate Proxy}
+    Start[🌐 Hedef URL İstegi] --> S1{Strateji A1: Google Translate Proxy Standart}
     S1 -->|Başarılı & isValidHtml| Done[✅ HTML Alındı]
-    S1 -->|Hata / 403 / Timeout 15s| S2{Strateji B: Direct Googlebot 2.1 UA}
+    S1 -->|429 Rate Limit| Jitter[⏳ 1.2s - 2.0s Jitter Backoff]
+    Jitter --> S2{Strateji A2: Google Translate WebApp Mode}
+    S1 -->|Hata / Timeout 15s| S2
     S2 -->|Başarılı & isValidHtml| Done
-    S2 -->|Hata / Timeout 5s| S3{Strateji C: Direct WhatsApp Mobile UA}
+    S2 -->|Hata / Timeout 15s| S3{Strateji B: Direct Googlebot 2.1 UA}
     S3 -->|Başarılı & isValidHtml| Done
-    S3 -->|Hata / Timeout 5s| S4{Strateji D: Microlink API Proxy}
+    S3 -->|Hata / Timeout 5s| S4{Strateji C: Direct WhatsApp Mobile UA}
     S4 -->|Başarılı & isValidHtml| Done
-    S4 -->|Hata / Timeout 12s| S5{Strateji E: Native OS Curl Subprocess}
+    S4 -->|Hata / Timeout 5s| S5{Strateji D: Microlink API Proxy}
     S5 -->|Başarılı & isValidHtml| Done
-    S5 -->|Hata / Timeout 10s| Retry[🔁 1 Saniye Bekle ve Tekrar Dene: Max 3]
+    S5 -->|Hata / Timeout 12s| S6{Strateji E: Native OS Curl Subprocess}
+    S6 -->|Başarılı & isValidHtml| Done
+    S6 -->|Hata / Timeout 10s| Retry[🔁 Jitter ile Bekle ve Tekrar Dene: Max 3]
 ```
 
-1. **Strateji A (Birincil - Google Translate Proxy):** URL `*.translate.goog` formatına dönüştürülerek Google çeviri altyapısı üzerinden çekilir (WAF engellerini %99 aşar).
-2. **Strateji B (Googlebot User-Agent):** `Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)` başlığı ile doğrudan istek.
-3. **Strateji C (WhatsApp Mobile User-Agent):** `WhatsApp/2.23.4.15 A` mobil bot başlığı ile doğrudan istek.
-4. **Strateji D (Microlink Proxy):** `api.microlink.io` servisi üzerinden headless HTML ayrıştırma.
-5. **Strateji E (Native Curl Subprocess):** İşletim sisteminin yerel `curl` komutu (`spawnSync`) ile ham istek.
+1. **Dinamik User-Agent Havuzu (`USER_AGENTS`):** Her istekte modern masaüstü ve mobil tarayıcı başlıkları (Chrome 126, Safari 17.5, Firefox 127, Edge 125) rastgele seçilerek parmak izi tespiti önlenir.
+2. **Strateji A1 (Google Translate Standart Proxy):** URL `*.translate.goog` formatına dönüştürülerek Google çeviri omurgası üzerinden çekilir. HTTP 429 alınırsa 1200ms - 2000ms rastgele gecikme ile dinlenme sağlanır.
+3. **Strateji A2 (Google Translate WebApp Modu - `_x_tr_pto=wapp`):** Standart çeviri uç noktası tıkandığında alternatif web uygulaması proxy moduna otomatik geçiş yapılır.
+4. **Strateji B (Googlebot User-Agent):** `Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)` başlığı ile doğrudan istek.
+5. **Strateji C (WhatsApp Mobile User-Agent):** `WhatsApp/2.23.4.15 A` mobil bot başlığı ile doğrudan istek.
+6. **Strateji D (Microlink Proxy):** `api.microlink.io` servisi üzerinden headless HTML ayrıştırma.
+7. **Strateji E (Native Curl Subprocess):** İşletim sisteminin yerel `curl` komutu (`spawnSync`) ile ham istek.
 
-### 7.2. HTML Doğrulama ve Güvenlik Filtresi (`isValidHtml`)
+### 7.2. Kapsamlı HTML Doğrulama ve Güvenlik Filtresi (`isValidHtml`)
 Alınan yanıtın geçerli bir web sayfası olup olmadığı kontrol edilir:
-* Minimum içerik uzunluğu: `2500` - `3000` karakter.
-* WAF ve hata engelleme kontrolü: Metinde `403 - Forbidden`, `Access is denied`, `Robot verification` ifadeleri varsa yanıt geçersiz sayılır.
+* Minimum içerik uzunluğu: `2500` karakter.
+* WAF, CAPTCHA ve hata engelleme kontrolü: Metinde aşağıdaki ifadelerden biri varsa yanıt geçersiz sayılır ve sonraki stratejiye geçilir:
+  * `403 - forbidden`, `access is denied`, `robot verification`
+  * `captcha-form`, `recaptcha`, `sıra dışı bir trafik`, `unusual traffic`
+  * `cf-browser-verification`, `just a moment...`, `attention required! | cloudflare`
+  * `429 too many requests`, `rate limit exceeded`, `özür dileriz, aradığınız ürünü bulamadık`
 
 ### 7.3. Mağaza Eşleşme ve Zehirlenme Koruması (Anti-Poisoning Filter)
-Akakçe üzerinde broşürü bulunmayan bazı mağazalar genel `/brosurler/` anasayfasına yönlenebilir. Alakasız broşürlerin ilgili mağazaya eklenmesini önlemek için:
+Akakçe üzerinde broşürü bulunmayan bazı mağazalar (örn: Evkur, Bauhaus, Mopaş) genel `/brosurler/` anasayfasına yönlenebilir. Alakasız broşürlerin ilgili mağazaya eklenmesini önlemek için:
 * Link yolunda (`cleanPath`) veya broşür mağaza adında (`storeNameText`) hedeflenen mağazanın anahtar kelimeleri (`keywords`) aranır.
 * Hariç tutma kelimeleri (`excludeKeywords`) kontrol edilir (Örn: `hakmar` taranırken `express` içeren Hakmar Express broşürleri elenir).
 
-### 7.4. Görsel Çözünürlük Yükseltme Hattı (Resolution Upscaling)
-Akakçe sayfalarında küçük önizleme boyutunda olan görseller regex dönüşümleriyle tam çözünürlüklü hale getirilir:
+### 7.4. Hassas Broşür Görseli Ayrıştırma ve Çözünürlük Yükseltme
+* **Hedefli DOM Seçicisi:** Yan menü ve alt öneri çarkındaki alakasız mağaza broşürlerinin karışmasını engellemek için görseller strictly `#BP_W .p img, #BP_W div.p img, #BP_W img, .bpgc .p img, .bpgc div.p img` konteynerlerinden çekilir.
 * `sayfaResimleri`: `/_bro/l/`, `/_bro/y/` ve `/_bro/m/` yolları `/_bro/u/` (Ultra High Res) ile değiştirilir.
 * `kapakResmi`: Hızlı yükleme için `/_bro/l/` (Low/Medium Res) olarak normalize edilir.
 * `t.gif` şeffaf yer tutucu görselleri filtrelenir.

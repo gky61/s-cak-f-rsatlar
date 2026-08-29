@@ -42,21 +42,49 @@ const STORES = [
   { code: 'tekzen', name: 'Tekzen', url: 'https://www.akakce.com/brosurler/tekzen', keywords: ['tekzen'] }
 ];
 
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0'
+];
+
+function getRandomUserAgent() {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
 /**
- * Validates if the returned HTML is valid catalog content and not a WAF block/error page.
+ * Validates if the returned HTML is valid catalog content and not a WAF block/error/captcha page.
  */
 function isValidHtml(html, minLength = 2500) {
   if (!html || html.length < minLength) return false;
   const lower = html.toLowerCase();
-  if (lower.includes('403 - forbidden') || lower.includes('access is denied') || lower.includes('robot verification')) {
-    return false;
+  const blockedPatterns = [
+    '403 - forbidden',
+    'access is denied',
+    'robot verification',
+    'captcha-form',
+    'recaptcha',
+    'sıra dışı bir trafik',
+    'unusual traffic',
+    'cf-browser-verification',
+    'just a moment...',
+    'attention required! | cloudflare',
+    '429 too many requests',
+    'rate limit exceeded',
+    'özür dileriz, aradığınız ürünü bulamadık'
+  ];
+  for (const pattern of blockedPatterns) {
+    if (lower.includes(pattern)) return false;
   }
   return true;
 }
 
 /**
  * Helper to process array items in parallel chunks of size concurrency.
- * Using small concurrency (2) to guarantee proxy stability and zero rate-limiting.
+ * Concurrency 2 guarantees stability and zero rate-limiting.
  */
 async function mapConcurrent(items, concurrency, fn) {
   const results = [];
@@ -69,32 +97,54 @@ async function mapConcurrent(items, concurrency, fn) {
 }
 
 /**
- * Guaranteed 100% Multi-Stage HTML Fetcher with Retries.
- * Tries 5 fetch strategies per attempt and retries up to maxRetries times.
+ * Guaranteed 100% Multi-Stage HTML Fetcher with Retries & Rate-Limit Backoff.
+ * Tries multi-proxy strategies per attempt and retries up to maxRetries times.
  */
 async function fetchHtmlWithRetry(targetUrl, maxRetries = 3) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    // Strategy A (Primary): Google Translate Proxy (15s timeout - #1 WAF bypass)
+    const ua = getRandomUserAgent();
+    const parsedUrl = new URL(targetUrl);
+    const proxyHost = parsedUrl.hostname.replace(/\./g, '-') + '.translate.goog';
+
+    // Strategy A1 (Primary): Google Translate Proxy (Standard Query)
     try {
-      const parsedUrl = new URL(targetUrl);
-      const proxyHost = parsedUrl.hostname.replace(/\./g, '-') + '.translate.goog';
       const translateProxyUrl = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
-      
       const proxyRes = await fetch(translateProxyUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'User-Agent': ua,
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Cache-Control': 'no-cache'
         },
         signal: AbortSignal.timeout(15000)
       });
       if (proxyRes.ok) {
         const html = await proxyRes.text();
         if (isValidHtml(html, 2500)) return html;
+      } else if (proxyRes.status === 429) {
+        functions.logger.warn(`⚠️ Translate Proxy 429 Rate Limit for ${targetUrl} (Attempt ${attempt}). Backing off...`);
+        await new Promise(r => setTimeout(r, 1200 + Math.random() * 800));
       }
     } catch (e) {
-      functions.logger.debug(`Stage A (Translate Proxy attempt ${attempt}) failed for ${targetUrl}:`, e.message);
+      functions.logger.debug(`Stage A1 (Translate Proxy attempt ${attempt}) failed for ${targetUrl}:`, e.message);
     }
+
+    // Strategy A2: Google Translate Proxy (Web App Mode _x_tr_pto=wapp)
+    try {
+      const translateProxyWapp = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr&_x_tr_pto=wapp`;
+      const proxyRes2 = await fetch(translateProxyWapp, {
+        headers: {
+          'User-Agent': getRandomUserAgent(),
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8'
+        },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (proxyRes2.ok) {
+        const html = await proxyRes2.text();
+        if (isValidHtml(html, 2500)) return html;
+      }
+    } catch (e) {}
 
     // Strategy B: Direct Fetch with Googlebot UA (5s timeout)
     try {
@@ -144,7 +194,7 @@ async function fetchHtmlWithRetry(targetUrl, maxRetries = 3) {
       const curlArgs = [
         '-s', '-L',
         '--max-time', '10',
-        '-H', 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        '-H', `User-Agent: ${ua}`,
         '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         '-H', 'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
         targetUrl
@@ -155,9 +205,9 @@ async function fetchHtmlWithRetry(targetUrl, maxRetries = 3) {
       }
     } catch (e) {}
 
-    // Pause 1 second before next retry
+    // Pause before next retry with jitter
     if (attempt < maxRetries) {
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1000 + Math.random() * 600));
     }
   }
 
@@ -326,11 +376,12 @@ async function scrapeAndSaveCatalogs() {
             const $detail = cheerio.load(detailHtml);
             
             const sayfaResimleri = [];
-            const imgElements = $detail('#BP_W .p img, .p img, #BP_W img, .bpgc img, img[src*="_bro"], img[data-src*="_bro"]');
+            // Target the actual brochure container only (#BP_W / .bpgc) to prevent recommendation leakage
+            const imgElements = $detail('#BP_W .p img, #BP_W div.p img, #BP_W img, .bpgc .p img, .bpgc div.p img');
 
             imgElements.each((i, el) => {
               let src = $detail(el).attr('data-src') || $detail(el).attr('src') || $detail(el).attr('data-original');
-              if (src && !src.includes('t.gif')) {
+              if (src && !src.includes('t.gif') && (src.includes('/_bro/') || src.includes('cdn.akakce.com'))) {
                 if (src.startsWith('//')) src = 'https:' + src;
                 src = src.replace('/_bro/l/', '/_bro/u/').replace('/_bro/y/', '/_bro/u/').replace('/_bro/m/', '/_bro/u/');
                 if (!sayfaResimleri.includes(src)) {
@@ -376,8 +427,8 @@ async function scrapeAndSaveCatalogs() {
       });
 
       allScrapedCatalogs.push(...storeBrochures.filter(Boolean));
-      // Mağazalar arası kısa bekleme (Rate limit koruması)
-      await new Promise(r => setTimeout(r, 200));
+      // Mağazalar arası kısa bekleme (Rate limit ve WAF koruması)
+      await new Promise(r => setTimeout(r, 300));
     } catch (storeErr) {
       functions.logger.error(`❌ Error scraping store ${store.name}:`, storeErr.message);
     }
@@ -410,4 +461,4 @@ async function scrapeAndSaveCatalogs() {
   return { success: true, count: allScrapedCatalogs.length };
 }
 
-module.exports = { scrapeAndSaveCatalogs };
+module.exports = { STORES, scrapeAndSaveCatalogs };

@@ -33,6 +33,7 @@ import '../widgets/skeletons/profile_skeleton.dart';
 import 'deal_detail_screen.dart';
 import 'package:flutter/services.dart';
 import '../utils/circular_theme_transition.dart';
+import '../widgets/morphing_sun_moon_button.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -2077,55 +2078,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required bool isDark,
     required Color textMain,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: Tooltip(
-        message: isDark ? 'Aydınlık Moda Geç' : 'Karanlık Moda Geç',
-        child: InkWell(
-          key: _themeButtonKey,
-          onTap: () {
-            CircularThemeTransition.animate(
-              context: context,
-              buttonKey: _themeButtonKey,
-              isCurrentlyDark: isDark,
-              onToggleTheme: () => _themeService.toggleTheme(),
-            );
-          },
-          borderRadius: BorderRadius.circular(20),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 450),
-            curve: Curves.easeInOutCubic,
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.amber.withValues(alpha: 0.15)
-                  : Colors.indigo.withValues(alpha: 0.10),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isDark
-                    ? Colors.amber.withValues(alpha: 0.35)
-                    : Colors.indigo.withValues(alpha: 0.2),
-                width: 1,
-              ),
-            ),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 450),
-              switchInCurve: Curves.easeInOutCubic,
-              switchOutCurve: Curves.easeInOutCubic,
-              transitionBuilder: (child, anim) => RotationTransition(
-                turns: anim,
-                child: ScaleTransition(scale: anim, child: child),
-              ),
-              child: Icon(
-                isDark ? Icons.wb_sunny_rounded : Icons.nightlight_round,
-                key: ValueKey<bool>(isDark),
-                size: 18,
-                color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
-              ),
-            ),
-          ),
-        ),
-      ),
+    return MorphingSunMoonButton(
+      buttonKey: _themeButtonKey,
+      isDark: isDark,
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.easeInOutCubic,
+      onTap: () {
+        CircularThemeTransition.animate(
+          context: context,
+          buttonKey: _themeButtonKey,
+          isCurrentlyDark: isDark,
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.easeInOutCubic,
+          onToggleTheme: () => _themeService.toggleTheme(),
+        );
+      },
     );
   }
 

@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/circular_theme_transition.dart';
+import '../widgets/morphing_sun_moon_button.dart';
 import 'faq_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'category_preferences_screen.dart';
@@ -823,49 +824,21 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
               ),
             ),
             const Spacer(),
-            InkWell(
-              key: _themeButtonKey,
+            MorphingSunMoonButton(
+              buttonKey: _themeButtonKey,
+              isDark: isDark,
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeInOutCubic,
               onTap: () {
                 CircularThemeTransition.animate(
                   context: context,
                   buttonKey: _themeButtonKey,
                   isCurrentlyDark: isDark,
+                  duration: const Duration(milliseconds: 800),
+                  curve: Curves.easeInOutCubic,
                   onToggleTheme: () => _themeService.toggleTheme(),
                 );
               },
-              borderRadius: BorderRadius.circular(20),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 450),
-                curve: Curves.easeInOutCubic,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF334155).withValues(alpha: 0.6)
-                      : Colors.indigo.withValues(alpha: 0.10),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF475569)
-                        : Colors.indigo.withValues(alpha: 0.2),
-                    width: 1,
-                  ),
-                ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 450),
-                  switchInCurve: Curves.easeInOutCubic,
-                  switchOutCurve: Curves.easeInOutCubic,
-                  transitionBuilder: (child, anim) => RotationTransition(
-                    turns: anim,
-                    child: ScaleTransition(scale: anim, child: child),
-                  ),
-                  child: Icon(
-                    isDark ? Icons.wb_sunny_rounded : Icons.nightlight_round,
-                    key: ValueKey<bool>(isDark),
-                    size: 18,
-                    color: isDark ? const Color(0xFFFBBF24) : const Color(0xFF6366F1),
-                  ),
-                ),
-              ),
             ),
           ],
         ),

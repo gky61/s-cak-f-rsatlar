@@ -13,15 +13,15 @@ class CircularThemeTransition {
 
   static bool get isTransitioning => _isTransitioning;
 
-  /// Starts a circular reveal animation.
-  /// When transitioning Light -> Dark: Originates from [buttonKey] (top-right).
-  /// When transitioning Dark -> Light: Originates from the opposite diagonal end (bottom-left) to create a reverse daybreak effect.
+  /// Starts a circular reveal / collapse animation.
+  /// When transitioning Light -> Dark: Expanding circle originating from [buttonKey] (top-right Moon).
+  /// When transitioning Dark -> Light: Collapsing "black hole / vortex" shrinking directly into [buttonKey] (top-right Sun).
   static Future<void> animate({
     required BuildContext context,
     required GlobalKey buttonKey,
     required bool isCurrentlyDark,
     required Future<void> Function() onToggleTheme,
-    Duration duration = const Duration(milliseconds: 750),
+    Duration duration = const Duration(milliseconds: 800),
     Curve curve = Curves.easeInOutCubic,
   }) async {
     if (_isTransitioning) return;
@@ -55,20 +55,13 @@ class CircularThemeTransition {
       final screenSize = mediaQuery.size;
       final overlay = Overlay.of(context);
 
-      // 3. Determine Center Point:
-      // If currently Light (switching to Dark): start from Button (top-right)
-      // If currently Dark (switching to Light): start from Opposite Diagonal Corner (bottom-left)
-      final Offset center = isCurrentlyDark
-          ? Offset(
-              math.max(16.0, screenSize.width - buttonCenter.dx),
-              math.max(16.0, screenSize.height - buttonCenter.dy),
-            )
-          : buttonCenter;
+      // 3. Center point is ALWAYS buttonCenter (Sun or Moon icon)
+      final Offset center = buttonCenter;
 
       // 4. Capture screenshot of current screen before theme change
       final ui.Image image = await boundary.toImage(pixelRatio: pixelRatio);
 
-      // 5. Calculate max radius to cover all corners from tap center
+      // 5. Calculate max radius to cover all corners from buttonCenter
       final d1 = math.sqrt(math.pow(center.dx, 2) + math.pow(center.dy, 2));
       final d2 = math.sqrt(math.pow(screenSize.width - center.dx, 2) + math.pow(center.dy, 2));
       final d3 = math.sqrt(math.pow(center.dx, 2) + math.pow(screenSize.height - center.dy, 2));
@@ -83,6 +76,7 @@ class CircularThemeTransition {
           image: image,
           center: center,
           maxRadius: maxRadius,
+          isCollapsing: isCurrentlyDark,
           duration: duration,
           curve: curve,
           onCompleted: () {
@@ -110,6 +104,7 @@ class _CircularRevealOverlay extends StatefulWidget {
   final ui.Image image;
   final Offset center;
   final double maxRadius;
+  final bool isCollapsing;
   final Duration duration;
   final Curve curve;
   final VoidCallback onCompleted;
@@ -118,6 +113,7 @@ class _CircularRevealOverlay extends StatefulWidget {
     required this.image,
     required this.center,
     required this.maxRadius,
+    required this.isCollapsing,
     required this.duration,
     required this.curve,
     required this.onCompleted,
@@ -140,12 +136,23 @@ class _CircularRevealOverlayState extends State<_CircularRevealOverlay>
       duration: widget.duration,
     );
 
-    _radiusAnimation = Tween<double>(begin: 0.0, end: widget.maxRadius).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: widget.curve,
-      ),
-    );
+    if (widget.isCollapsing) {
+      // Dark -> Light: Start from full radius and shrink down to 0 at button center (Black hole effect)
+      _radiusAnimation = Tween<double>(begin: widget.maxRadius, end: 0.0).animate(
+        CurvedAnimation(
+          parent: _controller,
+          curve: widget.curve,
+        ),
+      );
+    } else {
+      // Light -> Dark: Start from 0 and expand to max radius from button center (Expanding reveal)
+      _radiusAnimation = Tween<double>(begin: 0.0, end: widget.maxRadius).animate(
+        CurvedAnimation(
+          parent: _controller,
+          curve: widget.curve,
+        ),
+      );
+    }
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -182,10 +189,15 @@ class _CircularRevealOverlayState extends State<_CircularRevealOverlay>
           ),
           builder: (context, child) {
             return ClipPath(
-              clipper: _InvertedCircleClipper(
-                center: widget.center,
-                radius: _radiusAnimation.value,
-              ),
+              clipper: widget.isCollapsing
+                  ? _NormalCircleClipper(
+                      center: widget.center,
+                      radius: _radiusAnimation.value,
+                    )
+                  : _InvertedCircleClipper(
+                      center: widget.center,
+                      radius: _radiusAnimation.value,
+                    ),
               child: child,
             );
           },
@@ -195,6 +207,32 @@ class _CircularRevealOverlayState extends State<_CircularRevealOverlay>
   }
 }
 
+/// Normal circle clipper for collapsing mode (Dark -> Light)
+/// Keeps only the circle area, revealing the new light theme outside as it shrinks into center
+class _NormalCircleClipper extends CustomClipper<Path> {
+  final Offset center;
+  final double radius;
+
+  _NormalCircleClipper({
+    required this.center,
+    required this.radius,
+  });
+
+  @override
+  Path getClip(Size size) {
+    final path = Path()
+      ..addOval(Rect.fromCircle(center: center, radius: math.max(0.0, radius)));
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant _NormalCircleClipper oldClipper) {
+    return oldClipper.radius != radius || oldClipper.center != center;
+  }
+}
+
+/// Inverted circle clipper for expanding reveal mode (Light -> Dark)
+/// Cuts a circular hole in the rectangle, revealing the new dark theme inside as it expands from center
 class _InvertedCircleClipper extends CustomClipper<Path> {
   final Offset center;
   final double radius;
@@ -208,7 +246,7 @@ class _InvertedCircleClipper extends CustomClipper<Path> {
   Path getClip(Size size) {
     final path = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..addOval(Rect.fromCircle(center: center, radius: radius))
+      ..addOval(Rect.fromCircle(center: center, radius: math.max(0.0, radius)))
       ..fillType = PathFillType.evenOdd;
     return path;
   }
