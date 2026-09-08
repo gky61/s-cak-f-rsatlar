@@ -41,29 +41,37 @@ const affiliateConfig = {
     // Trendyol Affiliate ID (örnek: https://www.trendyol.com/...?boutiqueId=XXXXX)
     trendyol: {
         boutiqueId: '', // Trendyol Boutique ID'nizi buraya ekleyin
-        // Örnek: '123456' veya 'abc123'
+        enabled: true,
     },
-    // Hepsiburada Affiliate ID (Link Gelir programı için genellikle 'linkgelir' kullanılır)
+    // Hepsiburada LinkGelir (Adjust 7t4g.adj.st)
     hepsiburada: {
-        utmSource: 'linkgelir', // Hepsiburada Link Gelir için genellikle 'linkgelir' kullanılır
-        // Eğer özel bir partner ID'niz varsa onu yazın
-        // Örnek: 'linkgelir' veya 'partner456'
+        accountName: 'muratcan gokyokus', // LinkGelir Adjust adj_adgroup adı
+        trackerToken: '10zuiki3_y4q2fze', // LinkGelir Adjust adj_t takip belirteci
+        campaign: 'ux_gelistirmeleri',   // Adjust kampanya adı
+        enabled: true, // Acil durumda 'false' yapılarak kapatılabilir (Fallback: temiz hepsiburada.com linkleri kullanılır)
     },
     // N11 Affiliate ID (örnek: https://www.n11.com/...?ref=XXXXX)
     n11: {
         refId: '', // N11 Referans ID'nizi buraya ekleyin
-        // Örnek: 'affiliate789' veya 'partner012'
+        enabled: true,
     },
-    // Amazon Affiliate ID (örnek: https://www.amazon.com.tr/...?tag=XXXXX)
+    // Amazon Associates (Gelir Ortaklığı) Store / Tracking ID
     amazon: {
-        tag: '', // Amazon Associate Tag'inizi buraya ekleyin
-        // Örnek: 'yourstore-21'
+        tag: 'firsatkolik-21', // Amazon Associate Tag
+        enabled: true, // Acil durumda 'false' yapılarak affiliate kapatılabilir (Fallback: temiz amazon.com.tr linkleri kullanılır)
     },
     // GittiGidiyor Affiliate ID
     gittigidiyor: {
         affiliateId: '', // GittiGidiyor Affiliate ID'nizi buraya ekleyin
+        enabled: true,
+    },
+    // Teknosa Paylaş Kazan (Winfluenced / TUNE) User UUID
+    teknosa: {
+        userId: '906bd201-92dc-4898-914a-10309b2cd576',
+        enabled: true, // Acil durumda 'false' yapılarak affiliate kapatılabilir (Fallback: temiz teknosa.com linkleri kullanılır)
     }
 };
+
 
 
 

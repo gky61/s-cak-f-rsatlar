@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../models/deal.dart';
 import '../../models/category.dart';
+import '../../services/affiliate/store_redirect_service.dart';
 import '../../theme/app_theme.dart';
 
 // Kırmızı çizgi çizmek için CustomPainter
@@ -170,58 +170,12 @@ String formatExactDateTime(DateTime date) {
   }
 }
 
-Future<void> openProductLink(BuildContext context, String url) async {
-  if (url.isEmpty) return;
-  
-  try {
-    // URL'yi düzelt - http:// veya https:// yoksa ekle
-    String cleanUrl = url.trim();
-    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-      cleanUrl = 'https://$cleanUrl';
-    }
-    
-    final uri = Uri.parse(cleanUrl);
-    
-    try {
-      // Önce external application ile dene
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (launched) return;
-    } catch (e) {
-      // External başarısız, devam et
-    }
-    
-    try {
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.platformDefault,
-      );
-      if (launched) return;
-    } catch (e) {
-      // Platform default da başarısız
-    }
-    
-    try {
-      await launchUrl(
-        uri,
-        mode: LaunchMode.inAppWebView,
-      );
-    } catch (e) {
-      throw Exception('Bağlantı açılamadı');
-    }
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Bağlantı açılamadı: ${e.toString()}'),
-          duration: const Duration(seconds: 4),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
+Future<void> openProductLink(BuildContext context, String url, [String? storeName]) async {
+  await StoreRedirectService.launchStore(
+    context,
+    rawUrl: url,
+    storeName: storeName,
+  );
 }
 
 void showExpiredBottomSheet(BuildContext context, Deal deal) {
@@ -319,7 +273,7 @@ void showExpiredBottomSheet(BuildContext context, Deal deal) {
                   child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(context);
-                      openProductLink(context, deal.link);
+                      openProductLink(context, deal.link, deal.store);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primary,

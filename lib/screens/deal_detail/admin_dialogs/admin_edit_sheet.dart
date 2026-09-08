@@ -3,11 +3,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../models/deal.dart';
 import '../../../models/category.dart';
 import '../../../services/firestore_service.dart';
-import '../../../services/link_preview_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/category_selector_widget.dart';
 import '../../../widgets/store_price_badge.dart';
 import 'category_selector.dart';
+import '../../../services/affiliate/affiliate_service.dart';
 
 /// Topluluk ve Admin ortamlarında Fırsat Düzenleme Modal Sheet'ini açan merkezi fonksiyon.
 void showAdminEditSheet({
@@ -20,7 +20,27 @@ void showAdminEditSheet({
   final descriptionController = TextEditingController(text: deal.description);
   final storeController = TextEditingController(text: deal.store);
   final brandController = TextEditingController(text: deal.brand ?? '');
-  final linkController = TextEditingController(text: deal.link);
+  final cleanUrlController = TextEditingController(
+    text: deal.displayUrl.isNotEmpty ? deal.displayUrl : Deal.cleanProductUrl(deal.link),
+  );
+
+  // Eğer mağaza affiliate destekliyorsa ve mevcut link henüz affiliate linkine dönüştürülmemişse (organik link ise),
+  // düzenleme ekranı açıldığında otomatik olarak affiliate linke dönüştürerek hazır getir
+  String initialAffiliateLink = deal.link;
+  final effectiveSourceUrl = deal.displayUrl.isNotEmpty ? deal.displayUrl : deal.link;
+  if (AffiliateService.isStoreSupported(deal.store) ||
+      AffiliateService.isStoreSupported(deal.displayUrl) ||
+      AffiliateService.isStoreSupported(deal.link)) {
+    final adapter = AffiliateService.getAdapter(deal.link) ?? AffiliateService.getAdapter(effectiveSourceUrl);
+    final isAlreadyAffiliate = adapter != null && adapter.isAlreadyAffiliate(Uri.tryParse(deal.link) ?? Uri());
+    if (!isAlreadyAffiliate) {
+      final autoConverted = AffiliateService.convertToAffiliateLink(effectiveSourceUrl);
+      if (autoConverted != effectiveSourceUrl && autoConverted.isNotEmpty) {
+        initialAffiliateLink = autoConverted;
+      }
+    }
+  }
+  final linkController = TextEditingController(text: initialAffiliateLink);
   final imageUrlController = TextEditingController(text: deal.imageUrl);
   
   final priceController = TextEditingController(
@@ -91,28 +111,17 @@ void showAdminEditSheet({
             return int.tryParse(cleaned);
           }
 
-          String convertToAffiliateLink(String originalUrl) {
-            if (originalUrl.isEmpty) return originalUrl;
-            try {
-              final uri = Uri.parse(originalUrl);
-              final hostname = uri.host.toLowerCase();
-
-              // Hepsiburada LinkGelir
-              if (hostname.contains('hepsiburada.com')) {
-                final newQueryParams = Map<String, String>.from(uri.queryParameters);
-                newQueryParams['utm_source'] = 'linkgelir';
-                newQueryParams['utm_medium'] = 'referral';
-                newQueryParams['utm_campaign'] = 'urun_paylasim';
-                return uri.replace(queryParameters: newQueryParams).toString();
-              }
-            } catch (_) {}
-            return originalUrl;
+          Future<String> resolveAndConvertToAffiliateLink(String originalUrl) {
+            return AffiliateService.resolveAndConvertToAffiliate(originalUrl);
           }
 
           Future<void> handleConvertAffiliate() async {
-            final currentUrl = linkController.text.trim();
+            var currentUrl = cleanUrlController.text.trim();
             if (currentUrl.isEmpty) {
-              setSheetState(() => errorText = 'Dönüştürmek için önce bir URL girin.');
+              currentUrl = linkController.text.trim();
+            }
+            if (currentUrl.isEmpty) {
+              setSheetState(() => errorText = 'Dönüştürmek için önce geçerli bir URL girin.');
               return;
             }
 
@@ -122,34 +131,59 @@ void showAdminEditSheet({
             });
 
             try {
-              String urlToConvert = currentUrl;
-              if (urlToConvert.contains('hb.biz') || urlToConvert.contains('app.hb.biz')) {
-                try {
-                  final linkPreviewService = LinkPreviewService();
-                  final resolved = await linkPreviewService.resolveUrlRedirects(urlToConvert);
-                  if (resolved.isNotEmpty) urlToConvert = resolved;
-                } catch (_) {}
+              // Temiz URL henüz yoksa veya affiliate ise unwrapped halini cleanUrl alanına koyalım
+              final inputAdapter = AffiliateService.getAdapter(cleanUrlController.text);
+              final isAffiliateInput = (inputAdapter != null && inputAdapter.isAlreadyAffiliate(Uri.tryParse(cleanUrlController.text) ?? Uri())) ||
+                  cleanUrlController.text.contains('btrck.com') ||
+                  cleanUrlController.text.contains('7t4g.adj.st') ||
+                  cleanUrlController.text.contains('adj.st') ||
+                  cleanUrlController.text.contains('tag=');
+              if (cleanUrlController.text.trim().isEmpty || isAffiliateInput) {
+                final unwrap = Deal.cleanProductUrl(currentUrl);
+                if (unwrap.isNotEmpty && !unwrap.contains('btrck.com') && !unwrap.contains('7t4g.adj.st') && !unwrap.contains('tag=')) {
+                  cleanUrlController.text = unwrap;
+                  currentUrl = unwrap;
+                }
               }
 
-              final converted = convertToAffiliateLink(urlToConvert);
+              final converted = await resolveAndConvertToAffiliateLink(currentUrl);
               setSheetState(() {
                 linkController.text = converted;
                 isConvertingLink = false;
               });
 
               if (sheetContext.mounted) {
-                ScaffoldMessenger.of(sheetContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('✅ Affiliate link güncellendi!'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                final resAdapter = AffiliateService.getAdapter(converted);
+                final isAffiliateResult = resAdapter != null && resAdapter.isAlreadyAffiliate(Uri.tryParse(converted) ?? Uri());
+                if (converted != currentUrl && isAffiliateResult) {
+                  ScaffoldMessenger.of(sheetContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('✅ Affiliate link başarıyla üretildi!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(sheetContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('ℹ️ Orijinal mağaza linki korundu (Şalter kapalı veya mağaza hazır değil).'),
+                      backgroundColor: Colors.blueGrey,
+                    ),
+                  );
+                }
               }
             } catch (e) {
               setSheetState(() {
                 isConvertingLink = false;
-                errorText = 'Link dönüştürme hatası: $e';
+                linkController.text = currentUrl;
               });
+              if (sheetContext.mounted) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('ℹ️ Dönüştürme başarısız oldu, orijinal link korundu.'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
             }
           }
 
@@ -176,6 +210,47 @@ void showAdminEditSheet({
               errorText = null;
             });
 
+            final isSupported = AffiliateService.isStoreSupported(storeController.text.trim()) ||
+                AffiliateService.isStoreSupported(deal.store) ||
+                AffiliateService.isStoreSupported(cleanUrlController.text.trim()) ||
+                AffiliateService.isStoreSupported(linkController.text.trim());
+
+            String finalCleanUrl = cleanUrlController.text.trim();
+            String finalLink = linkController.text.trim();
+
+            if (!isSupported) {
+              // Affiliate desteklenmeyen mağazalar: Standart tek URL modeli
+              final singleUrl = finalCleanUrl.isNotEmpty ? finalCleanUrl : finalLink;
+              final cleaned = singleUrl.isNotEmpty ? Deal.cleanProductUrl(singleUrl) : singleUrl;
+              finalCleanUrl = cleaned;
+              finalLink = cleaned;
+            } else {
+              // Affiliate desteklenen mağazalar (Teknosa, Hepsiburada, Amazon)
+              // 1. Temiz URL boş ama link doluysa cleanUrl türet
+              if (finalCleanUrl.isEmpty && finalLink.isNotEmpty) {
+                finalCleanUrl = Deal.cleanProductUrl(finalLink);
+                cleanUrlController.text = finalCleanUrl;
+              }
+
+              // 2. Link boşsa veya henüz affiliate linki değilse cleanUrl üzerinden affiliate üret
+              final linkAdapter = AffiliateService.getAdapter(finalLink);
+              final isFinalAffiliate = linkAdapter != null && linkAdapter.isAlreadyAffiliate(Uri.tryParse(finalLink) ?? Uri());
+              if (finalLink.isEmpty || !isFinalAffiliate) {
+                try {
+                  final sourceForAffiliate = (finalCleanUrl.isNotEmpty &&
+                          !finalCleanUrl.contains('btrck.com') &&
+                          !finalCleanUrl.contains('7t4g.adj.st'))
+                      ? finalCleanUrl
+                      : finalLink;
+                  final converted = await resolveAndConvertToAffiliateLink(sourceForAffiliate);
+                  if (converted.isNotEmpty) {
+                    finalLink = converted;
+                  }
+                } catch (_) {}
+                linkController.text = finalLink;
+              }
+            }
+
             final updates = <String, dynamic>{
               'title': titleController.text.trim(),
               'description': descriptionController.text.trim(),
@@ -183,7 +258,9 @@ void showAdminEditSheet({
               'brand': brandController.text.trim().isNotEmpty ? brandController.text.trim() : null,
               'category': Category.getNameById(selectedCategoryId),
               'subCategory': selectedSubCategory,
-              'link': linkController.text.trim(),
+              'cleanUrl': finalCleanUrl.isNotEmpty ? finalCleanUrl : null,
+              'link': finalLink,
+              'url': finalLink,
               'imageUrl': imageUrlController.text.trim(),
               'price': price ?? 0.0,
               'originalPrice': (originalPrice ?? 0) > 0 ? originalPrice : null,
@@ -225,6 +302,10 @@ void showAdminEditSheet({
           final mediaQuery = MediaQuery.of(context);
           final keyboardHeight = mediaQuery.viewInsets.bottom;
           final maxSheetHeight = mediaQuery.size.height * 0.88;
+          final isAffiliateSupported = AffiliateService.isStoreSupported(storeController.text.trim()) ||
+              AffiliateService.isStoreSupported(deal.store) ||
+              AffiliateService.isStoreSupported(cleanUrlController.text.trim()) ||
+              AffiliateService.isStoreSupported(linkController.text.trim());
 
           return Container(
             constraints: BoxConstraints(maxHeight: maxSheetHeight),
@@ -563,65 +644,145 @@ void showAdminEditSheet({
 
                         const SizedBox(height: 12),
 
-                        // Section 4: Bağlantı & Affiliate
-                        _buildSectionCard(
-                          isDark: isDark,
-                          title: 'Bağlantı & Affiliate',
-                          icon: Icons.link_rounded,
-                          children: [
-                            _buildStyledTextField(
-                              context: context,
-                              label: 'Ürün URL',
-                              controller: linkController,
-                              placeholder: 'https://...',
-                              keyboardType: TextInputType.url,
-                            ),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: isConvertingLink ? null : handleConvertAffiliate,
-                                  icon: isConvertingLink
-                                      ? const SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                        )
-                                      : const Icon(Icons.swap_horiz_rounded, size: 18),
-                                  label: Text(
-                                    isConvertingLink ? 'Dönüştürülüyor...' : 'Affiliate Linke Dönüştür',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.primary,
-                                    foregroundColor: Colors.black,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                ),
-                                OutlinedButton.icon(
-                                  onPressed: () async {
-                                    final urlStr = linkController.text.trim();
-                                    if (urlStr.isNotEmpty) {
-                                      final uri = Uri.tryParse(urlStr);
-                                      if (uri != null && await canLaunchUrl(uri)) {
-                                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        // Section 4: Bağlantı veya Bağlantı & Affiliate (Çoklu Görünüm)
+                        if (isAffiliateSupported)
+                          _buildSectionCard(
+                            isDark: isDark,
+                            title: 'Bağlantı & Affiliate (Çoklu Görünüm)',
+                            icon: Icons.link_rounded,
+                            children: [
+                              // 1. Orijinal Mağaza Linki (cleanUrl)
+                              _buildStyledTextField(
+                                context: context,
+                                label: 'Orijinal Mağaza Linki (Temiz / Görünen Link)',
+                                controller: cleanUrlController,
+                                placeholder: 'https://www.teknosa.com/...',
+                                keyboardType: TextInputType.url,
+                                helperText: 'Kullanıcılara gösterilen, kopyalanan ve paylaşılan temiz ürün linki.',
+                              ),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final urlStr = cleanUrlController.text.trim();
+                                      if (urlStr.isNotEmpty) {
+                                        final uri = Uri.tryParse(urlStr);
+                                        if (uri != null && await canLaunchUrl(uri)) {
+                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        }
                                       }
-                                    }
-                                  },
-                                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                                  label: const Text('Linki Test Et', style: TextStyle(fontSize: 12)),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    },
+                                    icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                                    label: const Text('Orijinal Linki Aç', style: TextStyle(fontSize: 12)),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                                  ElevatedButton.icon(
+                                    onPressed: isConvertingLink ? null : handleConvertAffiliate,
+                                    icon: isConvertingLink
+                                        ? const SizedBox(
+                                            width: 14,
+                                            height: 14,
+                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                          )
+                                        : const Icon(Icons.auto_fix_high_rounded, size: 18),
+                                    label: Text(
+                                      isConvertingLink ? 'Dönüştürülüyor...' : 'Orijinalden Affiliate Üret',
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primary,
+                                      foregroundColor: Colors.black,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              Divider(height: 1, color: isDark ? AppTheme.darkBorder : Colors.grey[300]),
+                              const SizedBox(height: 14),
+
+                              // 2. Aktif Affiliate Linki (link)
+                              _buildStyledTextField(
+                                context: context,
+                                label: 'Aktif Affiliate Linki (Mağazaya Git Butonunda Çalışan)',
+                                controller: linkController,
+                                placeholder: 'https://rdr.btrck.com/...',
+                                keyboardType: TextInputType.url,
+                                helperText: 'Kullanıcı mağazaya git butonuna bastığında komisyon kazanımı için açılır.',
+                              ),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final urlStr = linkController.text.trim();
+                                      if (urlStr.isNotEmpty) {
+                                        final uri = Uri.tryParse(urlStr);
+                                        if (uri != null && await canLaunchUrl(uri)) {
+                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        }
+                                      }
+                                    },
+                                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                    label: const Text('Affiliate Linki Test Et', style: TextStyle(fontSize: 12)),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          )
+                        else
+                          _buildSectionCard(
+                            isDark: isDark,
+                            title: 'Bağlantı',
+                            icon: Icons.link_rounded,
+                            children: [
+                              _buildStyledTextField(
+                                context: context,
+                                label: 'Ürün URL',
+                                controller: cleanUrlController,
+                                placeholder: 'https://...',
+                                keyboardType: TextInputType.url,
+                                helperText: 'Ürünün doğrudan mağaza linki.',
+                              ),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final urlStr = cleanUrlController.text.trim().isNotEmpty
+                                          ? cleanUrlController.text.trim()
+                                          : linkController.text.trim();
+                                      if (urlStr.isNotEmpty) {
+                                        final uri = Uri.tryParse(urlStr);
+                                        if (uri != null && await canLaunchUrl(uri)) {
+                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        }
+                                      }
+                                    },
+                                    icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                                    label: const Text('Linki Test Et', style: TextStyle(fontSize: 12)),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
 
                         const SizedBox(height: 12),
 
@@ -864,6 +1025,7 @@ Widget _buildStyledTextField({
   required String label,
   required TextEditingController controller,
   String placeholder = '',
+  String? helperText,
   int maxLines = 1,
   TextInputType keyboardType = TextInputType.text,
   ValueChanged<String>? onChanged,
@@ -898,6 +1060,12 @@ Widget _buildStyledTextField({
           decoration: InputDecoration(
             isDense: true,
             hintText: placeholder,
+            helperText: helperText,
+            helperStyle: TextStyle(
+              fontSize: 11,
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+            ),
+            helperMaxLines: 2,
             hintStyle: TextStyle(
               fontSize: 13,
               color: isDark ? Colors.grey[600] : Colors.grey[400],

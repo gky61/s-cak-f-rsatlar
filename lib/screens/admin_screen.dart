@@ -3,12 +3,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'dart:io';
 import 'dart:async';
-import 'package:firebase_app_check/firebase_app_check.dart';
-import '../firebase_options.dart';
 import '../models/deal.dart';
 import '../models/category.dart';
 import '../models/user.dart';
@@ -22,7 +17,6 @@ import '../theme/app_theme.dart';
 import 'deal_detail_screen.dart';
 import 'deal_detail/admin_dialogs/admin_edit_sheet.dart';
 import 'profile_screen.dart';
-import 'message_screen.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../widgets/skeletons/user_list_skeleton.dart';
 import '../widgets/skeletons/chat_list_skeleton.dart';
@@ -33,30 +27,12 @@ import '../utils/test_logger.dart';
 import '../services/link_preview_service.dart';
 import '../services/category_detection_service.dart';
 import '../services/ai_service.dart';
+import '../services/affiliate/affiliate_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
 }
 
-// Affiliate Link Configuration
-// Buraya kendi affiliate ID'lerinizi ekleyin
-const Map<String, Map<String, String>> _affiliateConfig = {
-  'trendyol': {
-    'boutiqueId': '', // Trendyol Boutique ID'nizi buraya ekleyin
-  },
-  'hepsiburada': {
-    'utmSource': 'linkgelir', // Hepsiburada Link Gelir için genellikle 'linkgelir' kullanılır
-  },
-  'n11': {
-    'refId': '', // N11 Referans ID'nizi buraya ekleyin
-  },
-  'amazon': {
-    'tag': '', // Amazon Associate Tag'inizi buraya ekleyin
-  },
-  'gittigidiyor': {
-    'affiliateId': '', // GittiGidiyor Affiliate ID'nizi buraya ekleyin
-  },
-};
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -858,6 +834,58 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             ),
           ),
           if (isPending || isUserSubmitted) ...[
+            Builder(
+              builder: (context) {
+                final dealUrl = deal.link.isNotEmpty ? deal.link : deal.displayUrl;
+                final isSupported = AffiliateService.isStoreSupported(deal.store.isNotEmpty ? deal.store : dealUrl);
+                if (!isSupported) return const SizedBox.shrink();
+
+                final adapter = AffiliateService.getAdapter(dealUrl);
+                if (adapter == null) return const SizedBox.shrink();
+
+                final uri = Uri.tryParse(dealUrl);
+                final isAlreadyAffiliate = uri != null && adapter.isAlreadyAffiliate(uri);
+
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isAlreadyAffiliate
+                        ? Colors.green.withOpacity(0.08)
+                        : Colors.orange.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isAlreadyAffiliate
+                          ? Colors.green.withOpacity(0.3)
+                          : Colors.orange.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isAlreadyAffiliate ? Icons.verified_rounded : Icons.auto_fix_high_rounded,
+                        size: 16,
+                        color: isAlreadyAffiliate ? Colors.green : Colors.orange[800],
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          isAlreadyAffiliate
+                              ? '${adapter.storeName} Affiliate linki hazır'
+                              : '${adapter.storeName} linki (Onaylanınca otomatik affiliate\'e dönüştürülür)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isAlreadyAffiliate ? Colors.green[800] : Colors.orange[900],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
             const Divider(height: 1),
             Row(
               children: [
@@ -1011,6 +1039,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   }
 
   Future<void> _approveDeal(String id, {bool isEditorPick = false, bool hidePrice = false}) async {
+    final dealDoc = await _firestoreService.getDeal(id);
     final updates = <String, dynamic>{
       'isApproved': true,
       'isEditorPick': isEditorPick,
@@ -1018,11 +1047,76 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     if (hidePrice) {
       updates['hidePrice'] = true;
     }
+
+    bool wasConverted = false;
+    if (dealDoc != null) {
+      final currentUrl = dealDoc.link;
+      _log('═══════════════════════════════════════════════════════════');
+      _log('👑 [AFFILIATE-TEST] Mobil Admin Onay Ekranı: Fırsat Onaylanıyor');
+      _log('   🆔 Fırsat ID: $id');
+      _log('   🏷️ Başlık: ${dealDoc.title}');
+      _log('   🔗 Mevcut Link: $currentUrl');
+      if (currentUrl.isNotEmpty) {
+        final adapter = AffiliateService.getAdapter(currentUrl);
+        final uri = Uri.tryParse(currentUrl);
+        final isAlreadyAffiliate = adapter != null && uri != null && adapter.isAlreadyAffiliate(uri);
+
+        if (isAlreadyAffiliate) {
+          // ⚡ Hızlı Yol (Fast-Path): Link zaten paylaşım anında affiliate yapılmış ve hazır.
+          // Tekrar hesaplama yapılmaz; hazır link doğrudan "Mağazaya Git" butonu arkasında yayına girer.
+          _log('⚡ [AFFILIATE-TEST] Hızlı Yol (Fast-Path): Link zaten hazır affiliate linki, mükerrer hesaplama yapılmadı.');
+          _log('   👉 Aktif Link: $currentUrl');
+        } else {
+          // 🛡️ Emniyet Ağı (Safety Net): Yalnızca eski/organik kalmış linkler için tek seferlik dönüşüm
+          _log('🔄 [AFFILIATE-TEST] Emniyet Ağı: Link henüz affiliate değil, dönüştürülüyor...');
+          try {
+            final settingsDoc = await _firestoreService.firestore.collection('settings').doc('app').get();
+            if (settingsDoc.exists && settingsDoc.data() != null) {
+              AffiliateService.syncFromMap(settingsDoc.data()!);
+              _log('⚙️ [AFFILIATE-TEST] Firestore settings/app şalterleri senkronize edildi');
+            }
+          } catch (_) {}
+
+          try {
+            final convertedUrl = await AffiliateService.resolveAndConvertToAffiliate(currentUrl);
+            if (convertedUrl != currentUrl) {
+              updates['url'] = convertedUrl;
+              updates['link'] = convertedUrl;
+              wasConverted = true;
+              _log('🎉 [AFFILIATE-TEST] Fırsat onaylandı ve affiliate linke dönüştürüldü!');
+              _log('   👉 Eski: $currentUrl');
+              _log('   👉 Yeni: $convertedUrl');
+            } else {
+              _log('ℹ️ [AFFILIATE-TEST] Link dönüştürülmedi (Şalter kapalı veya desteklenmeyen mağaza): $convertedUrl');
+            }
+          } catch (e) {
+            _log('⚠️ [AFFILIATE-TEST] Onay sırasında link dönüştürme hatası, mevcut link korundu: $e');
+          }
+        }
+
+        // cleanUrl eksik veya affiliate yönlendirme linki ise organik temiz URL'i Firestore'a kaydet
+        if (dealDoc.cleanUrl == null ||
+            dealDoc.cleanUrl!.trim().isEmpty ||
+            dealDoc.cleanUrl!.contains('btrck.com') ||
+            dealDoc.cleanUrl!.contains('7t4g.adj.st') ||
+            dealDoc.cleanUrl!.contains('adj.st')) {
+          final clean = Deal.cleanProductUrl(dealDoc.displayUrl.isNotEmpty ? dealDoc.displayUrl : currentUrl);
+          if (clean.isNotEmpty &&
+              !clean.contains('btrck.com') &&
+              !clean.contains('7t4g.adj.st') &&
+              !clean.contains('adj.st')) {
+            updates['cleanUrl'] = clean;
+            _log('✨ [AFFILIATE-TEST] cleanUrl Firestore alanına eklendi: $clean');
+          }
+        }
+      }
+      _log('═══════════════════════════════════════════════════════════');
+    }
+
     await _firestoreService.updateDeal(id, updates);
     
     // Anahtar kelime kontrolü yap - onaylanan fırsat için
     try {
-      final dealDoc = await _firestoreService.getDeal(id);
       if (dealDoc != null) {
         final notificationService = NotificationService();
         await notificationService.checkKeywordsAndNotify(
@@ -1046,9 +1140,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isEditorPick
-                ? 'Fırsat Editörün Seçimi olarak onaylandı ⭐'
-                : 'Fırsat Onaylandı ✅',
+            wasConverted
+                ? (isEditorPick
+                    ? 'Fırsat Editörün Seçimi & Affiliate Linkiyle Onaylandı ⭐🔗'
+                    : 'Fırsat Onaylandı & Affiliate Linke Dönüştürüldü! ✅🔗')
+                : (isEditorPick
+                    ? 'Fırsat Editörün Seçimi olarak onaylandı ⭐'
+                    : 'Fırsat Onaylandı ✅'),
           ),
           backgroundColor: isEditorPick ? Colors.orange[700] : Colors.green,
         ),
@@ -1267,184 +1365,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         );
       }
     }
-  }
-
-
-
-  // Kısa link çözme (Firebase Function çağrısı)
-  Future<String?> _resolveShortLink(String shortUrl) async {
-    try {
-      final projectId = DefaultFirebaseOptions.flavorProjectId;
-      final functionsUrl =
-          'https://us-central1-$projectId.cloudfunctions.net/resolveShortLink';
-      final uri = Uri.parse('$functionsUrl?url=${Uri.encodeComponent(shortUrl)}');
-      
-      String? token;
-      try {
-        token = await FirebaseAppCheck.instance.getToken();
-      } catch (e) {
-        _log('App Check token alınamadı: $e');
-      }
-
-      final response = await http.get(
-        uri,
-        headers: {
-          if (token != null) 'X-Firebase-AppCheck': token,
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && data['resolvedUrl'] != null) {
-          return data['resolvedUrl'] as String;
-        }
-      }
-      return null;
-    } catch (e) {
-      _log('Kısa link çözme hatası: $e');
-      return null;
-    }
-  }
-
-  // Mağaza tespit etme
-  String _detectStoreFromUrl(String url) {
-    if (url.isEmpty) return 'Bilinmeyen';
-
-    try {
-      final uri = Uri.parse(url);
-      final hostname = uri.host.toLowerCase();
-
-      if (hostname.contains('trendyol.com')) return 'Trendyol';
-      if (hostname.contains('hepsiburada.com')) return 'Hepsiburada';
-      if (hostname.contains('n11.com')) return 'N11';
-      if (hostname.contains('amazon.') || hostname.contains('amzn.') || hostname.contains('link.amazon')) return 'Amazon';
-      if (hostname.contains('gittigidiyor.com')) return 'GittiGidiyor';
-      if (hostname.contains('havitstore.com.tr')) return 'Havit';
-      if (hostname.contains('migros.com.tr')) return 'Migros';
-      if (hostname.contains('getir.com')) return 'Getir';
-      if (hostname.contains('boyner.com.tr')) return 'Boyner';
-
-      return 'Bilinmeyen';
-    } catch (e) {
-      return 'Bilinmeyen';
-    }
-  }
-
-  // Affiliate link'e dönüştürme
-  String _convertToAffiliateLink(String originalUrl) {
-    if (originalUrl.isEmpty) return originalUrl;
-
-    try {
-      final uri = Uri.parse(originalUrl);
-      final hostname = uri.host.toLowerCase();
-
-      // Hepsiburada kısa link kontrolü
-      if (hostname.contains('hb.biz') || hostname.contains('app.hb.biz')) {
-        _log('ℹ️ Kısa link tespit edildi: $originalUrl');
-        // Kısa linkler zaten çözülmüş olmalı, eğer hala kısa linkse olduğu gibi bırak
-        return originalUrl;
-      }
-
-      // Trendyol
-      if (hostname.contains('trendyol.com')) {
-        final boutiqueId = _affiliateConfig['trendyol']?['boutiqueId'];
-        if (boutiqueId != null && boutiqueId.isNotEmpty) {
-          // Mevcut boutiqueId'yi temizle
-          final newQueryParams = Map<String, String>.from(uri.queryParameters);
-          newQueryParams.remove('boutiqueId');
-          // Kendi boutiqueId'yi ekle
-          newQueryParams['boutiqueId'] = boutiqueId;
-          final newUri = uri.replace(queryParameters: newQueryParams);
-          return newUri.toString();
-        }
-      }
-
-      // Hepsiburada (Link Gelir) - Normal ürün linkleri
-      if (hostname.contains('hepsiburada.com')) {
-        final utmSource = _affiliateConfig['hepsiburada']?['utmSource'];
-        if (utmSource != null && utmSource.isNotEmpty) {
-          // Mevcut affiliate parametrelerini kontrol et
-          final existingUtmSource = uri.queryParameters['utm_source'];
-          if (existingUtmSource == utmSource) {
-            _log('ℹ️ Link zaten kendi affiliate linkiniz: $originalUrl');
-            return originalUrl; // Kendi linkiniz, değiştirme
-          }
-
-          // Başkasının affiliate linkini kendi affiliate linkimize dönüştür
-          final newQueryParams = Map<String, String>.from(uri.queryParameters);
-          newQueryParams.remove('utm_source');
-          newQueryParams.remove('utm_medium');
-          newQueryParams.remove('utm_campaign');
-          newQueryParams.remove('utm_content');
-          newQueryParams.remove('wt_inf');
-
-          // Kendi affiliate parametrelerini ekle
-          newQueryParams['utm_source'] = utmSource;
-          newQueryParams['utm_medium'] = 'referral';
-          newQueryParams['utm_campaign'] = 'urun_paylasim';
-
-          final newUri = uri.replace(queryParameters: newQueryParams);
-          return newUri.toString();
-        }
-      }
-
-      // N11
-      if (hostname.contains('n11.com')) {
-        final refId = _affiliateConfig['n11']?['refId'];
-        if (refId != null && refId.isNotEmpty) {
-          // Mevcut ref parametresini temizle
-          final newQueryParams = Map<String, String>.from(uri.queryParameters);
-          newQueryParams.remove('ref');
-          // Kendi ref ID'sini ekle
-          newQueryParams['ref'] = refId;
-          final newUri = uri.replace(queryParameters: newQueryParams);
-          return newUri.toString();
-        }
-      }
-
-      // Amazon
-      if (hostname.contains('amazon.com.tr') || hostname.contains('amazon.com') || hostname.contains('amazon.') || hostname.contains('amzn.') || hostname.contains('link.amazon')) {
-        final tag = _affiliateConfig['amazon']?['tag'];
-        if (tag != null && tag.isNotEmpty) {
-          // Mevcut tag parametresini temizle
-          final newQueryParams = Map<String, String>.from(uri.queryParameters);
-          newQueryParams.remove('tag');
-          // Kendi tag'ini ekle
-          newQueryParams['tag'] = tag;
-          final newUri = uri.replace(queryParameters: newQueryParams);
-          return newUri.toString();
-        }
-      }
-
-      // GittiGidiyor
-      if (hostname.contains('gittigidiyor.com')) {
-        final affiliateId = _affiliateConfig['gittigidiyor']?['affiliateId'];
-        if (affiliateId != null && affiliateId.isNotEmpty) {
-          // Mevcut affiliateId parametresini temizle
-          final newQueryParams = Map<String, String>.from(uri.queryParameters);
-          newQueryParams.remove('affiliateId');
-          // Kendi affiliateId'yi ekle
-          newQueryParams['affiliateId'] = affiliateId;
-          final newUri = uri.replace(queryParameters: newQueryParams);
-          return newUri.toString();
-        }
-      }
-
-      // Desteklenmeyen site veya affiliate ID yoksa orijinal linki döndür
-      return originalUrl;
-    } catch (e) {
-      _log('Link dönüştürme hatası: $e');
-      return originalUrl;
-    }
-  }
-
-  Future<void> _showEditDialog(Deal deal) async {
-    showAdminEditSheet(
-      context: context,
-      deal: deal,
-      firestoreService: _firestoreService,
-      onDealUpdated: () => setState(() {}),
-    );
   }
 
   Widget _buildUsersList() {

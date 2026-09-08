@@ -136,11 +136,57 @@ class Deal {
 
 
 
+  /// Kullanıcı arayüzlerinde (panoya kopyalama, yerel paylaşım, önizleme)
+  /// gösterilecek orijinal ve temiz ürün linki. Asla karmaşık affiliate linki içermez.
+  String get displayUrl {
+    if (cleanUrl.trim().isNotEmpty) {
+      final cleanUri = Uri.tryParse(cleanUrl.trim());
+      if (cleanUri != null &&
+          !cleanUri.host.toLowerCase().contains('btrck.com') &&
+          !cleanUri.host.toLowerCase().contains('7t4g.adj.st') &&
+          !cleanUri.host.toLowerCase().contains('adj.st')) {
+        return cleanUrl.trim();
+      }
+    }
+    final cleanedFromLink = cleanProductUrl(link);
+    return cleanedFromLink.isNotEmpty ? cleanedFromLink : link;
+  }
+
   // URL parametrelerini temizleyen statik fonksiyon
   static String cleanProductUrl(String urlStr) {
     if (urlStr.isEmpty) return '';
     try {
-      final uri = Uri.parse(urlStr.trim());
+      var uri = Uri.parse(urlStr.trim());
+      
+      // 1. Affiliate / Yönlendirme Linklerini Unwrap Et (btrck.com, 7t4g.adj.st vb.)
+      if (uri.host.toLowerCase().contains('btrck.com')) {
+        final embeddedUrl = uri.queryParameters['url'];
+        if (embeddedUrl != null && embeddedUrl.isNotEmpty) {
+          final parsed = Uri.tryParse(embeddedUrl);
+          if (parsed != null && !parsed.host.toLowerCase().contains('paylaskazan.')) {
+            uri = parsed;
+          }
+        } else {
+          final affSub3 = uri.queryParameters['aff_sub3'];
+          if (affSub3 != null && affSub3.isNotEmpty && affSub3.contains('teknosa.com')) {
+            final decoded = Uri.decodeComponent(affSub3);
+            final full = decoded.startsWith('http') ? decoded : 'https://www.$decoded';
+            final parsed = Uri.tryParse(full);
+            if (parsed != null) uri = parsed;
+          }
+        }
+      } else if (uri.host.toLowerCase().contains('7t4g.adj.st') ||
+          (uri.host.toLowerCase().contains('adjust.') && uri.queryParameters.containsKey('adj_fallback')) ||
+          (uri.host.toLowerCase().contains('adj.st') && uri.queryParameters.containsKey('adj_fallback'))) {
+        final fallback = uri.queryParameters['adj_fallback'];
+        if (fallback != null && fallback.isNotEmpty) {
+          final parsed = Uri.tryParse(fallback);
+          if (parsed != null) {
+            uri = parsed;
+          }
+        }
+      }
+
       final host = uri.host.toLowerCase();
       
       // Bilinen büyük mağazaların listesi

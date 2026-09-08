@@ -668,6 +668,9 @@ function initEventListeners() {
     // Load initial global settings status
     loadDealSharingStatus();
     loadCommentSharingStatus();
+    loadTeknosaAffiliateStatus();
+    loadHepsiburadaAffiliateStatus();
+    loadAmazonAffiliateStatus();
 
     // Toggle Deal Sharing button (Deals Toolbar)
     const toggleDealSharingBtn = document.getElementById('toggleDealSharingBtn');
@@ -730,6 +733,87 @@ function initEventListeners() {
     if (settingsToggleBotkolikChatBtn) {
         settingsToggleBotkolikChatBtn.addEventListener('change', async () => {
             await toggleBotkolikChat();
+        });
+    }
+
+    // Toggle Teknosa Affiliate switch (Settings View)
+    const settingsToggleTeknosaAffiliateBtn = document.getElementById('settingsToggleTeknosaAffiliateBtn');
+    if (settingsToggleTeknosaAffiliateBtn) {
+        settingsToggleTeknosaAffiliateBtn.addEventListener('change', async () => {
+            await toggleTeknosaAffiliate();
+        });
+    }
+
+    // Teknosa Affiliate Info Button and Close Button
+    const teknosaAffiliateInfoBtn = document.getElementById('teknosaAffiliateInfoBtn');
+    const closeTeknosaAffiliateInfoBtn = document.getElementById('closeTeknosaAffiliateInfoBtn');
+    const teknosaAffiliateInfoBox = document.getElementById('teknosaAffiliateInfoBox');
+
+    if (teknosaAffiliateInfoBtn && teknosaAffiliateInfoBox) {
+        teknosaAffiliateInfoBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            teknosaAffiliateInfoBox.classList.toggle('hidden');
+        });
+    }
+
+    if (closeTeknosaAffiliateInfoBtn && teknosaAffiliateInfoBox) {
+        closeTeknosaAffiliateInfoBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            teknosaAffiliateInfoBox.classList.add('hidden');
+        });
+    }
+
+    // Toggle Hepsiburada Affiliate switch (Settings View)
+    const settingsToggleHepsiburadaAffiliateBtn = document.getElementById('settingsToggleHepsiburadaAffiliateBtn');
+    if (settingsToggleHepsiburadaAffiliateBtn) {
+        settingsToggleHepsiburadaAffiliateBtn.addEventListener('change', async () => {
+            await toggleHepsiburadaAffiliate();
+        });
+    }
+
+    // Hepsiburada Affiliate Info Button and Close Button
+    const hepsiburadaAffiliateInfoBtn = document.getElementById('hepsiburadaAffiliateInfoBtn');
+    const closeHepsiburadaAffiliateInfoBtn = document.getElementById('closeHepsiburadaAffiliateInfoBtn');
+    const hepsiburadaAffiliateInfoBox = document.getElementById('hepsiburadaAffiliateInfoBox');
+
+    if (hepsiburadaAffiliateInfoBtn && hepsiburadaAffiliateInfoBox) {
+        hepsiburadaAffiliateInfoBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            hepsiburadaAffiliateInfoBox.classList.toggle('hidden');
+        });
+    }
+
+    if (closeHepsiburadaAffiliateInfoBtn && hepsiburadaAffiliateInfoBox) {
+        closeHepsiburadaAffiliateInfoBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            hepsiburadaAffiliateInfoBox.classList.add('hidden');
+        });
+    }
+
+    // Toggle Amazon Affiliate switch (Settings View)
+    const settingsToggleAmazonAffiliateBtn = document.getElementById('settingsToggleAmazonAffiliateBtn');
+    if (settingsToggleAmazonAffiliateBtn) {
+        settingsToggleAmazonAffiliateBtn.addEventListener('change', async () => {
+            await toggleAmazonAffiliate();
+        });
+    }
+
+    // Amazon Affiliate Info Button and Close Button
+    const amazonAffiliateInfoBtn = document.getElementById('amazonAffiliateInfoBtn');
+    const closeAmazonAffiliateInfoBtn = document.getElementById('closeAmazonAffiliateInfoBtn');
+    const amazonAffiliateInfoBox = document.getElementById('amazonAffiliateInfoBox');
+
+    if (amazonAffiliateInfoBtn && amazonAffiliateInfoBox) {
+        amazonAffiliateInfoBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            amazonAffiliateInfoBox.classList.toggle('hidden');
+        });
+    }
+
+    if (closeAmazonAffiliateInfoBtn && amazonAffiliateInfoBox) {
+        closeAmazonAffiliateInfoBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            amazonAffiliateInfoBox.classList.add('hidden');
         });
     }
 
@@ -1648,18 +1732,32 @@ async function approveDeal(dealId) {
         const dealData = dealDoc.data();
         let currentUrl = dealData.url || dealData.link || '';
 
-        // Kısa link kontrolü ve otomatik çözme
-        if (currentUrl) {
+        // Fast-Path: Link zaten hazır bir affiliate linki ise tekrar çözme veya dönüştürme yapma
+        let finalUrl = currentUrl;
+        const isAlreadyAffiliate = Boolean(currentUrl && typeof AffiliateManager !== 'undefined' && typeof AffiliateManager.isAlreadyAffiliate === 'function' && AffiliateManager.isAlreadyAffiliate(currentUrl, typeof affiliateConfig !== 'undefined' ? affiliateConfig : null));
+
+        if (isAlreadyAffiliate) {
+            console.log('⚡ [Fast-Path] Link zaten hazır affiliate linki, mükerrer hesaplama yapılmadı:', currentUrl);
+        } else if (currentUrl) {
+            // Emniyet Ağı (Safety Net): Yalnızca organik/kısa link kalmışsa çöz ve dönüştür
             try {
                 const url = new URL(currentUrl);
                 const hostname = url.hostname.toLowerCase();
+                const isShortlink = hostname.includes('hb.biz') ||
+                    hostname.includes('app.hb.biz') ||
+                    hostname.includes('paylaskazan.teknosa.com') ||
+                    hostname.includes('ty.gl') ||
+                    hostname.includes('sl.n11.com') ||
+                    hostname.includes('amzn.to') ||
+                    hostname.includes('amzn.eu') ||
+                    hostname.includes('link.amazon') ||
+                    hostname.includes('bit.ly') ||
+                    hostname.includes('tinyurl.com');
 
-                if (hostname.includes('hb.biz') || hostname.includes('app.hb.biz')) {
-                    // Kısa link tespit edildi - Otomatik çöz
+                if (isShortlink) {
                     console.log('🔄 Kısa link tespit edildi, çözülüyor...', currentUrl);
                     try {
                         const functionsUrl = `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net/resolveShortLink`;
-
                         const response = await fetch(`${functionsUrl}?url=${encodeURIComponent(currentUrl)}`);
                         const data = await response.json();
 
@@ -1676,15 +1774,12 @@ async function approveDeal(dealId) {
             } catch (e) {
                 // URL parse hatası, devam et
             }
-        }
 
-        // Affiliate link'e dönüştür (eğer yapılandırılmışsa)
-        let finalUrl = currentUrl;
-        if (currentUrl) {
+            // Affiliate link'e dönüştür (eğer yapılandırılmışsa)
             const convertedUrl = convertToAffiliateLink(currentUrl);
             if (convertedUrl !== currentUrl) {
                 finalUrl = convertedUrl;
-                console.log('✅ Affiliate link\'e dönüştürüldü:', finalUrl);
+                console.log('✅ Emniyet Ağı: Affiliate link\'e dönüştürüldü:', finalUrl);
             }
         }
 
@@ -1701,6 +1796,14 @@ async function approveDeal(dealId) {
         if (finalUrl !== currentUrl) {
             updateData.url = finalUrl;
             updateData.link = finalUrl;
+        }
+
+        // cleanUrl eksikse ve organik link çıkarılabiliyorsa güncelle
+        if (!dealData.cleanUrl) {
+            const clean = cleanProductUrl(currentUrl);
+            if (clean && !clean.includes('btrck.com')) {
+                updateData.cleanUrl = clean;
+            }
         }
 
         await db.collection('deals').doc(dealId).update(updateData);
@@ -1739,144 +1842,33 @@ async function deleteDeal(dealId) {
     }
 }
 
-// Affiliate Link Dönüştürme Fonksiyonları
+// Affiliate Link Dönüştürme Fonksiyonları (Modüler AffiliateManager üzerinden)
 function convertToAffiliateLink(originalUrl) {
-    if (!originalUrl || typeof originalUrl !== 'string') {
-        return originalUrl;
+    if (typeof AffiliateManager !== 'undefined') {
+        return AffiliateManager.convert(originalUrl, affiliateConfig);
     }
-
-    try {
-        const url = new URL(originalUrl);
-        const hostname = url.hostname.toLowerCase();
-
-        // Hepsiburada kısa link kontrolü (app.hb.biz)
-        // Başkasının kısa linkini kendi affiliate linkimize dönüştürmek için
-        // önce gerçek ürün linkini bulmamız gerekir (bu client-side'da yapılamaz)
-        // Bu yüzden kısa linkleri olduğu gibi bırakıyoruz
-        // NOT: Eğer kısa linki kendi affiliate linkinize dönüştürmek istiyorsanız,
-        // önce kısa linki tarayıcıda açıp gerçek ürün linkini alın, sonra admin panelinde kullanın
-        if (hostname.includes('hb.biz') || hostname.includes('app.hb.biz')) {
-            console.log('ℹ️ Kısa link tespit edildi:', originalUrl);
-            console.log('⚠️ Kısa linkler başkasına ait olabilir. Kendi affiliate linkinize dönüştürmek için:');
-            console.log('   1. Kısa linki tarayıcıda açın');
-            console.log('   2. Gerçek ürün linkini kopyalayın');
-            console.log('   3. Admin panelinde o linki kullanın');
-
-            // Eğer config'de utmSource varsa, kısa linki değiştirmeye çalışabiliriz
-            // Ama kısa linkler redirect yaptığı için client-side'da gerçek URL'yi bulamayız
-            // Bu yüzden kullanıcıya uyarı gösterip linki olduğu gibi bırakıyoruz
-            if (affiliateConfig.hepsiburada.utmSource) {
-                // Kısa linki olduğu gibi bırak, ama kullanıcıya bilgi ver
-                return originalUrl;
-            }
-            return originalUrl; // Kısa link olduğu gibi kalır
-        }
-
-        // Trendyol
-        if (hostname.includes('trendyol.com')) {
-            // Mevcut boutiqueId'yi temizle (başkasının affiliate linkini kendi linkimize dönüştürmek için)
-            url.searchParams.delete('boutiqueId');
-
-            if (affiliateConfig.trendyol.boutiqueId) {
-                // Kendi boutiqueId'yi ekle
-                url.searchParams.set('boutiqueId', affiliateConfig.trendyol.boutiqueId);
-                return url.toString();
-            }
-        }
-
-        // Hepsiburada (Link Gelir) - Normal ürün linkleri
-        if (hostname.includes('hepsiburada.com')) {
-            // Hepsiburada'nın "Tavsiyeni Paylaş" butonundan gelen linkler zaten affiliate linktir
-            // Eğer link zaten kendi affiliate linkimizse (utm_source bizim ID'mizle eşleşiyorsa), değiştirme
-            const existingUtmSource = url.searchParams.get('utm_source');
-            const ourUtmSource = affiliateConfig.hepsiburada.utmSource;
-
-            // Eğer link zaten bizim affiliate linkimizse, olduğu gibi bırak
-            if (existingUtmSource && ourUtmSource && existingUtmSource === ourUtmSource) {
-                console.log('ℹ️ Link zaten kendi affiliate linkiniz:', originalUrl);
-                return originalUrl; // Kendi linkiniz, değiştirme
-            }
-
-            // Başkasının affiliate linkini kendi affiliate linkimize dönüştür
-            // Mevcut affiliate parametrelerini temizle
-            url.searchParams.delete('utm_source');
-            url.searchParams.delete('utm_medium');
-            url.searchParams.delete('utm_campaign');
-            url.searchParams.delete('utm_content');
-            url.searchParams.delete('wt_inf');
-
-            if (affiliateConfig.hepsiburada.utmSource) {
-                // Kendi affiliate parametrelerini ekle
-                url.searchParams.set('utm_source', affiliateConfig.hepsiburada.utmSource);
-                url.searchParams.set('utm_medium', 'referral');
-                url.searchParams.set('utm_campaign', 'urun_paylasim');
-                return url.toString();
-            }
-        }
-
-        // N11
-        if (hostname.includes('n11.com')) {
-            // Mevcut ref parametresini temizle
-            url.searchParams.delete('ref');
-
-            if (affiliateConfig.n11.refId) {
-                // Kendi ref ID'sini ekle
-                url.searchParams.set('ref', affiliateConfig.n11.refId);
-                return url.toString();
-            }
-        }
-
-        // Amazon
-        if (hostname.includes('amazon.com.tr') || hostname.includes('amazon.com')) {
-            // Mevcut tag parametresini temizle
-            url.searchParams.delete('tag');
-
-            if (affiliateConfig.amazon.tag) {
-                // Kendi tag'ini ekle
-                url.searchParams.set('tag', affiliateConfig.amazon.tag);
-                return url.toString();
-            }
-        }
-
-        // GittiGidiyor
-        if (hostname.includes('gittigidiyor.com')) {
-            // Mevcut affiliateId parametresini temizle
-            url.searchParams.delete('affiliateId');
-
-            if (affiliateConfig.gittigidiyor.affiliateId) {
-                // Kendi affiliateId'yi ekle
-                url.searchParams.set('affiliateId', affiliateConfig.gittigidiyor.affiliateId);
-                return url.toString();
-            }
-        }
-
-        // Desteklenmeyen site veya affiliate ID yoksa orijinal linki döndür
-        return originalUrl;
-    } catch (error) {
-        console.error('Link dönüştürme hatası:', error);
-        return originalUrl;
-    }
+    return originalUrl;
 }
 
 function detectStoreFromUrl(url) {
-    if (!url || typeof url !== 'string') {
-        return 'unknown';
+    if (typeof AffiliateManager !== 'undefined') {
+        return AffiliateManager.detectStore(url);
     }
+    return 'Bilinmeyen';
+}
 
-    try {
-        const urlObj = new URL(url);
-        const hostname = urlObj.hostname.toLowerCase();
-
-        if (hostname.includes('trendyol.com')) return 'Trendyol';
-        if (hostname.includes('hepsiburada.com')) return 'Hepsiburada';
-        if (hostname.includes('n11.com')) return 'N11';
-        if (hostname.includes('amazon.com')) return 'Amazon';
-        if (hostname.includes('gittigidiyor.com')) return 'GittiGidiyor';
-
-        return 'Bilinmeyen';
-    } catch (error) {
-        return 'Bilinmeyen';
+function cleanProductUrl(url) {
+    if (typeof AffiliateManager !== 'undefined' && typeof AffiliateManager.cleanProductUrl === 'function') {
+        return AffiliateManager.cleanProductUrl(url);
     }
+    return url || '';
+}
+
+function isAffiliateSupportedStore(storeOrUrl) {
+    if (typeof AffiliateManager !== 'undefined' && typeof AffiliateManager.isStoreSupported === 'function') {
+        return AffiliateManager.isStoreSupported(storeOrUrl, typeof affiliateConfig !== 'undefined' ? affiliateConfig : null);
+    }
+    return false;
 }
 
 // Show deal modal
@@ -1889,6 +1881,41 @@ async function showDealModal(deal) {
     const postedBy = deal.postedBy || 'Bilinmiyor';
     const isApproved = deal.isApproved === true;
     const isUserSubmitted = deal.isUserSubmitted === true;
+    const isAffiliateSupported = isAffiliateSupportedStore(deal.store) ||
+        isAffiliateSupportedStore(deal.cleanUrl) ||
+        isAffiliateSupportedStore(deal.url) ||
+        isAffiliateSupportedStore(deal.link);
+
+    // Affiliate link ve temiz URL hesaplama (Teknosa ve Hepsiburada gibi affiliate destekli mağazalar için otomatik hazır hale getirme)
+    let initialCleanUrl = deal.cleanUrl || cleanProductUrl(deal.url || deal.link || '');
+    let initialAffiliateUrl = deal.url || deal.link || '';
+
+    if (isAffiliateSupported) {
+        // Eğer affiliateUrl henüz hazır affiliate linki değilse veya boşsa, otomatik olarak affiliate link üret
+        const isAlreadyAffiliate = Boolean(initialAffiliateUrl && typeof AffiliateManager !== 'undefined' && typeof AffiliateManager.isAlreadyAffiliate === 'function' && AffiliateManager.isAlreadyAffiliate(initialAffiliateUrl, affiliateConfig));
+        if (!initialAffiliateUrl || !isAlreadyAffiliate) {
+            const sourceUrl = (initialCleanUrl && !initialCleanUrl.includes('btrck.com') && !initialCleanUrl.includes('7t4g.adj.st'))
+                ? initialCleanUrl
+                : (initialAffiliateUrl || '');
+            if (sourceUrl) {
+                const converted = convertToAffiliateLink(sourceUrl);
+                if (converted && converted !== sourceUrl) {
+                    initialAffiliateUrl = converted;
+                }
+            }
+        }
+        // Eğer cleanUrl boşsa veya affiliate linki ise, temiz linki unwrap et
+        if (!initialCleanUrl || initialCleanUrl.includes('btrck.com') || initialCleanUrl.includes('7t4g.adj.st') || initialCleanUrl.includes('adj.st')) {
+            const unwrap = cleanProductUrl(initialCleanUrl || initialAffiliateUrl);
+            if (unwrap && !unwrap.includes('btrck.com') && !unwrap.includes('7t4g.adj.st')) {
+                initialCleanUrl = unwrap;
+            }
+        }
+    } else {
+        // Affiliate kapalı veya desteklenmeyen mağaza: Her iki linki de temiz kanonik ürün URL'sine unwrap et
+        initialCleanUrl = cleanProductUrl(initialCleanUrl || initialAffiliateUrl);
+        initialAffiliateUrl = initialCleanUrl;
+    }
 
     // Kullanıcı bilgilerini Firestore'dan çek (eğer kullanıcı tarafından paylaşıldıysa)
     let userDisplayName = 'Bot';
@@ -2061,23 +2088,80 @@ async function showDealModal(deal) {
                     </label>
                 </div>
                 <div class="h-px bg-slate-200 dark:bg-slate-700 w-full"></div>
-                <label class="flex flex-col gap-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm font-semibold text-gray-900 dark:text-white">Mağaza / Affiliate Linki</span>
-                        <button type="button" id="convertToAffiliateBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-medium transition-colors">
-                            <span class="material-symbols-outlined text-[16px]">swap_horiz</span>
-                            <span>Affiliate Link'e Dönüştür</span>
-                        </button>
+                ${isAffiliateSupported ? `
+                <!-- Bağlantı & Affiliate (Çoklu Görünüm) -->
+                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-4">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary text-[20px]">link</span>
+                        <h4 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Bağlantı & Affiliate (Çoklu Görünüm)</h4>
                     </div>
-                    <div class="flex gap-2">
-                        <input id="editUrl" class="form-input flex-1 rounded-lg bg-background-light dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-primary h-12 px-4 text-base" type="url" value="${escapeHtml(deal.url || deal.link || '')}"/>
-                        <a id="previewLinkBtn" class="flex items-center justify-center gap-1.5 px-4 h-12 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-sm font-semibold transition-all whitespace-nowrap" href="${escapeHtml(deal.url || deal.link || '#')}" target="_blank">
-                            <span class="material-symbols-outlined text-[18px]">open_in_new</span>
-                            <span>Linki Test Et</span>
-                        </a>
+
+                    <!-- 1. Orijinal / Temiz Mağaza Linki (cleanUrl) -->
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-gray-700 dark:text-slate-300">Orijinal Mağaza Linki (Temiz / Görünen Link)</span>
+                            <span class="text-[11px] text-slate-400 font-mono">cleanUrl</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <input id="editCleanUrl" class="form-input flex-1 rounded-lg bg-white dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-11 px-3 text-sm" type="url" placeholder="https://www.teknosa.com/..." value="${escapeHtml(initialCleanUrl)}"/>
+                            <a id="previewCleanUrlBtn" class="flex items-center justify-center gap-1.5 px-3 h-11 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-gray-800 dark:text-slate-200 text-xs font-semibold transition-all whitespace-nowrap" href="${escapeHtml(initialCleanUrl || '#')}" target="_blank">
+                                <span class="material-symbols-outlined text-[16px]">open_in_browser</span>
+                                <span>Orijinal Linki Aç</span>
+                            </a>
+                        </div>
+                        <div class="flex items-center justify-between mt-1">
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">Kullanıcılara gösterilen, kopyalanan ve paylaşılan temiz ürün linki.</p>
+                            <button type="button" id="convertToAffiliateBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-black font-semibold text-xs transition-all shadow-sm">
+                                <span class="material-symbols-outlined text-[16px]">auto_fix_high</span>
+                                <span>Orijinalden Affiliate Üret</span>
+                            </button>
+                        </div>
                     </div>
-                    <p id="affiliateStatus" class="text-xs text-slate-500 dark:text-slate-400 mt-1"></p>
-                </label>
+
+                    <div class="h-px bg-slate-200 dark:bg-slate-700 w-full"></div>
+
+                    <!-- 2. Aktif Affiliate Linki (link / url) -->
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-gray-700 dark:text-slate-300">Aktif Affiliate Linki (Mağazaya Git Butonunda Çalışan)</span>
+                            <span class="text-[11px] text-primary font-mono font-bold">link / url</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <input id="editAffiliateUrl" class="form-input flex-1 rounded-lg bg-white dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-primary font-mono text-xs h-11 px-3" type="url" placeholder="https://rdr.btrck.com/..." value="${escapeHtml(initialAffiliateUrl)}"/>
+                            <!-- Backward compatibility hidden inputs -->
+                            <input id="editUrl" type="hidden" value="${escapeHtml(initialAffiliateUrl)}"/>
+                            <a id="previewAffiliateBtn" class="flex items-center justify-center gap-1.5 px-3 h-11 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-semibold transition-all whitespace-nowrap" href="${escapeHtml(initialAffiliateUrl || '#')}" target="_blank">
+                                <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+                                <span>Affiliate Test Et</span>
+                            </a>
+                            <a id="previewLinkBtn" class="hidden" href="${escapeHtml(initialAffiliateUrl || '#')}" target="_blank"></a>
+                        </div>
+                        <p id="affiliateStatus" class="text-xs text-slate-500 dark:text-slate-400 mt-1"></p>
+                    </div>
+                </div>
+                ` : `
+                <!-- Bağlantı (Standart Tek Link) -->
+                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary text-[20px]">link</span>
+                        <h4 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Bağlantı</h4>
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-gray-700 dark:text-slate-300">Ürün URL</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <input id="editCleanUrl" class="form-input flex-1 rounded-lg bg-white dark:bg-background-dark border border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary text-gray-900 dark:text-white h-11 px-3 text-sm" type="url" placeholder="https://..." value="${escapeHtml(deal.cleanUrl || cleanProductUrl(deal.url || deal.link || ''))}"/>
+                            <input id="editUrl" type="hidden" value="${escapeHtml(deal.cleanUrl || deal.url || deal.link || '')}"/>
+                            <a id="previewCleanUrlBtn" class="flex items-center justify-center gap-1.5 px-3 h-11 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-gray-800 dark:text-slate-200 text-xs font-semibold transition-all whitespace-nowrap" href="${escapeHtml(deal.cleanUrl || cleanProductUrl(deal.url || deal.link || '#'))}" target="_blank">
+                                <span class="material-symbols-outlined text-[16px]">open_in_browser</span>
+                                <span>Linki Test Et</span>
+                            </a>
+                        </div>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400">Ürünün doğrudan mağaza linki.</p>
+                    </div>
+                </div>
+                `}
                 <div class="grid grid-cols-1 gap-6">
                     <label class="flex flex-col gap-2">
                         <span class="text-sm font-semibold text-gray-900 dark:text-white">Kupon Kodu (Opsiyonel)</span>
@@ -2275,28 +2359,52 @@ async function showDealModal(deal) {
         });
     }
 
-    // Affiliate link dönüştürme butonu
+    // Affiliate link dönüştürme ve çoklu link yönetimi
     const convertToAffiliateBtn = document.getElementById('convertToAffiliateBtn');
+    const editCleanUrlEl = document.getElementById('editCleanUrl');
+    const editAffiliateUrlEl = document.getElementById('editAffiliateUrl');
     const editUrlEl = document.getElementById('editUrl');
+    const previewCleanUrlBtn = document.getElementById('previewCleanUrlBtn');
+    const previewAffiliateBtn = document.getElementById('previewAffiliateBtn');
     const previewLinkBtn = document.getElementById('previewLinkBtn');
     const affiliateStatusEl = document.getElementById('affiliateStatus');
 
-    if (convertToAffiliateBtn && editUrlEl) {
+    if (convertToAffiliateBtn) {
         convertToAffiliateBtn.addEventListener('click', async () => {
-            const currentUrl = editUrlEl.value.trim();
-            if (!currentUrl) {
+            let sourceUrl = editCleanUrlEl?.value.trim() || editAffiliateUrlEl?.value.trim() || editUrlEl?.value.trim() || '';
+            if (!sourceUrl) {
                 showError('Lütfen önce bir link girin!');
                 return;
             }
 
+            // Eğer cleanUrl boşsa veya btrck linki yapıştırılmışsa cleanUrl'i unwrap edelim
+            if (editCleanUrlEl && (!editCleanUrlEl.value.trim() || editCleanUrlEl.value.includes('btrck.com'))) {
+                const unwrap = cleanProductUrl(sourceUrl);
+                if (unwrap && !unwrap.includes('btrck.com')) {
+                    editCleanUrlEl.value = unwrap;
+                    sourceUrl = unwrap;
+                    if (previewCleanUrlBtn) previewCleanUrlBtn.href = unwrap;
+                }
+            }
+
             // Kısa link kontrolü ve otomatik çözme
-            let urlToConvert = currentUrl;
+            let urlToConvert = sourceUrl;
             try {
-                const url = new URL(currentUrl);
+                const url = new URL(sourceUrl);
                 const hostname = url.hostname.toLowerCase();
 
-                if (hostname.includes('hb.biz') || hostname.includes('app.hb.biz')) {
-                    // Kısa link tespit edildi - Otomatik çöz
+                const isShortlink = hostname.includes('hb.biz') ||
+                    hostname.includes('app.hb.biz') ||
+                    hostname.includes('paylaskazan.teknosa.com') ||
+                    hostname.includes('ty.gl') ||
+                    hostname.includes('sl.n11.com') ||
+                    hostname.includes('amzn.to') ||
+                    hostname.includes('amzn.eu') ||
+                    hostname.includes('link.amazon') ||
+                    hostname.includes('bit.ly') ||
+                    hostname.includes('tinyurl.com');
+
+                if (isShortlink) {
                     if (affiliateStatusEl) {
                         affiliateStatusEl.innerHTML = `
                             <div style="background: #e7f3ff; padding: 10px; border-radius: 5px; border-left: 4px solid #2196F3;">
@@ -2307,15 +2415,17 @@ async function showDealModal(deal) {
                         affiliateStatusEl.className = 'text-xs mt-1';
                     }
 
-                    // Firebase Function ile kısa linki çöz
                     try {
                         const functionsUrl = `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net/resolveShortLink`;
-
-                        const response = await fetch(`${functionsUrl}?url=${encodeURIComponent(currentUrl)}`);
+                        const response = await fetch(`${functionsUrl}?url=${encodeURIComponent(sourceUrl)}`);
                         const data = await response.json();
 
                         if (data.success && data.resolvedUrl) {
                             urlToConvert = data.resolvedUrl;
+                            if (editCleanUrlEl) {
+                                editCleanUrlEl.value = cleanProductUrl(urlToConvert);
+                                if (previewCleanUrlBtn) previewCleanUrlBtn.href = editCleanUrlEl.value;
+                            }
                             if (affiliateStatusEl) {
                                 affiliateStatusEl.innerHTML = `
                                     <div style="background: #d4edda; padding: 10px; border-radius: 5px; border-left: 4px solid #28a745;">
@@ -2355,39 +2465,69 @@ async function showDealModal(deal) {
             const convertedUrl = convertToAffiliateLink(urlToConvert);
 
             if (convertedUrl !== urlToConvert) {
-                editUrlEl.value = convertedUrl;
-                if (previewLinkBtn) {
-                    previewLinkBtn.href = convertedUrl;
-                }
+                if (editAffiliateUrlEl) editAffiliateUrlEl.value = convertedUrl;
+                if (editUrlEl) editUrlEl.value = convertedUrl;
+                if (previewAffiliateBtn) previewAffiliateBtn.href = convertedUrl;
+                if (previewLinkBtn) previewLinkBtn.href = convertedUrl;
                 if (affiliateStatusEl) {
                     affiliateStatusEl.textContent = `✅ ${store} affiliate linkine dönüştürüldü`;
                     affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
                 }
                 showSuccess(`${store} affiliate linkine dönüştürüldü!`);
             } else {
-                // Link değişmedi - affiliate ID yapılandırılmamış olabilir
                 if (affiliateStatusEl) {
-                    if (store === 'Bilinmeyen') {
-                        affiliateStatusEl.textContent = '⚠️ Bu site için affiliate link yapılandırması bulunamadı';
-                        affiliateStatusEl.className = 'text-xs text-amber-600 dark:text-amber-400 mt-1';
-                    } else {
-                        affiliateStatusEl.textContent = `⚠️ ${store} için affiliate ID yapılandırılmamış (config.js dosyasını kontrol edin)`;
-                        affiliateStatusEl.className = 'text-xs text-amber-600 dark:text-amber-400 mt-1';
-                    }
+                    affiliateStatusEl.textContent = 'ℹ️ Orijinal mağaza linki korundu (Şalter kapalı veya mağaza henüz canlıda değil)';
+                    affiliateStatusEl.className = 'text-xs text-slate-500 dark:text-slate-400 mt-1';
                 }
-                showError(`${store} için affiliate ID yapılandırılmamış. Lütfen config.js dosyasını kontrol edin.`);
+                showSuccess('Orijinal mağaza linki korundu.');
             }
         });
     }
 
-    // URL değiştiğinde preview link'i güncelle
-    if (editUrlEl && previewLinkBtn) {
-        editUrlEl.addEventListener('input', () => {
-            const url = editUrlEl.value.trim();
-            if (url) {
-                previewLinkBtn.href = url;
-            } else {
-                previewLinkBtn.href = '#';
+    // URL input değişikliklerinde linkleri dinamik senkronize et
+    if (editCleanUrlEl && previewCleanUrlBtn) {
+        editCleanUrlEl.addEventListener('input', () => {
+            const url = editCleanUrlEl.value.trim();
+            previewCleanUrlBtn.href = url || '#';
+        });
+    }
+
+    // Affiliate durum rozeti başlangıç ayarı
+    if (affiliateStatusEl && isAffiliateSupported) {
+        if (initialAffiliateUrl && initialAffiliateUrl.includes('btrck.com')) {
+            affiliateStatusEl.textContent = '✅ Teknosa TUNE affiliate linki hazır ve aktif';
+            affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
+        } else if (initialAffiliateUrl && (initialAffiliateUrl.includes('7t4g.adj.st') || initialAffiliateUrl.includes('adj_adgroup='))) {
+            affiliateStatusEl.textContent = '✅ Hepsiburada LinkGelir (Adjust) affiliate linki hazır ve aktif';
+            affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
+        } else {
+            affiliateStatusEl.textContent = 'ℹ️ Orijinal mağaza linki tespit edildi. "Orijinalden Affiliate Üret" ile dönüştürebilirsiniz.';
+            affiliateStatusEl.className = 'text-xs text-slate-500 dark:text-slate-400 mt-1';
+        }
+    }
+
+    if (editAffiliateUrlEl) {
+        editAffiliateUrlEl.addEventListener('input', () => {
+            const url = editAffiliateUrlEl.value.trim();
+            if (editUrlEl) editUrlEl.value = url;
+            if (previewAffiliateBtn) previewAffiliateBtn.href = url || '#';
+            if (previewLinkBtn) previewLinkBtn.href = url || '#';
+            if (affiliateStatusEl) {
+                if (url.includes('btrck.com')) {
+                    affiliateStatusEl.textContent = '✅ Teknosa TUNE affiliate linki hazır ve aktif';
+                    affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
+                } else if (url.includes('7t4g.adj.st') || url.includes('adj_adgroup=')) {
+                    affiliateStatusEl.textContent = '✅ Hepsiburada LinkGelir (Adjust) affiliate linki hazır ve aktif';
+                    affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
+                } else if (url.includes('teknosa.com')) {
+                    affiliateStatusEl.textContent = '⚠️ Bu organik bir Teknosa linkidir. "Orijinalden Affiliate Üret" butonuna basarak affiliate yapabilirsiniz.';
+                    affiliateStatusEl.className = 'text-xs text-amber-600 dark:text-amber-400 mt-1';
+                } else if (url.includes('hepsiburada.com')) {
+                    affiliateStatusEl.textContent = '⚠️ Bu organik bir Hepsiburada linkidir. "Orijinalden Affiliate Üret" butonuna basarak affiliate yapabilirsiniz.';
+                    affiliateStatusEl.className = 'text-xs text-amber-600 dark:text-amber-400 mt-1';
+                } else {
+                    affiliateStatusEl.textContent = '';
+                }
             }
         });
     }
@@ -2709,7 +2849,8 @@ async function saveDealChanges() {
         const description = document.getElementById('editDescription')?.value || currentDeal.description || '';
         const price = parseFloat(document.getElementById('editPrice')?.value) || currentDeal.price || 0;
         const originalPrice = parseFloat(document.getElementById('editOriginalPrice')?.value) || currentDeal.originalPrice || price || 0;
-        const url = document.getElementById('editUrl')?.value || currentDeal.url || currentDeal.link || '';
+        const cleanUrlInput = document.getElementById('editCleanUrl')?.value?.trim() || '';
+        const affiliateUrlInput = document.getElementById('editAffiliateUrl')?.value?.trim() || document.getElementById('editUrl')?.value?.trim() || currentDeal.url || currentDeal.link || '';
         const category = document.getElementById('editCategory')?.value || currentDeal.category || '';
         const subcategoryEl = document.getElementById('editSubcategory');
         const subcategory = (subcategoryEl?.value && subcategoryEl.value !== 'none' && subcategoryEl.value !== 'Alt kategori yok')
@@ -2725,6 +2866,51 @@ async function saveDealChanges() {
         const ratingValue = (ratingValStr !== undefined && ratingValStr !== '') ? parseFloat(ratingValStr) : null;
         const ratingCntStr = document.getElementById('editRatingCount')?.value;
         const ratingCount = (ratingCntStr !== undefined && ratingCntStr !== '') ? parseInt(ratingCntStr) : null;
+
+        let finalCleanUrl = cleanUrlInput || currentDeal.cleanUrl || '';
+        let processedUrl = affiliateUrlInput || currentDeal.url || currentDeal.link || '';
+
+        const isDealAffiliateSupported = isAffiliateSupportedStore(store) ||
+            isAffiliateSupportedStore(cleanUrlInput) ||
+            isAffiliateSupportedStore(affiliateUrlInput) ||
+            isAffiliateSupportedStore(currentDeal.store) ||
+            isAffiliateSupportedStore(currentDeal.cleanUrl);
+
+        if (!isDealAffiliateSupported) {
+            // Affiliate desteği olmayan veya şalteri kapalı olan mağazalar: Standart tek link modeli
+            const singleUrl = cleanUrlInput || affiliateUrlInput || currentDeal.url || currentDeal.link || '';
+            const cleaned = cleanProductUrl(singleUrl);
+            finalCleanUrl = cleaned;
+            processedUrl = cleaned;
+        } else {
+            // Affiliate desteklenen mağazalar (Amazon, Teknosa & Hepsiburada)
+            // 1. Temiz URL boş veya affiliate linki ise unwrap et
+            const isCleanAffiliate = !finalCleanUrl || finalCleanUrl.includes('btrck.com') || finalCleanUrl.includes('7t4g.adj.st') || finalCleanUrl.includes('adj.st') ||
+                (typeof AffiliateManager !== 'undefined' && AffiliateManager.isAlreadyAffiliate(finalCleanUrl, affiliateConfig));
+            if (isCleanAffiliate) {
+                const unwrap = cleanProductUrl(finalCleanUrl || processedUrl);
+                if (unwrap && !unwrap.includes('btrck.com') && !unwrap.includes('7t4g.adj.st')) {
+                    finalCleanUrl = unwrap;
+                }
+            }
+
+            // 2. Affiliate link boşsa veya henüz affiliate linki değilse otomatik dönüştür
+            const isAffiliate = Boolean(processedUrl && typeof AffiliateManager !== 'undefined' && typeof AffiliateManager.isAlreadyAffiliate === 'function' && AffiliateManager.isAlreadyAffiliate(processedUrl, affiliateConfig));
+            if (!processedUrl || !isAffiliate) {
+                const sourceForAffiliate = (finalCleanUrl && !finalCleanUrl.includes('btrck.com') && !finalCleanUrl.includes('7t4g.adj.st')) ? finalCleanUrl : processedUrl;
+                if (sourceForAffiliate) {
+                    try {
+                        const converted = convertToAffiliateLink(sourceForAffiliate);
+                        if (converted && converted !== sourceForAffiliate) {
+                            processedUrl = converted;
+                            console.log('✅ saveDealChanges: Affiliate link\'e dönüştürüldü:', processedUrl);
+                        }
+                    } catch (e) {
+                        console.warn('Affiliate auto-conversion error in saveDealChanges:', e);
+                    }
+                }
+            }
+        }
 
         // Mevcut görselleri al (yeni görsel yüklenmişse güncellenmiş olacak)
         let imageUrls = currentDeal.imageUrls || [];
@@ -2745,7 +2931,7 @@ async function saveDealChanges() {
             showError('Geçerli bir fiyat giriniz!');
             throw new Error('Geçerli bir fiyat giriniz!');
         }
-        if (!url.trim()) {
+        if (!processedUrl && !finalCleanUrl) {
             showError('Ürün linki gereklidir!');
             throw new Error('Ürün linki gereklidir!');
         }
@@ -2774,8 +2960,9 @@ async function saveDealChanges() {
             price: price || 0,
             originalPrice: originalPrice || price || 0,
             discountRate: discountRate,
-            url: url.trim(),
-            link: url.trim(), // link alanı da ekle (geriye dönük uyumluluk için)
+            cleanUrl: finalCleanUrl || null,
+            url: processedUrl,
+            link: processedUrl, // link alanı da ekle (geriye dönük uyumluluk için)
             category: category,
             imageUrl: imageUrl || '',
             hidePrice: hidePrice,
@@ -6996,6 +7183,265 @@ async function toggleBotkolikChat() {
     }
 }
 
+// Firestore settings/app belgesini anlık dinleyen listener (Tüm sekmeler ve cihazlar arasında anlık senkronizasyon)
+let adminAffiliateSettingsUnsubscribe = null;
+function initAdminAffiliateSettingsListener() {
+    if (typeof db === 'undefined' || !db || adminAffiliateSettingsUnsubscribe) return;
+    try {
+        adminAffiliateSettingsUnsubscribe = db.collection('settings').doc('app').onSnapshot((doc) => {
+            if (doc.exists && doc.data()) {
+                const data = doc.data();
+                const teknosaEnabled = data.teknosaAffiliateEnabled !== false;
+                const hepsiburadaEnabled = data.hepsiburadaAffiliateEnabled !== false;
+                const amazonEnabled = data.amazonAffiliateEnabled !== false;
+
+                if (typeof affiliateConfig !== 'undefined') {
+                    if (affiliateConfig.teknosa) affiliateConfig.teknosa.enabled = teknosaEnabled;
+                    if (affiliateConfig.hepsiburada) affiliateConfig.hepsiburada.enabled = hepsiburadaEnabled;
+                    if (affiliateConfig.amazon) affiliateConfig.amazon.enabled = amazonEnabled;
+                }
+
+                const tToggle = document.getElementById('settingsToggleTeknosaAffiliateBtn');
+                if (tToggle && tToggle.checked !== teknosaEnabled) {
+                    tToggle.checked = teknosaEnabled;
+                }
+
+                const hToggle = document.getElementById('settingsToggleHepsiburadaAffiliateBtn');
+                if (hToggle && hToggle.checked !== hepsiburadaEnabled) {
+                    hToggle.checked = hepsiburadaEnabled;
+                }
+
+                const aToggle = document.getElementById('settingsToggleAmazonAffiliateBtn');
+                if (aToggle && aToggle.checked !== amazonEnabled) {
+                    aToggle.checked = amazonEnabled;
+                }
+                console.log('🔄 [AffiliateSettings] Firestore settings/app anlık güncellendi: Teknosa =', teknosaEnabled, ', Hepsiburada =', hepsiburadaEnabled, ', Amazon =', amazonEnabled);
+            }
+        }, (err) => {
+            console.warn('Affiliate settings listener error:', err);
+        });
+    } catch (e) {
+        console.warn('initAdminAffiliateSettingsListener error:', e);
+    }
+}
+
+// Teknosa Affiliate durumunu Firestore'dan yükle ve switch'i güncelle
+async function loadTeknosaAffiliateStatus() {
+    initAdminAffiliateSettingsListener();
+    try {
+        console.log('📥 Loading Teknosa affiliate status from Firestore...');
+        const settingsDoc = await db.collection('settings').doc('app').get();
+        const isEnabled = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().teknosaAffiliateEnabled !== false)
+            : true;
+
+        console.log('📊 Teknosa affiliate enabled:', isEnabled);
+
+        // config.js içerisindeki affiliateConfig nesnesini güncelle
+        if (typeof affiliateConfig !== 'undefined' && affiliateConfig.teknosa) {
+            affiliateConfig.teknosa.enabled = isEnabled;
+        }
+
+        const toggle = document.getElementById('settingsToggleTeknosaAffiliateBtn');
+        if (toggle) {
+            toggle.checked = isEnabled;
+        }
+    } catch (error) {
+        console.error('❌ Error loading Teknosa affiliate status:', error);
+    }
+}
+
+// Teknosa Affiliate durumunu toggle et ve Firestore settings/app belgesine yaz
+async function toggleTeknosaAffiliate() {
+    try {
+        console.log('🔄 toggleTeknosaAffiliate başladı...');
+        const settingsRef = db.collection('settings').doc('app');
+        const settingsDoc = await settingsRef.get();
+
+        const currentStatus = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().teknosaAffiliateEnabled !== false)
+            : true;
+
+        const newStatus = !currentStatus;
+        console.log('📊 New Teknosa affiliate status:', newStatus);
+
+        await settingsRef.set({
+            teknosaAffiliateEnabled: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        // config.js içerisindeki affiliateConfig nesnesini anında senkronize et
+        if (typeof affiliateConfig !== 'undefined' && affiliateConfig.teknosa) {
+            affiliateConfig.teknosa.enabled = newStatus;
+        }
+
+        const toggle = document.getElementById('settingsToggleTeknosaAffiliateBtn');
+        if (toggle) {
+            toggle.checked = newStatus;
+        }
+
+        const message = newStatus
+            ? '✅ Teknosa Affiliate (Paylaş Kazan) dönüşümü aktifleştirildi!'
+            : '🛡️ Teknosa Affiliate dönüşümü kapatıldı! Sistem güvenli fallback (temiz ürün linki) moduna geçti.';
+        showSuccess(message);
+
+        console.log(`✅ Teknosa affiliate status set to ${newStatus}`);
+    } catch (error) {
+        console.error('❌ Error toggling Teknosa affiliate status:', error);
+        showError('Teknosa affiliate durumu değiştirilirken hata oluştu: ' + error.message);
+
+        // Reset toggle switch state on error
+        const toggle = document.getElementById('settingsToggleTeknosaAffiliateBtn');
+        if (toggle) {
+            toggle.checked = !toggle.checked;
+        }
+    }
+}
+
+// Hepsiburada Affiliate durumunu Firestore'dan yükle ve switch'i güncelle
+async function loadHepsiburadaAffiliateStatus() {
+    try {
+        console.log('📥 Loading Hepsiburada affiliate status from Firestore...');
+        const settingsDoc = await db.collection('settings').doc('app').get();
+        const isEnabled = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().hepsiburadaAffiliateEnabled !== false)
+            : true;
+
+        console.log('📊 Hepsiburada affiliate enabled:', isEnabled);
+
+        // config.js içerisindeki affiliateConfig nesnesini güncelle
+        if (typeof affiliateConfig !== 'undefined' && affiliateConfig.hepsiburada) {
+            affiliateConfig.hepsiburada.enabled = isEnabled;
+        }
+
+        const toggle = document.getElementById('settingsToggleHepsiburadaAffiliateBtn');
+        if (toggle) {
+            toggle.checked = isEnabled;
+        }
+    } catch (error) {
+        console.error('❌ Error loading Hepsiburada affiliate status:', error);
+    }
+}
+
+// Hepsiburada Affiliate durumunu toggle et ve Firestore settings/app belgesine yaz
+async function toggleHepsiburadaAffiliate() {
+    try {
+        console.log('🔄 toggleHepsiburadaAffiliate başladı...');
+        const settingsRef = db.collection('settings').doc('app');
+        const settingsDoc = await settingsRef.get();
+
+        const currentStatus = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().hepsiburadaAffiliateEnabled !== false)
+            : true;
+
+        const newStatus = !currentStatus;
+        console.log('📊 New Hepsiburada affiliate status:', newStatus);
+
+        await settingsRef.set({
+            hepsiburadaAffiliateEnabled: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        // config.js içerisindeki affiliateConfig nesnesini anında senkronize et
+        if (typeof affiliateConfig !== 'undefined' && affiliateConfig.hepsiburada) {
+            affiliateConfig.hepsiburada.enabled = newStatus;
+        }
+
+        const toggle = document.getElementById('settingsToggleHepsiburadaAffiliateBtn');
+        if (toggle) {
+            toggle.checked = newStatus;
+        }
+
+        const message = newStatus
+            ? '✅ Hepsiburada Affiliate (LinkGelir) dönüşümü aktifleştirildi!'
+            : '🛡️ Hepsiburada Affiliate dönüşümü kapatıldı! Sistem güvenli fallback (temiz ürün linki) moduna geçti.';
+        showSuccess(message);
+
+        console.log(`✅ Hepsiburada affiliate status set to ${newStatus}`);
+    } catch (error) {
+        console.error('❌ Error toggling Hepsiburada affiliate status:', error);
+        showError('Hepsiburada affiliate durumu değiştirilirken hata oluştu: ' + error.message);
+
+        // Reset toggle switch state on error
+        const toggle = document.getElementById('settingsToggleHepsiburadaAffiliateBtn');
+        if (toggle) {
+            toggle.checked = !toggle.checked;
+        }
+    }
+}
+
+// Amazon Affiliate durumunu Firestore'dan yükle ve switch'i güncelle
+async function loadAmazonAffiliateStatus() {
+    try {
+        console.log('📥 Loading Amazon affiliate status from Firestore...');
+        const settingsDoc = await db.collection('settings').doc('app').get();
+        const isEnabled = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().amazonAffiliateEnabled !== false)
+            : true;
+
+        console.log('📊 Amazon affiliate enabled:', isEnabled);
+
+        // config.js içerisindeki affiliateConfig nesnesini güncelle
+        if (typeof affiliateConfig !== 'undefined' && affiliateConfig.amazon) {
+            affiliateConfig.amazon.enabled = isEnabled;
+        }
+
+        const toggle = document.getElementById('settingsToggleAmazonAffiliateBtn');
+        if (toggle) {
+            toggle.checked = isEnabled;
+        }
+    } catch (error) {
+        console.error('❌ Error loading Amazon affiliate status:', error);
+    }
+}
+
+// Amazon Affiliate durumunu toggle et ve Firestore settings/app belgesine yaz
+async function toggleAmazonAffiliate() {
+    try {
+        console.log('🔄 toggleAmazonAffiliate başladı...');
+        const settingsRef = db.collection('settings').doc('app');
+        const settingsDoc = await settingsRef.get();
+
+        const currentStatus = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().amazonAffiliateEnabled !== false)
+            : true;
+
+        const newStatus = !currentStatus;
+        console.log('📊 New Amazon affiliate status:', newStatus);
+
+        await settingsRef.set({
+            amazonAffiliateEnabled: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        // config.js içerisindeki affiliateConfig nesnesini anında senkronize et
+        if (typeof affiliateConfig !== 'undefined' && affiliateConfig.amazon) {
+            affiliateConfig.amazon.enabled = newStatus;
+        }
+
+        const toggle = document.getElementById('settingsToggleAmazonAffiliateBtn');
+        if (toggle) {
+            toggle.checked = newStatus;
+        }
+
+        const message = newStatus
+            ? '✅ Amazon Associates (Gelir Ortaklığı) dönüşümü aktifleştirildi!'
+            : '🛡️ Amazon Associates dönüşümü kapatıldı! Sistem güvenli fallback (temiz ürün linki) moduna geçti.';
+        showSuccess(message);
+
+        console.log(`✅ Amazon affiliate status set to ${newStatus}`);
+    } catch (error) {
+        console.error('❌ Error toggling Amazon affiliate status:', error);
+        showError('Amazon affiliate durumu değiştirilirken hata oluştu: ' + error.message);
+
+        // Reset toggle switch state on error
+        const toggle = document.getElementById('settingsToggleAmazonAffiliateBtn');
+        if (toggle) {
+            toggle.checked = !toggle.checked;
+        }
+    }
+}
+
 // Comment Sharing durumunu yükle ve butonu güncelle
 async function loadCommentSharingStatus() {
     try {
@@ -7133,6 +7579,9 @@ function showSettingsView() {
     loadCommentSharingStatus();
     loadBotConfig();
     loadAdminList();
+    loadTeknosaAffiliateStatus();
+    loadHepsiburadaAffiliateStatus();
+    loadAmazonAffiliateStatus();
 }
 
 function loadReports() {

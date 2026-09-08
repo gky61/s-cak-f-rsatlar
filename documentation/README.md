@@ -149,6 +149,8 @@ Fırsat paylaşımlarındaki en büyük teknik engel olan Cloudflare/Akamai bot 
 * 🔗 [İndirimsiz Ürün Fiyatı (originalPrice) Entegrasyon Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/original_price_scraper_integration_guide.md) — Eski fiyat ve % indirim tespiti için 5 aşamalı yol haritası.
 * 🔗 [Mağaza Scraper Metadata Entegrasyon Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraper_metadata_integration_guide.md) — Puan, yorum sayısı ve marka verilerinin 19 noktada işlenmesi.
 * 🔗 [İstemci Tarafı Mağaza Özel Scraping Kuralları](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_rules_and_strategies.md) — Dart tabanlı kazıyıcılar, Zara MethodChannel ve Gotham API entegrasyonu.
+* 🔗 [Affiliate Link Dönüştürme ve Mağaza Stratejileri Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/affiliate_link_donusturme_ve_stratejileri_rehberi.md) — Çözüm metotları karşılaştırması, Strategy Pattern adaptör mimarisi, admin onay kalkanları, 4 katmanlı fallback tasarımı ve genel mağaza stratejileri ana rehberi.
+* 🔗 [Teknosa Gelir Ortaklığı (Paylaş Kazan) ve TUNE Mimarisi Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/teknosa_affiliate_ve_paylas_kazan_rehberi.md) — Teknosa TUNE HasOffers tersine mühendisliği, 0 ms deep-link sentezleme, Web Admin acil durum şalteri (`#settingsToggleTeknosaAffiliateBtn`), unwrap/retargeting ve birim test kılavuzu.
 
 ---
 
@@ -339,6 +341,9 @@ documentation/
 │
 ├── 📁 scraping-ve-botlar/                                    # Web Kazıma, Telegram Botu & WAF Bypass
 │   ├── 📄 scraping_mimarisi_rehberi.md                       # [MASTER KONTRAT] 21 Mağaza Kazıma Mimarisi, WAF Bypass, Metadata & Bot Rehberi
+│   ├── 📁 affiliate/                                         # Gelir Ortaklığı (Affiliate) & Link Dönüştürme
+│   │   ├── 📄 affiliate_link_donusturme_ve_stratejileri_rehberi.md # [MASTER REHBER] Gelir Ortaklığı (Affiliate) Link Dönüştürme & Mağaza Stratejileri
+│   │   └── 📄 teknosa_affiliate_ve_paylas_kazan_rehberi.md   # [ÖZEL REHBER] Teknosa TUNE (HasOffers), Paylaş Kazan, Fallback & İzolasyon Rehberi
 │   ├── 📄 bot_scraping_rules_and_strategies.md               # Sunucu Tarafı WAF (Cloudflare/Akamai) Bypass Stratejileri
 │   ├── 📄 end_to_end_scraping_architecture.md                # Uçtan Uca Kazıma Mimarisi ve VM Deploy Süreçleri
 │   ├── 📄 original_price_scraper_integration_guide.md        # İndirimsiz Fiyat (originalPrice) ve % İndirim Yol Haritası
@@ -381,6 +386,9 @@ documentation/
 │   ├── 📄 DESIGN_SYSTEM_GUIDE.md                             # Resmi FırsatKolik Tasarım Sistemi (Notched Cards, Colors)
 │   ├── 📄 apk_size_optimization_guide.md                     # APK Boyut Optimizasyonu (72MB -> 27MB) ve WebP Dönüşümü
 │   └── 📄 flutter_live_code_push_and_hot_reload_strategies.md# Shorebird OTA Code Push & Sunucu Güdümlü Mimari Analizi
+│
+├── 📁 web-ve-domain/                                         # Resmi Web Vitrini, Domain & Hosting Altyapısı
+│   └── 📄 domain_ve_web_showcase_rehberi.md                  # [MASTER KONTRAT] firsatkolik.app, Cloudflare DNS, SSL & Amazon Yasal Uyum Rehberi
 │
 └── 📁 yayin-ve-surec/                                        # Google Play Store Yayın & İlerleme
     ├── 📄 firsatkolik_production_roadmap.md                  # 7 Fazlık Google Play Production Çıkış ve Büyüme Rehberi

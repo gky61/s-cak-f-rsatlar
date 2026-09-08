@@ -145,14 +145,50 @@ class TrendyolScraper extends BaseProductScraper {
       }
     }
 
-    // 3. DOM Seçicileri (Fallback)
-    final priceEl = document.querySelector('.discounted') ??
-                    document.querySelector('.prc-dsc') ??
-                    document.querySelector('.price-container span');
-    if (priceEl != null) {
-      final val = parsePriceText(priceEl.text);
-      if (val != null && val > 0) {
-        return val;
+    // 3. DOM Seçicileri (Fallback 1)
+    const priceSelectors = [
+      '.discounted',
+      '.prc-dsc',
+      '.price-container span',
+      '.new-price',
+      '[class*="new-price"]',
+      '.campaign-price-wrapper .new-price',
+      '.prc-slg',
+      '.pr-bx-w .prc-dsc',
+      '.product-price-container span',
+      '.prc-box-dsc',
+      '.prc-box-sll',
+      '[class*="price-discounted"]',
+      '[class*="prc-dsc"]',
+      '[class*="selling-price"]',
+    ];
+    for (final sel in priceSelectors) {
+      final el = document.querySelector(sel);
+      if (el != null) {
+        final val = parsePriceText(el.text);
+        if (val != null && val > 0) {
+          return val;
+        }
+      }
+    }
+
+    // 4. Initial State / Script Search (Fallback 2)
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.isNotEmpty && (text.contains('__PRODUCT_DETAIL_APP_INITIAL_STATE__') || text.contains('product":{') || text.contains('__NEXT_DATA__'))) {
+        try {
+          final match = RegExp(r'"(?:discountedPrice|sellingPrice|price|salePrice)"\s*:\s*\{[^\}]*?"value"\s*:\s*([\d.]+)').firstMatch(text);
+          if (match != null) {
+            final raw = match.group(1);
+            if (raw != null) {
+              final val = double.tryParse(raw);
+              if (val != null && val > 0) {
+                return val;
+              }
+            }
+          }
+        } catch (_) {}
       }
     }
 

@@ -1,41 +1,1502 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
+
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
-  <base href="/">
-
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
 
-  <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="sicak_firsatlar">
+  <!-- Primary Meta Tags -->
+  <title>FırsatKolik — Türkiye'nin En Sıcak İndirim & Fırsat Topluluğu</title>
+  <meta name="title" content="FırsatKolik — Türkiye'nin En Sıcak İndirim & Fırsat Topluluğu">
+  <meta name="description"
+    content="Amazon, Trendyol, Hepsiburada, BİM, A101 ve 40+ süpermarketin en dip fiyat fırsatları, indirim kuponları ve haftalık aktüel broşürleri tek bir uygulamada anında cebinde!">
+  <meta name="keywords"
+    content="fırsatkolik, sıcak fırsatlar, indirim kuponu, aktüel ürünler, a101 aktüel, bim aktüel, şok aktüel, migros indirimleri, trendyol kupon kodu, amazon fırsatları">
+  <meta name="author" content="FırsatKolik">
+  <meta name="theme-color" content="#05070B">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://firsatkolik.app/">
+  <meta property="og:title" content="FırsatKolik — İndirimleri İlk Sen Yakala!">
+  <meta property="og:description"
+    content="Yüzlerce mağazanın anlık indirimleri, aktüel broşürleri ve indirim kuponları cebinde. Sahte indirimlere son ver!">
+  <meta property="og:image" content="assets/foreground.png">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://firsatkolik.app/">
+  <meta property="twitter:title" content="FırsatKolik — İndirimleri İlk Sen Yakala!">
+  <meta property="twitter:description"
+    content="Yüzlerce mağazanın anlık indirimleri, aktüel broşürleri ve indirim kuponları cebinde.">
+  <meta property="twitter:image" content="assets/foreground.png">
+
+  <!-- Favicon & PWA -->
+  <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <!-- Google Sign-In Client ID for Web -->
-  <meta name="google-signin-client_id" content="560592268193-peu6i6g5nelkklqi6gpaqq4056kgse44.apps.googleusercontent.com">
-
-  <title>sicak_firsatlar</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
+
+  <!-- FontAwesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Showcase Stylesheet -->
+  <link rel="stylesheet" href="showcase.css?v=mobile-responsive-v11">
 </head>
+
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+
+  <!-- Ambient Light Effects -->
+  <div class="ambient-glow"></div>
+  <div class="ambient-glow-bottom"></div>
+  <div class="grid-overlay"></div>
+
+  <!-- ==========================================================================
+       Header / Navbar (Spacious, Elegant, No Wrapping)
+       ========================================================================== -->
+  <header class="site-header">
+    <div class="container nav-container">
+      <a href="#" class="brand-logo">
+        <div class="brand-icon">
+          <img src="assets/foreground.png" alt="FırsatKolik Logo" onerror="this.src='favicon.png'">
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">Fırsat<span class="brand-kolik">Kolik</span></span>
+          <span class="brand-subtitle">İndirim Radarı</span>
+        </div>
+      </a>
+
+      <!-- Action Button & Theme Switcher -->
+      <div class="nav-actions">
+        <a href="#ozellikler" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-bolt"></i> Fırsatları Keşfet
+        </a>
+
+        <!-- Morphing Sun & Moon Toggle (Top Right Corner) -->
+        <button class="theme-toggle-btn morph-toggle" id="theme-toggle" aria-label="Görünüm Modunu Değiştir" title="Gece / Gündüz Modu">
+          <div class="theme-icon-container">
+            <svg width="0" height="0" style="position: absolute; pointer-events: none;">
+              <defs>
+                <linearGradient id="sun-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#F59E0B" />
+                  <stop offset="100%" stop-color="#EA580C" />
+                </linearGradient>
+                <linearGradient id="moon-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#BAE6FD" />
+                  <stop offset="50%" stop-color="#60A5FA" />
+                  <stop offset="100%" stop-color="#3B82F6" />
+                </linearGradient>
+              </defs>
+            </svg>
+
+            <!-- SUN ICON (Radiant Solar Rays) -->
+            <svg class="theme-svg theme-svg-sun" viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <circle cx="12" cy="12" r="5.2" fill="url(#sun-grad)" />
+              <g class="sun-rays" stroke="url(#sun-grad)" stroke-width="2.2" stroke-linecap="round">
+                <line x1="12" y1="1.5" x2="12" y2="3.8" />
+                <line x1="12" y1="20.2" x2="12" y2="22.5" />
+                <line x1="4.57" y1="4.57" x2="6.2" y2="6.2" />
+                <line x1="17.8" y1="17.8" x2="19.43" y2="19.43" />
+                <line x1="1.5" y1="12" x2="3.8" y2="12" />
+                <line x1="20.2" y1="12" x2="22.5" y2="12" />
+                <line x1="4.57" y1="19.43" x2="6.2" y2="17.8" />
+                <line x1="17.8" y1="6.2" x2="19.43" y2="4.57" />
+              </g>
+            </svg>
+
+            <!-- MOON ICON (Crescent Moon + Stars) -->
+            <svg class="theme-svg theme-svg-moon" viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <path class="moon-body" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="url(#moon-grad)" />
+              <path class="moon-star star-a" d="M19 3.5L19.4 4.6L20.5 5L19.4 5.4L19 6.5L18.6 5.4L17.5 5L18.6 4.6Z" fill="#BAE6FD" />
+              <path class="moon-star star-b" d="M7 19L7.3 19.8L8.1 20.1L7.3 20.4L7 21.2L6.7 20.4L5.9 20.1L6.7 19.8Z" fill="#93C5FD" />
+            </svg>
+          </div>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       First Screen Above-the-Fold (Hero + Dual Store Marquee Stream)
+       ========================================================================== -->
+  <div class="first-fold-wrapper">
+    <!-- Hero Section (Consumer Value Proposition) -->
+    <section class="hero-section" id="hero">
+      <div class="container hero-grid">
+
+        <!-- Left Content -->
+        <div class="hero-content">
+          <div class="badge-pill hero-pill">
+            <span class="pulse-dot"></span>
+            <span>TÜRKİYE'NİN EN SICAK FIRSAT TOPLULUĞU</span>
+          </div>
+
+          <h1 class="hero-title">
+            İndirimleri İlk Sen Yakala,<br>
+            <span class="gradient-text">Her Alışverişinde</span> <span class="gradient-text-fire">Tasarruf Et!</span>
+          </h1>
+
+          <p class="hero-description">
+            30+ E-Ticaret sitesinin anlık dip fiyatları, 40+ zincir marketin haftalık aktüel katalogları ve indirim
+            kuponları tek uygulamada. Toplulukla gerçek fırsatları ilk siz keşfedin!
+          </p>
+
+          <div class="hero-actions">
+            <a href="#ozellikler" class="btn btn-primary btn-lg">
+              <i class="fa-solid fa-bolt"></i> Özellikleri Keşfet
+            </a>
+          </div>
+
+          <!-- Hero Trust Metrics Bar (Clean, Spacious, Zero-Clutter) -->
+          <div class="hero-trust-bar">
+            <div class="trust-stat">
+              <span class="stat-number">30+</span>
+              <span class="stat-label">E-Ticaret Sitesi</span>
+            </div>
+            <div class="trust-sep"></div>
+            <div class="trust-stat">
+              <span class="stat-number">40+</span>
+              <span class="stat-label">Zincir Market</span>
+            </div>
+            <div class="trust-sep"></div>
+            <div class="trust-stat">
+              <span class="stat-number">%100</span>
+              <span class="stat-label">Topluluk Onaylı</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Visual: Authentic Interactive iPhone 17 Pro Max Mockup -->
+        <div class="hero-visual" id="mockup">
+          <div class="phone-mockup-wrapper">
+            <div class="phone-mockup-glow"></div>
+
+            <!-- iPhone 17 Pro Natural Titanium Hardware Buttons -->
+            <div class="iphone-hw-btn action-btn"></div>
+            <div class="iphone-hw-btn vol-up-btn"></div>
+            <div class="iphone-hw-btn vol-down-btn"></div>
+            <div class="iphone-hw-btn power-btn"></div>
+            <div class="iphone-hw-btn camera-control-btn"></div>
+
+            <!-- Phone Bezel Frame (iPhone 17 Pro Max Titanium Chassis) -->
+            <div class="phone-frame iphone-17-pro">
+              <!-- Ceramic Glass Diagonal Glare Reflection -->
+              <div class="phone-glass-glare"></div>
+
+              <!-- Top Speaker Micro-Ear-Piece Slit -->
+              <div class="phone-earpiece-slit"></div>
+
+              <!-- Authentic iOS Status Bar -->
+              <div class="phone-status-bar">
+                <span class="phone-time-display">09:41</span>
+
+                <!-- Dynamic Island with Optics -->
+                <div class="phone-island">
+                  <div class="island-camera-lens"></div>
+                  <div class="island-truedepth-dot"></div>
+                </div>
+
+                <!-- iOS Status Icons -->
+                <div class="phone-status-icons">
+                  <div class="ios-signal-bars">
+                    <span class="bar bar-1"></span>
+                    <span class="bar bar-2"></span>
+                    <span class="bar bar-3"></span>
+                    <span class="bar bar-4"></span>
+                  </div>
+                  <span class="ios-5g-text">5G</span>
+                  <div class="ios-battery-pill">
+                    <div class="battery-charge"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- In-App Search Header -->
+              <div class="phone-app-bar">
+                <div class="phone-search-row">
+                  <div class="phone-search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <span>Ürün, mağaza veya kupon ara...</span>
+                  </div>
+                  <div class="phone-avatar-badge">
+                    <i class="fa-regular fa-bell"></i>
+                    <span class="phone-notif-dot"></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Screen Views Container (Interactive Tab Pages) -->
+              <div class="phone-screen-container">
+
+                <!-- ==========================================
+                   VIEW 1: ANASAYFA (2x2 Grid View like Flutter)
+                   ========================================== -->
+                <div class="phone-screen-view active" id="view-anasayfa">
+                  <!-- Mini Filter Chips -->
+                  <div class="phone-chips-row">
+                    <span class="phone-chip active" data-filter="all">🔥 Tümü</span>
+                    <span class="phone-chip" data-filter="pc">💻 Bilgisayar</span>
+                    <span class="phone-chip" data-filter="phone">📱 Telefon</span>
+                    <span class="phone-chip" data-filter="home">🏠 Ev & Yaşam</span>
+                  </div>
+
+                  <!-- 2x2 Grid with 4 Deals -->
+                  <div class="phone-deals-grid-2x2" id="deals-grid-container">
+
+                    <!-- Deal 1 -->
+                    <div class="grid-deal-card" data-cat="pc">
+                      <div class="grid-deal-media">
+                        <img
+                          src="https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=300&q=80"
+                          alt="MacBook Pro" class="grid-deal-img"
+                          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <i class="fa-solid fa-laptop grid-deal-fallback-icon" style="display: none;"></i>
+                        <span class="grid-deal-time"><i class="fa-regular fa-clock"></i> 14d</span>
+                        <span class="grid-deal-discount">-%38</span>
+                        <div class="grid-deal-store">
+                          <img src="assets/amazon.webp" alt="Amazon" onerror="this.src='favicon.png'">
+                          <span>Amazon</span>
+                        </div>
+                      </div>
+                      <div class="grid-deal-info">
+                        <h5 class="grid-deal-title">Apple MacBook Pro 14" M3 Pro 512GB</h5>
+                        <div class="grid-deal-price-row">
+                          <span class="grid-deal-price">68.499 ₺</span>
+                          <span class="grid-deal-oldprice">109.999 ₺</span>
+                        </div>
+                        <div class="grid-deal-badge-row">
+                          <span class="grid-deal-dip">Dip Fiyat</span>
+                        </div>
+                        <div class="grid-deal-footer">
+                          <div class="grid-vote-pill sim-vote-btn" data-votes="142">
+                            <i class="fa-solid fa-fire"></i> <span class="vote-num">142</span>
+                          </div>
+                          <span class="grid-deal-comments"><i class="fa-regular fa-comment"></i> 34</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Deal 2 -->
+                    <div class="grid-deal-card" data-cat="home">
+                      <div class="grid-deal-media">
+                        <img
+                          src="https://images.unsplash.com/photo-1558317374-067fb5f30001?auto=format&fit=crop&w=300&q=80"
+                          alt="Dyson V15" class="grid-deal-img"
+                          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <i class="fa-solid fa-wand-magic-sparkles grid-deal-fallback-icon"
+                          style="display: none; color: #60A5FA;"></i>
+                        <span class="grid-deal-time"><i class="fa-regular fa-clock"></i> 26d</span>
+                        <span class="grid-deal-discount">-%42</span>
+                        <div class="grid-deal-store">
+                          <img src="assets/hepsiburada.webp" alt="Hepsiburada" onerror="this.src='favicon.png'">
+                          <span>Hepsiburada</span>
+                        </div>
+                      </div>
+                      <div class="grid-deal-info">
+                        <h5 class="grid-deal-title">Dyson V15 Detect Absolute Süpürge</h5>
+                        <div class="grid-deal-price-row">
+                          <span class="grid-deal-price">21.999 ₺</span>
+                          <span class="grid-deal-oldprice">37.999 ₺</span>
+                        </div>
+                        <div class="grid-deal-badge-row">
+                          <span class="grid-deal-dip">Flaş İndirim</span>
+                        </div>
+                        <div class="grid-deal-footer">
+                          <div class="grid-vote-pill sim-vote-btn" data-votes="89">
+                            <i class="fa-solid fa-fire"></i> <span class="vote-num">89</span>
+                          </div>
+                          <span class="grid-deal-comments"><i class="fa-regular fa-comment"></i> 62</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Deal 3 -->
+                    <div class="grid-deal-card" data-cat="phone">
+                      <div class="grid-deal-media">
+                        <img
+                          src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=300&q=80"
+                          alt="Sony WH-1000XM5" class="grid-deal-img"
+                          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <i class="fa-solid fa-headphones grid-deal-fallback-icon"
+                          style="display: none; color: #FBBF24;"></i>
+                        <span class="grid-deal-time"><i class="fa-regular fa-clock"></i> 41d</span>
+                        <span class="grid-deal-discount">-%30</span>
+                        <div class="grid-deal-store">
+                          <img src="assets/trendyol.webp" alt="Trendyol" onerror="this.src='favicon.png'">
+                          <span>Trendyol</span>
+                        </div>
+                      </div>
+                      <div class="grid-deal-info">
+                        <h5 class="grid-deal-title">Sony WH-1000XM5 ANC Kulaklık</h5>
+                        <div class="grid-deal-price-row">
+                          <span class="grid-deal-price">11.499 ₺</span>
+                          <span class="grid-deal-oldprice">16.499 ₺</span>
+                        </div>
+                        <div class="grid-deal-badge-row">
+                          <span class="grid-deal-dip">Popüler Fırsat</span>
+                        </div>
+                        <div class="grid-deal-footer">
+                          <div class="grid-vote-pill sim-vote-btn" data-votes="64">
+                            <i class="fa-solid fa-fire"></i> <span class="vote-num">64</span>
+                          </div>
+                          <span class="grid-deal-comments"><i class="fa-regular fa-comment"></i> 28</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Deal 4 -->
+                    <div class="grid-deal-card" data-cat="home">
+                      <div class="grid-deal-media">
+                        <img
+                          src="https://images.unsplash.com/photo-1588854337236-6889d631faa8?auto=format&fit=crop&w=300&q=80"
+                          alt="Philips Airfryer" class="grid-deal-img"
+                          onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <i class="fa-solid fa-utensils grid-deal-fallback-icon"
+                          style="display: none; color: #34D399;"></i>
+                        <span class="grid-deal-time"><i class="fa-regular fa-clock"></i> 55d</span>
+                        <span class="grid-deal-discount">-%45</span>
+                        <div class="grid-deal-store">
+                          <img src="assets/teknosa.webp" alt="Teknosa" onerror="this.src='favicon.png'">
+                          <span>Teknosa</span>
+                        </div>
+                      </div>
+                      <div class="grid-deal-info">
+                        <h5 class="grid-deal-title">Philips XXL Akıllı Fritöz Airfryer</h5>
+                        <div class="grid-deal-price-row">
+                          <span class="grid-deal-price">4.299 ₺</span>
+                          <span class="grid-deal-oldprice">7.899 ₺</span>
+                        </div>
+                        <div class="grid-deal-badge-row">
+                          <span class="grid-deal-dip">En Düşük Fiyat</span>
+                        </div>
+                        <div class="grid-deal-footer">
+                          <div class="grid-vote-pill sim-vote-btn" data-votes="110">
+                            <i class="fa-solid fa-fire"></i> <span class="vote-num">110</span>
+                          </div>
+                          <span class="grid-deal-comments"><i class="fa-regular fa-comment"></i> 51</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                <!-- ==========================================
+                   VIEW 2: AKTUEL (36 Store Catalogs Simulation)
+                   ========================================== -->
+                <!-- ==========================================
+                   VIEW 2: AKTUEL (Haftalık Aktüel Afişler)
+                   ========================================== -->
+                <div class="phone-screen-view" id="view-aktuel">
+                  <div class="aktuel-sim-header">
+                    <span class="aktuel-sim-title">📰 Haftalık Aktüel Afişler</span>
+                    <span class="aktuel-sim-badge"><i class="fa-solid fa-circle"></i> 40+ Market</span>
+                  </div>
+
+                  <div class="aktuel-store-grid">
+                    <!-- BİM -->
+                    <div class="aktuel-card">
+                      <div class="aktuel-logo-wrap">
+                        <img src="assets/bim.webp" alt="BİM" onerror="this.src='favicon.png'">
+                      </div>
+                      <div class="aktuel-name">BİM</div>
+                      <div class="aktuel-status-pill urgent">Bugün son!</div>
+                    </div>
+
+                    <!-- A101 -->
+                    <div class="aktuel-card">
+                      <div class="aktuel-logo-wrap">
+                        <img src="assets/a101.webp" alt="A101" onerror="this.src='favicon.png'">
+                      </div>
+                      <div class="aktuel-name">A101</div>
+                      <div class="aktuel-status-pill upcoming">2 gün sonra başlayacak</div>
+                    </div>
+
+                    <!-- ŞOK -->
+                    <div class="aktuel-card">
+                      <div class="aktuel-logo-wrap">
+                        <img src="assets/sok.webp" alt="ŞOK" onerror="this.src='favicon.png'">
+                      </div>
+                      <div class="aktuel-name">ŞOK</div>
+                      <div class="aktuel-status-pill alert">3 gün kaldı</div>
+                    </div>
+
+                    <!-- Migros -->
+                    <div class="aktuel-card">
+                      <div class="aktuel-logo-wrap">
+                        <img src="assets/migros.webp" alt="Migros" onerror="this.src='favicon.png'">
+                      </div>
+                      <div class="aktuel-name">Migros</div>
+                      <div class="aktuel-status-pill ongoing">2 hafta sonra bitecek</div>
+                    </div>
+                  </div>
+
+                  <div class="aktuel-sim-info">
+                    <span class="pulse-dot emerald" style="width: 6px; height: 6px;"></span>
+                    <span>Tüm market afişleri her sabah 06:00'da taranır ve güncellenir.</span>
+                  </div>
+                </div>
+
+                <!-- ==========================================
+                   VIEW 3: FIRSAT PAYLAS (AI-Powered Link Scanner)
+                   ========================================== -->
+                <div class="phone-screen-view" id="view-paylas">
+                  <div class="share-sim-header">
+                    <span class="share-sim-title">
+                      <i class="fa-solid fa-wand-magic-sparkles" style="color: #FF6B35;"></i> Fırsat Paylaş
+                    </span>
+                    <span class="badge-pill emerald" style="font-size: 0.5625rem; padding: 2px 7px;">AI Destekli</span>
+                  </div>
+
+                  <!-- AI Link Scanner Box -->
+                  <div class="share-scanner-box">
+                    <div class="share-scanner-label">
+                      <i class="fa-solid fa-robot" style="color: #60A5FA;"></i>
+                      <span>Akıllı Bağlantı Analizörü</span>
+                    </div>
+                    <div class="share-input-row">
+                      <div class="share-input-field">
+                        <i class="fa-solid fa-link"></i>
+                        <input type="text" id="share-sim-input" value="https://amazon.com.tr/dp/B0CX..." readonly>
+                      </div>
+                      <button class="share-scan-action-btn" id="share-sim-btn">
+                        <i class="fa-solid fa-bolt"></i> Tara
+                      </button>
+                    </div>
+                    <div class="share-status-tag">
+                      <span class="pulse-dot emerald" style="width: 5px; height: 5px;"></span>
+                      <span>Amazon TR algılandı • 30+ Mağaza Radarda</span>
+                    </div>
+                  </div>
+
+                  <!-- Extracted Dummy Fields Simulation (Başlık, Fiyat, Açıklama) -->
+                  <div class="share-extracted-box" id="share-extracted-fields">
+                    <!-- Alan 1: Başlık -->
+                    <div class="share-form-field">
+                      <div class="share-field-header">
+                        <label><i class="fa-solid fa-heading"></i> Başlık</label>
+                        <span class="field-status-chip">AI Otomatik</span>
+                      </div>
+                      <div class="share-field-value" id="field-sim-title">
+                        Apple AirPods Pro 2. Nesil USB-C MagSafe
+                      </div>
+                    </div>
+
+                    <!-- Alan 2: Fiyat & İndirim -->
+                    <div class="share-form-field">
+                      <div class="share-field-header">
+                        <label><i class="fa-solid fa-tag"></i> Fiyat</label>
+                        <span class="field-status-chip dip">Dip Fiyat</span>
+                      </div>
+                      <div class="share-field-value price-field" id="field-sim-price">
+                        <span class="current-price">7.299 ₺</span>
+                        <span class="original-price">9.499 ₺</span>
+                        <span class="discount-rate">-%23</span>
+                      </div>
+                    </div>
+
+                    <!-- Alan 3: Açıklama -->
+                    <div class="share-form-field">
+                      <div class="share-field-header">
+                        <label><i class="fa-solid fa-align-left"></i> Açıklama</label>
+                        <span class="field-status-chip">Grafik Onaylı</span>
+                      </div>
+                      <div class="share-field-value desc-field" id="field-sim-desc">
+                        Amazon TR satıcılı son 30 günün en dip fiyatı. Prime ile aynı gün kargo, 2 yıl resmi Apple
+                        garantili.
+                      </div>
+                    </div>
+                  </div>
+
+                  <button class="btn-share-submit-sim" id="btn-share-action">
+                    <i class="fa-solid fa-paper-plane"></i> Fırsatı Toplulukla Paylaş (+50 Puan)
+                  </button>
+                </div>
+
+                <!-- ==========================================
+                   VIEW 4: KUPONLAR (Working Coupons - Blurred Codes)
+                   ========================================== -->
+                <div class="phone-screen-view" id="view-kuponlar">
+                  <div class="kupon-sim-header">
+                    <span class="kupon-sim-title">🎟️ İndirim Kuponları</span>
+                    <span class="kupon-sim-badge">500+ Aktif</span>
+                  </div>
+
+                  <div class="kupon-toggle-row">
+                    <div class="kupon-toggle-btn active" data-kupon-tab="community">Topluluk (14)</div>
+                    <div class="kupon-toggle-btn" data-kupon-tab="radar">Kupon Radarı (52)</div>
+                  </div>
+
+                  <!-- Coupons List - Entire Card is Visible, Only the Code is Blurred -->
+                  <div class="kupon-display-area">
+                    <div class="kupon-list-clean">
+                      <!-- Coupon 1 -->
+                      <div class="phone-coupon-item">
+                        <div class="phone-coupon-top">
+                          <div class="phone-coupon-brand">
+                            <img src="assets/trendyol.webp" alt="Trendyol" onerror="this.src='favicon.png'">
+                            <span>Trendyol</span>
+                          </div>
+                          <span class="phone-coupon-discount">300 ₺ İndirim</span>
+                        </div>
+                        <div class="phone-coupon-desc">1.500 ₺ üzeri elektronik ve modada anında geçerli.</div>
+                        <div class="phone-coupon-copy">
+                          <div class="coupon-code-blur-wrap">
+                            <span class="phone-coupon-code blurred-code">TYTREND300</span>
+                            <i class="fa-solid fa-lock blur-lock-icon"></i>
+                          </div>
+                          <button class="phone-copy-btn btn-coupon-blur-action">
+                            <i class="fa-solid fa-eye"></i> KODU AÇ
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Coupon 2 -->
+                      <div class="phone-coupon-item">
+                        <div class="phone-coupon-top">
+                          <div class="phone-coupon-brand">
+                            <img src="assets/amazon.webp" alt="Amazon" onerror="this.src='favicon.png'">
+                            <span>Amazon TR</span>
+                          </div>
+                          <span class="phone-coupon-discount">150 ₺ İndirim</span>
+                        </div>
+                        <div class="phone-coupon-desc">İlk mobil siparişine özel 750 ₺ sepete anında indirim.</div>
+                        <div class="phone-coupon-copy">
+                          <div class="coupon-code-blur-wrap">
+                            <span class="phone-coupon-code blurred-code">AMZPRIME150</span>
+                            <i class="fa-solid fa-lock blur-lock-icon"></i>
+                          </div>
+                          <button class="phone-copy-btn btn-coupon-blur-action">
+                            <i class="fa-solid fa-eye"></i> KODU AÇ
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Coupon 3 -->
+                      <div class="phone-coupon-item">
+                        <div class="phone-coupon-top">
+                          <div class="phone-coupon-brand">
+                            <img src="assets/hepsiburada.webp" alt="Hepsiburada" onerror="this.src='favicon.png'">
+                            <span>Hepsiburada</span>
+                          </div>
+                          <span class="phone-coupon-discount">200 ₺ İndirim</span>
+                        </div>
+                        <div class="phone-coupon-desc">Premium üyelere özel teknoloji sepetinde anında indirim.</div>
+                        <div class="phone-coupon-copy">
+                          <div class="coupon-code-blur-wrap">
+                            <span class="phone-coupon-code blurred-code">HBPREM200</span>
+                            <i class="fa-solid fa-lock blur-lock-icon"></i>
+                          </div>
+                          <button class="phone-copy-btn btn-coupon-blur-action">
+                            <i class="fa-solid fa-eye"></i> KODU AÇ
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="kupon-app-notice">
+                      <i class="fa-solid fa-circle-info"></i>
+                      <span>Kupon kodları FırsatKolik uygulamasında tek dokunuşla kopyalanır.</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ==========================================
+                   VIEW 5: PROFIL (Authentic Flutter Profile Screen)
+                   ========================================== -->
+                <div class="phone-screen-view" id="view-profil">
+                  <!-- User Profile Header -->
+                  <div class="flutter-profile-header">
+                    <div class="flutter-avatar-wrapper">
+                      <img src="assets/foreground.png" alt="Murat Yılmaz" class="flutter-avatar-img">
+                      <span class="flutter-avatar-badge"><i class="fa-solid fa-check"></i></span>
+                    </div>
+                    <div class="flutter-user-meta">
+                      <h5 class="flutter-user-name">Murat Yılmaz</h5>
+                      <span class="flutter-user-handle">@murat_avci</span>
+                    </div>
+                    <div class="flutter-badges-row">
+                      <!-- Trust Level Pill -->
+                      <div class="flutter-trust-pill">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>Usta Avcı</span>
+                        <span class="pill-dot">•</span>
+                        <span class="pill-points">450 P</span>
+                        <i class="fa-solid fa-chevron-right chevron-mini"></i>
+                      </div>
+                      <!-- Pinned Badge -->
+                      <div class="flutter-pinned-badge">
+                        <i class="fa-solid fa-fire"></i>
+                        <span>Sıcak Fırsatçı</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Hero Entegre 4'lü Minimalist Emojili İstatistik Şeridi -->
+                  <div class="flutter-stat-strip">
+                    <div class="stat-strip-item">
+                      <div class="stat-top"><span class="stat-emoji">🏷️</span> <span class="stat-num">18</span></div>
+                      <span class="stat-lbl">Fırsat</span>
+                    </div>
+                    <div class="stat-strip-divider"></div>
+                    <div class="stat-strip-item">
+                      <div class="stat-top"><span class="stat-emoji">🎯</span> <span class="stat-num">450</span></div>
+                      <span class="stat-lbl">Puan</span>
+                    </div>
+                    <div class="stat-strip-divider"></div>
+                    <div class="stat-strip-item">
+                      <div class="stat-top"><span class="stat-emoji">🔥</span> <span class="stat-num">342</span></div>
+                      <span class="stat-lbl">Sıcaklık</span>
+                    </div>
+                    <div class="stat-strip-divider"></div>
+                    <div class="stat-strip-item">
+                      <div class="stat-top"><span class="stat-emoji">👥</span> <span class="stat-num">89</span></div>
+                      <span class="stat-lbl">Takip</span>
+                    </div>
+                  </div>
+
+                  <!-- Bento Quick Shortcuts 2x2 Grid -->
+                  <div class="flutter-bento-grid">
+                    <!-- Mesajlarım -->
+                    <div class="flutter-bento-card" data-bento="messages">
+                      <div class="bento-top">
+                        <div class="bento-icon-box blue">
+                          <i class="fa-solid fa-comment-dots"></i>
+                        </div>
+                        <span class="bento-title">Mesajlarım</span>
+                        <span class="bento-unread-badge">2</span>
+                      </div>
+                      <span class="bento-sub">Özel ve anlık sohbetler</span>
+                    </div>
+
+                    <!-- Kelime Takibi -->
+                    <div class="flutter-bento-card" data-bento="keywords">
+                      <div class="bento-top">
+                        <div class="bento-icon-box orange">
+                          <i class="fa-solid fa-bullseye"></i>
+                        </div>
+                        <span class="bento-title">Kelime Takibi</span>
+                        <i class="fa-solid fa-chevron-right bento-arrow"></i>
+                      </div>
+                      <span class="bento-sub">Anahtar kelime bildirimleri</span>
+                    </div>
+
+                    <!-- Fırsatlarım -->
+                    <div class="flutter-bento-card" data-bento="mydeals">
+                      <div class="bento-top">
+                        <div class="bento-icon-box teal">
+                          <i class="fa-solid fa-tags"></i>
+                        </div>
+                        <span class="bento-title">Fırsatlarım</span>
+                        <i class="fa-solid fa-chevron-right bento-arrow"></i>
+                      </div>
+                      <span class="bento-sub">Son 30 güne ait fırsatlar</span>
+                    </div>
+
+                    <!-- Kategori Takibi -->
+                    <div class="flutter-bento-card" data-bento="categories">
+                      <div class="bento-top">
+                        <div class="bento-icon-box purple">
+                          <i class="fa-solid fa-shapes"></i>
+                        </div>
+                        <span class="bento-title">Kategori Takibi</span>
+                        <i class="fa-solid fa-chevron-right bento-arrow"></i>
+                      </div>
+                      <span class="bento-sub">İlgi alanları & alarmlar</span>
+                    </div>
+                  </div>
+
+                  <!-- Quick Profile Bottom Row -->
+                  <div class="flutter-profile-bottom-row">
+                    <div class="profile-quick-item">
+                      <i class="fa-solid fa-bell" style="color: #FBBF24;"></i>
+                      <span>Bildirim Ayarları</span>
+                      <span class="quick-status">Açık</span>
+                    </div>
+                    <div class="profile-quick-item interactive-theme-item" id="phone-theme-toggle" role="button" tabindex="0" title="Gece / Gündüz Modunu Değiştir">
+                      <i class="fa-solid fa-moon profile-theme-icon" id="phone-theme-icon" style="color: #60A5FA;"></i>
+                      <span id="phone-theme-title">Karanlık Mod</span>
+                      <span class="quick-status profile-theme-status" id="phone-theme-status">OLED</span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- In-Phone Micro Toast Notification -->
+              <div class="phone-toast" id="phone-toast">
+                <i class="fa-solid fa-circle-check"></i>
+                <span id="phone-toast-text">İşlem başarılı</span>
+              </div>
+
+              <!-- In-App Bottom Navigation Bar (5 Tabs: Anasayfa, Aktüel, Paylaş FAB, Kuponlar, Profil) -->
+              <div class="phone-bottom-nav">
+                <div class="bottom-nav-item active" data-target-tab="anasayfa">
+                  <i class="fa-solid fa-house"></i>
+                  <span>Anasayfa</span>
+                </div>
+                <div class="bottom-nav-item" data-target-tab="aktuel">
+                  <i class="fa-solid fa-book-open"></i>
+                  <span>Aktüel</span>
+                </div>
+                <div class="bottom-nav-item nav-fab-item" data-target-tab="paylas">
+                  <div class="nav-fab-btn">
+                    <i class="fa-solid fa-plus"></i>
+                  </div>
+                  <span>Paylaş</span>
+                </div>
+                <div class="bottom-nav-item" data-target-tab="kuponlar">
+                  <i class="fa-solid fa-ticket"></i>
+                  <span>Kuponlar</span>
+                </div>
+                <div class="bottom-nav-item" data-target-tab="profil">
+                  <i class="fa-solid fa-user"></i>
+                  <span>Profil</span>
+                </div>
+              </div>
+
+              <!-- iPhone Safe Area Home Indicator Bar -->
+              <div class="phone-home-indicator-bar">
+                <div class="home-indicator-line"></div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+       Store Marquee (Dual Stream with Perfect Symmetry)
+       ========================================================================== -->
+    <div class="marquee-section">
+      <div class="container marquee-container">
+        <!-- Centered Symmetrical Header -->
+        <div class="marquee-header-container">
+          <h2 class="marquee-main-title">
+            En Sevilen Mağazalarda <span class="gradient-text">Anlık Dip Fırsatlar</span> ve <span
+              class="gradient-text-emerald">Aktüel Kataloglar</span>
+          </h2>
+        </div>
+
+      <!-- Row 1: Scraped E-Commerce Stores (Flowing Leftwards) -->
+      <div class="marquee-row-block">
+        <div class="marquee-row-header-symm blue">
+          <span class="symm-line"></span>
+          <div class="symm-pill">
+            <span class="symm-indicator-dot blue"></span>
+            <i class="fa-solid fa-bolt"></i>
+            <span class="symm-title">30+ Popüler E-Ticaret Devi</span>
+            <span class="symm-divider">•</span>
+            <span class="symm-desc">Anlık Dip Fiyat & Fırsat Taraması</span>
+          </div>
+          <span class="symm-line"></span>
+        </div>
+        <div class="marquee-track-wrapper" id="marquee-wrapper-ecommerce" data-direction="left">
+          <div class="marquee-track track-left" id="marquee-track-ecommerce">
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/amazon.webp" alt="Amazon" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Amazon Türkiye</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/trendyol.webp" alt="Trendyol" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Trendyol</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/hepsiburada.webp" alt="Hepsiburada" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Hepsiburada</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/teknosa.webp" alt="Teknosa" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Teknosa</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/vatan.webp" alt="Vatan" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Vatan Bilgisayar</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/itopya.webp" alt="İtopya" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">İtopya</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/mediamarkt.webp" alt="MediaMarkt" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">MediaMarkt</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/n11.webp" alt="N11" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">N11</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/pttavm.webp" alt="PttAVM" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">PttAVM</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/pazarama.webp" alt="Pazarama" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Pazarama</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/boyner.webp" alt="Boyner" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Boyner</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/beymen.webp" alt="Beymen" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Beymen</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/zara.webp" alt="Zara" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Zara</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/mango.webp" alt="Mango" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Mango</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/mavi.webp" alt="Mavi" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Mavi</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/getir.webp" alt="Getir" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Getir</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/watsons.webp" alt="Watsons" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Watsons</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/gratis.webp" alt="Gratis" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Gratis</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/idefix.webp" alt="İdefix" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">İdefix</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/incehesap.webp" alt="İncehesap" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">İncehesap</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/defacto.webp" alt="DeFacto" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">DeFacto</span>
+            </div>
+
+            <!-- Duplicated for continuous smooth infinite scroll -->
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/amazon.webp" alt="Amazon" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Amazon Türkiye</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/trendyol.webp" alt="Trendyol" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Trendyol</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/hepsiburada.webp" alt="Hepsiburada" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Hepsiburada</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/teknosa.webp" alt="Teknosa" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Teknosa</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/vatan.webp" alt="Vatan" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Vatan Bilgisayar</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/itopya.webp" alt="İtopya" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">İtopya</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/mediamarkt.webp" alt="MediaMarkt" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">MediaMarkt</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/n11.webp" alt="N11" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">N11</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/pttavm.webp" alt="PttAVM" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">PttAVM</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/pazarama.webp" alt="Pazarama" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Pazarama</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/boyner.webp" alt="Boyner" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Boyner</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/beymen.webp" alt="Beymen" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Beymen</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/zara.webp" alt="Zara" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Zara</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/mango.webp" alt="Mango" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Mango</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: Catalog / Aktüel Market Stores (Flowing Rightwards / Reverse) -->
+      <div class="marquee-row-block">
+        <div class="marquee-row-header-symm emerald">
+          <span class="symm-line"></span>
+          <div class="symm-pill">
+            <span class="symm-indicator-dot emerald"></span>
+            <i class="fa-solid fa-book-open"></i>
+            <span class="symm-title">40+ Zincir Market & Yapı Market</span>
+            <span class="symm-divider">•</span>
+            <span class="symm-desc">Haftalık Aktüel İndirim Katalogları</span>
+          </div>
+          <span class="symm-line"></span>
+        </div>
+        <div class="marquee-track-wrapper" id="marquee-wrapper-catalogs" data-direction="right">
+          <div class="marquee-track track-right" id="marquee-track-catalogs">
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/bim.webp" alt="BİM" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">BİM</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/a101.webp" alt="A101" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">A101</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/sok.webp" alt="ŞOK" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">ŞOK Market</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/migros.webp" alt="Migros" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Migros</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/carrefoursa.webp" alt="CarrefourSA" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">CarrefourSA</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/hakmar.webp" alt="Hakmar" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Hakmar</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/hakmar-express.webp" alt="Hakmar Express" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Hakmar Express</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/file.webp" alt="File Market" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">File Market</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/bizim.webp" alt="Bizim Toptan" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Bizim Toptan</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/macrocenter.webp" alt="Macrocenter" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Macrocenter</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/metro.webp" alt="Metro Market" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Metro Market</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/kooperatif.webp" alt="Tarım Kredi" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Tarım Kredi Kooperatif</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/mopas.webp" alt="Mopaş" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Mopaş</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/cagri.webp" alt="Çağrı Market" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Çağrı Market</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/happycenter.webp" alt="Happy Center" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Happy Center</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/ozkuruslar.webp" alt="Özkuruşlar" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Özkuruşlar</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/rossmann.webp" alt="Rossmann" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Rossmann</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/tedi.webp" alt="Tedi" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Tedi</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/mrdiy.webp" alt="MR.DIY" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">MR.DIY</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/koctas.webp" alt="Koçtaş" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Koçtaş</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/bauhaus.webp" alt="Bauhaus" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Bauhaus</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/tekzen.webp" alt="Tekzen" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Tekzen</span>
+            </div>
+
+            <!-- Duplicated for continuous smooth infinite scroll -->
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/bim.webp" alt="BİM" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">BİM</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/a101.webp" alt="A101" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">A101</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/sok.webp" alt="ŞOK" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">ŞOK Market</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/migros.webp" alt="Migros" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Migros</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/carrefoursa.webp" alt="CarrefourSA" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">CarrefourSA</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/hakmar.webp" alt="Hakmar" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Hakmar</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/hakmar-express.webp" alt="Hakmar Express" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Hakmar Express</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/file.webp" alt="File Market" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">File Market</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/bizim.webp" alt="Bizim Toptan" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Bizim Toptan</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/macrocenter.webp" alt="Macrocenter" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Macrocenter</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/metro.webp" alt="Metro Market" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Metro Market</span>
+            </div>
+            <div class="store-card store-pill">
+              <div class="store-logo-box">
+                <img src="assets/kooperatif.webp" alt="Tarım Kredi" onerror="this.src='favicon.png'">
+              </div>
+              <span class="store-name">Tarım Kredi Kooperatif</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- ==========================================================================
+       Core Features: 4-Card Bento Grid Showcase (#ozellikler)
+       ========================================================================== -->
+  <section id="ozellikler" class="bento-section">
+    <div class="container">
+      <div class="section-header text-center">
+        <div class="badge-pill">
+          <i class="fa-solid fa-sparkles"></i>
+          <span>TEMEL ÖZELLİKLER</span>
+        </div>
+        <h2>Akıllı Tüketici İçin <span class="gradient-text">Eksiksiz Alışveriş Ekosistemi</span></h2>
+        <p class="section-subtitle">
+          Farklı sitelerde indirim arayarak vakit kaybetmeye son. İhtiyacınız olan tüm araçlar tek ekranda.
+        </p>
+      </div>
+
+      <div class="bento-grid">
+
+        <!-- Bento Card 1: Topluluk Onaylı Dip Fiyatlar (Wide) -->
+        <div class="bento-card bento-wide">
+          <div class="bento-content">
+            <div class="bento-tag hot">
+              <i class="fa-solid fa-fire"></i> GÜNÜN TRENDLERİ
+            </div>
+            <h3>Topluluk Oylarıyla Teyit Edilen Gerçek İndirimler</h3>
+            <p>
+              Fiyatı önce şişirip sonra indiren aldatmacalar topluluk oylarıyla elenir. Yalnızca üyelerin sıcak oylarıyla (🔥) onaylanan gerçek dip fiyat fırsatları öne çıkar.
+            </p>
+            <div class="bento-pills-row">
+              <span class="bento-pill"><i class="fa-solid fa-shield-check"></i> Sahte İndirim Filtresi</span>
+              <span class="bento-pill"><i class="fa-solid fa-chart-line"></i> Dip Fiyat Geçmişi</span>
+              <span class="bento-pill"><i class="fa-solid fa-hourglass-end"></i> Biten Fırsat Uyarısı</span>
+            </div>
+          </div>
+          <div class="bento-visual">
+            <div class="mini-deal-preview">
+              <div class="mini-deal-top">
+                <div class="mini-store-tag">
+                  <img src="assets/amazon.webp" alt="Amazon" onerror="this.src='favicon.png'">
+                  <span>Amazon TR</span>
+                </div>
+                <span class="mini-discount-tag">-%23 Dip Fiyat</span>
+              </div>
+              <div class="mini-deal-name">Apple AirPods Pro 2. Nesil USB&#8209;C</div>
+              <div class="mini-price-row">
+                <span class="mini-price-current">7.299 ₺</span>
+                <span class="mini-price-old">9.499 ₺</span>
+              </div>
+              <div class="mini-vote-bar">
+                <span class="mini-hot-count"><i class="fa-solid fa-fire"></i> %98 Sıcak Oy (+342)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bento Card 2: Akıllı Fiyat Alarmı Radarı (Compact) -->
+        <div class="bento-card bento-compact" id="firsat-radari">
+          <div class="bento-content">
+            <div class="bento-tag blue">
+              <i class="fa-solid fa-crosshairs"></i> FIRSAT RADARI
+            </div>
+            <h3>Kelime ve Kategori Fiyat Alarmı</h3>
+            <p>
+              Aradığınız ürün belirlediğiniz fiyata veya dip seviyeye indiği anda telefonunuza anlık bildirim gelsin.
+            </p>
+          </div>
+          <div class="bento-visual">
+            <div class="mini-alarm-stack">
+              <div class="mini-alarm-tracker-pill">
+                <span class="pulse-dot blue" style="width: 8px; height: 8px;"></span>
+                <span class="tracker-title">🎯 Takip: <strong>AirPods Pro 2</strong></span>
+                <span class="tracker-target-price">Hedef: &le; 7.500 ₺</span>
+              </div>
+              <div class="mini-alarm-box">
+                <div class="mini-alarm-icon">
+                  <i class="fa-solid fa-bell"></i>
+                </div>
+                <div class="mini-alarm-info">
+                  <span class="mini-alarm-title">🎉 Dip Fiyat Alarmı Çaldı!</span>
+                  <span class="mini-alarm-detail">7.299 ₺ (-%23) • Amazon TR</span>
+                </div>
+                <span class="mini-alarm-badge-now">Şimdi</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bento Card 3: 40+ Market Aktüel ve Kuponlar (Compact) -->
+        <div class="bento-card bento-compact">
+          <div class="bento-content">
+            <div class="bento-tag emerald">
+              <i class="fa-solid fa-book-open"></i> AKTÜEL & KUPONLAR
+            </div>
+            <h3>40+ Market Kataloğu & İndirim Kuponları</h3>
+            <p>
+              BİM, A101, ŞOK haftalık aktüel afişleri ile popüler mağazaların indirim kuponları tek tıkla cebinizde.
+            </p>
+          </div>
+          <div class="bento-visual">
+            <div class="mini-market-row">
+              <span class="mini-market-badge"><img src="assets/bim.webp" alt="BİM"> BİM</span>
+              <span class="mini-market-badge"><img src="assets/a101.webp" alt="A101"> A101</span>
+              <span class="mini-market-badge"><img src="assets/sok.webp" alt="ŞOK"> ŞOK</span>
+            </div>
+            <div class="mini-coupons-stack">
+              <div class="mini-coupon-card">
+                <i class="fa-solid fa-ticket" style="color: #F59E0B;"></i>
+                <div class="mini-coupon-meta">
+                  <span class="mini-coupon-title">Trendyol 150 ₺ Kupon</span>
+                  <span class="mini-coupon-sub">Sepette %20 İndirim</span>
+                </div>
+                <span class="mini-coupon-action">KOPYALA</span>
+              </div>
+              <div class="mini-coupon-card coupon-hb">
+                <i class="fa-solid fa-ticket" style="color: #FF6B35;"></i>
+                <div class="mini-coupon-meta">
+                  <span class="mini-coupon-title">Hepsiburada 100 ₺</span>
+                  <span class="mini-coupon-sub">İlk Siparişe Özel</span>
+                </div>
+                <span class="mini-coupon-action">KOPYALA</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bento Card 4: Yapay Zeka Destekli Paylaşım & Avcı Kulübü (Wide) -->
+        <div class="bento-card bento-wide">
+          <div class="bento-content">
+            <div class="bento-tag purple">
+              <i class="fa-solid fa-trophy"></i> AVCI KULÜBÜ
+            </div>
+            <h3>Yapay Zeka Destekli Paylaşım & Avcı Rozetleri</h3>
+            <p>
+              İndirim mi buldunuz? Web linkini yapıştırın; yapay zeka ürün başlığı, fiyatı ve görselini otomatik doldursun. Fırsat paylaştıkça güven puanı kazanın ve rozetleri toplayın!
+            </p>
+            <div class="bento-badges-row">
+              <div class="hunter-badge-item">
+                <i class="fa-solid fa-seedling" style="color: #60A5FA;"></i>
+                <span>Çaylak Avcı</span>
+              </div>
+              <div class="hunter-badge-item">
+                <i class="fa-solid fa-shield-halved" style="color: #F59E0B;"></i>
+                <span>Usta Avcı</span>
+              </div>
+              <div class="hunter-badge-item">
+                <i class="fa-solid fa-fire" style="color: #FF6B35;"></i>
+                <span>Sıcak Fırsatçı</span>
+              </div>
+              <div class="hunter-badge-item">
+                <i class="fa-solid fa-crown" style="color: #EC4899;"></i>
+                <span>Efsane Avcı</span>
+              </div>
+            </div>
+          </div>
+          <div class="bento-visual">
+            <div class="mini-ai-box">
+              <div class="mini-ai-head">
+                <i class="fa-solid fa-wand-magic-sparkles" style="color: #A855F7;"></i>
+                <span>AI Link Ayrıştırıcı</span>
+              </div>
+              <div class="mini-ai-link">https://amazon.com.tr/dp/B0BDHW...</div>
+              <div class="mini-ai-status">
+                <span class="pulse-dot emerald" style="width: 6px; height: 6px;"></span>
+                <span>Başlık, Fiyat ve Görsel Hazır (%100 Otomatik)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+
+  <!-- ==========================================================================
+       Footer (Minimalist & Amazon Associates Compliant)
+       ========================================================================== -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+
+        <!-- Col 1: Brand Info -->
+        <div class="footer-brand">
+          <a href="#" class="brand-logo">
+            <div class="brand-icon">
+              <img src="assets/foreground.png" alt="FırsatKolik" onerror="this.src='favicon.png'">
+            </div>
+            <div class="brand-text">
+              <span class="brand-title">Fırsat<span class="brand-kolik">Kolik</span></span>
+              <span class="brand-subtitle">İndirim Radarı</span>
+            </div>
+          </a>
+          <p>
+            Türkiye'nin en sıcak indirimlerini, süpermarket aktüel broşürlerini ve indirim kuponlarını tek noktada toplayan modern topluluk platformu.
+          </p>
+          <div style="margin-top: 14px;">
+            <span class="badge-pill emerald" style="font-size: 0.75rem; padding: 4px 12px;">
+              <span class="pulse-dot emerald"></span> Canlı Fırsat Akışı Aktif
+            </span>
+          </div>
+        </div>
+
+        <!-- Col 2: Hızlı Keşif -->
+        <div class="footer-col">
+          <h4>Hızlı Keşif</h4>
+          <ul class="footer-links">
+            <li><a href="#ozellikler">Günün Sıcak Fırsatları</a></li>
+            <li><a href="#firsat-radari">Fiyat & Kelime Alarmları</a></li>
+            <li><a href="#ozellikler">40+ Market Aktüel Afişleri</a></li>
+            <li><a href="#ozellikler">Mağaza İndirim Kuponları</a></li>
+          </ul>
+        </div>
+
+        <!-- Col 3: Kurumsal & Destek -->
+        <div class="footer-col">
+          <h4>Kurumsal & Destek</h4>
+          <ul class="footer-links">
+            <li><a href="privacy-policy.html">Gizlilik Politikası (KVKK)</a></li>
+            <li><a href="delete-account.html">Hesap ve Veri Silme</a></li>
+            <li><a href="/admin/">Yönetici Girişi</a></li>
+          </ul>
+        </div>
+
+      </div>
+
+      <!-- Footer Bottom -->
+      <div class="footer-bottom">
+        <div>
+          © 2026 FırsatKolik. Tüm hakları saklıdır. Türkiye'de gururla geliştirildi.
+        </div>
+        <div style="display: flex; gap: 18px; flex-wrap: wrap; align-items: center;">
+          <span>Topluluk Odaklı</span>
+          <span>•</span>
+          <span>%100 Ücretsiz</span>
+          <span>•</span>
+          <span style="white-space: nowrap;">Canlı İndirim Radarı</span>
+        </div>
+      </div>
+
+      <!-- Affiliate Disclosure (Amazon Associates Compliance - Official Wording) -->
+      <div class="footer-affiliate-disclosure"
+        style="margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.75rem; color: #94A3B8; text-align: center; line-height: 1.6;">
+        <i class="fa-brands fa-amazon" style="color: #FF9900; margin-right: 6px; font-size: 0.875rem;"></i>
+        <span>Bir Amazon Gelir Ortağı olarak nitelikli satın alımlar üzerinden kazanç elde ediyorum.</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="showcase.js"></script>
 </body>
+
 </html>

@@ -6,6 +6,7 @@ import 'content_moderation_service.dart';
 import 'user_service.dart';
 import 'link_preview_service.dart';
 import 'advertising_compliance_service.dart';
+import 'affiliate/affiliate_service.dart';
 import '../utils/asset_path_migration.dart';
 
 void _log(String message) {
@@ -235,17 +236,26 @@ class DealService {
       if (!moderationResult.isSafe) {
         throw Exception(moderationResult.reason ?? 'İçerik uygunsuz');
       }
-            // Akıllı Mükerrer Link Kontrolü
+            _log('═══════════════════════════════════════════════════════════');
+      _log('📥 [AFFILIATE-TEST] DealService.createDeal Başlatıldı');
+      _log('   🔗 Ham URL: $url');
+      _log('   🏷️ Başlık: $title');
+      _log('   🏪 Mağaza: $store');
+
+      // Akıllı Mükerrer Link Kontrolü
       // Önce yönlendirmeleri çözüyoruz (short link vb. durumları için)
       String resolvedUrl = url;
       try {
         final linkPreviewService = LinkPreviewService();
+        _log('🔄 [AFFILIATE-TEST] Kısa link ve yönlendirme kontrolü yapılıyor...');
         resolvedUrl = await linkPreviewService.resolveUrlRedirects(url);
+        _log('🎯 [AFFILIATE-TEST] Çözümlenen Kanonik URL: $resolvedUrl');
       } catch (e) {
-        _log('⚠️ Yönlendirme çözülemedi: $e');
+        _log('⚠️ [AFFILIATE-TEST] Yönlendirme çözülemedi: $e');
       }
 
       final cleanUrl = Deal.cleanProductUrl(resolvedUrl);
+      _log('🧹 [AFFILIATE-TEST] Clean URL (Mükerrerlik için): $cleanUrl');
       if (cleanUrl.isNotEmpty) {
         final querySnapshot = await _firestore
             .collection('deals')
@@ -287,12 +297,15 @@ class DealService {
       bool isApprovalRequired = true;
       try {
         final settingsDoc = await _firestore.collection('settings').doc('app').get();
-        if (settingsDoc.exists) {
-          isApprovalRequired = settingsDoc.data()?['dealApprovalRequired'] ?? true;
+        if (settingsDoc.exists && settingsDoc.data() != null) {
+          final sData = settingsDoc.data()!;
+          isApprovalRequired = sData['dealApprovalRequired'] ?? true;
+          AffiliateService.syncFromMap(sData);
         }
       } catch (e) {
         _log('⚠️ Settings loading error: $e');
       }
+      _log('📋 [AFFILIATE-TEST] Onay Modu: ${isApprovalRequired ? "Admin Onayı Bekliyor (isApproved: false)" : "Doğrudan Yayında (isApproved: true)"}');
 
       // Yazar bilgilerini al (snapshot)
       String? finalPosterName = (postedByName != null && postedByName.trim().isNotEmpty) ? postedByName.trim() : null;
@@ -323,6 +336,21 @@ class DealService {
 
       final compliantDescription = AdvertisingComplianceService.ensureDisclosure(description);
 
+      String finalDealLink = (resolvedUrl.isNotEmpty && resolvedUrl.startsWith('http')) ? resolvedUrl : url;
+      try {
+        _log('⚡ [AFFILIATE-TEST] Fırsat kaydedilirken affiliate dönüştürme kontrolü yapılıyor...');
+        final converted = await AffiliateService.resolveAndConvertToAffiliate(finalDealLink);
+        if (converted != finalDealLink) {
+          finalDealLink = converted;
+          _log('🎉 [AFFILIATE-TEST] Fırsat linki başarıyla affiliate linkine dönüştürüldü: $finalDealLink');
+        } else {
+          _log('ℹ️ [AFFILIATE-TEST] Mağaza affiliate desteklemiyor veya şalter kapalı, orijinal link korundu: $finalDealLink');
+        }
+      } catch (e) {
+        _log('⚠️ [AFFILIATE-TEST] Fırsat oluşturulurken affiliate dönüştürme hatası: $e');
+      }
+
+
       final deal = Deal(
         id: '',
         title: title,
@@ -331,7 +359,7 @@ class DealService {
         store: store,
         category: category,
         subCategory: subCategory,
-        link: url,
+        link: finalDealLink,
         imageUrl: imageUrl,
         postedBy: userId,
         postedByName: finalPosterName,

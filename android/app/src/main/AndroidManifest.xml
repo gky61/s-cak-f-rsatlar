@@ -25,6 +25,24 @@
             <action android:name="android.intent.action.SENDTO" />
             <data android:scheme="smsto" />
         </intent>
+        <!-- Mağaza Özel Deep-Link Şemaları (0 ms Doğrudan Native Uygulama Açılışı) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="hbapp" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="teknosa" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="trendyol" />
+        </intent>
+        <package android:name="com.pozitron.hepsiburada" />
+        <package android:name="com.tmob.teknosa" />
+        <package android:name="com.teknosa.teknosa" />
+        <package android:name="com.trendyol.trendyol" />
+        <package android:name="com.amazon.mShop.android.shopping" />
     </queries>
     <application
         android:label="@string/app_name"

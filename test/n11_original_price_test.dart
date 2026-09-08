@@ -4,49 +4,72 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:sicak_firsatlar/services/scrapers/n11_scraper.dart';
 
 void main() {
-  test('N11 Original Price Scraper Test (All 6 Links)', () async {
-    final scraper = N11Scraper();
-
+  test('N11 Original Price & Discounted Price Scraper Test (All 10 User Links)', () async {
     final testCases = [
       {
-        'name': 'Link 1 (LG 65QNED TV)',
-        'url': 'https://www.n11.com/urun/lg-65qned70b6c-65-165-ekran-uydu-alicili-4k-ultra-hd-smart-webos-miniled-tv-128133247?magaza=tekno11',
-        'expectedDiscounted': 46409.09,
-        'expectedOriginal': 50999.00,
+        'name': 'Link 1 (Ulike Air 3 Lazer Epilasyon)',
+        'url': 'https://www.n11.com/urun/ulike-air-3-ipl-lazer-epilasyon-cihazi-beyaz-87746993',
+        'expectedDiscounted': 23422.00,
+        'expectedOriginal': 23899.00,
       },
       {
-        'name': 'Link 2 (Samsung Mikrodalga)',
-        'url': 'https://www.n11.com/urun/samsung-ms23k3614awtr-23-lt-solo-mikrodalga-firin-61161984?magaza=samsungturkiye',
-        'expectedDiscounted': 4912.20,
-        'expectedOriginal': 5167.80,
+        'name': 'Link 2 (Torima Sac Sekillendirici)',
+        'url': 'https://www.n11.com/urun/torima-thd-01-pembe-7-in-1-hava-uflemeli-sac-sekillendirici-85589731?magaza=torima',
+        'expectedDiscounted': 6578.00,
+        'expectedOriginal': 7150.00,
       },
       {
-        'name': 'Link 3 (Tefal Tencere Seti)',
-        'url': 'https://www.n11.com/urun/tefal-optispace-6-parca-tencere-seti-16784781?magaza=tefal',
-        'expectedDiscounted': 3999.00,
-        'expectedOriginal': 5499.00,
+        'name': 'Link 3 (Vicco Isikli Cocuk Ayakkabi)',
+        'url': 'https://www.n11.com/urun/vicco-toyga-isikli-erkek-cocuk-beyaz-spor-ayakkabi-126873713?numara=32&magaza=vicco',
+        'expectedDiscounted': 1759.92,
+        'expectedOriginal': 2199.90,
       },
       {
-        'name': 'Link 4 (Samsung Galaxy A17)',
-        'url': 'https://www.n11.com/urun/samsung-galaxy-a17-5g-8-gb-256-gb-samsung-turkiye-garantili-98196396?renk=gri&magaza=n11',
-        'expectedDiscounted': 16399.00,
-        'expectedOriginal': 19399.00,
+        'name': 'Link 4 (Oto Koltuk Minderi)',
+        'url': 'https://www.n11.com/urun/oto-koltuk-minderi-bambu-bel-destekli-ergonomik-terletmez-universal-fa1-625-1-adet-78679123?magaza=otoaksesuarist',
+        'expectedDiscounted': 790.15,
+        'expectedOriginal': 888.92,
       },
       {
-        'name': 'Link 5 (Yunuşoğlu Plaj Çantası)',
-        'url': 'https://www.n11.com/urun/yunusoglu-home-genis-hacimli-ham-bez-plaj-cantasi-ic-cepli-sik-tasarim-bordo-35-cm-x-45-cm-128529494?magaza=yunusogluhome',
-        'expectedDiscounted': 275.91,
-        'expectedOriginal': 299.90,
+        'name': 'Link 5 (BMW Direksiyon Logosu)',
+        'url': 'https://www.n11.com/urun/bmw-direksiyon-logosu-oem-metal-47-mm-tam-olcu-sticker-degil-hatasiz-uyum-47mm-120238944?magaza=onurexpresstuning',
+        'expectedDiscounted': 399.20,
+        'expectedOriginal': 449.10,
       },
       {
-        'name': 'Link 6 (Karaca Barbekü Mangal Seti)',
-        'url': 'https://www.n11.com/urun/onluklu-7-parca-ahsap-sapli-barbekumangal-seti-94403175?magaza=karaca',
-        'expectedDiscounted': 819.98,
-        'expectedOriginal': 919.98,
+        'name': 'Link 6 (Ayak Alti Led Lamba)',
+        'url': 'https://www.n11.com/urun/ayak-alti-led-lamba-sese-duyarli-led-muzige-duyarli-led-12-led-440870900-23334181?magaza=onurexpresstuning',
+        'expectedDiscounted': 295.20,
+        'expectedOriginal': 295.31,
+      },
+      {
+        'name': 'Link 7 (Lifos Oto Koltuk Kilifi)',
+        'url': 'https://www.n11.com/urun/lifos-hafif-ticari-serisi-koton-kumas-oto-koltuk-kilifi-tam-set-berlingo-caddy-connect-courier-doblo-dokker-partner-gri-126246337?magaza=smotokilif',
+        'expectedDiscounted': 2979.00,
+        'expectedOriginal': 3379.00,
+      },
+      {
+        'name': 'Link 8 (Honda Forza 250 Ekran Koruyucu)',
+        'url': 'https://www.n11.com/urun/honda-forza-250-ekran-koruyucu-5-inc-dijital-ekran-2024-2025-sadece-ekran-koruyucu-65754218?magaza=engo',
+        'expectedDiscounted': 199.20,
+        'expectedOriginal': 287.90,
+      },
+      {
+        'name': 'Link 9 (Samsung Galaxy Z Fold 7)',
+        'url': 'https://www.n11.com/urun/samsung-galaxy-z-fold7-512-gb-samsung-turkiye-garantili-89325266?magaza=cephaneteknoloji&renk=gece-siyahi',
+        'expectedDiscounted': 89209.96,
+        'expectedOriginal': 90139.23,
+      },
+      {
+        'name': 'Link 10 (Apple iPhone 17e - Calisan Referans)',
+        'url': 'https://www.n11.com/urun/apple-iphone-17e-256-gb-apple-turkiye-garantili-120966170?renk=acik-pembe&magaza=bszelektronik',
+        'expectedDiscounted': 62399.04,
+        'expectedOriginal': 64999.00,
       },
     ];
 
     for (final tc in testCases) {
+      final scraper = N11Scraper(); // Yeni scraper instance'ı (her vaka için taze cache)
       final url = tc['url'] as String;
       final response = await http.get(
         Uri.parse(url),
@@ -61,13 +84,17 @@ void main() {
 
       final price = await scraper.scrapePrice(doc);
       final originalPrice = scraper.scrapeOriginalPrice(doc, price);
+      final priceLabel = scraper.scrapePriceLabel(doc);
 
-      print('--- ${tc['name']} ---');
+      print('------------------------------------------------------------');
+      print('Testing: ${tc['name']}');
       print('Discounted Price: $price (Expected: ${tc['expectedDiscounted']})');
       print('Original Price:   $originalPrice (Expected: ${tc['expectedOriginal']})');
+      if (priceLabel != null) print('Price Label:      $priceLabel');
 
       expect(price, equals(tc['expectedDiscounted']));
       expect(originalPrice, equals(tc['expectedOriginal']));
+      expect(priceLabel, isNull, reason: 'N11 must not have membership priceLabel');
 
       if (originalPrice != null && price != null && originalPrice > price) {
         final discountPercent = (((originalPrice - price) / originalPrice) * 100).round();

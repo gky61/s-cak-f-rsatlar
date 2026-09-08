@@ -1,8 +1,22 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:html/dom.dart' as dom;
 import 'base_scraper.dart';
 
+class _N11ApiPriceResult {
+  final double? discountedPrice;
+  final double? originalPrice;
+
+  _N11ApiPriceResult({
+    this.discountedPrice,
+    this.originalPrice,
+  });
+}
+
 class N11Scraper extends BaseProductScraper {
+  _N11ApiPriceResult? _lastApiResult;
+
   @override
   String get domain => 'n11.com';
 
@@ -165,34 +179,153 @@ class N11Scraper extends BaseProductScraper {
     return null;
   }
 
+  // --- Private Helper Methods for N11 Personalized Detail API ---
+
+  Future<_N11ApiPriceResult?> _fetchPersonalizedDetailPrice(dom.Document document) async {
+    try {
+      final model = _getN11Model(document);
+      final p = model?['product'];
+      final dynamic rawProductId = model?['productId'] ?? p?['id'];
+      if (rawProductId == null) return null;
+
+      final productId = rawProductId is int ? rawProductId : int.tryParse(rawProductId.toString());
+      if (productId == null || productId <= 0) return null;
+
+      final categoryId = p?['category']?['id'] as int?;
+
+      String slug = '';
+      final canonical = model?['seoMetaData']?['canonical']?.toString() ??
+                        document.querySelector('link[rel="canonical"]')?.attributes['href'] ??
+                        document.querySelector('meta[property="og:url"]')?.attributes['content'] ??
+                        p?['url']?.toString();
+      if (canonical != null && canonical.contains('/urun/')) {
+        try {
+          final uri = Uri.parse(canonical);
+          final path = uri.path;
+          if (path.contains('/urun/')) {
+            slug = path.substring(path.indexOf('/urun/') + 6);
+            if (slug.contains('?')) slug = slug.substring(0, slug.indexOf('?'));
+          }
+        } catch (_) {}
+      }
+
+      final body = jsonEncode({
+        'productId': productId,
+        'categoryId': categoryId,
+        'productSlug': slug,
+        'vue': true,
+      });
+
+      final response = await http.post(
+        Uri.parse('https://www.n11.com/rest/v1/personalizedDetail'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/plain, */*',
+          'User-Agent': 'WhatsApp/2.23.4.15 A',
+          'Accept-Language': 'tr-TR,tr;q=0.9',
+        },
+        body: body,
+      ).timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        final resp = data['response'];
+        if (resp is Map) {
+          final prod = resp['product'] is Map ? resp['product'] as Map : null;
+
+          final instantDiscountStr = resp['instantDiscountedPrice']?.toString();
+          final finalPriceStr = prod?['finalPrice']?.toString();
+          final oldPriceStr = prod?['oldPrice']?.toString();
+          final displayPriceStr = prod?['displayPrice']?.toString();
+          final badge = prod?['finalPriceBadge']?.toString() ?? resp['instantDiscountMessage']?.toString();
+
+          final instantDiscount = instantDiscountStr != null ? parsePriceText(instantDiscountStr) : null;
+          final finalPrice = finalPriceStr != null ? parsePriceText(finalPriceStr) : null;
+          final oldPrice = oldPriceStr != null ? parsePriceText(oldPriceStr) : null;
+          final displayPrice = displayPriceStr != null ? parsePriceText(displayPriceStr) : null;
+
+          // 1. İndirimli Satış Fiyatı
+          double? discPrice = instantDiscount ?? finalPrice;
+          if (discPrice == null && displayPrice != null && oldPrice != null && displayPrice < oldPrice) {
+            discPrice = displayPrice;
+          }
+
+          // 2. İndirimsiz Liste / Piyasa Fiyatı
+          double? origPrice;
+          if (oldPrice != null && discPrice != null && oldPrice > discPrice) {
+            origPrice = oldPrice;
+          } else if (displayPrice != null && discPrice != null && displayPrice > discPrice) {
+            origPrice = displayPrice;
+          }
+
+          if (discPrice != null && discPrice > 0) {
+            final result = _N11ApiPriceResult(
+              discountedPrice: discPrice,
+              originalPrice: origPrice,
+            );
+            _lastApiResult = result;
+            return result;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. window.model JSON'ından fiyatı çekmeyi dene (Öncelikli)
+    // 1. Canlı API Çağrısı (Öncelikli)
+    final apiResult = await _fetchPersonalizedDetailPrice(document);
+    if (apiResult?.discountedPrice != null && apiResult!.discountedPrice! > 0) {
+      return apiResult.discountedPrice;
+    }
+
+    // 2. window.model JSON'ından fiyatı çekmeyi dene (Öncelikli Statik Fallback)
     final model = _getN11Model(document);
     if (model != null) {
       final p = model['product'];
       final pers = p is Map ? p['personalizedData'] : null;
 
-      final candidates = [
-        if (pers is Map) pers['instantDiscountedPrice'],
-        if (pers is Map && pers['product'] is Map) pers['product']['finalPrice'],
-        if (p is Map) p['finalPriceFloat'],
-        if (p is Map) p['finalPrice'],
-        if (p is Map) p['priceFloat'],
-        if (p is Map) p['price'],
-        if (p is Map) p['displayPriceFloat'],
-        if (p is Map) p['displayPrice'],
-      ];
+      // Eğer personalizedData zaten model içinde varsa (nadir durumlar)
+      final instantPrice = pers is Map ? pers['instantDiscountedPrice'] : null;
+      if (instantPrice != null) {
+        final parsed = instantPrice is num ? instantPrice.toDouble() : parsePriceText(instantPrice.toString());
+        if (parsed != null && parsed > 0) return parsed;
+      }
 
-      for (final val in candidates) {
-        if (val != null) {
-          final parsed = val is num ? val.toDouble() : parsePriceText(val.toString());
-          if (parsed != null && parsed > 0) return parsed;
+      final finalPrice = (pers is Map && pers['product'] is Map)
+          ? pers['product']['finalPrice']
+          : (p is Map ? p['finalPriceFloat'] ?? p['finalPrice'] : null);
+      if (finalPrice != null) {
+        final parsed = finalPrice is num ? finalPrice.toDouble() : parsePriceText(finalPrice.toString());
+        if (parsed != null && parsed > 0) return parsed;
+      }
+
+      // price ve displayPrice alanlarını parse et ve karşılaştır!
+      double? priceVal;
+      double? displayVal;
+      if (p is Map) {
+        final rawPrice = p['priceFloat'] ?? p['price'];
+        if (rawPrice != null) {
+          priceVal = rawPrice is num ? rawPrice.toDouble() : parsePriceText(rawPrice.toString());
         }
+        final rawDisplay = p['displayPriceFloat'] ?? p['displayPrice'];
+        if (rawDisplay != null) {
+          displayVal = rawDisplay is num ? rawDisplay.toDouble() : parsePriceText(rawDisplay.toString());
+        }
+      }
+
+      if (priceVal != null && displayVal != null && priceVal > 0 && displayVal > 0) {
+        // İki fiyat da mevcutsa DÜŞÜK OLAN satış fiyatıdır (indirimli fiyattır)!
+        return priceVal < displayVal ? priceVal : displayVal;
+      } else if (priceVal != null && priceVal > 0) {
+        return priceVal;
+      } else if (displayVal != null && displayVal > 0) {
+        return displayVal;
       }
     }
 
-    // 2. window.model içinden regex ile fiyat çekmeyi dene (Fallback 1)
+    // 3. window.model içinden regex ile fiyat çekmeyi dene (Fallback 1)
     final html = document.outerHtml;
     final finalPriceReg = RegExp(r'"finalPrice"\s*:\s*"([^"]+)"');
     final finalPriceMatch = finalPriceReg.firstMatch(html);
@@ -208,7 +341,7 @@ class N11Scraper extends BaseProductScraper {
       if (val != null && val > 0) return val;
     }
 
-    // 3. DOM Seçicileri (Fallback 2)
+    // 4. DOM Seçicileri (Fallback 2)
     final priceEl = document.querySelector('.newPrice ins') ??
                     document.querySelector('ins') ??
                     document.querySelector('.newPrice') ??
@@ -227,9 +360,14 @@ class N11Scraper extends BaseProductScraper {
   double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
     if (currentPrice == null || currentPrice <= 0) return null;
 
+    // 1. Canlı API Sonucu Önceliği (_lastApiResult)
+    if (_lastApiResult?.originalPrice != null && _lastApiResult!.originalPrice! > currentPrice) {
+      return _lastApiResult!.originalPrice;
+    }
+
     final candidates = <double>[];
 
-    // 1. window.model JSON'ından eski / liste fiyatlarını çek
+    // 2. window.model JSON'ından eski / liste fiyatlarını çek
     final model = _getN11Model(document);
     if (model != null) {
       final p = model['product'];
@@ -256,7 +394,7 @@ class N11Scraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM selectors for old / strikethrough / original prices
+    // 3. DOM selectors for old / strikethrough / original prices
     final selectors = [
       '.oldPrice',
       '.old-price',
@@ -283,6 +421,7 @@ class N11Scraper extends BaseProductScraper {
     valid.sort();
     return valid.first;
   }
+
 
   @override
   String? scrapeDescription(dom.Document document) {

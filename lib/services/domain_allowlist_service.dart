@@ -130,7 +130,9 @@ class DomainAllowlistService {
     't.co',
     'rebrand.ly',
     'rdrtr.com',
-    'onelink.me'
+    'onelink.me',
+    'paylaskazan.teknosa.com',
+    'rdr.btrck.com'
   ];
 
   /// Verilen URL'nin domain'inin (hostname) allowlist'te olup olmadığını kontrol eder.

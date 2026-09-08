@@ -464,7 +464,23 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         return;
       }
 
-      _log('🔄 Otomatik ürün bilgisi çekme başlatıldı: $url');
+      _log('═══════════════════════════════════════════════════════════');
+      _log('🚀 [AFFILIATE-TEST] Fırsat Paylaş Ekranı: Link Girildi');
+      _log('📍 [AFFILIATE-TEST] Girilen URL: $url');
+      final isPaylasKazan = url.toLowerCase().contains('paylaskazan.teknosa.com');
+      final isTeknosa = url.toLowerCase().contains('teknosa.com');
+      final isBtrck = url.toLowerCase().contains('btrck.com');
+      if (isPaylasKazan) {
+        _log('🔍 [AFFILIATE-TEST] Tespit: Teknosa Paylaş Kazan Kısa Linki (Shortlink)');
+      } else if (isBtrck) {
+        _log('🔍 [AFFILIATE-TEST] Tespit: Başkasına Ait TUNE (rdr.btrck.com) Affiliate Linki');
+      } else if (isTeknosa) {
+        _log('🔍 [AFFILIATE-TEST] Tespit: Teknosa Normal/Organik Ürün Linki');
+      } else {
+        _log('🔍 [AFFILIATE-TEST] Tespit: Diğer Mağaza Linki');
+      }
+      _log('🔄 [AFFILIATE-TEST] Otomatik ürün bilgisi çekme (Scraping) başlatıldı...');
+      _log('═══════════════════════════════════════════════════════════');
 
       bool hasImage = false;
       bool hasTitle = false;
@@ -643,6 +659,12 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           _isAutoDetecting = false;
         });
       }
+
+      _log('📦 [AFFILIATE-TEST] Otomatik Kazıma Tamamlandı:');
+      _log('   🏷️ Başlık: ${_titleController.text.trim()}');
+      _log('   💰 Fiyat: ${_priceController.text.trim()} TL');
+      _log('   🏪 Mağaza: ${_storeController.text.trim()}');
+      _log('   🖼️ Görsel: ${_imageUrlController.text.trim().isNotEmpty ? "Görsel bulundu" : "Görsel yok"}');
 
       // 4. KULLANICI BİLGİLENDİRME (SNACKBAR)
       if (mounted) {
@@ -978,6 +1000,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       }
 
       try {
+        _log('═══════════════════════════════════════════════════════════');
+        _log('🚀 [AFFILIATE-TEST] Fırsat Paylaş: Gönder Butonuna Basıldı');
+        _log('   🔗 Gönderilen URL: ${_urlController.text.trim()}');
+        _log('   🏷️ Başlık: ${_titleController.text.trim()}');
+        _log('   💰 Fiyat: ${_priceController.text.trim()} TL');
+        _log('═══════════════════════════════════════════════════════════');
+
         await _firestoreService.createDeal(
           title: _titleController.text.trim(),
           description: AdvertisingComplianceService.ensureDisclosure(_descriptionController.text.trim()),

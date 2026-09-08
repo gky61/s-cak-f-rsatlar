@@ -15,6 +15,7 @@ const linkScraperService = require('./link_scraper_service');
 const categoryDetectionService = require('./category_detection_service');
 const domainAllowlist = require('./domain_allowlist');
 const advertisingComplianceService = require('./advertising_compliance_service');
+const affiliateManager = require('./affiliate_manager');
 
 // Firebase Admin başlat
 // Cloud Run'da otomatik authentication kullanır
@@ -24,67 +25,9 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-
-
 // URL parametrelerini temizleyen fonksiyon
 function cleanProductUrl(urlStr) {
-  if (!urlStr || typeof urlStr !== 'string') return '';
-  try {
-    const url = new URL(urlStr.trim());
-    const host = url.hostname.toLowerCase();
-
-    const majorStores = [
-      'amazon',
-      'trendyol',
-      'hepsiburada',
-      'n11',
-      'pazarama',
-      'pttavm',
-      'zara',
-      'defacto',
-      'mavi',
-      'beymen',
-      'teknosa',
-      'mediamarkt',
-      'migros',
-      'getir',
-      'vatanbilgisayar',
-      'idefix',
-      'itopya',
-      'incehesap',
-      'havit'
-    ];
-
-    let isMajorStore = false;
-    for (const store of majorStores) {
-      if (host.includes(store)) {
-        isMajorStore = true;
-        break;
-      }
-    }
-
-    if (isMajorStore) {
-      // Büyük mağazalar için query parametrelerini tamamen temizle
-      url.search = '';
-    } else {
-      // Diğer mağazalar için sadece ürün kimlik parametrelerini koru, kalanları sil
-      const paramsToKeep = ['id', 'productid', 'product_id', 'p', 'item_id', 'itemid', 'sku'];
-      const keys = Array.from(url.searchParams.keys());
-      for (const key of keys) {
-        if (!paramsToKeep.includes(key.toLowerCase())) {
-          url.searchParams.delete(key);
-        }
-      }
-    }
-
-    let result = url.toString();
-    if (result.endsWith('?')) {
-      result = result.substring(0, result.length - 1);
-    }
-    return result;
-  } catch (e) {
-    return urlStr;
-  }
+  return affiliateManager.cleanProductUrl(urlStr);
 }
 
 // Environment variables - sanitized to prevent newline/quote issues from Secret Manager
@@ -1076,12 +1019,14 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
      ↳ [Kategori Tespit Servisi]
 🎯 ====================================================
     `);
-    // Deal onay gereksinimini Firestore settings/app belgesinden kontrol et
+    // Deal onay gereksinimini ve affiliate ayarlarını Firestore settings/app belgesinden kontrol et
     let dealApprovalRequired = true;
+    let appSettings = {};
     try {
       const settingsDoc = await db.collection('settings').doc('app').get();
       if (settingsDoc.exists) {
-        dealApprovalRequired = settingsDoc.data().dealApprovalRequired !== false;
+        appSettings = settingsDoc.data() || {};
+        dealApprovalRequired = appSettings.dealApprovalRequired !== false;
       }
     } catch (e) {
       console.log('⚠️ Settings yüklenemedi, varsayılan olarak onay beklenecek:', e.message);
@@ -1093,13 +1038,28 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       discountRate = Math.round(((origPrice - finalPrice) / origPrice) * 100);
     }
 
+    const rawTargetUrl = scrapeResult.url || mainLink;
+    const finalCleanUrl = affiliateManager.cleanProductUrl(rawTargetUrl);
+
+    // 🎯 Gelir Ortaklığı (Affiliate) Dönüştürme:
+    // Amazon, Hepsiburada, Teknosa vb. linkleri doğrudan yetkili admin takip kodumuzla dönüştür
+    let finalDealLink = rawTargetUrl;
+    try {
+      finalDealLink = affiliateManager.convert(rawTargetUrl, appSettings);
+      if (finalDealLink !== rawTargetUrl) {
+        console.log(`🎉 [AFFILIATE] Link başarıyla affiliate linke dönüştürüldü: ${finalDealLink}`);
+      }
+    } catch (affErr) {
+      console.warn('⚠️ [AFFILIATE] Link dönüştürme hatası, orijinal link korundu:', affErr.message);
+    }
+
     // Deal objesi
     const deal = {
       title: cleanedTitle,
       description: advertisingComplianceService.ensureAdvertisingDisclosure(
         truncateEditorAndFooterInfo(finalDescription || scrapeResult.description || 'Fırsat Ürünü Detayları')
       ),
-      link: scrapeResult.url || mainLink,
+      link: finalDealLink,
       price: finalPrice,
       originalPrice: origPrice,
       discountRate: discountRate,
@@ -1112,7 +1072,7 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       isActive: true,
       isExpired: false,
       isFeatured: false,
-      cleanUrl: cleanProductUrl(scrapeResult.url || mainLink),
+      cleanUrl: finalCleanUrl,
       viewCount: 0,
       hotVotes: 0,
       coldVotes: 0,

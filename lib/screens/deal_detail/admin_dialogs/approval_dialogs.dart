@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../../../models/deal.dart';
+import '../../../services/affiliate/affiliate_service.dart';
 import '../../../services/firestore_service.dart';
 import '../../../services/notification_service.dart';
 
@@ -125,6 +126,80 @@ Future<void> _approveDeal({
   if (hidePrice) {
     updates['hidePrice'] = true;
   }
+
+  bool wasConverted = false;
+  if (currentDeal != null) {
+    final currentUrl = currentDeal.link;
+    _log('═══════════════════════════════════════════════════════════');
+    _log('👑 [AFFILIATE-TEST] Mobil Fırsat Detay Onay: Fırsat Onaylanıyor');
+    _log('   🆔 Fırsat ID: $dealId');
+    _log('   🏷️ Başlık: ${currentDeal.title}');
+    _log('   🔗 Mevcut Link: $currentUrl');
+    if (currentUrl.isNotEmpty) {
+      final adapter = AffiliateService.getAdapter(currentUrl);
+      try {
+        final settingsDoc = await firestoreService.firestore.collection('settings').doc('app').get();
+        if (settingsDoc.exists && settingsDoc.data() != null) {
+          AffiliateService.syncFromMap(settingsDoc.data()!);
+        }
+      } catch (_) {}
+
+      final uri = Uri.tryParse(currentUrl);
+      final isAlreadyAffiliate = adapter != null && uri != null && adapter.isAlreadyAffiliate(uri);
+
+      if (adapter != null && !adapter.isEnabled) {
+        // 🛑 Kill-Switch Aktif (Şalter Kapalı): Eğer linkte affiliate kalmışsa organik temiz linke unwrap et
+        _log('🛑 [AFFILIATE-TEST] ${adapter.storeName} affiliate şalteri KAPALI (enabled=false).');
+        _log('   🛡️ Fırsat onaylanırken organik temiz ürün linkine unwrap ediliyor: $currentUrl');
+        final cleanUrl = uri != null ? adapter.convert(uri) : Deal.cleanProductUrl(currentUrl);
+        updates['url'] = cleanUrl;
+        updates['link'] = cleanUrl;
+        updates['cleanUrl'] = cleanUrl;
+        wasConverted = true;
+      } else if (isAlreadyAffiliate) {
+        // ⚡ Hızlı Yol (Fast-Path): Link zaten paylaşım anında affiliate yapılmış ve hazır.
+        // Tekrar hesaplama yapılmaz; hazır link doğrudan "Mağazaya Git" butonu arkasında yayına girer.
+        _log('⚡ [AFFILIATE-TEST] Hızlı Yol (Fast-Path): Link zaten hazır affiliate linki, mükerrer hesaplama yapılmadı.');
+        _log('   👉 Aktif Link: $currentUrl');
+      } else {
+        // 🛡️ Emniyet Ağı (Safety Net): Yalnızca eski/organik kalmış linkler için tek seferlik dönüşüm
+        _log('🔄 [AFFILIATE-TEST] Emniyet Ağı: Link henüz affiliate değil, dönüştürülüyor...');
+
+        try {
+          final convertedUrl = await AffiliateService.resolveAndConvertToAffiliate(currentUrl);
+          if (convertedUrl != currentUrl) {
+            updates['url'] = convertedUrl;
+            updates['link'] = convertedUrl;
+            wasConverted = true;
+            _log('🎉 [AFFILIATE-TEST] Fırsat onaylandı ve affiliate linke dönüştürüldü!');
+            _log('   👉 Eski: $currentUrl');
+            _log('   👉 Yeni: $convertedUrl');
+          } else {
+            _log('ℹ️ [AFFILIATE-TEST] Link dönüştürülmedi (Şalter kapalı veya desteklenmeyen mağaza): $convertedUrl');
+          }
+        } catch (e) {
+          _log('⚠️ [AFFILIATE-TEST] Onay sırasında link dönüştürme hatası, mevcut link korundu: $e');
+        }
+      }
+
+      // cleanUrl eksik veya affiliate yönlendirme linki ise organik temiz URL'i Firestore'a kaydet
+      if (currentDeal.cleanUrl.trim().isEmpty ||
+          currentDeal.cleanUrl.contains('btrck.com') ||
+          currentDeal.cleanUrl.contains('7t4g.adj.st') ||
+          currentDeal.cleanUrl.contains('adj.st')) {
+        final clean = Deal.cleanProductUrl(currentDeal.displayUrl.isNotEmpty ? currentDeal.displayUrl : currentUrl);
+        if (clean.isNotEmpty &&
+            !clean.contains('btrck.com') &&
+            !clean.contains('7t4g.adj.st') &&
+            !clean.contains('adj.st')) {
+          updates['cleanUrl'] = clean;
+          _log('✨ [AFFILIATE-TEST] cleanUrl Firestore alanına eklendi: $clean');
+        }
+      }
+    }
+    _log('═══════════════════════════════════════════════════════════');
+  }
+
   await firestoreService.updateDeal(dealId, updates);
   
   if (currentDeal != null) {
@@ -150,9 +225,13 @@ Future<void> _approveDeal({
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          isEditorPick
-              ? 'Fırsat Editörün Seçimi olarak onaylandı ⭐'
-              : 'Fırsat Onaylandı ✅',
+          wasConverted
+              ? (isEditorPick
+                  ? 'Fırsat Editörün Seçimi & Affiliate Linkiyle Onaylandı ⭐🔗'
+                  : 'Fırsat Onaylandı & Affiliate Linke Dönüştürüldü! ✅🔗')
+              : (isEditorPick
+                  ? 'Fırsat Editörün Seçimi olarak onaylandı ⭐'
+                  : 'Fırsat Onaylandı ✅'),
         ),
         backgroundColor: isEditorPick ? Colors.orange[700] : Colors.green,
       ),

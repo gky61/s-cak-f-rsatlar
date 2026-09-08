@@ -1705,9 +1705,196 @@
                                     <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
                                 </label>
                             </div>
+
+                            <!-- Teknosa Affiliate (Paylaş Kazan) Toggle & Info Box -->
+                            <div class="flex flex-col gap-2 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div class="flex flex-col gap-1">
+                                        <div class="flex items-center gap-2">
+                                            <h4 class="text-sm font-bold text-slate-900 dark:text-white">Teknosa Affiliate (Paylaş Kazan) Dönüşümü</h4>
+                                            <!-- Info ! button -->
+                                            <button type="button" id="teknosaAffiliateInfoBtn" class="size-5 rounded-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-black flex items-center justify-center border border-blue-500/30 transition-all cursor-pointer shadow-sm" title="Açık/Kapalı çalışma durumlarını ve detaylarını öğrenmek için tıklayın">
+                                                !
+                                            </button>
+                                        </div>
+                                        <p class="text-xs text-slate-500 dark:text-slate-400">Teknosa ürün ve kısa linklerinin admin gelir ortaklığı (TUNE / HasOffers) linkine dönüştürülmesini kontrol eder.</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                        <input id="settingsToggleTeknosaAffiliateBtn" class="sr-only peer" type="checkbox" checked/>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                    </label>
+                                </div>
+
+                                <!-- Collapsible / Expandable Info Note -->
+                                <div id="teknosaAffiliateInfoBox" class="hidden mt-2 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-blue-200/60 dark:border-blue-800/40 text-xs space-y-3 transition-all duration-300">
+                                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                                        <div class="flex items-center gap-1.5 font-bold text-blue-600 dark:text-blue-400">
+                                            <span class="material-symbols-outlined text-[18px]">info</span>
+                                            <span>Teknosa Affiliate Şalteri Çalışma Mantığı & Yedekleme (Fallback) Kılavuzu</span>
+                                        </div>
+                                        <button type="button" id="closeTeknosaAffiliateInfoBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-semibold px-2 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                                            ✕ Kapat
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <!-- Durum A: Açık -->
+                                        <div class="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 space-y-1.5">
+                                            <div class="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-400">
+                                                <span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                <span>AÇIK DURUMDA (Varsayılan):</span>
+                                            </div>
+                                            <ul class="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1 pl-1 leading-relaxed">
+                                                <li>Admin panelinde onaylanan Teknosa ürün linkleri otomatik olarak adminin <strong>rdr.btrck.com</strong> (TUNE HasOffers / Winfluenced) gelir ortaklığı linkine dönüştürülür.</li>
+                                                <li>Kullanıcılar başkasına ait Paylaş Kazan veya affiliate linki paylaşsa bile sistem unwrap ederek admin UUID'sine devreder (retargeting).</li>
+                                                <li>Alışverişlerden platform adminine komisyon yazılır.</li>
+                                            </ul>
+                                        </div>
+
+                                        <!-- Durum B: Kapalı -->
+                                        <div class="p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 space-y-1.5">
+                                            <div class="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-400">
+                                                <span class="size-2 rounded-full bg-amber-500"></span>
+                                                <span>KAPALI DURUMDA (Acil Durum / Fallback Modu):</span>
+                                            </div>
+                                            <ul class="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1 pl-1 leading-relaxed">
+                                                <li>Teknosa yarın Paylaş Kazan yapısında değişikliğe giderse, kampanya biterse veya TUNE linkleri 404 verirse bu şalter kapatılır.</li>
+                                                <li>Affiliate dönüşümü anında devre dışı bırakılır ve <strong>güvenli fallback moduna</strong> geçilir.</li>
+                                                <li>Ürün bilgileri (fiyat, eski fiyat, resim, başlık) eskiden olduğu gibi standart scraping ile eksiksiz çekilir.</li>
+                                                <li>Link doğrudan sade ve çalışan kanonik <strong>teknosa.com/...-p-123</strong> ürün linki olarak korunur. Sıfır kırık link, sıfır yönlendirme hatası!</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Hepsiburada Affiliate (LinkGelir / Adjust) Toggle & Info Box -->
+                            <div class="flex flex-col gap-2 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div class="flex flex-col gap-1">
+                                        <div class="flex items-center gap-2">
+                                            <h4 class="text-sm font-bold text-slate-900 dark:text-white">Hepsiburada Affiliate (LinkGelir) Dönüşümü</h4>
+                                            <!-- Info ! button -->
+                                            <button type="button" id="hepsiburadaAffiliateInfoBtn" class="size-5 rounded-full bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-xs font-black flex items-center justify-center border border-orange-500/30 transition-all cursor-pointer shadow-sm" title="Açık/Kapalı çalışma durumlarını ve detaylarını öğrenmek için tıklayın">
+                                                !
+                                            </button>
+                                        </div>
+                                        <p class="text-xs text-slate-500 dark:text-slate-400">Hepsiburada ürün ve kısa linklerinin admin gelir ortaklığı (Adjust 7t4g.adj.st / LinkGelir) linkine dönüştürülmesini kontrol eder.</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                        <input id="settingsToggleHepsiburadaAffiliateBtn" class="sr-only peer" type="checkbox" checked/>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                    </label>
+                                </div>
+
+                                <!-- Collapsible / Expandable Info Note -->
+                                <div id="hepsiburadaAffiliateInfoBox" class="hidden mt-2 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-orange-200/60 dark:border-orange-800/40 text-xs space-y-3 transition-all duration-300">
+                                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                                        <div class="flex items-center gap-1.5 font-bold text-orange-600 dark:text-orange-400">
+                                            <span class="material-symbols-outlined text-[18px]">info</span>
+                                            <span>Hepsiburada Affiliate Şalteri Çalışma Mantığı & Yedekleme (Fallback) Kılavuzu</span>
+                                        </div>
+                                        <button type="button" id="closeHepsiburadaAffiliateInfoBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-semibold px-2 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                                            ✕ Kapat
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <!-- Durum A: Açık -->
+                                        <div class="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 space-y-1.5">
+                                            <div class="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-400">
+                                                <span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                <span>AÇIK DURUMDA (Varsayılan):</span>
+                                            </div>
+                                            <ul class="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1 pl-1 leading-relaxed">
+                                                <li>Admin panelinde onaylanan Hepsiburada ürün linkleri otomatik olarak adminin <strong>7t4g.adj.st</strong> (Adjust LinkGelir Universal Deep-Link) gelir ortaklığı linkine dönüştürülür.</li>
+                                                <li>Kullanıcılar başkasına ait app.hb.biz veya Adjust linki paylaşsa bile sistem unwrap ederek admin LinkGelir hesabına (muratcan gokyokus) devreder (retargeting).</li>
+                                                <li>Alışverişlerden platform adminine komisyon yazılır.</li>
+                                            </ul>
+                                        </div>
+
+                                        <!-- Durum B: Kapalı -->
+                                        <div class="p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 space-y-1.5">
+                                            <div class="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-400">
+                                                <span class="size-2 rounded-full bg-amber-500"></span>
+                                                <span>KAPALI DURUMDA (Acil Durum / Fallback Modu):</span>
+                                            </div>
+                                            <ul class="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1 pl-1 leading-relaxed">
+                                                <li>Hepsiburada LinkGelir yapısında değişikliğe giderse, kampanya biterse veya Adjust linkleri sorun yaşarsa bu şalter kapatılır.</li>
+                                                <li>Affiliate dönüşümü anında devre dışı bırakılır ve <strong>güvenli fallback moduna</strong> geçilir.</li>
+                                                <li>Ürün bilgileri (fiyat, eski fiyat, resim, başlık) eskiden olduğu gibi standart scraping ile eksiksiz çekilir.</li>
+                                                <li>Link doğrudan sade ve çalışan kanonik <strong>hepsiburada.com/...-p-[SKU]</strong> ürün linki olarak korunur. Sıfır kırık link, sıfır yönlendirme hatası!</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Amazon Affiliate (Associates TR / firsatkolik-21) Toggle & Info Box -->
+                            <div class="flex flex-col gap-2 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div class="flex flex-col gap-1">
+                                        <div class="flex items-center gap-2">
+                                            <h4 class="text-sm font-bold text-slate-900 dark:text-white">Amazon Affiliate (Associates TR) Dönüşümü</h4>
+                                            <!-- Info ! button -->
+                                            <button type="button" id="amazonAffiliateInfoBtn" class="size-5 rounded-full bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-xs font-black flex items-center justify-center border border-orange-500/30 transition-all cursor-pointer shadow-sm" title="Açık/Kapalı çalışma durumlarını ve detaylarını öğrenmek için tıklayın">
+                                                !
+                                            </button>
+                                        </div>
+                                        <p class="text-xs text-slate-500 dark:text-slate-400">Amazon Türkiye ürün ve kısa linklerinin admin gelir ortaklığı (tag=firsatkolik-21) linkine dönüştürülmesini kontrol eder.</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                        <input id="settingsToggleAmazonAffiliateBtn" class="sr-only peer" type="checkbox" checked/>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                    </label>
+                                </div>
+
+                                <!-- Collapsible / Expandable Info Note -->
+                                <div id="amazonAffiliateInfoBox" class="hidden mt-2 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-orange-200/60 dark:border-orange-800/40 text-xs space-y-3 transition-all duration-300">
+                                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                                        <div class="flex items-center gap-1.5 font-bold text-orange-600 dark:text-orange-400">
+                                            <span class="material-symbols-outlined text-[18px]">info</span>
+                                            <span>Amazon Affiliate Şalteri Çalışma Mantığı & Yedekleme (Fallback) Kılavuzu</span>
+                                        </div>
+                                        <button type="button" id="closeAmazonAffiliateInfoBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-semibold px-2 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                                            ✕ Kapat
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <!-- Durum A: Açık -->
+                                        <div class="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 space-y-1.5">
+                                            <div class="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-400">
+                                                <span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                <span>AÇIK DURUMDA (Varsayılan):</span>
+                                            </div>
+                                            <ul class="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1 pl-1 leading-relaxed">
+                                                <li>Admin panelinde onaylanan Amazon linkleri otomatik olarak adminin resmi <strong>tag=firsatkolik-21</strong> gelir ortaklığı linkine dönüştürülür.</li>
+                                                <li>Kullanıcılar başkasına ait tag veya amzn.eu kısa linki paylaşsa bile sistem unwrap ederek admin tag'ine devreder (anti-hijack & retargeting).</li>
+                                                <li>Alışverişlerden (24 saatlik ilişkilendirme penceresinde) platform adminine komisyon yazılır.</li>
+                                            </ul>
+                                        </div>
+
+                                        <!-- Durum B: Kapalı -->
+                                        <div class="p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 space-y-1.5">
+                                            <div class="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-400">
+                                                <span class="size-2 rounded-full bg-amber-500"></span>
+                                                <span>KAPALI DURUMDA (Acil Durum / Fallback Modu):</span>
+                                            </div>
+                                            <ul class="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1 pl-1 leading-relaxed">
+                                                <li>Amazon Associates politikalarında değişiklik olursa veya hesap duraklatılırsa bu şalter kapatılır.</li>
+                                                <li>Affiliate dönüşümü anında devre dışı bırakılır ve <strong>güvenli fallback moduna</strong> geçilir.</li>
+                                                <li>Ürün bilgileri eskiden olduğu gibi standart scraping ile eksiksiz çekilir.</li>
+                                                <li>Link doğrudan sade ve çalışan kanonik <strong>amazon.com.tr/dp/[ASIN]</strong> ürün linki olarak korunur. Sıfır kırık link, sıfır yönlendirme hatası!</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Bot & App Config Card -->
+
                         <div class="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-6">
                             <h3 class="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 pb-3">Bot ve Uygulama Yapılandırması</h3>
                             
@@ -2185,6 +2372,7 @@
     </div>
 
     <script src="config.js?v=3.1"></script>
+    <script src="affiliate_manager.js?v=1.0"></script>
     <script>
         // Version check - Force cache refresh
         console.log('Admin Panel v9.01 - ' + new Date().toISOString());

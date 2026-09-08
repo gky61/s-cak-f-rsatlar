@@ -147,14 +147,22 @@ Platform bünyesinde tam desteklenen 21 e-ticaret mağazası ve uygulanan özel 
 - **Sunucu Bypass:** Akamai Bot Manager, Google Translate ve Googlebot IP'lerini Captcha sayfasına (`HBBlockandCaptcha.html`) yönlendirir. Sunucuda `spawnSync('curl', [...])` + `WhatsApp` UA ile doğrudan erişilir.
 
 ### 3. Trendyol (`trendyol.com`, `ty.gl`)
-- **Kısa Link Çözümleme (`ty.gl`):** WhatsApp UA ve Türkiye çerezleri ile sistem `curl` HEAD komutu kullanılarak çözülür.
+- **Kısa Link Çözümleme (`ty.gl`):** WhatsApp UA ve Türkiye çerezleri ile sistem `curl` HEAD komutu kullanılarak çözülür (`adjust_redirect` parametresi üzerinden doğrudan ürün linkine erişilir).
 - **Varyant Desteği (`ProductGroup`):** Çoklu beden/renk içeren sayfalarda root tipi `ProductGroup` olarak geldiğinde ilk varyantın alakasız fiyatı yerine `findProductInJson` ile ana ürünün geçerli aktif fiyatı çözümlenir.
+- **Kampanya & Sepet İndirimi Fallback'i (`.campaign-price-wrapper` / State Fallback):**
+  - Bazı kampanya veya sepet indirimli ürünlerde Trendyol sayfaya `application/ld+json` script bloğu basmaz.
+  - Bu tür sayfalarda satış fiyatı DOM'da `<p class="new-price">`, indirimsiz fiyat ise `<p class="old-price">` altında tutulur.
+  - DOM seçicilerine ek olarak `__PRODUCT_DETAIL_APP_INITIAL_STATE__` veya `__NEXT_DATA__` script nesnesindeki `discountedPrice` ve `sellingPrice` verileri regex/JSON fallback olarak taranır; böylece JSON-LD bulunmayan ürünlerin de fiyatı 0 TL kalmadan %100 doğrulukla ayıklanır.
 - **Fiyat Rozeti:** `.plus-price` veya `data-plus-price` tespit edildiğinde `priceLabel: "Plus'a Özel"` atanır.
 - **Sunucu Bypass (Yurt Dışı IP Yönlendirmesi):** Cloud Run sunucuları ABD IP'sinde olduğundan Trendyol istekleri `/en/select-country` sayfasına yönlendirir. İstek `curl` ile atılırken `Cookie: storefrontId=1; countryCode=TR; language=tr` çerezleri eklenir; böylece Trendyol botu Türkiye'deki bir kullanıcı gibi algılar ve local butik indirimli fiyatları döner.
 
 ### 4. N11 (`n11.com`, `sl.n11.com`)
 - **Kısa Link Çözümleme (`sl.n11.com/n/`):** `sl.n11.com/n/...` linkleri `www.n11.com/n/...` formatına dönüştürülerek Google Translate Proxy tüneli üzerinden çözülür; böylece Adjust'ın Google Play Store yönlendirmesi tamamen bypass edilir.
-- **Fiyat & Mağaza Parametresi:** Sadece mağaza bazlı indirimlerin doğru hesaplanması için `magaza` parametresi korunur, diğerleri temizlenir. `.newPrice` ve JSON-LD şemaları taranır.
+- **Dinamik Sepet İndirimi & Fiyat Çözümleme (`personalizedDetail` REST API):** 
+  - N11, "Sepette %X İndirim" kampanyalarını ilk gelen statik HTML'e basmaz; tarayıcı ön yüzü arka planda `POST https://www.n11.com/rest/v1/personalizedDetail` uç noktasına istek atarak anlık sepet indirimini (`instantDiscountedPrice`) ve eski fiyatı (`oldPrice`) yükler.
+  - Scraper, `window.model`'den `productId`, `categoryId` ve ürün slug bilgisini çekip bu API'ye `WhatsApp/2.23.4.15 A` kimliği ve HTTP/1.1 TLS istemcisiyle istek atar (`instantDiscountedPrice` / `finalPrice` ➔ `price`, `oldPrice` / `displayPrice` ➔ `originalPrice`).
+  - Statik model fallback'inde ise `product.price` ve `product.displayPrice` alanları karşılaştırılarak **düşük olan indirimli satış fiyatı**, **yüksek olan ise indirimsiz liste fiyatı** olarak seçilir.
+- **Abonelik / Rozet Politikası:** N11'de Amazon Prime veya Hepsiburada Premium gibi ücretli bir Plus/Premium üyelik modeli bulunmadığı için `priceLabel` alanı standart mağazalar gibi her zaman `null` döner; arayüzde üye rozeti tetiklenmez.
 - **Sunucu Bypass:** Google Cloud datacenter IP engeli `https://www-n11-com.translate.goog/path?...` Google Translate Proxy yöntemiyle aşılır.
 
 ### 5. Pazarama (`pazarama.com`)
@@ -361,7 +369,7 @@ python cloud-run-bot/deploy_to_vm.py prod
 | **Amazon** | WhatsApp UA + 43-byte Filtresi | curl spawnSync / Microlink | Prime Fırsatı (`priceLabel`), Amazon Depo 2. El (`isAmazonWarehouse`) |
 | **Hepsiburada** | Canlı `withoutAffordability` API | curl spawnSync (Akamai Bypass) | Premium ile (`priceLabel`), Gotham API Gateway, Sepet İndirimi |
 | **Trendyol** | JSON-LD `ProductGroup` Parser | curl spawnSync + TR Cookies | Plus'a Özel (`priceLabel`), Butik/Varyant Fiyat Ayrımı |
-| **N11** | WhatsApp UA + sl.n11 Çözücü | Google Translate Proxy | `magaza` parametresi koruma, DOM `.newPrice` |
+| **N11** | WhatsApp UA + Canlı `personalizedDetail` API | Google Translate Proxy | Sepette İndirim (`instantDiscountedPrice`), `magaza` parametresi koruma, `price`/`displayPrice` min-max analizi |
 | **Pazarama** | DOM (Plus Alanı) & JSON-LD | curl spawnSync | Plus ile (`priceLabel`), Standart JSON-LD fallback |
 | **Getir** | Native HTTP + Lokasyon Çerezleri| Lokasyon curl + Yandex / Wayback | Depo Ürünleri Çözümleme, `__NEXT_DATA__` Parser |
 | **Zara** | **Native MethodChannel HTTP** | curl spawnSync | Akamai Bot Manager Bypass, `zara.analyticsData` Script |
@@ -422,4 +430,5 @@ Her mağazanın scraper doğruluğu bağımsız unit testler ile garanti altına
 | **Telegram Canlı Botu** | [telegram_bot.js](file:///d:/firsatkolik/cloud-run-bot/telegram_bot.js) | Telegram kanallarını dinleyen ve fırsatları Firestore'a kaydeden ana bot. |
 | **Kategori Tespit Servisi** | [category_detection_service.js](file:///d:/firsatkolik/cloud-run-bot/category_detection_service.js) | NLP tabanlı otomatik kategori sınıflandırma motoru. |
 | **Reklam Uyum Servisi** | [advertising_compliance_service.js](file:///d:/firsatkolik/cloud-run-bot/advertising_compliance_service.js) | Yasal reklam ibaresi (#işbirliği) entegrasyonu. |
+| **Affiliate Dönüştürme Rehberi** | [affiliate_link_donusturme_ve_stratejileri_rehberi.md](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/affiliate_link_donusturme_ve_stratejileri_rehberi.md) | TUNE HasOffers tersine mühendisliği, modüler adaptör mimarisi ve mağaza affiliate stratejileri. |
 | **VM Deployment Scripti** | [deploy_to_vm.py](file:///d:/firsatkolik/cloud-run-bot/deploy_to_vm.py) | Google Cloud Build ve VM Docker container güncelleme otomasyonu. |

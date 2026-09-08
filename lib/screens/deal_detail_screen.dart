@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/foundation.dart' show kDebugMode;
-import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
 
@@ -12,6 +11,7 @@ import '../models/category.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/link_preview_service.dart';
+import '../services/affiliate/store_redirect_service.dart';
 import '../theme/app_theme.dart';
 import 'profile_screen.dart';
 import 'botkolik_profile_screen.dart';
@@ -399,9 +399,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           _expiredVotes = deal.expiredVotes;
         });
         _checkUserVote();
-        // Eğer görsel yoksa, linkten çekmeyi dene
-        if (deal.imageUrl.isEmpty && deal.link.isNotEmpty && !_hasTriedFetching) {
-          _fetchImageFromLink(deal.link);
+        // Eğer görsel yoksa, temiz linkten çekmeyi dene
+        if (deal.imageUrl.isEmpty && deal.displayUrl.isNotEmpty && !_hasTriedFetching) {
+          _fetchImageFromLink(deal.displayUrl);
         }
         
         // Eğer scrollToCommentId varsa ve henüz otomatik açılmadıysa, yorumlar bottom sheet'ini tam 1 defa aç
@@ -1753,70 +1753,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
 
   Future<void> _openLink(BuildContext context, String link) async {
-    if (link.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bağlantı henüz eklenmedi'),
-        ),
-      );
-      return;
-    }
-
-    try {
-      // URL'yi düzelt - http:// veya https:// yoksa ekle
-      String cleanUrl = link.trim();
-      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-        cleanUrl = 'https://$cleanUrl';
-      }
-      
-      final uri = Uri.parse(cleanUrl);
-      
-      // canLaunchUrl kontrolü yapmadan direkt dene - daha güvenilir
-      try {
-        // Önce external application ile dene
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-        if (launched) return;
-      } catch (e) {
-        // External başarısız, devam et
-      }
-      
-      // External başarısız olduysa platform default dene
-      try {
-        final launched = await launchUrl(
-          uri,
-          mode: LaunchMode.platformDefault,
-        );
-        if (launched) return;
-      } catch (e) {
-        // Platform default da başarısız
-      }
-      
-      // Son çare: inAppWebView (eğer destekleniyorsa)
-      try {
-        await launchUrl(
-          uri,
-          mode: LaunchMode.inAppWebView,
-        );
-    } catch (e) {
-        // Tüm yöntemler başarısız oldu
-        throw Exception('Bağlantı açılamadı');
-      }
-    } catch (e) {
-      _log('❌ URL açma hatası: $e');
-      _log('❌ URL: $link');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Bağlantı açılamadı: ${e.toString()}'),
-            duration: const Duration(seconds: 4),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+    final currentDeal = _currentDeal;
+    await StoreRedirectService.launchStore(
+      context,
+      rawUrl: link,
+      storeName: currentDeal?.store,
+    );
   }
 
 
@@ -1827,12 +1769,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       originalImageFailed: _originalImageFailed,
       isFetchingImage: _isFetchingImage,
       hasTriedFetching: _hasTriedFetching,
-      onFetchImage: () => _fetchImageFromLink(deal.link),
+      onFetchImage: () => _fetchImageFromLink(deal.displayUrl),
       onOriginalImageFailed: (failed) {
         if (mounted) {
           setState(() => _originalImageFailed = failed);
-          if (!_hasTriedFetching && deal.link.isNotEmpty) {
-            _fetchImageFromLink(deal.link);
+          if (!_hasTriedFetching && deal.displayUrl.isNotEmpty) {
+            _fetchImageFromLink(deal.displayUrl);
           }
         }
       },

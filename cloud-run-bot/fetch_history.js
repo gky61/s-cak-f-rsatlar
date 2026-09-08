@@ -13,6 +13,7 @@ const linkScraperService = require('./link_scraper_service');
 const categoryDetectionService = require('./category_detection_service');
 const domainAllowlist = require('./domain_allowlist');
 const advertisingComplianceService = require('./advertising_compliance_service');
+const affiliateManager = require('./affiliate_manager');
 
 // Firebase Admin başlat
 // Cloud Run'da otomatik authentication kullanır
@@ -665,13 +666,23 @@ async function saveDealToFirebase(message, chatInfo) {
 🎯 ====================================================
     `);
 
+    const rawTargetUrl = scrapeResult.url || mainLink;
+    const finalCleanUrl = affiliateManager.cleanProductUrl(rawTargetUrl);
+
+    // 🎯 Gelir Ortaklığı (Affiliate) Dönüştürme
+    let finalDealLink = rawTargetUrl;
+    try {
+      finalDealLink = affiliateManager.convert(rawTargetUrl);
+    } catch (_) {}
+
     // Deal objesi
     const deal = {
       title: cleanedTitle,
       description: advertisingComplianceService.ensureAdvertisingDisclosure(
         truncateEditorAndFooterInfo(finalDescription || 'Fırsat Ürünü Detayları')
       ),
-      link: scrapeResult.url || mainLink,
+      link: finalDealLink,
+      cleanUrl: finalCleanUrl,
       price: finalPrice,
       originalPrice: (scrapeResult.originalPrice || scrapeResult.original_price || null),
       discount: (scrapeResult.discount || null),

@@ -75,6 +75,8 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 ### 6. Trendyol (`trendyol.com`)
 *   **Varyant Karmaşası:** Trendyol'da çoklu boyut/renk içeren sayfalarda şema root tipi `Product` yerine `ProductGroup` olarak gelir. Eski yapıda bu durum en üstteki asıl fiyat yerine ilk varyantın alakasız fiyatının çekilmesine yol açıyordu.
 *   **Çözüm:** `findProductInJson` fonksiyonuna `ProductGroup` desteği eklenerek en üst seviyedeki ana ürünün geçerli aktif fiyatının çözümlenmesi sağlandı.
+*   **Kampanyalı / Sepet İndirimli Ürünlerde JSON-LD Eksikliği:** Bazı sepet indirimli veya kampanya tanımlı ürün sayfalarında (`.campaign-price-wrapper`) Trendyol hiçbir `application/ld+json` şeması basmaz. Bu durumda fiyat DOM'da `<p class="new-price">` ve script state'inde (`__PRODUCT_DETAIL_APP_INITIAL_STATE__`) `discountedPrice` / `sellingPrice` alanlarında saklanır.
+*   **Çözüm:** DOM seçicilerine `.new-price` eklenerek ve state script fallback'i getirilerek fiyatın 0 TL dönmesi engellendi.
 
 ### 7. Zara (`zara.com`)
 *   **Bot Koruması Engeli (Akamai Bot Manager):** Zara, standart Dart HTTP istemcilerini JA3/TLS parmak izi analiziyle anında engelleyerek `2.8 KB` boyutunda bir Javascript challenge sayfasına (`bm-verify`) yönlendirir.
@@ -103,10 +105,15 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
     2. Puan veya değerlendirme sayısı bulunamadığında, canonical URL veya DOM etiketlerinden ürün ID'si (`p-{productId}`) çıkarılır.
     3. İdefix'in resmi e-ticaret yorum servisine (`https://ecomapi.idefix.com/api/product/{productId}/detail/review`) istek atılarak `averageRating` ve `reviewCount` alanları canlı olarak çekilir.
 
-### 11. Vatan Bilgisayar / Teknosa / MediaMarkt / İtopya / N11
-*   Bu mağazalar görece daha standart WAF yapıları kullanırlar. Ağırlıklı olarak `application/ld+json` taranır. N11'de Cloudflare engeli için `WhatsApp` UA taklidi yapılarak DOM fallback seçicileriyle veriler kurtarılır.
+### 11. N11 (`n11.com`)
+*   **Sepet İndirimi & Fiyat Çözümleme:** N11'de anlık sepet kampanyaları ("Sepette %X İndirim") ilk HTML'de yer almaz. `window.model` üzerinden ürün ID'si ve kategorisi okunarak `POST https://www.n11.com/rest/v1/personalizedDetail` API'sine istek atılır ve dinamik `instantDiscountedPrice` ile `oldPrice` çekilir. Statik fallback'te `price` ve `displayPrice` karşılaştırılarak düşük olan satış fiyatı, yüksek olan ise liste fiyatı olarak alınır.
+*   **Abonelik Rozeti (`priceLabel`):** N11'de Prime/Plus/Premium gibi ücretli üyelik sistemi bulunmadığından `priceLabel` alanı standart dışı mağazalara uygun şekilde daima `null` döner.
+*   **WAF Engeli & Kısa Linkler:** WAF 403 engeli için `WhatsApp` UA taklidi ve HTTP/1.1 TLS istemcisi kullanılır. `sl.n11.com/n/` kısa linkleri Google Translate Proxy üzerinden çözülür.
 
-### 11. Getir (`getir.com`)
+### 12. Vatan Bilgisayar / Teknosa / MediaMarkt / İtopya
+*   Bu mağazalar görece daha standart WAF yapıları kullanırlar. Ağırlıklı olarak `application/ld+json` taranır.
+
+### 13. Getir (`getir.com`)
 *   **Çerez ve Konum Entegrasyonu:** Getir, Next.js kullanan konum tabanlı bir teslimat servisidir. Bölgesel/depoya özel ürünlerin çözümlenebilmesi için istek başlıklarına `locale=tr; language=tr; countryCode=TR; appType=GETIR` çerezleri otomatik olarak enjekte edilir.
 *   **Next.js JSON-LD & DOM Verisi:**
     *   **Fiyat ve Görsel:** Ürün bilgileri HTML içerisindeki `<script id="__NEXT_DATA__">` JSON bloğundan parse edilir. Ürün adı, fiyatı ve görsel cdn linkleri (`picURLs`) buradan doğrudan çekilir.
@@ -127,7 +134,7 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 | **Zara** | `zara.analyticsData` Script & Meta Tags | Akamai Bot Manager (JA3 TLS parmak izi engellemesi) | **Android (`HttpURLConnection`) & iOS (`URLSession`) Native MethodChannel bypass** + Regex script tarayıcı |
 | **Mango** | Next.js `__next_f.push` Script & Meta Tags | JSON-LD şemasının olmaması ve fiyatların Next.js hydration payload'unda olması | `__next_f.push` payload price regex ayrıştırıcı + og:image meta tag |
 | **Beymen** | JSON-LD (`application/ld+json`) & DOM | Hatalı JSON-LD karakter dizilimleri (satır sonu, kaçışsız çift tırnak) ve marka/başlık ayrımı | JSON-LD Sanitizer + DOM başlık (`.o-productDetail__description`) & en ucuz fiyat karşılaştırma |
-| **N11** | JSON-LD & DOM | WAF / Cloudflare bot koruması & Kısa Linkler | `WhatsApp` User-Agent + `.newPrice` / dataLayer fallback. `sl.n11.com/n/` kısa linkleri web tarafındaki `/n/` yönlendirme yoluna çevrilerek (`www.n11.com/n/`) ve HTTP redirect takibiyle asıl ürün sayfasına çözümlenir. |
+| **N11** | `window.model` & Canlı `personalizedDetail` API | WAF bot koruması, dinamik sepet indirimleri & Kısa Linkler | `WhatsApp` User-Agent + HTTP/1.1 TLS ile canlı `personalizedDetail` POST isteği (sepet indirimli ve eski fiyat tespiti, `price`/`displayPrice` min-max analizi). `sl.n11.com/n/` linkleri Google Translate Proxy tüneli ile Play Store yönlendirmesinden kurtarılır. Ücretli üyelik olmadığından `priceLabel` daima `null` döner. |
 | **Vatan Bilgisayar**| DOM Seçicileri | Dinamik render bağımlılığı | `.product-list__price` DOM seçici fallback |
 | **Teknosa** | JSON-LD | Standart yapı | JSON-LD `Product` şema çözücü |
 | **MediaMarkt** | JSON-LD | Standart yapı | JSON-LD `Product` şema çözücü |

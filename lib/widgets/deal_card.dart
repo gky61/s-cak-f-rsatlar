@@ -64,8 +64,8 @@ class _DealCardState extends State<DealCard> {
     
     // Yalnızca Amazon linklerinde deterministik ve güvenli ASIN görsel çözümlemesi yap.
     // Diğer mağazalarda generic banner çekilmesini engelleyerek temiz mağaza logosu fallback'ini koru.
-    if (!_imageLoadAttempted && (_effectiveImageUrl == null || isBlobUrl) && widget.deal.link.isNotEmpty) {
-      final link = widget.deal.link.trim();
+    if (!_imageLoadAttempted && (_effectiveImageUrl == null || isBlobUrl) && widget.deal.displayUrl.isNotEmpty) {
+      final link = widget.deal.displayUrl.trim();
       if (link.contains("amazon") || link.contains("amzn")) {
         _imageLoadAttempted = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -156,6 +156,51 @@ void main() {
       final priceLabelScript = await scraper.scrapePriceLabel(docScript);
       expect(priceLabelScript, equals("Plus'a Özel"));
     });
+
+    test('should scrape price and originalPrice from campaign DOM (.campaign-price-wrapper / .new-price / .old-price) when JSON-LD is absent', () async {
+      const html = '''
+      <!DOCTYPE html>
+      <html>
+      <head></head>
+      <body>
+        <div class="campaign-price-wrapper">
+          <p class="old-price">8.250 TL</p>
+          <p class="new-price">6.749 TL</p>
+        </div>
+      </body>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+      final price = await scraper.scrapePrice(doc);
+      final originalPrice = scraper.scrapeOriginalPrice(doc, price);
+      expect(price, equals(6749.0));
+      expect(originalPrice, equals(8250.0));
+    });
+
+    test('should scrape price from __PRODUCT_DETAIL_APP_INITIAL_STATE__ script when JSON-LD is absent', () async {
+      const html = '''
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <script>
+          window.__PRODUCT_DETAIL_APP_INITIAL_STATE__ = {
+            "product": {
+              "price": {
+                "discountedPrice": { "value": 6749.0 },
+                "sellingPrice": { "value": 8250.0 }
+              }
+            }
+          };
+        </script>
+      </head>
+      <body>
+      </body>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(6749.0));
+    });
   });
 }
 

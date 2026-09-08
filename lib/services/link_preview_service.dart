@@ -221,6 +221,9 @@ class LinkPreviewService {
       if (targetUrl.toLowerCase().contains('sl.n11.com/n/') || targetUrl.toLowerCase().contains('n11.com/n/')) {
         targetUrl = await resolveN11ShortLink(targetUrl);
       }
+      if (targetUrl.toLowerCase().contains('paylaskazan.teknosa.com') || targetUrl.toLowerCase().contains('rdr.btrck.com')) {
+        targetUrl = await resolveTeknosaPaylasKazan(targetUrl);
+      }
       final lowerUrl = targetUrl.toLowerCase();
       final isShortOrRedirect = lowerUrl.contains('amzn.eu') || 
                                lowerUrl.contains('amzn.to') || 
@@ -233,6 +236,7 @@ class LinkPreviewService {
                                lowerUrl.contains('rebrand.ly') ||
                                lowerUrl.contains('rdrtr.com') ||
                                lowerUrl.contains('onelink.me') ||
+                               lowerUrl.contains('paylaskazan.teknosa.com') ||
                                lowerUrl.contains('ty.gl');
 
       if (isShortOrRedirect) {
@@ -535,6 +539,9 @@ class LinkPreviewService {
       if (currentUrl.toLowerCase().contains('sl.n11.com/n/') || currentUrl.toLowerCase().contains('n11.com/n/')) {
         currentUrl = await resolveN11ShortLink(currentUrl);
       }
+      if (currentUrl.toLowerCase().contains('paylaskazan.teknosa.com') || currentUrl.toLowerCase().contains('rdr.btrck.com')) {
+        currentUrl = await resolveTeknosaPaylasKazan(currentUrl);
+      }
       if (currentUrl != url) {
         _log('🎯 Adjust yönlendirmesi hemen çözüldü: $currentUrl');
         return currentUrl;
@@ -600,6 +607,107 @@ class LinkPreviewService {
       _log('⚠️ N11 kısa link çözme hatası: $e');
     }
     return url;
+  }
+
+  // Teknosa Paylaş Kazan linklerini (paylaskazan.teknosa.com veya rdr.btrck.com) uzun ürün linkine çözer
+  Future<String> resolveTeknosaPaylasKazan(String url) async {
+    try {
+      // 1. Önce URL'in kendisinden yerel parametrelerle çözmeyi dene (özellikle rdr.btrck.com linklerinde)
+      final localResolved = _extractTeknosaProductUrl(url);
+      if (localResolved != null && localResolved.isNotEmpty) {
+        _log('⚡ Teknosa Paylaş Kazan URL parametrelerinden hemen çözüldü: $localResolved');
+        return localResolved;
+      }
+
+      _log('🔗 Teknosa Paylaş Kazan linki çözülüyor: $url');
+      final client = http.Client();
+      final request = http.Request('GET', Uri.parse(url))
+        ..followRedirects = false
+        ..headers['User-Agent'] = 'WhatsApp/2.23.4.15 A'
+        ..headers['Accept-Language'] = 'tr-TR,tr;q=0.9';
+      final response = await client.send(request).timeout(const Duration(seconds: 5));
+      final location = response.headers['location'] ?? response.headers['Location'];
+      client.close();
+      if (location != null && location.isNotEmpty) {
+        _log('📍 Teknosa Paylaş Kazan Location yakalandı: $location');
+        final resolved = _extractTeknosaProductUrl(location);
+        if (resolved != null && resolved.isNotEmpty) {
+          _log('✅ Teknosa Paylaş Kazan linki başarıyla çözüldü: $resolved');
+          return resolved;
+        }
+      }
+    } catch (e) {
+      _log('⚠️ Teknosa Paylaş Kazan link çözme hatası: $e');
+    }
+    return url;
+  }
+
+  String? _extractTeknosaProductUrl(String locationStr) {
+    try {
+      final uri = Uri.parse(locationStr);
+
+      // 1. url parametresi içindeki Adjust URL'ini veya doğrudan Teknosa URL'ini kontrol et
+      final nestedUrl = uri.queryParameters['url'];
+      if (nestedUrl != null && nestedUrl.isNotEmpty) {
+        try {
+          final nestedUri = Uri.parse(nestedUrl);
+          final redirectParam = nestedUri.queryParameters['redirect'] ?? nestedUri.queryParameters['deep_link'];
+          if (redirectParam != null && redirectParam.isNotEmpty) {
+            final clean = _cleanTeknosaProductUrl(redirectParam);
+            if (clean != null) return clean;
+          }
+          if (nestedUri.host.contains('teknosa.com')) {
+            final clean = _cleanTeknosaProductUrl(nestedUrl);
+            if (clean != null) return clean;
+          }
+        } catch (_) {}
+      }
+
+      // 2. Doğrudan query parameter olarak redirect veya deep_link var mı
+      final directRedirect = uri.queryParameters['redirect'] ?? uri.queryParameters['deep_link'];
+      if (directRedirect != null && directRedirect.isNotEmpty) {
+        final clean = _cleanTeknosaProductUrl(directRedirect);
+        if (clean != null) return clean;
+      }
+
+      // 3. aff_sub3 parametresini kontrol et
+      final affSub3 = uri.queryParameters['aff_sub3'];
+      if (affSub3 != null && affSub3.isNotEmpty && affSub3.contains('teknosa.com')) {
+        final full = affSub3.startsWith('http') ? affSub3 : 'https://www.$affSub3';
+        final clean = _cleanTeknosaProductUrl(full);
+        if (clean != null) return clean;
+      }
+
+      // 4. Regex fallback: locationStr içinde teknosa.com/...-p-... ara
+      final match = RegExp(r'(https%3A%2F%2Fwww\.teknosa\.com%2F[^&"\s]+|https?:\/\/(?:www\.)?teknosa\.com\/[^&"\s]+)', caseSensitive: false).firstMatch(locationStr);
+      if (match != null) {
+        var raw = match.group(1)!;
+        if (raw.contains('%')) {
+          raw = Uri.decodeFull(raw);
+        }
+        final clean = _cleanTeknosaProductUrl(raw);
+        if (clean != null) return clean;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String? _cleanTeknosaProductUrl(String rawUrl) {
+    try {
+      final uri = Uri.parse(rawUrl);
+      if (!uri.host.contains('teknosa.com')) return null;
+      final cleanUri = Uri(
+        scheme: 'https',
+        host: 'www.teknosa.com',
+        path: uri.path,
+        queryParameters: uri.queryParameters.containsKey('shopId')
+            ? {'shopId': uri.queryParameters['shopId']!}
+            : null,
+      );
+      return cleanUri.toString();
+    } catch (_) {
+      return rawUrl;
+    }
   }
 
   // Amazon kısa linkini (amzn.eu) uzun linke (amazon.com.tr/dp/...) çevir

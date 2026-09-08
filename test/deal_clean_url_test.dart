@@ -30,5 +30,61 @@ void main() {
       const url = 'not-a-valid-url-123';
       expect(Deal.cleanProductUrl(url), url);
     });
+
+    test('Should unwrap btrck.com affiliate URL to clean canonical Teknosa product URL', () {
+      const btrckUrl = 'https://rdr.btrck.com/aff_c?offer_id=5&aff_id=1016&source=906bd201-92dc-4898-914a-10309b2cd576&aff_sub=906bd201-92dc-4898-914a-10309b2cd576&aff_sub3=teknosa.com/tcl-mt40x-mavi-akilli-cocuk-saati-p-145059639&url=https%3A%2F%2Fwww.teknosa.com%2Ftcl-mt40x-mavi-akilli-cocuk-saati-p-145059639%3Futm_source%3Dsocial_affiliate%26utm_medium%3Dpaylaskazan%26utm_campaign%3D906bd201-92dc-4898-914a-10309b2cd576';
+      expect(Deal.cleanProductUrl(btrckUrl), 'https://www.teknosa.com/tcl-mt40x-mavi-akilli-cocuk-saati-p-145059639');
+    });
+
+    test('Should unwrap btrck.com affiliate URL via aff_sub3 fallback', () {
+      const btrckUrlNoParam = 'https://rdr.btrck.com/aff_c?offer_id=5&aff_id=1016&aff_sub3=teknosa.com/apple-iphone-13-128gb-yildiz-isigi-akilli-telefon-p-125078170';
+      expect(Deal.cleanProductUrl(btrckUrlNoParam), 'https://www.teknosa.com/apple-iphone-13-128gb-yildiz-isigi-akilli-telefon-p-125078170');
+    });
+  });
+
+  group('Deal.displayUrl Tests', () {
+    Deal createTestDeal({required String link, required String cleanUrl}) {
+      return Deal(
+        id: '1',
+        title: 'Test Deal',
+        description: 'Desc',
+        price: 100,
+        link: link,
+        cleanUrl: cleanUrl,
+        imageUrl: 'https://example.com/img.jpg',
+        store: 'Teknosa',
+        category: 'elektronik',
+        createdAt: DateTime.now(),
+        hotVotes: 0,
+        coldVotes: 0,
+        commentCount: 0,
+        postedBy: 'admin',
+        isEditorPick: false,
+      );
+    }
+
+    test('Should return cleanUrl when valid and non-affiliate', () {
+      final deal = createTestDeal(
+        link: 'https://rdr.btrck.com/aff_c?offer_id=5&aff_id=1016&source=123&url=https%3A%2F%2Fwww.teknosa.com%2Furun-p-123',
+        cleanUrl: 'https://www.teknosa.com/urun-p-123',
+      );
+      expect(deal.displayUrl, 'https://www.teknosa.com/urun-p-123');
+    });
+
+    test('Should unwrap link if cleanUrl is empty', () {
+      final deal = createTestDeal(
+        link: 'https://rdr.btrck.com/aff_c?offer_id=5&aff_id=1016&source=123&url=https%3A%2F%2Fwww.teknosa.com%2Furun-p-123%3Futm_source%3Dsocial_affiliate',
+        cleanUrl: '',
+      );
+      expect(deal.displayUrl, 'https://www.teknosa.com/urun-p-123');
+    });
+
+    test('Should unwrap link if cleanUrl was mistakenly stored as btrck affiliate URL', () {
+      final deal = createTestDeal(
+        link: 'https://rdr.btrck.com/aff_c?offer_id=5&aff_id=1016&source=123&url=https%3A%2F%2Fwww.teknosa.com%2Furun-p-123',
+        cleanUrl: 'https://rdr.btrck.com/aff_c?offer_id=5&aff_id=1016&source=123&url=https%3A%2F%2Fwww.teknosa.com%2Furun-p-123',
+      );
+      expect(deal.displayUrl, 'https://www.teknosa.com/urun-p-123');
+    });
   });
 }

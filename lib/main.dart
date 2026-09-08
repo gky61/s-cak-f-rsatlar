@@ -19,6 +19,7 @@ import 'screens/auth_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/firestore_service.dart';
 import 'services/ai_service.dart';
+import 'services/affiliate/affiliate_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/circular_theme_transition.dart';
 
@@ -176,6 +177,9 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    // Affiliate şalterlerini Firestore settings/app belgesinden gerçek zamanlı dinle
+    AffiliateService.initSettingsListener();
 
     // App Check Aktivasyonu
     try {

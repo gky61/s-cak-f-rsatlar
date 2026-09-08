@@ -29,7 +29,7 @@ class DealDetailImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Eğer görsel yoksa ve henüz çekilmeye çalışılmadıysa, çekmeyi dene
-    if (deal.imageUrl.isEmpty && !hasTriedFetching && !isFetchingImage && deal.link.isNotEmpty) {
+    if (deal.imageUrl.isEmpty && !hasTriedFetching && !isFetchingImage && deal.displayUrl.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         onFetchImage?.call();
       });

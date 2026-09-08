@@ -108,6 +108,75 @@ async function resolveN11ShortLink(url) {
   return url;
 }
 
+/**
+ * Teknosa Paylaş Kazan yönlendirmesinden (Location header) kanonik ürün URL'sini ve shopId'yi çıkarır.
+ */
+function extractTeknosaProductUrlFromPaylasKazan(locationStr) {
+  try {
+    const parsed = new URL(locationStr);
+
+    // 1. url parametresi içindeki Adjust URL'ini veya doğrudan Teknosa URL'ini kontrol et
+    const nestedUrl = parsed.searchParams.get('url');
+    if (nestedUrl) {
+      try {
+        const nestedParsed = new URL(nestedUrl);
+        const redirectParam = nestedParsed.searchParams.get('redirect') || nestedParsed.searchParams.get('deep_link');
+        if (redirectParam) {
+          const clean = cleanTeknosaProductUrl(redirectParam);
+          if (clean) return clean;
+        }
+        if (nestedParsed.hostname.includes('teknosa.com')) {
+          const clean = cleanTeknosaProductUrl(nestedUrl);
+          if (clean) return clean;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Doğrudan query parameter olarak redirect veya deep_link
+    const directRedirect = parsed.searchParams.get('redirect') || parsed.searchParams.get('deep_link');
+    if (directRedirect) {
+      const clean = cleanTeknosaProductUrl(directRedirect);
+      if (clean) return clean;
+    }
+
+    // 3. aff_sub3 parametresi: "teknosa.com/yenilenmis-iphone-xr-...-p-790182989"
+    const affSub3 = parsed.searchParams.get('aff_sub3');
+    if (affSub3 && affSub3.includes('teknosa.com')) {
+      const full = affSub3.startsWith('http') ? affSub3 : 'https://www.' + affSub3;
+      const clean = cleanTeknosaProductUrl(full);
+      if (clean) return clean;
+    }
+
+    // 4. Regex fallback: locationStr içinde teknosa.com/...-p-... ara
+    const match = locationStr.match(/(https%3A%2F%2Fwww\.teknosa\.com%2F[^&"\s]+|https?:\/\/(?:www\.)?teknosa\.com\/[^&"\s]+)/i);
+    if (match) {
+      let raw = match[1];
+      if (raw.includes('%')) {
+        try { raw = decodeURIComponent(raw); } catch (_) {}
+      }
+      const clean = cleanTeknosaProductUrl(raw);
+      if (clean) return clean;
+    }
+  } catch (e) {
+    console.warn(`[EXTRACT-TEKNOSA] URL çıkarma hatası: ${e.message}`);
+  }
+  return null;
+}
+
+function cleanTeknosaProductUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (!parsed.hostname.includes('teknosa.com')) return null;
+    const clean = new URL(parsed.pathname, 'https://www.teknosa.com');
+    if (parsed.searchParams.has('shopId')) {
+      clean.searchParams.set('shopId', parsed.searchParams.get('shopId'));
+    }
+    return clean.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
 /** URL yönlendirmelerini çözer ve nihai hedef URL'yi döndürür */
 async function resolveUrlRedirects(url) {
   let targetUrl = extractAdjustFallback(url);
@@ -115,6 +184,59 @@ async function resolveUrlRedirects(url) {
     targetUrl = await resolveN11ShortLink(targetUrl);
   }
   const lowerUrl = targetUrl.toLowerCase();
+
+  // Teknosa Paylaş Kazan veya TUNE linkleri (paylaskazan.teknosa.com / rdr.btrck.com) için çözümleme
+  if (lowerUrl.includes('paylaskazan.teknosa.com') || lowerUrl.includes('rdr.btrck.com')) {
+    // 1. URL parametrelerinden hızlıca çözmeyi dene
+    const fastResolved = extractTeknosaProductUrlFromPaylasKazan(targetUrl);
+    if (fastResolved) {
+      console.log(`[RESOLVE-REDIRECT] ⚡ Teknosa TUNE linki yerel parametrelerden hemen çözüldü: ${fastResolved}`);
+      return fastResolved;
+    }
+
+    try {
+      console.log(`[RESOLVE-REDIRECT] 🔗 Teknosa Paylaş Kazan linki çözülüyor (redirect:manual): ${targetUrl}`);
+      const manualRes = await fetch(targetUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: { 'User-Agent': 'WhatsApp/2.23.4.15 A' },
+        signal: AbortSignal.timeout(10000)
+      });
+      const locationHeader = manualRes.headers.get('location');
+      if (locationHeader) {
+        console.log(`[RESOLVE-REDIRECT] 📍 Teknosa Paylaş Kazan Location: ${locationHeader.substring(0, 150)}...`);
+        const resolved = extractTeknosaProductUrlFromPaylasKazan(locationHeader);
+        if (resolved) {
+          console.log(`[RESOLVE-REDIRECT] ✅ Teknosa Paylaş Kazan linki çözüldü: ${resolved}`);
+          return resolved;
+        }
+      }
+    } catch (fetchErr) {
+      console.warn(`[RESOLVE-REDIRECT] ⚠️ Paylaş Kazan fetch hatası: ${fetchErr.message}. curl HEAD deneniyor...`);
+    }
+
+    try {
+      const curlRes = spawnSync('curl', [
+        '-sI',
+        '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
+        '--max-time', '10',
+        targetUrl
+      ], { encoding: 'utf-8', timeout: 12000 });
+      if (!curlRes.error && curlRes.stdout) {
+        const locationMatch = curlRes.stdout.match(/location:\s*(.+)/i);
+        if (locationMatch) {
+          const curlLoc = locationMatch[1].trim();
+          const resolved = extractTeknosaProductUrlFromPaylasKazan(curlLoc);
+          if (resolved) {
+            console.log(`[RESOLVE-REDIRECT] ✅ Teknosa Paylaş Kazan curl HEAD ile çözüldü: ${resolved}`);
+            return resolved;
+          }
+        }
+      }
+    } catch (curlErr) {
+      console.warn(`[RESOLVE-REDIRECT] ⚠️ Paylaş Kazan curl HEAD hatası: ${curlErr.message}`);
+    }
+  }
 
   // Hepsiburada kısa linkleri (hb.biz / app.hb.biz) için özel çözümleme
   // hb.biz kısa linkleri 301 ile adj.st (Adjust deep-link) URL'sine yönlendirir.
@@ -226,6 +348,8 @@ async function resolveUrlRedirects(url) {
     lowerUrl.includes('rebrand.ly') ||
     lowerUrl.includes('rdrtr.com') ||
     lowerUrl.includes('onelink.me') ||
+    lowerUrl.includes('paylaskazan.teknosa.com') ||
+    lowerUrl.includes('rdr.btrck.com') ||
     lowerUrl.includes('sl.n11.com');
 
   if (!isShortOrRedirect) return targetUrl;

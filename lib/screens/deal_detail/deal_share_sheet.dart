@@ -52,7 +52,7 @@ class DealShareSheet {
 
   /// Ürünün orijinal mağaza (Amazon, Trendyol, Hepsiburada vb.) bağlantısını panoya kopyalar.
   static Future<void> copyStoreLink(BuildContext context, Deal deal) async {
-    final link = deal.link.trim();
+    final link = deal.displayUrl.trim();
     if (link.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
@@ -113,8 +113,8 @@ class DealShareSheet {
 
   /// Fırsatı tek tıkla doğrudan telefonun kendi natif paylaşım ekranında paylaşır (WhatsApp, Telegram vb.).
   static Future<void> shareToNativeApps(BuildContext context, Deal deal) async {
-    final link = deal.link.trim().isNotEmpty 
-        ? deal.link.trim() 
+    final link = deal.displayUrl.trim().isNotEmpty 
+        ? deal.displayUrl.trim() 
         : 'https://firsatkolik.app/deal/${deal.id}';
 
     // Fırsat fiyat ve indirim metni
