@@ -470,12 +470,18 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       final isPaylasKazan = url.toLowerCase().contains('paylaskazan.teknosa.com');
       final isTeknosa = url.toLowerCase().contains('teknosa.com');
       final isBtrck = url.toLowerCase().contains('btrck.com');
+      final isIncehesapPaylasKazan = url.toLowerCase().contains('incehesap.com/u/');
+      final isIncehesap = url.toLowerCase().contains('incehesap.com');
       if (isPaylasKazan) {
         _log('🔍 [AFFILIATE-TEST] Tespit: Teknosa Paylaş Kazan Kısa Linki (Shortlink)');
       } else if (isBtrck) {
         _log('🔍 [AFFILIATE-TEST] Tespit: Başkasına Ait TUNE (rdr.btrck.com) Affiliate Linki');
       } else if (isTeknosa) {
         _log('🔍 [AFFILIATE-TEST] Tespit: Teknosa Normal/Organik Ürün Linki');
+      } else if (isIncehesapPaylasKazan) {
+        _log('🔍 [AFFILIATE-TEST] Tespit: İncehesap Paylaştıkça Kazan Kısa Linki (Shortlink)');
+      } else if (isIncehesap) {
+        _log('🔍 [AFFILIATE-TEST] Tespit: İncehesap Normal/Organik Ürün Linki');
       } else {
         _log('🔍 [AFFILIATE-TEST] Tespit: Diğer Mağaza Linki');
       }

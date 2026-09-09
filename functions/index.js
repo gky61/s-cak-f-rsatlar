@@ -1658,6 +1658,8 @@ function resolveRedirect(url) {
 
 
 
+
+
 /**
  * 📷 ESKİ GÖRSELLERİ TEMİZLE - Her gün gece yarısı çalışır
  * 30 günden eski sahipsiz/eski deal görsellerini Firebase Storage'dan siler

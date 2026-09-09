@@ -252,7 +252,83 @@ async function runPipelineTests() {
   assert.strictEqual(simulatedTeknosaDeal.isApproved, true);
   console.log('✅ Test 14 Passed: Telegram botu Teknosa için Firestore belgesini sıfır hata ile üretti!\n');
 
-  console.log('🎉🎉🎉 ALL TELEGRAM BOT AFFILIATE INGESTION PIPELINE TESTS PASSED! 🎉🎉🎉');
+  // Test 15: Live resolution of Telegram İncehesap /u/ shortlinks
+  console.log('Test 15: Resolving Telegram İncehesap /u/ mobile share shortlink...');
+  const testIncehesapShortLink = 'https://www.incehesap.com/u/R5GDA5JqZF/';
+  const resolvedIncehesap = await linkScraperService.resolveUrlRedirects(testIncehesapShortLink);
+  console.log(`  -> Shortlink: ${testIncehesapShortLink}`);
+  console.log(`  -> Resolved:  ${resolvedIncehesap}`);
+  assert(resolvedIncehesap.includes('incehesap.com'), 'Resolved URL must point to incehesap.com');
+  console.log('✅ Test 15 Passed: Telegram İncehesap /u/ kısa linki başarıyla çözüldü.\n');
+
+  // Test 16: cleanProductUrl for İncehesap
+  console.log('Test 16: cleanProductUrl for İncehesap...');
+  const organicIncehesapUrl = 'https://www.incehesap.com/gamepower-aero-ultra-siyah-triple-mode-gaming-kulaklik-fiyati-76428/?utm_source=telegram&utm_medium=bot&ref=123';
+  const cleanIncehesapUrl = affiliateManager.cleanProductUrl(organicIncehesapUrl);
+  console.log(`  -> Input:    ${organicIncehesapUrl}`);
+  console.log(`  -> Clean:    ${cleanIncehesapUrl}`);
+  assert.strictEqual(cleanIncehesapUrl, 'https://www.incehesap.com/gamepower-aero-ultra-siyah-triple-mode-gaming-kulaklik-fiyati-76428/', 'cleanProductUrl must strip query params');
+  console.log('✅ Test 16 Passed: cleanProductUrl İncehesap için organik kanonik linki tertemiz üretti.\n');
+
+  // Test 17: Dynamic on-demand live generation via resolveAndConvertToAffiliate for organic Telegram post
+  console.log('Test 17: Dynamic on-demand live generation via resolveAndConvertToAffiliate for organic Telegram post...');
+  const simulatedIncehesapSettings = {
+    incehesapAffiliateEnabled: true
+  };
+  const dynamicIncehesapDealLink = await affiliateManager.resolveAndConvertToAffiliate(cleanIncehesapUrl, simulatedIncehesapSettings);
+  console.log(`  -> Input Organic: ${cleanIncehesapUrl}`);
+  console.log(`  -> Converted Deal Link: ${dynamicIncehesapDealLink}`);
+  assert(dynamicIncehesapDealLink.includes('/u/'), 'Dynamic conversion must produce a live /u/ shortlink');
+  assert(affiliateManager.isAlreadyAffiliate(dynamicIncehesapDealLink), 'Generated link must be recognized as affiliate');
+  console.log('✅ Test 17 Passed: Organik İncehesap linki canlı API ile dinamik olarak /u/ linkine dönüştürüldü.\n');
+
+  // Test 18: Preserving incoming /u/ shortlink when already affiliate
+  console.log('Test 18: Preserving incoming /u/ shortlink when already affiliate...');
+  const preservedIncehesapLink = await affiliateManager.resolveAndConvertToAffiliate(testIncehesapShortLink, simulatedIncehesapSettings);
+  console.log(`  -> Input /u/ Link:     ${testIncehesapShortLink}`);
+  console.log(`  -> Preserved Output:   ${preservedIncehesapLink}`);
+  assert.strictEqual(preservedIncehesapLink, testIncehesapShortLink);
+  console.log('✅ Test 18 Passed: Gelen /u/ linki bozulmadan aynen korundu.\n');
+
+  // Test 19: End-to-End Deal Object Validation (Simulating telegram_bot.js saveDealToFirebase for İncehesap)
+  console.log('Test 19: Simulating saveDealToFirebase deal creation with organic İncehesap URL...');
+  const simulatedIncehesapAppSettings = {
+    dealApprovalRequired: false,
+    incehesapAffiliateEnabled: true
+  };
+
+  const finalIncehesapCleanUrl = affiliateManager.cleanProductUrl(cleanIncehesapUrl);
+  const finalIncehesapDealLink = await affiliateManager.resolveAndConvertToAffiliate(cleanIncehesapUrl, simulatedIncehesapAppSettings);
+
+  const simulatedIncehesapDeal = {
+    title: 'Gamepower Aero Ultra Siyah Triple Mode Gaming Kulaklık',
+    link: finalIncehesapDealLink,
+    cleanUrl: finalIncehesapCleanUrl,
+    store: 'incehesap',
+    isApproved: !simulatedIncehesapAppSettings.dealApprovalRequired
+  };
+
+  console.log('  -> Simulated Firestore Deal:');
+  console.log(`     deal.cleanUrl:   ${simulatedIncehesapDeal.cleanUrl}`);
+  console.log(`     deal.link:       ${simulatedIncehesapDeal.link}`);
+  console.log(`     deal.isApproved: ${simulatedIncehesapDeal.isApproved}`);
+
+  assert(simulatedIncehesapDeal.cleanUrl.includes('incehesap.com'));
+  assert(simulatedIncehesapDeal.cleanUrl.includes('-fiyati-76428'));
+  assert(simulatedIncehesapDeal.link.includes('/u/'));
+  assert.strictEqual(simulatedIncehesapDeal.isApproved, true);
+  console.log('✅ Test 19 Passed: Telegram botu İncehesap için Firestore belgesini sıfır hata ile üretti!\n');
+
+  // Test 20: Kill-Switch / Fallback when incehesapAffiliateEnabled is false (Switch OFF)
+  console.log('Test 20: Kill-Switch / Fallback when incehesapAffiliateEnabled is false...');
+  const disabledIncehesapSettings = { incehesapAffiliateEnabled: false };
+  const fallbackIncehesapUrl = await affiliateManager.resolveAndConvertToAffiliate(cleanIncehesapUrl, disabledIncehesapSettings);
+  console.log(`  -> Fallback URL when disabled: ${fallbackIncehesapUrl}`);
+  assert.strictEqual(fallbackIncehesapUrl, 'https://www.incehesap.com/gamepower-aero-ultra-siyah-triple-mode-gaming-kulaklik-fiyati-76428/');
+  assert(!fallbackIncehesapUrl.includes('/u/'), 'Must not generate /u/ affiliate link when disabled');
+  console.log('✅ Test 20 Passed: İncehesap switch kapalıyken dinamik affiliate üretimi es geçildi ve temiz organik link korundu.\n');
+
+  console.log('🎉🎉🎉 ALL TELEGRAM BOT AFFILIATE INGESTION PIPELINE TESTS (AMAZON, HEPSİBURADA, TEKNOSA, İNCEHESAP) PASSED! 🎉🎉🎉');
 }
 
 runPipelineTests().catch(err => {

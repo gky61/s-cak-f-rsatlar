@@ -119,6 +119,12 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
     *   **Fiyat ve Görsel:** Ürün bilgileri HTML içerisindeki `<script id="__NEXT_DATA__">` JSON bloğundan parse edilir. Ürün adı, fiyatı ve görsel cdn linkleri (`picURLs`) buradan doğrudan çekilir.
     *   **Uzun Açıklama:** Detaylı açıklama için `shortDescription` yerine Next.js payload'undaki uzun olan `description` veya `content` alanları öncelikli olarak okunur. İkisi de yoksa fallback olarak `shortDescription` ve meta tag'ler (`og:description`) taranır.
 
+### 14. İncehesap (`incehesap.com`, `incehesap.com/u/`)
+*   **User-Agent Politikası:** Cloudflare WAF engellerini aşmak için `WhatsApp/2.23.4.15 A` kullanılır.
+*   **Kısa Link Çözümleme (`/u/{code}/`):** Paylaştıkça Kazan kısa linkleri HTTP 302 yönlendirmesiyle (Location başlığı okunarak) 200 ms içerisinde kanonik ürün sayfasına çözülür (`asus-tuf-...-fiyati-91918/`).
+*   **Dinamik Canlı API & Doğrudan Üretim:** `POST https://www.incehesap.com/uye/paylastikca-kazan/ajax/update.php` endpoint'ine `WhatsApp` UA + `PHPSESSID` çereziyle `{"action":"getSingleProductLink","urunId":...}` isteği atılır. Mobil istemci (Flutter) ve Telegram botu (Node.js) harici proxy'ye gerek olmadan doğrudan ~200 ms'de canlı link üretir.
+*   **Fiyat ve Metadata Kazıma:** Sayfadaki `window.dataLayer` (`ecommerce.items`) nesnesi taranarak tam ürün adı, ürün ID, net/brüt fiyat, marka ve kategori bilgileri eksiksiz ayıklanır.
+
 ---
 
 ## 📊 Mağaza Özelinde Scraping Özet Tablosu
@@ -128,6 +134,7 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 | **Amazon** | DOM & JSON-LD | Boş/Placeholder 1x1 piksel görseller | 43-byte resim filtreleme + `img#landingImage` DOM seçicisi |
 | **DeFacto** | Javascript `PRODUCT_DETAIL_LASTVISITED` | Fiyatların DOM'a basılmaması, Unicode karakter bozuklukları | Tırnaksız regex anahtar eşleme + `_decodeUnicode` filtresi |
 | **Hepsiburada** | `withoutAffordability` & `otherMerchants` API | Premium ve Sepetteki indirimli fiyatların HTML'de gizlenmesi | `reduxStore` verileriyle canlı POST API istekleri ve paralel en ucuz fiyat seçimi |
+| **İncehesap** | `window.dataLayer` & Canlı `ajax/update.php` | Cloudflare WAF bot koruması & dinamik `/u/` hash üretimi | `WhatsApp/2.23.4.15 A` UA bypass + `PHPSESSID` oturum çerezi ile ~200 ms'de doğrudan canlı API'den dinamik `/u/` linki üretimi |
 | **Mavi** | JSON-LD (`application/ld+json`) | Cloudflare / Akamai engellemesi | `WhatsApp` User-Agent taklidi + JSON-LD parser |
 | **Pazarama** | DOM (Plus Alanı) & JSON-LD | Plus üye indirimli fiyatının JSON-LD şemasında bulunmaması | Plus logosu tarama + DOM fiyat önceliklendirmesi |
 | **Trendyol** | JSON-LD (`ProductGroup`) | Çoklu varyantlarda (beden vb.) yanlış varyant fiyatının çekilmesi | `ProductGroup` şema desteği ile root fiyat analizi |

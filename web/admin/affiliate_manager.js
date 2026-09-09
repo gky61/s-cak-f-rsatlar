@@ -318,6 +318,52 @@ const AffiliateManager = {
                 }
                 return url.toString();
             }
+        },
+
+        // İncehesap Paylaştıkça Kazan (/u/{code}/)
+        incehesap: {
+            name: 'İncehesap',
+            extractProductId: function(url) {
+                if (!url) return null;
+                const path = url.pathname || '';
+                const match = path.match(/-fiyati-(\d+)(?:\/|$)/i);
+                if (match) return match[1];
+                return url.searchParams.get('urunId') || url.searchParams.get('productId') || url.searchParams.get('id') || null;
+            },
+            canHandle: function(url) {
+                const host = url.hostname.toLowerCase();
+                return host.contains ? host.contains('incehesap.com') : host.includes('incehesap.com');
+            },
+            isAlreadyAffiliate: function(url, config) {
+                const host = url.hostname.toLowerCase();
+                if (!host.includes('incehesap.com')) return false;
+                return /^\/u\/[a-zA-Z0-9_-]+\/?$/i.test(url.pathname);
+            },
+            convert: function(url, config) {
+                const cfg = config?.incehesap;
+                let targetProductUrl = url;
+
+                // 1. Kill-switch / Fallback kontrolü: Eğer affiliate kapalıysa temiz ürün linkini döndür
+                if (cfg && cfg.enabled === false) {
+                    targetProductUrl.searchParams.delete('utm_source');
+                    targetProductUrl.searchParams.delete('utm_medium');
+                    targetProductUrl.searchParams.delete('utm_campaign');
+                    targetProductUrl.searchParams.delete('ref');
+                    targetProductUrl.search = '';
+                    return targetProductUrl.toString();
+                }
+
+                // 2. Link zaten bir Paylaştıkça Kazan linki ise aynen koru
+                if (/^\/u\/[a-zA-Z0-9_-]+\/?$/i.test(url.pathname)) {
+                    let path = url.pathname;
+                    if (!path.endsWith('/')) path = `${path}/`;
+                    return `${url.protocol}//${url.host}${path}`;
+                }
+
+                // 3. Kanonik URL ise takip parametrelerini temizleyerek dön
+                targetProductUrl.search = '';
+                return targetProductUrl.toString();
+            }
         }
     },
 
@@ -325,7 +371,7 @@ const AffiliateManager = {
      * Aktif olarak affiliate akışları ve UI/UX görünümü açılmış onaylı mağazalar listesi.
      * Yeni bir mağazanın affiliate entegrasyonu tamamlanıp test edildiğinde bu listeye eklenir.
      */
-    activeStores: ['teknosa', 'hepsiburada', 'amazon'],
+    activeStores: ['teknosa', 'hepsiburada', 'amazon', 'incehesap'],
 
     /**
      * Verilen mağaza adı veya URL için affiliate desteğinin aktif olup olmadığını döner.
@@ -508,6 +554,10 @@ const AffiliateManager = {
             // N11
             else if (host.includes('n11.com')) {
                 ['ref', 'utm_source', 'utm_medium', 'utm_campaign'].forEach(p => urlObj.searchParams.delete(p));
+            }
+            // İncehesap
+            else if (host.includes('incehesap.com')) {
+                ['utm_source', 'utm_medium', 'utm_campaign', 'ref', 'affiliate'].forEach(p => urlObj.searchParams.delete(p));
             }
 
             return urlObj.toString();

@@ -8,6 +8,7 @@ import 'adapters/hepsiburada_affiliate_adapter.dart';
 import 'adapters/amazon_affiliate_adapter.dart';
 import 'adapters/n11_affiliate_adapter.dart';
 import 'adapters/gittigidiyor_affiliate_adapter.dart';
+import 'adapters/incehesap_affiliate_adapter.dart';
 import '../link_preview_service.dart';
 
 void _log(String message) {
@@ -28,6 +29,7 @@ class AffiliateService {
     AmazonAffiliateAdapter(),
     N11AffiliateAdapter(),
     GittigidiyorAffiliateAdapter(),
+    IncehesapAffiliateAdapter(),
   ];
 
   /// Firestore settings/app belgesini dinleyerek adaptör şalterlerini anlık senkronize eder
@@ -64,6 +66,16 @@ class AffiliateService {
       final enabled = data['amazonAffiliateEnabled'] != false;
       setStoreEnabled('amazon', enabled);
       _log('⚙️ [AFFILIATE-SETTINGS] Amazon şalteri senkronize edildi: $enabled');
+    }
+    if (data.containsKey('incehesapAffiliateEnabled') ||
+        data.containsKey('incehesapSessionCookie')) {
+      final enabled = data['incehesapAffiliateEnabled'] != false;
+      final cookie = data['incehesapSessionCookie']?.toString();
+      updateIncehesapSettings(
+        isEnabled: enabled,
+        sessionCookie: cookie,
+      );
+      _log('⚙️ [AFFILIATE-SETTINGS] İncehesap ayarları senkronize edildi: enabled=$enabled');
     }
   }
 
@@ -143,6 +155,23 @@ class AffiliateService {
           userId: userId ?? current.userId,
           offerId: current.offerId,
           affId: current.affId,
+          enabled: isEnabled ?? current.isEnabled,
+        );
+        break;
+      }
+    }
+  }
+
+  /// İncehesap adaptör ayarlarını günceller
+  static void updateIncehesapSettings({
+    bool? isEnabled,
+    String? sessionCookie,
+  }) {
+    for (var i = 0; i < _adapters.length; i++) {
+      if (_adapters[i] is IncehesapAffiliateAdapter) {
+        final current = _adapters[i] as IncehesapAffiliateAdapter;
+        _adapters[i] = IncehesapAffiliateAdapter(
+          sessionCookie: sessionCookie ?? current.sessionCookie,
           enabled: isEnabled ?? current.isEnabled,
         );
         break;
@@ -261,9 +290,31 @@ class AffiliateService {
           _log('   👉 Çözülen: $resolved');
           targetUrl = resolved;
         }
+      } else if (lower.contains('incehesap.com/u/')) {
+        // İncehesap /u/ kısa linki için: Eğer bu link zaten geçerli bir /u/ linki ise ve aktifse doğrudan dönüştür/koru
+        final adapter = getAdapter(targetUrl);
+        if (adapter is IncehesapAffiliateAdapter && adapter.isEnabled) {
+          _log('✨ [AFFILIATE-TEST] İncehesap Paylaştıkça Kazan linki korundu: $targetUrl');
+          return convertToAffiliateLink(targetUrl);
+        }
       }
     } catch (e) {
       _log('⚠️ [AFFILIATE-TEST] Kısa link çözme hatası ($e), mevcut URL ile devam ediliyor: $targetUrl');
+    }
+
+    // İncehesap kanonik ürün linki için dinamik canlı AJAX üretimi
+    final adapter = getAdapter(targetUrl);
+    if (adapter is IncehesapAffiliateAdapter && adapter.isEnabled) {
+      final uri = Uri.tryParse(targetUrl);
+      if (uri != null) {
+        final productId = adapter.extractProductId(uri);
+        if (productId != null) {
+          final dynamicLink = await adapter.generateAffiliateLink(productId);
+          if (dynamicLink != null && dynamicLink.isNotEmpty) {
+            return dynamicLink;
+          }
+        }
+      }
     }
 
     return convertToAffiliateLink(targetUrl);

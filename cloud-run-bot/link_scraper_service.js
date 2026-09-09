@@ -336,6 +336,34 @@ async function resolveUrlRedirects(url) {
     }
   }
 
+  // İncehesap Paylaştıkça Kazan kısa linkleri (incehesap.com/u/...) için Cloudflare WAF bypass (curl WhatsApp UA)
+  // NOT: İncehesap Cloudflare koruması Node.js yerel fetch isteklerini 403 Forbidden ile engeller.
+  // Bu yüzden tıpkı ty.gl gibi doğrudan curl HEAD (WhatsApp UA) ile 301 Location header'ı yakalanır.
+  if (lowerUrl.includes('incehesap.com/u/')) {
+    try {
+      console.log(`[RESOLVE-REDIRECT] 🔗 İncehesap /u/ kısa linki curl (WhatsApp UA) ile çözülüyor: ${targetUrl}`);
+      const curlRes = spawnSync('curl', [
+        '-sI',
+        '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
+        '--max-time', '10',
+        targetUrl
+      ], { encoding: 'utf-8', timeout: 12000 });
+      if (!curlRes.error && curlRes.stdout) {
+        const locationMatch = curlRes.stdout.match(/location:\s*(.+)/i);
+        if (locationMatch) {
+          let loc = locationMatch[1].trim();
+          if (loc.startsWith('/')) {
+            loc = 'https://www.incehesap.com' + loc;
+          }
+          console.log(`[RESOLVE-REDIRECT] ✅ İncehesap /u/ kısa linki curl ile çözüldü: ${loc}`);
+          return loc;
+        }
+      }
+    } catch (err) {
+      console.warn(`[RESOLVE-REDIRECT] ⚠️ İncehesap short link resolution hatası: ${err.message}`);
+    }
+  }
+
   const isShortOrRedirect = lowerUrl.includes('amzn.eu') ||
     lowerUrl.includes('amzn.to') ||
     lowerUrl.includes('link.amazon') ||

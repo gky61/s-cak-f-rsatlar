@@ -1042,11 +1042,12 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     const finalCleanUrl = affiliateManager.cleanProductUrl(rawTargetUrl);
 
     // 🎯 Gelir Ortaklığı (Affiliate) Dönüştürme:
-    // Amazon, Hepsiburada, Teknosa vb. linkleri doğrudan yetkili admin takip kodumuzla dönüştür
-    let finalDealLink = rawTargetUrl;
+    // Amazon, Hepsiburada, Teknosa, İncehesap vb. linkleri doğrudan yetkili admin takip kodumuzla dönüştür
+    let sourceForAffiliate = (mainLink && affiliateManager.isAlreadyAffiliate(mainLink, appSettings)) ? mainLink : rawTargetUrl;
+    let finalDealLink = sourceForAffiliate;
     try {
-      finalDealLink = affiliateManager.convert(rawTargetUrl, appSettings);
-      if (finalDealLink !== rawTargetUrl) {
+      finalDealLink = await affiliateManager.resolveAndConvertToAffiliate(sourceForAffiliate, appSettings);
+      if (finalDealLink !== sourceForAffiliate) {
         console.log(`🎉 [AFFILIATE] Link başarıyla affiliate linke dönüştürüldü: ${finalDealLink}`);
       }
     } catch (affErr) {

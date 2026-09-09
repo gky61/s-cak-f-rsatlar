@@ -237,6 +237,7 @@ class LinkPreviewService {
                                lowerUrl.contains('rdrtr.com') ||
                                lowerUrl.contains('onelink.me') ||
                                lowerUrl.contains('paylaskazan.teknosa.com') ||
+                               lowerUrl.contains('incehesap.com/u/') ||
                                lowerUrl.contains('ty.gl');
 
       if (isShortOrRedirect) {
@@ -553,10 +554,12 @@ class LinkPreviewService {
 
       while (redirectCount < maxRedirects) {
         final request = http.Request('GET', Uri.parse(currentUrl))
-          ..followRedirects = false;
+          ..followRedirects = false
+          ..headers['User-Agent'] = 'WhatsApp/2.23.4.15 A'
+          ..headers['Accept-Language'] = 'tr-TR,tr;q=0.9,en-US;q=0.8';
         
         final response = await client.send(request).timeout(
-          const Duration(seconds: 4),
+          const Duration(seconds: 8),
         );
         
         final location = response.headers['location'] ?? response.headers['Location'];
@@ -571,6 +574,11 @@ class LinkPreviewService {
           currentUrl = nextUrl;
           redirectCount++;
           _log('   -> Yönlendi ($redirectCount): $currentUrl');
+
+          // Eğer hedef URL zaten İncehesap kanonik ürün sayfasına ulaştıysa döngüyü hemen tamamla
+          if (currentUrl.contains('incehesap.com') && RegExp(r'-fiyati-\d+').hasMatch(currentUrl)) {
+            break;
+          }
         } else {
           break;
         }

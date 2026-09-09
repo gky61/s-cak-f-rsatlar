@@ -278,10 +278,121 @@ const AffiliateManager = {
           return targetProductUrl.toString();
         }
       }
+    },
+
+    // 4. İncehesap Paylaştıkça Kazan (/u/{code}/)
+    incehesap: {
+      name: 'İncehesap',
+      extractProductId: function(url) {
+        if (!url) return null;
+        const path = url.pathname || '';
+        const match = path.match(/-fiyati-(\d+)(?:\/|$)/i);
+        if (match) return match[1];
+        return url.searchParams.get('urunId') || url.searchParams.get('productId') || url.searchParams.get('id') || null;
+      },
+      canHandle: function(url) {
+        const host = url.hostname.toLowerCase();
+        return host.includes('incehesap.com');
+      },
+      isAlreadyAffiliate: function(url, config) {
+        const host = url.hostname.toLowerCase();
+        if (!host.includes('incehesap.com')) return false;
+        return /^\/u\/[a-zA-Z0-9_-]+\/?$/i.test(url.pathname);
+      },
+      convert: function(url, config) {
+        const isEnabled = config?.incehesapAffiliateEnabled !== false && config?.incehesap?.enabled !== false;
+        let targetProductUrl = url;
+
+        // 1. Kill-switch / Fallback kontrolü: Eğer affiliate kapalıysa temiz ürün linkini döndür
+        if (!isEnabled) {
+          targetProductUrl.searchParams.delete('utm_source');
+          targetProductUrl.searchParams.delete('utm_medium');
+          targetProductUrl.searchParams.delete('utm_campaign');
+          targetProductUrl.searchParams.delete('ref');
+          targetProductUrl.search = '';
+          return targetProductUrl.toString();
+        }
+
+        // 2. Link zaten bir Paylaştıkça Kazan linki ise aynen koru
+        if (/^\/u\/[a-zA-Z0-9_-]+\/?$/i.test(url.pathname)) {
+          let path = url.pathname;
+          if (!path.endsWith('/')) path = `${path}/`;
+          return `${url.protocol}//${url.host}${path}`;
+        }
+
+        // 3. Kanonik URL ise takip parametrelerini temizleyerek dön
+        targetProductUrl.search = '';
+        return targetProductUrl.toString();
+      },
+      generateAffiliateLink: async function(productId, config) {
+        if (!productId) return null;
+
+        const cookie = (config?.incehesapSessionCookie && String(config.incehesapSessionCookie).trim()) ||
+          'PHPSESSID=4jcp9cn663qg4mah0vqd3a1rkb; cki1=ao2er02bt4kj918fssb3i16svn;';
+
+        try {
+          const https = require('https');
+          const postData = JSON.stringify({
+            action: 'getSingleProductLink',
+            urunId: Number(productId)
+          });
+
+          const options = {
+            hostname: 'www.incehesap.com',
+            port: 443,
+            path: '/uye/paylastikca-kazan/ajax/update.php',
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json, text/plain, */*',
+              'Content-Type': 'application/json;charset=UTF-8',
+              'User-Agent': 'WhatsApp/2.23.4.15 A',
+              'Origin': 'https://www.incehesap.com',
+              'Referer': 'https://www.incehesap.com/',
+              'Cookie': cookie,
+              'Content-Length': Buffer.byteLength(postData)
+            },
+            timeout: 10000
+          };
+
+          const responseJson = await new Promise((resolve, reject) => {
+            const apiReq = https.request(options, (apiRes) => {
+              let body = '';
+              apiRes.on('data', (chunk) => { body += chunk; });
+              apiRes.on('end', () => {
+                try {
+                  resolve(JSON.parse(body));
+                } catch (err) {
+                  resolve({ error: 'Parse error', raw: body });
+                }
+              });
+            });
+            apiReq.on('error', (e) => reject(e));
+            apiReq.write(postData);
+            apiReq.end();
+          });
+
+          if (responseJson && responseJson.url && responseJson.url.includes('/u/')) {
+            const match = responseJson.url.match(/\/u\/([a-zA-Z0-9_-]+)\/?/i);
+            const code = match ? match[1] : null;
+            if (code) {
+              return {
+                success: true,
+                affiliateUrl: responseJson.url,
+                code: code,
+                earningText: responseJson.text || '',
+                fromCache: false
+              };
+            }
+          }
+        } catch (e) {
+          console.warn('Node generateAffiliateLink error:', e.message);
+        }
+        return null;
+      }
     }
   },
 
-  activeStores: ['amazon', 'hepsiburada', 'teknosa'],
+  activeStores: ['amazon', 'hepsiburada', 'teknosa', 'incehesap'],
 
   isStoreSupported: function(storeOrUrl, config) {
     if (!storeOrUrl) return false;
@@ -356,6 +467,36 @@ const AffiliateManager = {
       return originalUrl;
     } catch (e) {
       return originalUrl;
+    }
+  },
+
+  resolveAndConvertToAffiliate: async function(originalUrl, config) {
+    if (!originalUrl || typeof originalUrl !== 'string') return originalUrl;
+
+    try {
+      const urlObj = new URL(originalUrl.trim());
+
+      // İncehesap kanonik ürün linki için dinamik canlı AJAX üretimi
+      const incehesapAdapter = this.adapters.incehesap;
+      if (incehesapAdapter && incehesapAdapter.canHandle(urlObj)) {
+        const isEnabled = config?.incehesapAffiliateEnabled !== false && config?.incehesap?.enabled !== false;
+        if (isEnabled) {
+          if (incehesapAdapter.isAlreadyAffiliate(urlObj, config)) {
+            return originalUrl;
+          }
+          const productId = incehesapAdapter.extractProductId(urlObj);
+          if (productId) {
+            const genRes = await incehesapAdapter.generateAffiliateLink(productId, config);
+            if (genRes && genRes.affiliateUrl) {
+              return genRes.affiliateUrl;
+            }
+          }
+        }
+      }
+
+      return this.convert(originalUrl, config);
+    } catch (e) {
+      return this.convert(originalUrl, config);
     }
   },
 

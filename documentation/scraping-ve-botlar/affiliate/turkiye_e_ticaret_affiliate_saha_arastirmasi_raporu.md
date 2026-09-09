@@ -184,7 +184,7 @@ Türkiye'de onlarca bağımsız e-ticaret markası kendi affiliate altyapısın�
 | **Amazon Türkiye** | 🟢 **CANLI / AKTİF** | Associates TR (`tag=`) | Nakit Komisyon (IBAN) | Kolay (Vergi/Şirket şartı yok) | ✅ **Mükemmel (0 ms)** | 🏆 **%100 (Tamamlandı)** |
 | **Hepsiburada** | 🟢 **CANLI / AKTİF** | Adjust (`7t4g.adj.st`) | Nakit Komisyon (IBAN) | Influencer / LinkGelir hesabı | ✅ **Mükemmel (0 ms)** | 🏆 **%100 (Tamamlandı)** |
 | **Teknosa** | 🟢 **CANLI / AKTİF** | TUNE HasOffers (`btrck`) | Nakit Komisyon (IBAN) | Paylaş Kazan hesabı | ✅ **Mükemmel (0 ms)** | 🏆 **%100 (Tamamlandı)** |
-| **İncehesap** | 🟡 **İncelendi (Hazır)** | Paylaştıkça Kazan | Nakit Para (IBAN) | 🟢 **Çok Kolay (Takipçi şartı yok)** | ✅ **Yüksek (Parametrik)** | ⭐⭐⭐⭐⭐ **(%95 - 1. Öncelik)** |
+| **İncehesap** | 🟢 **CANLI / AKTİF** | Paylaştıkça Kazan (`/u/`) | Nakit Para (IBAN) | 🟢 **Çok Kolay (Takipçi şartı yok)** | ✅ **Mükemmel (~200 ms WAF Bypass)** | 🏆 **%100 (Tamamlandı)** |
 | **Çiçeksepeti** | 🟡 **İncelendi (Hazır)** | **TUNE HasOffers** | Nakit Komisyon / Kupon | Partner Başvurusu | ✅ **Mükemmel (Teknosa ile Aynı)** | ⭐⭐⭐⭐⭐ **(%95 - 1. Öncelik)** |
 | **Trendyol** | 🟡 **İncelendi (Hazır)** | Adjust (`ty.gl`) | Nakit Komisyon (Fatura) | 10K Takipçi / Partnerlik | ✅ **Yüksek (HB benzeri Adjust)** | ⭐⭐⭐⭐ **(%90 - 2. Öncelik)** |
 | **N11** | 🟡 **İncelendi** | Fenomio / sl.n11.com | Nakit Komisyon | Fenomio Üyeliği | ⚠️ Orta (Fenomio Redirect) | ⭐⭐⭐ **(%75 - 3. Öncelik)** |
@@ -198,24 +198,19 @@ Türkiye'de onlarca bağımsız e-ticaret markası kendi affiliate altyapısın�
 
 ## 5. 🚀 FırsatKolik İçin Önceliklendirilmiş Yol Haritası (Roadmap)
 
-Saha araştırması verileri ışığında, FırsatKolik'in gelirlerini maksimize edecek ve geliştirme eforunu minimize edecek **en stratejik 3 adım**:
+Saha araştırması verileri ışığında, FırsatKolik'in gelirlerini maksimize edecek ve geliştirme eforunu minimize edecek yol haritası:
 
-### 🥇 Adım 1: İncehesap ("Paylaştıkça Kazan") Entegrasyonu
-* **Neden?**
-  1. Takipçi şartı, şirket zorunluluğu veya ağır sözleşme bariyerleri yoktur; forum ve topluluk odaklıdır.
-  2. FırsatKolik kullanıcı kitlesi donanım, hazır PC ve oyuncu ekipmanı indirimlerine bayılmaktadır.
-  3. Cuma günleri düzenlenen "Gaming Gecesi" haftalık en büyük satış patlamasını yaratır.
-  4. Nakit para ödemesi doğrudan banka hesabına yapılmaktadır.
-* **Eylem Planı:** İncehesap Paylaştıkça Kazan hesabı açılarak link parametresi çözümlenecek; `IncehesapAffiliateAdapter` inşa edilecektir.
+### ✅ Tamamlandı: İncehesap ("Paylaştıkça Kazan") Entegrasyonu
+* **Durum:** Canlı WAF bypass (`WhatsApp/2.23.4.15 A`), ~200 ms doğrudan canlı link üretimi ile Flutter mobil ve Telegram Cloud Run botuna tam entegre edildi.
 
-### 🥈 Adım 2: Çiçeksepeti (TUNE HasOffers Mimarisi) Entegrasyonu
+### 🥇 Adım 1: Çiçeksepeti (TUNE HasOffers Mimarisi) Entegrasyonu
 * **Neden?**
   1. Çiçeksepeti'nin arka planındaki affiliate motoru, Teknosa'da başarıyla çözdüğümüz dünya devi **TUNE (HasOffers)** altyapısının aynısıdır!
   2. Kod mimarimiz, unwrap mantığımız ve dual-URL yapımız Çiçeksepeti için %100 hazırdır; yeni bir teknoloji öğrenme maliyeti sıfırdır.
   3. Çiçeksepeti Extra; parfüm, küçük ev aletleri, hediye ve teknoloji kategorisinde çok yüksek sepete dönüşüm oranına sahiptir.
 * **Eylem Planı:** `CiceksepetiAffiliateAdapter`, Teknosa adaptörü klonlanarak ve TUNE kampanya ID'si girilerek 1 gün içinde tamamlanabilir.
 
-### 🥉 Adım 3: Trendyol (Adjust / Influencer Mimarisi) Entegrasyonu
+### 🥈 Adım 2: Trendyol (Adjust / Influencer Mimarisi) Entegrasyonu
 * **Neden?**
   1. Türkiye'nin en büyük sipariş hacmi Trendyol'dadır.
   2. Hepsiburada için geliştirdiğimiz Adjust deep-link mimarisi Trendyol'un `ty.gl` ve Adjust tracker altyapısıyla neredeyse ikizdir.
@@ -224,4 +219,4 @@ Saha araştırması verileri ışığında, FırsatKolik'in gelirlerini maksimiz
 ---
 
 > [!TIP]
-> **Sonuç:** FırsatKolik'in 3 devi (Amazon, Hepsiburada, Teknosa) tamamlanmıştır. Sırada ekosistemi mükemmelleştirecek **İncehesap** ve **Çiçeksepeti** bulunmaktadır!
+> **Sonuç:** FırsatKolik'in 4 devi (**Amazon**, **Hepsiburada**, **Teknosa**, **İncehesap**) tamamlanmıştır. Sırada ekosistemi genişletecek **Çiçeksepeti** ve **Trendyol** bulunmaktadır!

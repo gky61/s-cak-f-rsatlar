@@ -666,13 +666,25 @@ async function saveDealToFirebase(message, chatInfo) {
 🎯 ====================================================
     `);
 
+    // Deal onay gereksinimini ve affiliate ayarlarını Firestore settings/app belgesinden kontrol et
+    let appSettings = {};
+    try {
+      const settingsDoc = await db.collection('settings').doc('app').get();
+      if (settingsDoc.exists) {
+        appSettings = settingsDoc.data() || {};
+      }
+    } catch (e) {
+      console.log('⚠️ Settings yüklenemedi:', e.message);
+    }
+
     const rawTargetUrl = scrapeResult.url || mainLink;
     const finalCleanUrl = affiliateManager.cleanProductUrl(rawTargetUrl);
 
     // 🎯 Gelir Ortaklığı (Affiliate) Dönüştürme
-    let finalDealLink = rawTargetUrl;
+    let sourceForAffiliate = (mainLink && affiliateManager.isAlreadyAffiliate(mainLink, appSettings)) ? mainLink : rawTargetUrl;
+    let finalDealLink = sourceForAffiliate;
     try {
-      finalDealLink = affiliateManager.convert(rawTargetUrl);
+      finalDealLink = await affiliateManager.resolveAndConvertToAffiliate(sourceForAffiliate, appSettings);
     } catch (_) {}
 
     // Deal objesi

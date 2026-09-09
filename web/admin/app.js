@@ -671,6 +671,7 @@ function initEventListeners() {
     loadTeknosaAffiliateStatus();
     loadHepsiburadaAffiliateStatus();
     loadAmazonAffiliateStatus();
+    loadIncehesapAffiliateStatus();
 
     // Toggle Deal Sharing button (Deals Toolbar)
     const toggleDealSharingBtn = document.getElementById('toggleDealSharingBtn');
@@ -814,6 +815,33 @@ function initEventListeners() {
         closeAmazonAffiliateInfoBtn.addEventListener('click', (e) => {
             e.preventDefault();
             amazonAffiliateInfoBox.classList.add('hidden');
+        });
+    }
+
+    // Toggle İncehesap Affiliate switch (Settings View)
+    const settingsToggleIncehesapAffiliateBtn = document.getElementById('settingsToggleIncehesapAffiliateBtn');
+    if (settingsToggleIncehesapAffiliateBtn) {
+        settingsToggleIncehesapAffiliateBtn.addEventListener('change', async () => {
+            await toggleIncehesapAffiliate();
+        });
+    }
+
+    // İncehesap Affiliate Info Button and Close Button
+    const incehesapAffiliateInfoBtn = document.getElementById('incehesapAffiliateInfoBtn');
+    const closeIncehesapAffiliateInfoBtn = document.getElementById('closeIncehesapAffiliateInfoBtn');
+    const incehesapAffiliateInfoBox = document.getElementById('incehesapAffiliateInfoBox');
+
+    if (incehesapAffiliateInfoBtn && incehesapAffiliateInfoBox) {
+        incehesapAffiliateInfoBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            incehesapAffiliateInfoBox.classList.toggle('hidden');
+        });
+    }
+
+    if (closeIncehesapAffiliateInfoBtn && incehesapAffiliateInfoBox) {
+        closeIncehesapAffiliateInfoBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            incehesapAffiliateInfoBox.classList.add('hidden');
         });
     }
 
@@ -1776,7 +1804,7 @@ async function approveDeal(dealId) {
             }
 
             // Affiliate link'e dönüştür (eğer yapılandırılmışsa)
-            const convertedUrl = convertToAffiliateLink(currentUrl);
+            let convertedUrl = convertToAffiliateLink(currentUrl);
             if (convertedUrl !== currentUrl) {
                 finalUrl = convertedUrl;
                 console.log('✅ Emniyet Ağı: Affiliate link\'e dönüştürüldü:', finalUrl);
@@ -1898,7 +1926,7 @@ async function showDealModal(deal) {
                 ? initialCleanUrl
                 : (initialAffiliateUrl || '');
             if (sourceUrl) {
-                const converted = convertToAffiliateLink(sourceUrl);
+                let converted = convertToAffiliateLink(sourceUrl);
                 if (converted && converted !== sourceUrl) {
                     initialAffiliateUrl = converted;
                 }
@@ -2462,7 +2490,9 @@ async function showDealModal(deal) {
 
             // Affiliate link'e dönüştür (başkasının affiliate linkini kendi linkimize dönüştürür)
             const store = detectStoreFromUrl(urlToConvert);
-            const convertedUrl = convertToAffiliateLink(urlToConvert);
+            let convertedUrl = convertToAffiliateLink(urlToConvert);
+
+
 
             if (convertedUrl !== urlToConvert) {
                 if (editAffiliateUrlEl) editAffiliateUrlEl.value = convertedUrl;
@@ -2500,6 +2530,12 @@ async function showDealModal(deal) {
         } else if (initialAffiliateUrl && (initialAffiliateUrl.includes('7t4g.adj.st') || initialAffiliateUrl.includes('adj_adgroup='))) {
             affiliateStatusEl.textContent = '✅ Hepsiburada LinkGelir (Adjust) affiliate linki hazır ve aktif';
             affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
+        } else if (initialAffiliateUrl && initialAffiliateUrl.includes('tag=')) {
+            affiliateStatusEl.textContent = '✅ Amazon Associates affiliate linki hazır ve aktif';
+            affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
+        } else if (initialAffiliateUrl && initialAffiliateUrl.includes('incehesap.com/u/')) {
+            affiliateStatusEl.textContent = '✅ İncehesap Paylaştıkça Kazan affiliate linki hazır ve aktif';
+            affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
         } else {
             affiliateStatusEl.textContent = 'ℹ️ Orijinal mağaza linki tespit edildi. "Orijinalden Affiliate Üret" ile dönüştürebilirsiniz.';
             affiliateStatusEl.className = 'text-xs text-slate-500 dark:text-slate-400 mt-1';
@@ -2519,6 +2555,18 @@ async function showDealModal(deal) {
                 } else if (url.includes('7t4g.adj.st') || url.includes('adj_adgroup=')) {
                     affiliateStatusEl.textContent = '✅ Hepsiburada LinkGelir (Adjust) affiliate linki hazır ve aktif';
                     affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
+                } else if (url.includes('amazon.com.tr') && url.includes('tag=')) {
+                    affiliateStatusEl.textContent = '✅ Amazon Associates affiliate linki hazır ve aktif';
+                    affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
+                } else if (url.includes('amazon.com.tr')) {
+                    affiliateStatusEl.textContent = '⚠️ Bu organik bir Amazon linkidir. "Orijinalden Affiliate Üret" butonuna basarak affiliate yapabilirsiniz.';
+                    affiliateStatusEl.className = 'text-xs text-amber-600 dark:text-amber-400 mt-1';
+                } else if (url.includes('incehesap.com/u/')) {
+                    affiliateStatusEl.textContent = '✅ İncehesap Paylaştıkça Kazan affiliate linki hazır ve aktif';
+                    affiliateStatusEl.className = 'text-xs text-emerald-600 dark:text-emerald-400 mt-1';
+                } else if (url.includes('incehesap.com')) {
+                    affiliateStatusEl.textContent = '⚠️ Bu organik bir İncehesap linkidir. "Orijinalden Affiliate Üret" veya Paylaştıkça Kazan kısa linki giriniz.';
+                    affiliateStatusEl.className = 'text-xs text-amber-600 dark:text-amber-400 mt-1';
                 } else if (url.includes('teknosa.com')) {
                     affiliateStatusEl.textContent = '⚠️ Bu organik bir Teknosa linkidir. "Orijinalden Affiliate Üret" butonuna basarak affiliate yapabilirsiniz.';
                     affiliateStatusEl.className = 'text-xs text-amber-600 dark:text-amber-400 mt-1';
@@ -2900,7 +2948,7 @@ async function saveDealChanges() {
                 const sourceForAffiliate = (finalCleanUrl && !finalCleanUrl.includes('btrck.com') && !finalCleanUrl.includes('7t4g.adj.st')) ? finalCleanUrl : processedUrl;
                 if (sourceForAffiliate) {
                     try {
-                        const converted = convertToAffiliateLink(sourceForAffiliate);
+                        let converted = convertToAffiliateLink(sourceForAffiliate);
                         if (converted && converted !== sourceForAffiliate) {
                             processedUrl = converted;
                             console.log('✅ saveDealChanges: Affiliate link\'e dönüştürüldü:', processedUrl);
@@ -7194,11 +7242,25 @@ function initAdminAffiliateSettingsListener() {
                 const teknosaEnabled = data.teknosaAffiliateEnabled !== false;
                 const hepsiburadaEnabled = data.hepsiburadaAffiliateEnabled !== false;
                 const amazonEnabled = data.amazonAffiliateEnabled !== false;
+                const incehesapEnabled = data.incehesapAffiliateEnabled !== false;
 
                 if (typeof affiliateConfig !== 'undefined') {
                     if (affiliateConfig.teknosa) affiliateConfig.teknosa.enabled = teknosaEnabled;
                     if (affiliateConfig.hepsiburada) affiliateConfig.hepsiburada.enabled = hepsiburadaEnabled;
                     if (affiliateConfig.amazon) affiliateConfig.amazon.enabled = amazonEnabled;
+                    if (affiliateConfig.incehesap) {
+                        affiliateConfig.incehesap.enabled = incehesapEnabled;
+                        if (data.incehesapSessionCookie !== undefined) {
+                            affiliateConfig.incehesap.sessionCookie = data.incehesapSessionCookie;
+                        }
+                        if (data.incehesapProductLinkCache && typeof data.incehesapProductLinkCache === 'object') {
+                            affiliateConfig.incehesap.productLinkCache = Object.assign(
+                                {},
+                                affiliateConfig.incehesap.productLinkCache,
+                                data.incehesapProductLinkCache
+                            );
+                        }
+                    }
                 }
 
                 const tToggle = document.getElementById('settingsToggleTeknosaAffiliateBtn');
@@ -7215,7 +7277,12 @@ function initAdminAffiliateSettingsListener() {
                 if (aToggle && aToggle.checked !== amazonEnabled) {
                     aToggle.checked = amazonEnabled;
                 }
-                console.log('🔄 [AffiliateSettings] Firestore settings/app anlık güncellendi: Teknosa =', teknosaEnabled, ', Hepsiburada =', hepsiburadaEnabled, ', Amazon =', amazonEnabled);
+
+                const iToggle = document.getElementById('settingsToggleIncehesapAffiliateBtn');
+                if (iToggle && iToggle.checked !== incehesapEnabled) {
+                    iToggle.checked = incehesapEnabled;
+                }
+                console.log('🔄 [AffiliateSettings] Firestore settings/app anlık güncellendi: Teknosa =', teknosaEnabled, ', Hepsiburada =', hepsiburadaEnabled, ', Amazon =', amazonEnabled, ', İncehesap =', incehesapEnabled);
             }
         }, (err) => {
             console.warn('Affiliate settings listener error:', err);
@@ -7442,6 +7509,91 @@ async function toggleAmazonAffiliate() {
     }
 }
 
+// İncehesap Affiliate durumunu Firestore'dan yükle ve switch'i güncelle
+async function loadIncehesapAffiliateStatus() {
+    try {
+        console.log('📥 Loading İncehesap affiliate status from Firestore...');
+        const settingsDoc = await db.collection('settings').doc('app').get();
+        const isEnabled = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().incehesapAffiliateEnabled !== false)
+            : true;
+
+        console.log('📊 İncehesap affiliate enabled:', isEnabled);
+
+        // config.js içerisindeki affiliateConfig nesnesini güncelle
+        if (typeof affiliateConfig !== 'undefined' && affiliateConfig.incehesap) {
+            affiliateConfig.incehesap.enabled = isEnabled;
+            if (settingsDoc.exists && settingsDoc.data()) {
+                const sData = settingsDoc.data();
+                if (sData.incehesapSessionCookie !== undefined) {
+                    affiliateConfig.incehesap.sessionCookie = sData.incehesapSessionCookie;
+                }
+                if (sData.incehesapProductLinkCache && typeof sData.incehesapProductLinkCache === 'object') {
+                    affiliateConfig.incehesap.productLinkCache = Object.assign(
+                        {},
+                        affiliateConfig.incehesap.productLinkCache,
+                        sData.incehesapProductLinkCache
+                    );
+                }
+            }
+        }
+
+        const toggle = document.getElementById('settingsToggleIncehesapAffiliateBtn');
+        if (toggle) {
+            toggle.checked = isEnabled;
+        }
+    } catch (error) {
+        console.error('❌ Error loading İncehesap affiliate status:', error);
+    }
+}
+
+// İncehesap Affiliate durumunu toggle et ve Firestore settings/app belgesine yaz
+async function toggleIncehesapAffiliate() {
+    try {
+        console.log('🔄 toggleIncehesapAffiliate başladı...');
+        const settingsRef = db.collection('settings').doc('app');
+        const settingsDoc = await settingsRef.get();
+
+        const currentStatus = settingsDoc.exists && settingsDoc.data()
+            ? (settingsDoc.data().incehesapAffiliateEnabled !== false)
+            : true;
+
+        const newStatus = !currentStatus;
+        console.log('📊 New İncehesap affiliate status:', newStatus);
+
+        await settingsRef.set({
+            incehesapAffiliateEnabled: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        // config.js içerisindeki affiliateConfig nesnesini anında senkronize et
+        if (typeof affiliateConfig !== 'undefined' && affiliateConfig.incehesap) {
+            affiliateConfig.incehesap.enabled = newStatus;
+        }
+
+        const toggle = document.getElementById('settingsToggleIncehesapAffiliateBtn');
+        if (toggle) {
+            toggle.checked = newStatus;
+        }
+
+        const message = newStatus
+            ? '✅ İncehesap Affiliate (Paylaştıkça Kazan) dönüşümü aktifleştirildi!'
+            : '🛡️ İncehesap Affiliate dönüşümü kapatıldı! Sistem güvenli fallback (temiz ürün linki) moduna geçti.';
+        showSuccess(message);
+
+        console.log(`✅ İncehesap affiliate status set to ${newStatus}`);
+    } catch (error) {
+        console.error('❌ Error toggling İncehesap affiliate status:', error);
+        showError('İncehesap affiliate durumu değiştirilirken hata oluştu: ' + error.message);
+
+        // Reset toggle switch state on error
+        const toggle = document.getElementById('settingsToggleIncehesapAffiliateBtn');
+        if (toggle) {
+            toggle.checked = !toggle.checked;
+        }
+    }
+}
+
 // Comment Sharing durumunu yükle ve butonu güncelle
 async function loadCommentSharingStatus() {
     try {
@@ -7582,6 +7734,7 @@ function showSettingsView() {
     loadTeknosaAffiliateStatus();
     loadHepsiburadaAffiliateStatus();
     loadAmazonAffiliateStatus();
+    loadIncehesapAffiliateStatus();
 }
 
 function loadReports() {

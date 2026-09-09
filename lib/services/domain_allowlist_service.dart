@@ -132,7 +132,8 @@ class DomainAllowlistService {
     'rdrtr.com',
     'onelink.me',
     'paylaskazan.teknosa.com',
-    'rdr.btrck.com'
+    'rdr.btrck.com',
+    'incehesap.com/u/'
   ];
 
   /// Verilen URL'nin domain'inin (hostname) allowlist'te olup olmadığını kontrol eder.

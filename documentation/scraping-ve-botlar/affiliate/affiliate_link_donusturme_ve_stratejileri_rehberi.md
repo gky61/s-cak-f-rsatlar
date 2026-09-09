@@ -47,24 +47,25 @@ Affiliate link üretimi için değerlendirilen 4 temel mimari yaklaşım:
 
 ---
 
-## 🏪 3. Başarılı Referans Vakalar (Case Studies): Teknosa, Hepsiburada ve Amazon Modelleri
+## 🏪 3. Başarılı Referans Vakalar (Case Studies): Teknosa, Hepsiburada, Amazon ve İncehesap Modelleri
 
-FırsatKolik'te devreye alınan ve sistemin "altın standardı" haline gelen üç öncü model, **Teknosa**, **Hepsiburada** ve **Amazon Türkiye** mağazaları üzerinde gerçekleştirilmiştir.
+FırsatKolik'te devreye alınan ve sistemin "altın standardı" haline gelen dört öncü model, **Teknosa**, **Hepsiburada**, **Amazon Türkiye** ve **İncehesap** mağazaları üzerinde gerçekleştirilmiştir.
 
-Klasik yöntemlerin aksine (oturum açma zorunluluğu, WAF engelleri ve sunucu gecikmeleri), mağazaların arka plandaki küresel affiliate/attribution altyapıları tersine mühendislikle çözülmüş ve **algoritmik sentezleme yöntemi (Yol D)** hayata geçirilmiştir.
+Klasik yöntemlerin aksine (oturum açma zorunluluğu, WAF engelleri ve sunucu gecikmeleri), mağazaların arka plandaki küresel affiliate/attribution ve kısa link mimarileri tersine mühendislikle çözülmüş ve **algoritmik sentezleme / yönlendirme çözümleme yöntemi** hayata geçirilmiştir.
 
 ### 🌟 Sağlanan Temel Kazanımlar:
 * **0 ms Gecikme:** Sunucuya veya harici API'ye hiçbir ağ isteği atılmadan, cihaz üzerinde anında affiliate linki üretilir.
 * **Sıfır WAF/Cloudflare/Akamai Riski:** Hiçbir POST çağrısı yapılmadığı için güvenlik duvarlarına ve bot korumalarına takılma riski sıfırdır.
 * **Kesintisiz Retargeting & Anti-Hijack:** Kullanıcı başkasına ait bir Paylaş Kazan, LinkGelir veya Amazon Associates linki paylaştığında, link milisaniyeler içinde unwrap edilip adminin affiliate kimliğine devredilir.
 * **0 ms Yerel Uygulama Açılışı (Zero Browser / Zero Flicker):** Hepsiburada (`hbapp://`) ve Amazon (Android App Links / `com.amazon.mShop.android.shopping`) ile harici tarayıcı yüzü görülmeden doğrudan yerel alışveriş uygulaması açılır.
-* **%100 Test Başarısı:** Flutter (52/52) ve Node.js (13/13) birim testleriyle (toplam 65 test) tüm senaryolar uçtan uca doğrulanmıştır.
+* **%100 Test Başarısı:** Flutter (48/48) ve Node.js (20/20) birim testleriyle tüm senaryolar uçtan uca doğrulanmıştır.
 
 > [!TIP]
 > **Canlıya alınan mağazaların müstakil teknik rehberleri:**
 > 1. 👉 **[Teknosa Gelir Ortaklığı (Paylaş Kazan) ve TUNE Mimarisi Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/teknosa_affiliate_ve_paylas_kazan_rehberi.md)** (TUNE HasOffers / `rdr.btrck.com`)
 > 2. 👉 **[Hepsiburada Gelir Ortaklığı (LinkGelir) ve Adjust Mimarisi Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/hepsiburada_affiliate_ve_linkgelir_rehberi.md)** (Adjust Universal Deep-Link / `7t4g.adj.st`)
 > 3. 👉 **[Amazon Gelir Ortaklığı (Associates TR) ve firsatkolik-21 Mimarisi Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/amazon_affiliate_ve_associates_rehberi.md)** (Amazon Associates / `tag=firsatkolik-21`)
+> 4. 👉 **[İncehesap Gelir Ortaklığı (Paylaştıkça Kazan) Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/incehesap_affiliate_ve_paylas_kazan_rehberi.md)** (İncehesap `/u/{code}/` & IBAN Nakit Ödeme)
 
 ---
 
@@ -79,8 +80,9 @@ lib/services/affiliate/
 └── adapters/
     ├── teknosa_affiliate_adapter.dart        -> Teknosa TUNE HasOffers Adaptörü (CANLI)
     ├── hepsiburada_affiliate_adapter.dart    -> Hepsiburada Adjust Universal Link Adaptörü (CANLI)
+    ├── amazon_affiliate_adapter.dart         -> Amazon Associates Adaptörü (CANLI)
+    ├── incehesap_affiliate_adapter.dart      -> İncehesap Paylaştıkça Kazan Adaptörü (CANLI)
     ├── trendyol_affiliate_adapter.dart       -> Trendyol Adaptörü (Demo/Taslak)
-    ├── amazon_affiliate_adapter.dart         -> Amazon Adaptörü (Demo/Taslak)
     ├── n11_affiliate_adapter.dart            -> N11 Adaptörü (Demo/Taslak)
     └── gittigidiyor_affiliate_adapter.dart   -> GittiGidiyor Adaptörü (Demo/Taslak)
 ```
@@ -213,17 +215,17 @@ FırsatKolik'te kullanıcı deneyimi (UX) ile platformun gelir modeli birbirinde
 ## 📊 6. Mağaza Durum Matrisi ve Test Durumu
 
 > [!NOTE]
-> Şu an itibariyle **Teknosa**, **Hepsiburada** ve **Amazon Türkiye** adaptörleri uçtan uca test edilmiş, reverse-engineering doğrulaması yapılmış ve canlıya hazır hale getirilmiştir. Diğer mağazalar demo/taslak şablonlar olarak eklenmiştir; testleri ilerleyen fazlarda gerçekleştirilecektir.
+> Şu an itibariyle **Teknosa**, **Hepsiburada**, **Amazon Türkiye** ve **İncehesap** adaptörleri uçtan uca test edilmiş, reverse-engineering doğrulaması yapılmış ve canlıya hazır hale getirilmiştir. Diğer mağazalar demo/taslak şablonlar olarak eklenmiştir; testleri ilerleyen fazlarda gerçekleştirilecektir.
 
 | Mağaza | Kullanılan Yöntem | Durum | Teknik Notlar |
 | :--- | :--- | :--- | :--- |
 | **Teknosa** | **TUNE (HasOffers) Deep-Link Sentezleme** | 🟢 **Tam Test Edildi (Canlı)** | `rdr.btrck.com` üzerinden sıfır istek ile UUID ve UTM enjeksiyonu. [Kılavuza Git](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/teknosa_affiliate_ve_paylas_kazan_rehberi.md) |
 | **Hepsiburada** | **Adjust (7t4g.adj.st) Universal Deep-Link Sentezleme** | 🟢 **Tam Test Edildi (Canlı)** | 0 ms Adjust universal deep-link sentezleme, anti-hijack retargeting, 4 canlı linkle doğrulandı. [Kılavuza Git](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/hepsiburada_affiliate_ve_linkgelir_rehberi.md) |
 | **Amazon** | **Associates TR `tag=firsatkolik-21` & Android App Links** | 🟢 **Tam Test Edildi (Canlı)** | 0 ms istemci sentezleme, ASIN ayıklama, anti-hijack, App Links ile doğrudan yerel Amazon App açılışı. [Kılavuza Git](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/amazon_affiliate_ve_associates_rehberi.md) |
+| **İncehesap** | **Paylaştıkça Kazan `/u/{code}/` + WAF Bypass (Doğrudan Dinamik)** | 🟢 **Tam Test Edildi (Canlı)** | 24h çerez, IBAN nakit ödeme, Cloudflare WAF bypass (`WhatsApp` UA), doğrudan anlık canlı POST ile ~200 ms dinamik üretim (sıfır hardcode / sıfır önbellek karmaşası). [Kılavuza Git](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/incehesap_affiliate_ve_paylas_kazan_rehberi.md) |
 | **Trendyol** | `boutiqueId` Query Parametresi | 🟡 *Demo / Taslak (Test Edilmedi)* | İleride test edilecek. Yöntem çalışmazsa alternatif aranacak. |
 | **N11** | `ref` Referans ID Parametresi | 🟡 *Demo / Taslak (Test Edilmedi)* | İleride test edilecek. Yöntem çalışmazsa alternatif aranacak. |
 | **GittiGidiyor** | `affiliateId` Parametresi | 🔴 *Pazardan Çekildi (eBay kapattı)* | GittiGidiyor 2022'de Türkiye pazarındaki faaliyetlerini sonlandırmıştır. |
-| **İncehesap** | **Paylaştıkça Kazan** | 🟡 *Saha Araştırması Tamamlandı* | Takipçi sınırı yok, IBAN nakit ödeme, Gaming Gecesi satış patlaması. [Raporu İncele](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/turkiye_e_ticaret_affiliate_saha_arastirmasi_raporu.md) |
 | **Çiçeksepeti** | **TUNE HasOffers Mimarisi** | 🟡 *Saha Araştırması Tamamlandı* | Teknosa ile birebir aynı TUNE motoru (`partners.lolacicek.com`). [Raporu İncele](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/turkiye_e_ticaret_affiliate_saha_arastirmasi_raporu.md) |
 
 > 📚 **Kapsamlı Saha Araştırması:** Türkiye'deki tüm e-ticaret sitelerinin affiliate altyapıları, Fenomio, Adjust, TUNE ve komisyon modelleri için bkz:  
@@ -452,17 +454,19 @@ Her yeni mağaza adaptörü geliştirildiğinde şu temel testlerin yazılması 
 3. `Scraping Independence: Canonical product URL can be handled by the scraper independently of affiliate conversion`
 4. `StoreRedirectService & Hybrid Redirection: Kill-switch OFF unwraps to organic, ON synthesizes affiliate for hybrid engine`
 
-#### Aktif Test Paketleri (52 Flutter + 13 Node.js = 65 Test):
-* **Flutter Birim & Entegrasyon Testleri (52 Test):**
+#### Aktif Test Paketleri (61 Flutter + 20 Node.js = 81 Test):
+* **Flutter Birim & Entegrasyon Testleri (61 Test):**
   * [`test/amazon_affiliate_test.dart`](file:///d:/firsatkolik/test/amazon_affiliate_test.dart) -> 13 Test ✅
   * [`test/hepsiburada_affiliate_test.dart`](file:///d:/firsatkolik/test/hepsiburada_affiliate_test.dart) -> 13 Test ✅
   * [`test/teknosa_affiliate_test.dart`](file:///d:/firsatkolik/test/teknosa_affiliate_test.dart) -> 13 Test ✅
+  * [`test/incehesap_affiliate_test.dart`](file:///d:/firsatkolik/test/incehesap_affiliate_test.dart) -> 9 Test ✅
   * [`test/paylas_kazan_test.dart`](file:///d:/firsatkolik/test/paylas_kazan_test.dart) -> 6 Test ✅
   * [`test/store_redirect_service_test.dart`](file:///d:/firsatkolik/test/store_redirect_service_test.dart) -> 7 Test ✅
-* **Node.js Bulut Botu & Kazıma Testleri (13 Test):**
+* **Node.js Bulut Botu & Kazıma Testleri (20 Test):**
   * [`cloud-run-bot/tests/amazon_affiliate.test.js`](file:///d:/firsatkolik/cloud-run-bot/tests/amazon_affiliate.test.js) -> 4 Test ✅
   * [`cloud-run-bot/tests/hepsiburada_affiliate.test.js`](file:///d:/firsatkolik/cloud-run-bot/tests/hepsiburada_affiliate.test.js) -> 4 Test ✅
   * [`cloud-run-bot/tests/teknosa_affiliate.test.js`](file:///d:/firsatkolik/cloud-run-bot/tests/teknosa_affiliate.test.js) -> 2 Test ✅
+  * [`cloud-run-bot/tests/incehesap_affiliate.test.js`](file:///d:/firsatkolik/cloud-run-bot/tests/incehesap_affiliate.test.js) -> 7 Test ✅
   * [`cloud-run-bot/tests/paylas_kazan.test.js`](file:///d:/firsatkolik/cloud-run-bot/tests/paylas_kazan.test.js) -> 3 Test ✅
 
 *Canlıda doğrulanmış örnek test senaryoları ve terminal çıktıları için mağaza kılavuzlarına (örn. [Teknosa Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/teknosa_affiliate_ve_paylas_kazan_rehberi.md#8--test-senaryoları-ve-doğrulama-matrisi), [Hepsiburada Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/hepsiburada_affiliate_ve_linkgelir_rehberi.md#8--test-senaryoları-ve-doğrulama-matrisi) ve [Amazon Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/amazon_affiliate_ve_associates_rehberi.md#10--test-senaryoları-ve-doğrulama-matrisi-17-test)) bakınız.*

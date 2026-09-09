@@ -336,15 +336,25 @@ class DealService {
 
       final compliantDescription = AdvertisingComplianceService.ensureDisclosure(description);
 
-      String finalDealLink = (resolvedUrl.isNotEmpty && resolvedUrl.startsWith('http')) ? resolvedUrl : url;
+      // Eğer girilen URL zaten geçerli bir Paylaştıkça Kazan affiliate linki (/u/) ise doğrudan url'i koru,
+      // değilse resolvedUrl üzerinden affiliate dönüştürmesini yap.
+      String sourceForAffiliate = url;
+      if (url.toLowerCase().contains('incehesap.com/u/')) {
+        sourceForAffiliate = url;
+      } else if (resolvedUrl.isNotEmpty && resolvedUrl.startsWith('http')) {
+        sourceForAffiliate = resolvedUrl;
+      }
+
+      String finalDealLink = sourceForAffiliate;
       try {
         _log('⚡ [AFFILIATE-TEST] Fırsat kaydedilirken affiliate dönüştürme kontrolü yapılıyor...');
-        final converted = await AffiliateService.resolveAndConvertToAffiliate(finalDealLink);
-        if (converted != finalDealLink) {
+        final converted = await AffiliateService.resolveAndConvertToAffiliate(sourceForAffiliate);
+        if (converted.isNotEmpty && converted != sourceForAffiliate) {
           finalDealLink = converted;
           _log('🎉 [AFFILIATE-TEST] Fırsat linki başarıyla affiliate linkine dönüştürüldü: $finalDealLink');
         } else {
-          _log('ℹ️ [AFFILIATE-TEST] Mağaza affiliate desteklemiyor veya şalter kapalı, orijinal link korundu: $finalDealLink');
+          finalDealLink = converted.isNotEmpty ? converted : sourceForAffiliate;
+          _log('ℹ️ [AFFILIATE-TEST] Affiliate kontrolü tamamlandı: $finalDealLink');
         }
       } catch (e) {
         _log('⚠️ [AFFILIATE-TEST] Fırsat oluşturulurken affiliate dönüştürme hatası: $e');

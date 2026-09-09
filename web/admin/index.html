@@ -1891,6 +1891,68 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- İncehesap Affiliate (Paylaştıkça Kazan) Toggle & Info Box -->
+                            <div class="flex flex-col gap-2 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div class="flex flex-col gap-1">
+                                        <div class="flex items-center gap-2">
+                                            <h4 class="text-sm font-bold text-slate-900 dark:text-white">İncehesap Affiliate (Paylaştıkça Kazan) Dönüşümü</h4>
+                                            <!-- Info ! button -->
+                                            <button type="button" id="incehesapAffiliateInfoBtn" class="size-5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-xs font-black flex items-center justify-center border border-cyan-500/30 transition-all cursor-pointer shadow-sm" title="Açık/Kapalı çalışma durumlarını ve detaylarını öğrenmek için tıklayın">
+                                                !
+                                            </button>
+                                        </div>
+                                        <p class="text-xs text-slate-500 dark:text-slate-400">İncehesap ürün ve Paylaştıkça Kazan (/u/) linklerinin gelir ortaklığı dönüşümünü kontrol eder.</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer select-none font-semibold">
+                                        <input id="settingsToggleIncehesapAffiliateBtn" class="sr-only peer" type="checkbox" checked/>
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/30 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+                                    </label>
+                                </div>
+
+                                <!-- Collapsible / Expandable Info Note -->
+                                <div id="incehesapAffiliateInfoBox" class="hidden mt-2 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-cyan-200/60 dark:border-cyan-800/40 text-xs space-y-3 transition-all duration-300">
+                                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                                        <div class="flex items-center gap-1.5 font-bold text-cyan-600 dark:text-cyan-400">
+                                            <span class="material-symbols-outlined text-[18px]">info</span>
+                                            <span>İncehesap Affiliate Şalteri Çalışma Mantığı & Yedekleme (Fallback) Kılavuzu</span>
+                                        </div>
+                                        <button type="button" id="closeIncehesapAffiliateInfoBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-semibold px-2 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                                            ✕ Kapat
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <!-- Durum A: Açık -->
+                                        <div class="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 space-y-1.5">
+                                            <div class="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-400">
+                                                <span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                <span>AÇIK DURUMDA (Varsayılan):</span>
+                                            </div>
+                                            <ul class="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1 pl-1 leading-relaxed">
+                                                <li>Admin panelinde ve botta İncehesap Paylaştıkça Kazan linkleri (<strong>/u/{kod}/</strong>) aktif olarak korunur ve önbelleğe alınır.</li>
+                                                <li>Yabancı / rakip linkler unwrap edilerek komisyon hırsızlığı önlenir.</li>
+                                                <li>Alışverişlerden (24 saatlik ilişkilendirme penceresinde) %2 - %10 arasında nakit komisyon hakedilir.</li>
+                                            </ul>
+                                        </div>
+
+                                        <!-- Durum B: Kapalı -->
+                                        <div class="p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 space-y-1.5">
+                                            <div class="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-400">
+                                                <span class="size-2 rounded-full bg-amber-500"></span>
+                                                <span>KAPALI DURUMDA (Acil Durum / Fallback Modu):</span>
+                                            </div>
+                                            <ul class="list-disc list-inside text-slate-700 dark:text-slate-300 space-y-1 pl-1 leading-relaxed">
+                                                <li>İncehesap Paylaştıkça Kazan programında değişiklik olursa veya linkler duraklatılırsa bu şalter kapatılır.</li>
+                                                <li>Affiliate dönüşümü anında devre dışı bırakılır ve <strong>güvenli fallback moduna</strong> geçilir.</li>
+                                                <li>Ürün bilgileri eskiden olduğu gibi standart scraping ile eksiksiz çekilir.</li>
+                                                <li>Link doğrudan sade ve çalışan kanonik <strong>incehesap.com/...-fiyati-[ID]</strong> ürün linki olarak korunur. Sıfır kırık link, sıfır yönlendirme hatası!</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Bot & App Config Card -->

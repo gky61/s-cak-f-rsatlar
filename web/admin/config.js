@@ -69,6 +69,11 @@ const affiliateConfig = {
     teknosa: {
         userId: '906bd201-92dc-4898-914a-10309b2cd576',
         enabled: true, // Acil durumda 'false' yapılarak affiliate kapatılabilir (Fallback: temiz teknosa.com linkleri kullanılır)
+    },
+    // İncehesap Paylaştıkça Kazan (Affiliate)
+    incehesap: {
+        name: 'İncehesap',
+        enabled: true // Acil durumda 'false' yapılarak kapatılabilir (Fallback: temiz incehesap.com linkleri kullanılır)
     }
 };
 
