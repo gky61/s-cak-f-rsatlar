@@ -39,24 +39,31 @@ jobs:
       - name: 📥 Check out repository
         uses: actions/checkout@v4
 
-      # 2. Flutter Ortamını Kur (Önbellekli)
+      # 2. Modern Xcode 16 ve Swift 6 Ortamını Seç
+      - name: 🍏 Setup Xcode 16
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: 'latest-stable'
+
+      # 3. Flutter Ortamını Kur (Önbellekli)
       - name: 🐦 Setup Flutter SDK
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
-      # 3. Bağımlılıkları Yükle
-      - name: 📦 Install Flutter Dependencies
+      # 4. Flutter Yapılandırması ve Bağımlılıkları Yükle
+      - name: 📦 Configure Flutter & Install Dependencies
         run: |
+          flutter config --no-enable-swift-package-manager
           flutter pub get
           flutter precache --ios
 
-      # 4. iOS Uyumluluk Birim Testlerini Koş
+      # 5. iOS Uyumluluk Birim Testlerini Koş
       - name: 🧪 Run iOS Compatibility Tests
         run: flutter test test/ios_compatibility_test.dart
 
-      # 5. CocoaPods Önbelleği (Build süresini yarı yarıya düşürür, kotayı korur)
+      # 6. CocoaPods Önbelleği (Build süresini yarı yarıya düşürür, kotayı korur)
       - name: ⚡ Cache CocoaPods
         uses: actions/cache@v4
         with:
@@ -67,7 +74,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
 
-      # 6. Apple Dağıtım Sertifikası ve Keychain Kurulumu
+      # 7. Apple Dağıtım Sertifikası ve Keychain Kurulumu
       - name: 🔐 Setup Apple Keychain & Certificates
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -77,13 +84,16 @@ jobs:
           chmod +x ios_ci/scripts/setup_keychain.sh
           bash ios_ci/scripts/setup_keychain.sh
 
-      # 7. iOS IPA Paketini Derle (Flutter varsayılan Runner şemasını kullanır, ortam FLAVOR dart-define ile seçilir)
+      # 8. iOS IPA Paketini Derle (Flutter varsayılan Runner şemasını kullanır, ortam FLAVOR dart-define ile seçilir)
       - name: 🔨 Build iOS IPA (${{ inputs.flavor }})
         run: |
           echo "=================================================================="
           echo "Building iOS IPA for flavor: ${{ inputs.flavor }}"
           echo "Apple Bundle Identifier: com.firsatkolik.app (TestFlight Resmi Kimliği)"
           echo "=================================================================="
+
+          # SPM'i devre dışı bırakıp stabil CocoaPods derlemesini garanti et
+          flutter config --no-enable-swift-package-manager
 
           # TestFlight için daima kayıtlı com.firsatkolik.app kimliğini kullan
           sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com\.sicakfirsatlar\.sicakFirsatlar;/PRODUCT_BUNDLE_IDENTIFIER = com.firsatkolik.app;/g" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
@@ -93,7 +103,7 @@ jobs:
             --release \
             --export-options-plist=ios_ci/ExportOptions_${{ inputs.flavor }}.plist
 
-      # 8. Derlenen IPA Dosyasını GitHub Artifact Olarak Sakla
+      # 9. Derlenen IPA Dosyasını GitHub Artifact Olarak Sakla
       - name: 💾 Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -101,7 +111,7 @@ jobs:
           path: build/ios/ipa/*.ipa
           retention-days: 14
 
-      # 9. Apple TestFlight'a Yükle (Fastlane + App Store Connect API)
+      # 10. Apple TestFlight'a Yükle (Fastlane + App Store Connect API)
       - name: 🚀 Upload to Apple TestFlight
         if: ${{ inputs.upload_to_testflight }}
         env:
