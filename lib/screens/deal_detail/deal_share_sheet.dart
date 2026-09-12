@@ -141,8 +141,12 @@ $link
     } catch (e) {
       debugPrint('Fırsat paylaşım hatası: $e');
       if (context.mounted) {
+        final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Paylaşım başlatılamadı: $e')),
+          SnackBar(
+            content: Text('Paylaşım başlatılamadı: $cleanMsg'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }

@@ -151,6 +151,85 @@ String formatRelativeTime(DateTime date) {
   return DateFormat('d MMM').format(date);
 }
 
+String formatRelativeTimeCompact(DateTime date) {
+  final now = DateTime.now();
+  final difference = now.difference(date);
+
+  if (difference.inMinutes < 1) return 'Şimdi';
+  if (difference.inMinutes < 60) return '${difference.inMinutes}dk';
+  if (difference.inHours < 24) return '${difference.inHours}sa';
+  if (difference.inDays == 1) return 'Dün';
+  if (difference.inDays < 7) return '${difference.inDays}g';
+  try {
+    return DateFormat('d MMM', 'tr_TR').format(date);
+  } catch (_) {
+    return DateFormat('d MMM').format(date);
+  }
+}
+
+/// Fırsat kartlarında yorum sayısını gösteren şık, sabit hizalı mikro rozet.
+///
+/// [count] == 0 ise: Soluk, minimalist outline ikon ve hafif nötr gri ton ile görünür.
+/// [count] > 0 ise: Canlı, dikkat çekici, içi dolu ikon ve sıcak canlı renk (AppTheme.primary) ile parıldayan mikro kapsül.
+Widget buildDealCommentBadge({
+  required int count,
+  required bool isDark,
+  VoidCallback? onTap,
+}) {
+  final bool hasComments = count > 0;
+
+  final Color contentColor = hasComments
+      ? const Color(0xFFFF5722)
+      : (isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8));
+
+  final Color bgColor = hasComments
+      ? const Color(0xFFFF5722).withValues(alpha: isDark ? 0.16 : 0.10)
+      : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03));
+
+  final Color borderColor = hasComments
+      ? const Color(0xFFFF5722).withValues(alpha: isDark ? 0.35 : 0.22)
+      : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06));
+
+  final badgeWidget = Container(
+    padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
+    decoration: BoxDecoration(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(4),
+      border: Border.all(color: borderColor, width: 0.5),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.chat_bubble_outline_rounded,
+          size: 9.5,
+          color: contentColor,
+        ),
+        const SizedBox(width: 2.5),
+        Text(
+          '$count',
+          style: TextStyle(
+            fontSize: 8.5,
+            fontWeight: hasComments ? FontWeight.w800 : FontWeight.w600,
+            color: contentColor,
+            height: 1.1,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  if (onTap != null) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: badgeWidget,
+    );
+  }
+  return badgeWidget;
+}
+
 String formatExactDateTime(DateTime date) {
   try {
     return DateFormat('d MMMM - HH:mm', 'tr_TR').format(date);

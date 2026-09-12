@@ -1549,7 +1549,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            Icons.groups_rounded,
+                            Icons.radar_rounded,
                             size: 16,
                             color: isFirst
                                 ? AppTheme.primary
@@ -1557,7 +1557,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Topluluk Kuponları',
+                            'Kupon Radarı',
                             style: TextStyle(
                               color: isFirst
                                   ? (isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A))
@@ -1575,7 +1575,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            Icons.radar_rounded,
+                            Icons.groups_rounded,
                             size: 16,
                             color: !isFirst
                                 ? AppTheme.primary
@@ -1583,7 +1583,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Kupon Radarı',
+                            'Topluluk Kuponları',
                             style: TextStyle(
                               color: !isFirst
                                   ? (isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A))
@@ -1647,8 +1647,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
               final radarKuponlar = visibleKuponlar.where((k) => k.kaynakTipi == 'web' && k.durum == 'aktif').toList();
               radarKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank));
 
-              final currentTabCount = _tabController.index == 0 ? toplulukKuponlar.length : radarKuponlar.length;
-              final currentTabTitle = _tabController.index == 0 ? 'Topluluk Kuponları' : 'Kupon Radarı';
+              final currentTabCount = _tabController.index == 0 ? radarKuponlar.length : toplulukKuponlar.length;
+              final currentTabTitle = _tabController.index == 0 ? 'Kupon Radarı' : 'Topluluk Kuponları';
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1766,14 +1766,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                       physics: const BouncingScrollPhysics(),
                       children: [
                         _buildTabContent(
-                          list: toplulukKuponlar,
-                          tabHiddenIds: hiddenToplulukIds,
-                          tabName: 'Topluluk Kuponları',
-                          isDark: isDark,
-                          currentUser: currentUser,
-                          emptyMsg: 'Topluluk tarafından paylaşılan kupon bulunamadı.',
-                        ),
-                        _buildTabContent(
                           list: radarKuponlar,
                           tabHiddenIds: hiddenRadarIds,
                           tabName: 'Kupon Radarı',
@@ -1781,6 +1773,14 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           currentUser: currentUser,
                           emptyMsg: 'Kupon radarında şu an aktif kupon bulunamadı.',
                           showRadarBanner: true,
+                        ),
+                        _buildTabContent(
+                          list: toplulukKuponlar,
+                          tabHiddenIds: hiddenToplulukIds,
+                          tabName: 'Topluluk Kuponları',
+                          isDark: isDark,
+                          currentUser: currentUser,
+                          emptyMsg: 'Topluluk tarafından paylaşılan kupon bulunamadı.',
                         ),
                       ],
                     ),
@@ -1881,7 +1881,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           scale: animation,
           child: FadeTransition(opacity: animation, child: child),
         ),
-        child: _tabController.index == 0
+        child: _tabController.index == 1
             ? Container(
                 key: const ValueKey('share_coupon_fab'),
                 height: 48,

@@ -8,6 +8,7 @@ import 'link_preview_service.dart';
 import 'advertising_compliance_service.dart';
 import 'affiliate/affiliate_service.dart';
 import '../utils/asset_path_migration.dart';
+import 'system_log_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -17,6 +18,17 @@ class DealsSnapshot {
   final List<Deal> deals;
   final bool isFromCache;
   DealsSnapshot({required this.deals, required this.isFromCache});
+}
+
+/// Fırsat paylaşımı tamamlandığında dönen sonuç modeli.
+class DealSubmitResult {
+  final String dealId;
+  final bool isApproved;
+
+  const DealSubmitResult({
+    required this.dealId,
+    required this.isApproved,
+  });
 }
 
 class DealService {
@@ -193,7 +205,7 @@ class DealService {
   }
 
   // Yeni deal oluşturma
-  Future<String?> createDeal({
+  Future<DealSubmitResult?> createDeal({
     required String title,
     required String description,
     required double price,
@@ -407,9 +419,20 @@ class DealService {
         store: store,
         link: url,
       );
-      return docRef.id;
-    } catch (e) {
+      return DealSubmitResult(
+        dealId: docRef.id,
+        isApproved: !isApprovalRequired,
+      );
+    } catch (e, stack) {
       _log('Deal oluşturma hatası: $e');
+      SystemLogService.instance.logError(
+        category: 'submit_deal',
+        subCategory: store,
+        errorType: 'DealCreateException',
+        message: e.toString(),
+        stack: stack,
+        metadata: {'title': title, 'store': store, 'userId': userId},
+      );
       rethrow;
     }
   }
@@ -451,7 +474,6 @@ class DealService {
         final dealData = dealSnapshot.data() as Map<String, dynamic>;
         int hotVotes = dealData['hotVotes'] ?? 0;
         int coldVotes = dealData['coldVotes'] ?? 0;
-        final String postedBy = dealData['postedBy'] ?? '';
 
         String? oldType;
         if (voteSnapshot.exists) {
@@ -502,24 +524,9 @@ class DealService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // 5. Deal sahibine puan ver / geri al (exploit önleme)
-        // 'hot' oyu eklendiğinde +2 puan, kaldırıldığında/değiştirildiğinde -2 puan
-        final int oldPoints = (oldType == 'hot') ? 2 : 0;
-        final int newPoints = (newType == 'hot') ? 2 : 0;
-        final int diffPoints = newPoints - oldPoints;
-
-        final int oldLikes = (oldType == 'hot') ? 1 : 0;
-        final int newLikes = (newType == 'hot') ? 1 : 0;
-        final int diffLikes = newLikes - oldLikes;
-
-        if (postedBy.isNotEmpty && (diffPoints != 0 || diffLikes != 0)) {
-          final userService = UserService();
-          // Puan ve başarım güncellemesini transaction sonrasında arka planda yap
-          Future.delayed(Duration.zero, () async {
-            await userService.incrementUserPoints(postedBy, points: diffPoints, totalLikes: diffLikes);
-            await userService.checkAndAwardBadges(postedBy);
-          });
-        }
+        // 5. Deal sahibine puan ver / geri al (exploit ve yetki güvenliği):
+        // Puan (+2) ve beğeni (+1) artışı ile rozet kazanımları, Firestore RBAC güvenliği gereği
+        // sunucu tarafında Cloud Functions 'onDealUpdated' trigger'ı üzerinden Admin SDK ile atomik işletilir.
 
         return true;
       });
@@ -566,11 +573,15 @@ class DealService {
         }
 
         transaction.set(voteRef, {'expired': true, 'expiredAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
-        transaction.update(dealRef, {
+        final dealUpdates = <String, dynamic>{
           'expiredVotes': expiredVotes,
           'isExpired': isExpired,
           'updatedAt': FieldValue.serverTimestamp(),
-        });
+        };
+        if (isExpired) {
+          dealUpdates['status'] = 'expired';
+        }
+        transaction.update(dealRef, dealUpdates);
 
         return true;
       });
@@ -641,8 +652,71 @@ class DealService {
   }
 
   // Fırsatı bitir/başlat
-  Future<bool> markDealAsExpired(String dealId) async => updateDeal(dealId, {'isExpired': true});
-  Future<bool> unexpireDeal(String dealId) async => updateDeal(dealId, {'isExpired': false});
+  Future<bool> markDealAsExpired(String dealId) async => updateDeal(dealId, {
+        'isExpired': true,
+        'status': 'expired',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+  Future<bool> unexpireDeal(
+    String dealId, {
+    bool refreshTimestamp = false,
+    bool hidePrice = false,
+    bool isEditorPick = false,
+  }) async {
+    final Map<String, dynamic> updates = {
+      'isExpired': false,
+      'isApproved': true,
+      'isRejected': false,
+      'status': 'active',
+      'expiredVotes': 0,
+      'approvedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (refreshTimestamp) {
+      updates['createdAt'] = FieldValue.serverTimestamp();
+      updates['timestamp'] = FieldValue.serverTimestamp();
+    }
+    if (hidePrice) {
+      updates['hidePrice'] = true;
+    }
+    if (isEditorPick) {
+      updates['isEditorPick'] = true;
+    }
+    return updateDeal(dealId, updates);
+  }
+
+  // Toplu süresi bitenleri yayına alma (Batch Unexpire)
+  Future<bool> unexpireDealsBatch(
+    List<String> dealIds, {
+    bool refreshTimestamp = false,
+  }) async {
+    if (dealIds.isEmpty) return true;
+    try {
+      final batch = _firestore.batch();
+      for (final id in dealIds) {
+        final Map<String, dynamic> updates = {
+          'isExpired': false,
+          'isApproved': true,
+          'isRejected': false,
+          'status': 'active',
+          'expiredVotes': 0,
+          'approvedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+        if (refreshTimestamp) {
+          updates['createdAt'] = FieldValue.serverTimestamp();
+          updates['timestamp'] = FieldValue.serverTimestamp();
+        }
+        batch.update(_firestore.collection('deals').doc(id), updates);
+      }
+      await batch.commit();
+      return true;
+    } catch (e) {
+      _log('Batch unexpire hatası: $e');
+      return false;
+    }
+  }
 
   // Deal paylaşım ayarları
   Future<bool> isDealSharingEnabled() async {

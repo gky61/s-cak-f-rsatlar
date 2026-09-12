@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import '../models/deal.dart';
 import '../models/category.dart';
 import '../models/user.dart';
-import '../models/message.dart';
 import '../services/firestore_service.dart';
+import '../services/user_service.dart';
+import '../services/message_service.dart';
 import '../services/notification_service.dart';
 import '../services/theme_service.dart';
 import '../utils/badge_helper.dart';
@@ -19,14 +22,9 @@ import 'deal_detail/admin_dialogs/admin_edit_sheet.dart';
 import 'profile_screen.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../widgets/skeletons/user_list_skeleton.dart';
-import '../widgets/skeletons/chat_list_skeleton.dart';
 import '../widgets/admin_reports_list.dart';
+import '../widgets/admin_expired_deals_view.dart';
 import 'notification_debug_screen.dart';
-import '../widgets/test_automation_widget.dart';
-import '../utils/test_logger.dart';
-import '../services/link_preview_service.dart';
-import '../services/category_detection_service.dart';
-import '../services/ai_service.dart';
 import '../services/affiliate/affiliate_service.dart';
 
 void _log(String message) {
@@ -41,10 +39,12 @@ class AdminScreen extends StatefulWidget {
   State<AdminScreen> createState() => _AdminScreenState();
 }
 
-enum _AdminListType { pending, userSubmitted, published, expired, messages }
+enum _AdminListType { pending, userSubmitted, published, expired }
 
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
+  final UserService _userService = UserService();
+  final MessageService _messageService = MessageService();
   late TabController _tabController;
   
   // Tab bildirim sayıları
@@ -52,19 +52,17 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   int _userSubmittedCount = 0;
   int _expiredCount = 0;
   int _usersCount = 0;
-  int _unreadMessagesCount = 0;
   int _pendingReportsCount = 0;
-  int _testDealsCount = 0;
+  int _pendingComplaintsCount = 0;
+  int _unreadAutoModCount = 0;
   
   // Stream Subscriptions - Bellek sızıntısını önlemek için
   StreamSubscription? _pendingSubscription;
   StreamSubscription? _userSubmittedSubscription;
   StreamSubscription? _expiredSubscription;
   StreamSubscription? _usersSubscription;
-  StreamSubscription? _messagesSubscription;
   StreamSubscription? _reportsSubscription;
-  StreamSubscription? _testDealsSubscription;
-  StreamSubscription? _mobileTestCommandSubscription;
+  StreamSubscription? _autoModSubscription;
   
   // Kullanıcı arama
   String _userSearchQuery = '';
@@ -86,9 +84,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.red.withOpacity(0.5),
+                    color: Colors.red.withValues(alpha: 0.5),
                     blurRadius: 4,
-                    spreadRadius: 1,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -96,7 +94,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 count > 99 ? '99+' : count.toString(),
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -107,18 +105,17 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     );
   }
 
-  // Kategori ID'sini kategori adına çevir
+  // Kategori adını kategori ID'sinden bul
   String _getCategoryDisplayName(String categoryIdOrName) {
-    final normalizedValue = categoryIdOrName.toLowerCase().trim();
-    // Önce ID olarak kontrol et (bot'tan ID geliyor)
-    for (final cat in Category.categories) {
-      if (cat.id.toLowerCase() == normalizedValue && cat.id != 'tumu') {
+    // Önce standart kategorilerde ID ile ara
+    for (var cat in Category.categories) {
+      if (cat.id == categoryIdOrName) {
         return cat.name;
       }
     }
-    // ID bulunamazsa, name olarak kontrol et
-    for (final cat in Category.categories) {
-      if (cat.name.toLowerCase() == normalizedValue && cat.id != 'tumu') {
+    // Bulunamazsa, name ile ara (belki zaten isimdir)
+    for (var cat in Category.categories) {
+      if (cat.name.toLowerCase() == categoryIdOrName.toLowerCase()) {
         return cat.name;
       }
     }
@@ -129,12 +126,11 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadTabCounts();
     _loadReportCounts();
     // Admin paneli her açıldığında admin_deals topic'ine abone ol (bildirimlerin gelmesi için)
     _ensureAdminNotificationSubscription();
-    _startMobileTestCommandListener();
   }
 
   /// Admin bildirimlerine (onay bekleyen fırsatlar) abone olmayı garanti et
@@ -175,10 +171,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     _userSubmittedSubscription?.cancel();
     _expiredSubscription?.cancel();
     _usersSubscription?.cancel();
-    _messagesSubscription?.cancel();
     _reportsSubscription?.cancel();
-    _testDealsSubscription?.cancel();
-    _mobileTestCommandSubscription?.cancel();
+    _autoModSubscription?.cancel();
     _tabController.dispose();
     _userSearchController.dispose();
     super.dispose();
@@ -220,28 +214,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       if (mounted) {
         setState(() {
           _usersCount = snapshot.docs.length;
-        });
-      }
-    });
-
-    // Okunmamış mesajlar (admin tarafından okunmamış)
-    _messagesSubscription = _firestoreService.getAllMessagesStream().listen((messages) {
-      if (mounted) {
-        setState(() {
-          _unreadMessagesCount = messages.where((m) => !m.isReadByAdmin).length;
-        });
-      }
-    });
-
-    // Test Fırsatları sayısı
-    _testDealsSubscription = FirebaseFirestore.instance
-        .collection('deals')
-        .where('isTest', isEqualTo: true)
-        .snapshots()
-        .listen((snapshot) {
-      if (mounted) {
-        setState(() {
-          _testDealsCount = snapshot.docs.length;
         });
       }
     });
@@ -293,9 +265,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             _buildTabWithBadge('Paylaşılanlar', _userSubmittedCount),
             _buildTabWithBadge('Süresi Biten', _expiredCount),
             _buildTabWithBadge('Kullanıcılar', _usersCount),
-            _buildTabWithBadge('Mesajlar', _unreadMessagesCount),
             _buildTabWithBadge('Raporlar', _pendingReportsCount),
-            _buildTabWithBadge('Test Otomasyonu', _testDealsCount),
           ],
         ),
       ),
@@ -304,25 +274,37 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         children: [
           _buildDealList(_AdminListType.pending),
           _buildDealList(_AdminListType.userSubmitted),
-          _buildDealList(_AdminListType.expired),
+          const AdminExpiredDealsView(),
           _buildUsersList(),
-          _buildMessagesList(),
           const AdminReportsList(),
-          const TestAutomationWidget(),
         ],
       ),
     );
   }
 
-  // Rapor sayısı için yeni metod
+  // Rapor sayısı için metod (Kullanıcı şikayetleri + Otomatik moderasyon alarmları toplamı)
   void _loadReportCounts() {
-     _reportsSubscription = _firestoreService.reportsCollection
+    _reportsSubscription = _firestoreService.reportsCollection
         .where('status', isEqualTo: 'pending')
         .snapshots()
         .listen((snapshot) {
       if (mounted) {
         setState(() {
-          _pendingReportsCount = snapshot.docs.length;
+          _pendingComplaintsCount = snapshot.docs.length;
+          _pendingReportsCount = _pendingComplaintsCount + _unreadAutoModCount;
+        });
+      }
+    });
+
+    _autoModSubscription = FirebaseFirestore.instance
+        .collection('adminMessages')
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _unreadAutoModCount = snapshot.docs.length;
+          _pendingReportsCount = _pendingComplaintsCount + _unreadAutoModCount;
         });
       }
     });
@@ -332,7 +314,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final bool isPending = type == _AdminListType.pending;
     final bool isUserSubmitted = type == _AdminListType.userSubmitted;
     final bool isPublished = type == _AdminListType.published;
-    final bool isExpiredList = type == _AdminListType.expired;
 
     return StreamBuilder<List<Deal>>(
       stream: switch (type) {
@@ -340,10 +321,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         _AdminListType.userSubmitted => _firestoreService.getUserSubmittedPendingDealsStream(),
         _AdminListType.published => _firestoreService.getApprovedDealsStream(),
         _AdminListType.expired => _firestoreService.getExpiredDealsStream(),
-        _AdminListType.messages => Stream.value(<Deal>[]), // Messages için ayrı widget kullanılıyor
       },
       builder: (context, snapshot) {
-        final primaryColor = Theme.of(context).colorScheme.primary;
         if (snapshot.connectionState == ConnectionState.waiting) {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
@@ -458,27 +437,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   ),
                 ),
               ),
-            // Tümünü Sil butonu (sadece süresi bitenler için)
-            if (isExpiredList && deals.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _deleteAllExpiredDeals(deals),
-                    icon: const Icon(Icons.delete_forever, size: 20),
-                    label: Text('Tümünü Sil (${deals.length})'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red[700],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
 
             Expanded(
               child: ListView.builder(
@@ -520,7 +478,6 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final bool isPending = type == _AdminListType.pending;
     final bool isUserSubmitted = type == _AdminListType.userSubmitted;
     final bool isPublished = type == _AdminListType.published;
-    final bool isExpiredCard = type == _AdminListType.expired;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bool isBot = deal.isBotkolik;
     final String sourceName = deal.sourceDisplayName;
@@ -621,37 +578,32 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ),
                   ],
                 ),
+                const Spacer(),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, size: 18, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onSelected: (value) {
+                    if (value == 'delete') {
+                      _deleteSingleDeal(deal);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                          SizedBox(width: 8),
+                          Text('Fırsatı Kalıcı Sil', style: TextStyle(color: Colors.red, fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          if (isExpiredCard)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.warning_amber_outlined, color: Colors.red, size: 16),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          (deal.isApproved == true)
-                              ? 'Bu fırsat onaylanmış ve yayınlanmıştı, süresi dolduğu için pasife alınmış.'
-                              : 'Bu fırsat onaylanmamış ve süresi dolduğu için pasife alınmış.',
-                          style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
           ListTile(
             contentPadding: const EdgeInsets.all(12),
             leading: ClipRRect(
@@ -719,9 +671,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD97706).withOpacity(0.12),
+                      color: const Color(0xFFD97706).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: const Color(0xFFD97706).withOpacity(0.4), width: 0.5),
+                      border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.4), width: 0.5),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
@@ -852,13 +804,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: isAlreadyAffiliate
-                        ? Colors.green.withOpacity(0.08)
-                        : Colors.orange.withOpacity(0.08),
+                        ? Colors.green.withValues(alpha: 0.08)
+                        : Colors.orange.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isAlreadyAffiliate
-                          ? Colors.green.withOpacity(0.3)
-                          : Colors.orange.withOpacity(0.3),
+                          ? Colors.green.withValues(alpha: 0.3)
+                          : Colors.orange.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
@@ -924,50 +876,51 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             const Divider(height: 1),
             Padding(
               padding: const EdgeInsets.all(12),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => _unpublishDeal(deal.id),
-                  icon: const Icon(Icons.visibility_off, size: 20),
-                  label: const Text('Yayından Kaldır'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-          if (isExpiredCard)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Column(
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.info_outline, size: 16, color: Colors.grey),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Detay sayfasından bilgileri güncelleyebilir veya tekrar aktifleştirebilirsiniz.',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _deleteSingleDeal(deal),
+                      icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                      label: const Text('Sil', style: TextStyle(color: Colors.red)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => showAdminEditSheet(
+                        context: context,
+                        deal: deal,
+                        firestoreService: _firestoreService,
+                        onDealUpdated: () => setState(() {}),
+                      ),
+                      icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                      label: const Text('Düzenle', style: TextStyle(color: Colors.blue)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.blue),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: () => _reactivateDeal(deal.id),
-                      icon: const Icon(Icons.restore, size: 20),
-                      label: const Text('Tekrar Yayına Al'),
+                      onPressed: () => _unpublishDeal(deal.id),
+                      icon: const Icon(Icons.visibility_off, size: 18),
+                      label: const Text('Kaldır'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
+                        backgroundColor: Colors.orange,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
@@ -979,6 +932,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 ],
               ),
             ),
+          ],
         ],
       ),
     );
@@ -1042,7 +996,12 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final dealDoc = await _firestoreService.getDeal(id);
     final updates = <String, dynamic>{
       'isApproved': true,
+      'isRejected': false,
+      'isExpired': false,
+      'status': 'active',
       'isEditorPick': isEditorPick,
+      'approvedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     };
     if (hidePrice) {
       updates['hidePrice'] = true;
@@ -1095,11 +1054,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         }
 
         // cleanUrl eksik veya affiliate yönlendirme linki ise organik temiz URL'i Firestore'a kaydet
-        if (dealDoc.cleanUrl == null ||
-            dealDoc.cleanUrl!.trim().isEmpty ||
-            dealDoc.cleanUrl!.contains('btrck.com') ||
-            dealDoc.cleanUrl!.contains('7t4g.adj.st') ||
-            dealDoc.cleanUrl!.contains('adj.st')) {
+        if (dealDoc.cleanUrl.trim().isEmpty ||
+            dealDoc.cleanUrl.contains('btrck.com') ||
+            dealDoc.cleanUrl.contains('7t4g.adj.st') ||
+            dealDoc.cleanUrl.contains('adj.st')) {
           final clean = Deal.cleanProductUrl(dealDoc.displayUrl.isNotEmpty ? dealDoc.displayUrl : currentUrl);
           if (clean.isNotEmpty &&
               !clean.contains('btrck.com') &&
@@ -1155,7 +1113,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   }
 
   Future<void> _rejectDeal(String id) async {
-    await _firestoreService.updateDeal(id, {'isExpired': true}); // Reddedileni bitmiş sayalım veya silebiliriz
+    await _firestoreService.updateDeal(id, {
+      'isRejected': true,
+      'isApproved': false,
+      'isExpired': true,
+      'status': 'rejected',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fırsat Reddedildi ❌'), backgroundColor: Colors.red),
@@ -1211,7 +1175,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
     for (final deal in deals) {
       try {
-        await _firestoreService.updateDeal(deal.id, {'isExpired': true});
+        await _firestoreService.updateDeal(deal.id, {
+          'isRejected': true,
+          'isApproved': false,
+          'isExpired': true,
+          'status': 'rejected',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
         successCount++;
       } catch (e) {
         _log('Fırsat reddetme hatası (${deal.id}): $e');
@@ -1245,7 +1215,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Yayından Kaldır'),
-        content: const Text('Bu fırsatı yayından kaldırmak istediğinize emin misiniz? Fırsat ana ekrandan kaldırılacak.'),
+        content: const Text('Bu fırsatı yayından kaldırmak istediğinize emin misiniz? Fırsat ana ekrandan kaldırılıp süresi bitenler bölümüne taşınacak.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1262,59 +1232,28 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
     if (confirm != true) return;
 
-    await _firestoreService.updateDeal(id, {'isApproved': false});
+    await _firestoreService.updateDeal(id, {
+      'isExpired': true,
+      'status': 'expired',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Fırsat yayından kaldırıldı ⚠️'),
+          content: Text('Fırsat yayından kaldırıldı ve süresi bitenlere taşındı ⚠️'),
           backgroundColor: Colors.orange,
         ),
       );
     }
   }
 
-  Future<void> _reactivateDeal(String id) async {
+  Future<void> _deleteSingleDeal(Deal deal) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Fırsatı Aktif Et'),
-        content: const Text('Bu fırsatı tekrar aktif etmek istediğinize emin misiniz? Tüm kullanıcılar görebilecek.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Evet, Aktif Et'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    final success = await _firestoreService.unexpireDeal(id);
-    if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fırsat tekrar yayına alındı ✅'), backgroundColor: Colors.green),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bir hata oluştu ❌'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteAllExpiredDeals(List<Deal> deals) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Tümünü Sil'),
+        title: const Text('Fırsatı Sil'),
         content: Text(
-          'Süresi biten ${deals.length} fırsatın tümünü kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve tüm fırsatlar veritabanından tamamen kaldırılacak.',
+          'Bu fırsatı kalıcı olarak silmek istediğinize emin misiniz?\n\n"${deal.title}"\n\nBu işlem geri alınamaz ve fırsat tamamen kaldırılacaktır.',
         ),
         actions: [
           TextButton(
@@ -1324,44 +1263,23 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Evet, Tümünü Sil'),
+            child: const Text('Evet, Sil'),
           ),
         ],
       ),
     );
 
-    if (confirm != true) return;
+    if (confirm != true || !mounted) return;
 
-    // Tüm süresi biten fırsatları sil
-    int successCount = 0;
-    int failCount = 0;
-
-    for (final deal in deals) {
-      try {
-        await _firestoreService.deleteDeal(deal.id);
-        successCount++;
-      } catch (e) {
-        _log('Fırsat silme hatası (${deal.id}): $e');
-        failCount++;
-      }
-    }
-
+    final success = await _firestoreService.deleteDeal(deal.id);
     if (mounted) {
-      if (failCount == 0) {
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$successCount fırsat kalıcı olarak silindi 🗑️'),
-            backgroundColor: Colors.red[700],
-            duration: const Duration(seconds: 3),
-          ),
+          const SnackBar(content: Text('Fırsat başarıyla silindi 🗑️'), backgroundColor: Colors.red),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$successCount fırsat silindi, $failCount fırsat için hata oluştu ⚠️'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 3),
-          ),
+          const SnackBar(content: Text('Silme işlemi başarısız ❌'), backgroundColor: Colors.red),
         );
       }
     }
@@ -1521,6 +1439,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   final badges = (userData['badges'] ?? []) as List<dynamic>;
                   final badgeIds = badges.map((e) => e.toString()).toList();
                   final userId = userDoc.id;
+                  final isAdmin = userData['isAdmin'] == true || userData['isadmin'] == true || userData['isAdmin'] == 'true' || userData['isadmin'] == 'true';
                   
                   final email = userData['email']?.toString() ?? 'E-posta bilinmiyor';
                   final createdAtVal = userData['createdAt'];
@@ -1540,20 +1459,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ProfileScreen(userId: userId),
-                          ),
-                        );
-                      },
+                      onTap: () => _showUserAdminSheet(context, userData, userId),
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            // Avatar
+                            // Avatar (Güvenli: onBackgroundImageError sadece backgroundImage varken verilir)
                             CircleAvatar(
                               radius: 28,
                               backgroundColor: primaryColor.withValues(alpha: 0.1),
@@ -1562,7 +1474,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                                       ? AssetImage(profileImageUrl) as ImageProvider
                                       : CachedNetworkImageProvider(profileImageUrl))
                                   : null,
-                              onBackgroundImageError: (exception, stackTrace) {},
+                              onBackgroundImageError: profileImageUrl.isNotEmpty ? (exception, stackTrace) {} : null,
                               child: profileImageUrl.isEmpty
                                   ? Text(
                                       displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
@@ -1593,6 +1505,24 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
+                                      if (isAdmin)
+                                        Container(
+                                          margin: const EdgeInsets.only(left: 4),
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: Colors.blue.withValues(alpha: 0.4)),
+                                          ),
+                                          child: const Text(
+                                            '👮 Admin',
+                                            style: TextStyle(
+                                              color: Colors.blue,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
                                       // Rozetler
                                       ...BadgeHelper.getBadgeInfos(badgeIds).take(3).map(
                                         (badge) => Padding(
@@ -1726,33 +1656,12 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                                 ],
                               ),
                             ),
-                            // Rozet yönetim butonu
+                            // Yönetim butonu
                             IconButton(
-                              icon: const Icon(Icons.workspace_premium),
+                              icon: const Icon(Icons.admin_panel_settings_outlined),
                               color: primaryColor,
-                              onPressed: () {
-                                try {
-                                  final user = AppUser(
-                                    uid: userId,
-                                    username: username,
-                                    nickname: nickname,
-                                    profileImageUrl: profileImageUrl,
-                                    points: points,
-                                    totalLikes: totalLikes,
-                                    badges: badgeIds,
-                                  );
-                                  _showBadgeDialog(user);
-                                } catch (e) {
-                                  _log('Kullanıcı oluşturma hatası: $e');
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Hata: $e'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                }
-                              },
-                              tooltip: 'Rozet Yönet',
+                              onPressed: () => _showUserAdminSheet(context, userData, userId),
+                              tooltip: 'Kullanıcıyı Yönet',
                             ),
                           ],
                         ),
@@ -1768,88 +1677,830 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     );
   }
 
-  Future<void> _showBadgeDialog(AppUser user) async {
+  /// Kullanıcı için Yönetim ve Moderasyon Bottom Sheet'i
+  void _showUserAdminSheet(BuildContext context, Map<String, dynamic> userData, String userId) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    final username = (userData['username'] ?? 'Kullanıcı').toString();
+    final nickname = (userData['nickname'] ?? '').toString();
+    final displayName = nickname.isNotEmpty ? nickname : username;
+    final profileImageUrl = migrateAssetPath((userData['profileImageUrl'] ?? '').toString());
+    final email = userData['email']?.toString() ?? 'E-posta bilinmiyor';
+    final points = (userData['points'] ?? 0) as int;
+    final dealCount = (userData['dealCount'] ?? 0) as int;
+    final totalLikes = (userData['totalLikes'] ?? 0) as int;
+    final badges = (userData['badges'] ?? []) as List<dynamic>;
+    final badgeIds = badges.map((e) => e.toString()).toList();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return FutureBuilder<List<bool>>(
+              future: Future.wait([
+                _userService.isUserBlocked(userId),
+                _userService.isUserCommentBanned(userId),
+                _userService.isUserDealBanned(userId),
+                FirebaseFirestore.instance.collection('users').doc(userId).get().then((d) {
+                  final data = d.data();
+                  return data?['isAdmin'] == true || data?['isadmin'] == true || data?['isAdmin'] == 'true' || data?['isadmin'] == 'true';
+                }),
+              ]),
+              builder: (context, snapshot) {
+                final isBlocked = snapshot.data?[0] ?? false;
+                final isCommentBanned = snapshot.data?[1] ?? false;
+                final isDealBanned = snapshot.data?[2] ?? false;
+                final isAdmin = snapshot.data?[3] ?? (userData['isAdmin'] == true || userData['isadmin'] == true || userData['isAdmin'] == 'true');
+
+                return Container(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.88,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkSurface : Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Drag handle
+                      Container(
+                        margin: const EdgeInsets.only(top: 12, bottom: 8),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.grey[700] : Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      
+                      // Header Section
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundColor: primaryColor.withValues(alpha: 0.12),
+                              backgroundImage: profileImageUrl.isNotEmpty
+                                  ? (profileImageUrl.startsWith('assets/')
+                                      ? AssetImage(profileImageUrl) as ImageProvider
+                                      : CachedNetworkImageProvider(profileImageUrl))
+                                  : null,
+                              onBackgroundImageError: profileImageUrl.isNotEmpty ? (exception, stackTrace) {} : null,
+                              child: profileImageUrl.isEmpty
+                                  ? Text(
+                                      displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 22,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          displayName,
+                                          style: const TextStyle(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (isAdmin)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: Colors.blue.withValues(alpha: 0.4)),
+                                          ),
+                                          child: const Text(
+                                            '👮 Admin',
+                                            style: TextStyle(
+                                              color: Colors.blue,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '@$username • $email',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  InkWell(
+                                    onTap: () {
+                                      Clipboard.setData(ClipboardData(text: userId));
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Kullanıcı ID panoya kopyalandı 📋'),
+                                          duration: Duration(seconds: 1),
+                                        ),
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'ID: $userId',
+                                          style: TextStyle(
+                                            fontFamily: 'monospace',
+                                            fontSize: 11,
+                                            color: isDark ? Colors.grey[500] : Colors.grey[500],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(Icons.copy, size: 12, color: Colors.grey[500]),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Stat chips
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          children: [
+                            _buildStatBadge(Icons.stars, '$points Puan', Colors.amber[700]!, isDark),
+                            const SizedBox(width: 8),
+                            _buildStatBadge(Icons.local_offer, '$dealCount Fırsat', const Color(0xFF10B981), isDark),
+                            const SizedBox(width: 8),
+                            _buildStatBadge(Icons.favorite, '$totalLikes Beğeni', Colors.red[400]!, isDark),
+                          ],
+                        ),
+                      ),
+                      
+                      // Active status alerts
+                      if (isBlocked || isCommentBanned || isDealBanned)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              if (isBlocked)
+                                _buildWarningTag('🚫 Hesap Engelli', Colors.red),
+                              if (isCommentBanned)
+                                _buildWarningTag('💬 Yorum Engelli', Colors.orange),
+                              if (isDealBanned)
+                                _buildWarningTag('🏷️ Paylaşım Engelli', Colors.deepOrange),
+                            ],
+                          ),
+                        ),
+
+                      const SizedBox(height: 10),
+                      Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[200]),
+
+                      // Action Items List
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          children: [
+                            // 1. Admin Rolü
+                            _buildActionTile(
+                              icon: isAdmin ? Icons.no_accounts : Icons.admin_panel_settings,
+                              iconColor: isAdmin ? Colors.grey : Colors.blue,
+                              title: isAdmin ? 'Admin Yetkisini Kaldır' : 'Admin Yetkisi Ver',
+                              subtitle: isAdmin
+                                  ? 'Kullanıcının yönetim paneline erişimini sonlandırır'
+                                  : 'Kullanıcıya yönetim paneline erişim yetkisi verir',
+                              onTap: () async {
+                                final confirm = await _showConfirmDialog(
+                                  context: context,
+                                  title: isAdmin ? 'Admin Yetkisini Kaldır' : 'Admin Yetkisi Ver',
+                                  message: '$displayName adlı kullanıcının admin yetkisini ${isAdmin ? 'kaldırmak' : 'vermek'} istediğinize emin misiniz?',
+                                  confirmColor: isAdmin ? Colors.red : Colors.blue,
+                                );
+                                if (confirm == true) {
+                                  final success = await _userService.toggleUserAdminStatus(userId, !isAdmin);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(success ? 'Admin yetkisi güncellendi ✅' : 'Yetki güncellenemedi ❌'),
+                                        backgroundColor: success ? Colors.green : Colors.red,
+                                      ),
+                                    );
+                                    setSheetState(() {});
+                                  }
+                                }
+                              },
+                            ),
+
+                            // 2. Kullanıcı Engelle / Kaldır
+                            _buildActionTile(
+                              icon: isBlocked ? Icons.check_circle_outline : Icons.block,
+                              iconColor: isBlocked ? Colors.green : Colors.red,
+                              title: isBlocked ? 'Kullanıcı Engelini Kaldır' : 'Kullanıcıyı Engelle',
+                              subtitle: isBlocked
+                                  ? 'Kullanıcının uygulamaya erişimini yeniden açar'
+                                  : 'Kullanıcının uygulamayı kullanmasını tamamen engeller',
+                              onTap: () async {
+                                final confirm = await _showConfirmDialog(
+                                  context: context,
+                                  title: isBlocked ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle',
+                                  message: isBlocked
+                                      ? '$displayName kullanıcısının engelini kaldırmak istiyor musunuz?'
+                                      : '$displayName kullanıcısını engellemek istediğinize emin misiniz? Uygulamayı kullanamayacak.',
+                                  confirmColor: isBlocked ? Colors.green : Colors.red,
+                                );
+                                if (confirm == true) {
+                                  final success = isBlocked
+                                      ? await _userService.unblockUser(userId)
+                                      : await _userService.blockUser(userId);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(success ? (isBlocked ? 'Engel kaldırıldı ✅' : 'Kullanıcı engellendi 🚫') : 'İşlem başarısız ❌'),
+                                        backgroundColor: success ? Colors.green : Colors.red,
+                                      ),
+                                    );
+                                    setSheetState(() {});
+                                  }
+                                }
+                              },
+                            ),
+
+                            // 3. Yorum Engeli
+                            _buildActionTile(
+                              icon: isCommentBanned ? Icons.chat : Icons.comments_disabled,
+                              iconColor: isCommentBanned ? Colors.green : Colors.orange,
+                              title: isCommentBanned ? 'Yorum İzni Ver' : 'Yorum Yapmasını Engelle',
+                              subtitle: isCommentBanned
+                                  ? 'Kullanıcının fırsatlara yorum yazmasına izin verir'
+                                  : 'Kullanıcının yorum yazmasını kısıtlar',
+                              onTap: () async {
+                                final confirm = await _showConfirmDialog(
+                                  context: context,
+                                  title: isCommentBanned ? 'Yorum İzni Ver' : 'Yorumu Engelle',
+                                  message: isCommentBanned
+                                      ? '$displayName kullanıcısına tekrar yorum yapma izni verilsin mi?'
+                                      : '$displayName kullanıcısının yorum yapmasını engellemek istiyor musunuz?',
+                                  confirmColor: isCommentBanned ? Colors.green : Colors.orange,
+                                );
+                                if (confirm == true) {
+                                  final success = isCommentBanned
+                                      ? await _userService.unbanUserComments(userId)
+                                      : await _userService.banUserComments(userId);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(success ? (isCommentBanned ? 'Yorum izni verildi ✅' : 'Yorum yapması engellendi 🚫') : 'İşlem başarısız ❌'),
+                                        backgroundColor: success ? Colors.green : Colors.red,
+                                      ),
+                                    );
+                                    setSheetState(() {});
+                                  }
+                                }
+                              },
+                            ),
+
+                            // 4. Paylaşım Engeli
+                            _buildActionTile(
+                              icon: isDealBanned ? Icons.add_circle_outline : Icons.remove_circle_outline,
+                              iconColor: isDealBanned ? Colors.green : Colors.deepOrange,
+                              title: isDealBanned ? 'Paylaşım İzni Ver' : 'Fırsat Paylaşımını Engelle',
+                              subtitle: isDealBanned
+                                  ? 'Kullanıcının yeni fırsat paylaşmasına izin verir'
+                                  : 'Kullanıcının fırsat paylaşmasını kısıtlar',
+                              onTap: () async {
+                                final confirm = await _showConfirmDialog(
+                                  context: context,
+                                  title: isDealBanned ? 'Paylaşım İzni Ver' : 'Paylaşımı Engelle',
+                                  message: isDealBanned
+                                      ? '$displayName kullanıcısına tekrar fırsat paylaşma izni verilsin mi?'
+                                      : '$displayName kullanıcısının fırsat paylaşmasını engellemek istiyor musunuz?',
+                                  confirmColor: isDealBanned ? Colors.green : Colors.deepOrange,
+                                );
+                                if (confirm == true) {
+                                  final success = isDealBanned
+                                      ? await _userService.unbanUserDeals(userId)
+                                      : await _userService.banUserDeals(userId);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(success ? (isDealBanned ? 'Paylaşım izni verildi ✅' : 'Paylaşım yapması engellendi 🚫') : 'İşlem başarısız ❌'),
+                                        backgroundColor: success ? Colors.green : Colors.red,
+                                      ),
+                                    );
+                                    setSheetState(() {});
+                                  }
+                                }
+                              },
+                            ),
+
+                            // 5. Admin Mesajı Gönder
+                            _buildActionTile(
+                              icon: Icons.mail_outline,
+                              iconColor: Colors.blueAccent,
+                              title: 'Yönetici Mesajı Gönder',
+                              subtitle: 'Kullanıcıya resmi bildirim ve in-box sistem mesajı iletir',
+                              onTap: () {
+                                _showAdminSendMessageDialog(context, userId, displayName);
+                              },
+                            ),
+
+                            // 6. Rozet Yönetimi ve Otomatik Eşitle
+                            _buildActionTile(
+                              icon: Icons.workspace_premium,
+                              iconColor: Colors.amber[700] ?? Colors.amber,
+                              title: 'Rozet Yönetimi & Otomatik Eşitle',
+                              subtitle: '${badgeIds.length} rozet tanımlı • Otomatik kontrol et veya katalogdan ver',
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                final appUser = AppUser(
+                                  uid: userId,
+                                  username: username,
+                                  nickname: nickname,
+                                  profileImageUrl: profileImageUrl,
+                                  points: points,
+                                  dealCount: dealCount,
+                                  totalLikes: totalLikes,
+                                  badges: badgeIds,
+                                );
+                                _showBadgeDialog(appUser);
+                              },
+                            ),
+
+                            // 7. Profil Sayfası
+                            _buildActionTile(
+                              icon: Icons.person_outline,
+                              iconColor: isDark ? Colors.grey[300]! : Colors.grey[700]!,
+                              title: 'Kullanıcı Profilini Aç',
+                              subtitle: 'Paylaşımlar, takipçiler ve profil detaylarını incele',
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => ProfileScreen(userId: userId)),
+                                );
+                              },
+                            ),
+
+                            const SizedBox(height: 8),
+                            Divider(color: isDark ? Colors.grey[800] : Colors.grey[200]),
+                            const SizedBox(height: 8),
+
+                            // 8. Hesabı ve Tüm Verileri Sil
+                            _buildActionTile(
+                              icon: Icons.delete_forever,
+                              iconColor: Colors.red,
+                              title: 'Hesabı ve Tüm Verileri Kalıcı Sil',
+                              subtitle: 'Profil, fırsatlar, yorumlar, mesajlar ve giriş hesabı tamamen yok edilir',
+                              isDestructive: true,
+                              onTap: () async {
+                                final first = await _showConfirmDialog(
+                                  context: context,
+                                  title: '⚠️ Hesabı Silmek İstediğinize Emin Misiniz?',
+                                  message: '$displayName adlı kullanıcının tüm profilini, paylaştığı tüm fırsatları, yorumlarını ve giriş hesabını KALICI olarak silmek üzeresiniz. Bu işlem geri alınamaz!',
+                                  confirmColor: Colors.red,
+                                  confirmText: 'Devam Et',
+                                );
+                                if (first != true) return;
+
+                                if (!context.mounted) return;
+                                final second = await _showConfirmDialog(
+                                  context: context,
+                                  title: '🚨 SON UYARI',
+                                  message: 'Bu kullanıcının hesabı Firebase Auth ve Firestore üzerinden tamamen yok edilecektir. Onaylıyor musunuz?',
+                                  confirmColor: Colors.red,
+                                  confirmText: 'Kalıcı Olarak Sil',
+                                );
+                                if (second != true) return;
+                                if (!ctx.mounted) return;
+                                Navigator.pop(ctx);
+
+                                try {
+                                  final success = await _userService.deleteUserAccountAdmin(userId);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(success ? 'Kullanıcı hesabı başarıyla silindi 🗑️' : 'Silme başarısız'),
+                                        backgroundColor: success ? Colors.green : Colors.red,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Silme hatası: $e'), backgroundColor: Colors.red),
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildStatBadge(IconData icon, String label, Color color, bool isDark) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWarningTag(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDestructive
+                          ? Colors.red
+                          : (isDark ? Colors.white : Colors.black87),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, size: 18, color: Colors.grey[500]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<bool?> _showConfirmDialog({
+    required BuildContext context,
+    required String title,
+    required String message,
+    Color confirmColor = Colors.blue,
+    String confirmText = 'Onayla',
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text(message, style: const TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text('İptal', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: confirmColor,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: Text(confirmText),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAdminSendMessageDialog(BuildContext context, String targetUserId, String targetDisplayName) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
-    
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        title: Text(
-          '${user.username} - Rozet Yönetimi',
-          style: TextStyle(
-            color: isDark ? Colors.white : Colors.black,
-            fontWeight: FontWeight.w700,
-          ),
+        title: Row(
+          children: [
+            Icon(Icons.mail_outline, color: primaryColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Admin Mesajı: $targetDisplayName',
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
-        content: SizedBox(
-          width: double.maxFinite,
+        content: Form(
+          key: formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Mevcut Rozetler:',
-                style: TextStyle(
-                  color: isDark ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
+              TextFormField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Başlık',
+                  hintText: 'Örn: Uyarı, Bilgilendirme veya Hediye',
+                  border: OutlineInputBorder(),
+                  isDense: true,
                 ),
+                validator: (val) => (val == null || val.trim().isEmpty) ? 'Başlık zorunludur' : null,
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: user.badges.map((badgeId) {
-                  final badge = BadgeHelper.getBadgeInfo(badgeId);
-                  if (badge == null) return const SizedBox.shrink();
-                  return Chip(
-                    avatar: Text(badge.icon),
-                    label: Text(badge.name),
-                    backgroundColor: badge.color.withValues(alpha: 0.2),
-                    deleteIcon: Icon(Icons.close, size: 16, color: badge.color),
-                    onDeleted: () => _removeBadge(user.uid, badgeId),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Rozet Ekle:',
-                style: TextStyle(
-                  color: isDark ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: contentController,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Mesaj İçeriği',
+                  hintText: 'Kullanıcıya iletilecek mesajı yazın...',
+                  border: OutlineInputBorder(),
+                  isDense: true,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: BadgeHelper.getAllBadgeIds()
-                    .where((badgeId) => !user.badges.contains(badgeId))
-                    .map((badgeId) {
-                  final badge = BadgeHelper.getBadgeInfo(badgeId)!;
-                  return ActionChip(
-                    avatar: Text(badge.icon),
-                    label: Text(badge.name),
-                    backgroundColor: badge.color.withValues(alpha: 0.1),
-                    onPressed: () => _addBadge(user.uid, badgeId),
-                  );
-                }).toList(),
+                validator: (val) => (val == null || val.trim().isEmpty) ? 'Mesaj içeriği zorunludur' : null,
               ),
             ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogCtx),
             child: Text(
-              'Kapat',
+              'İptal',
               style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
             ),
           ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.send, size: 16),
+            label: const Text('Gönder'),
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              final currentAdmin = FirebaseAuth.instance.currentUser;
+              final adminName = currentAdmin?.displayName ?? 'FırsatKolik Yönetimi';
+              final adminId = currentAdmin?.uid ?? 'admin';
+
+              final success = await _messageService.sendAdminToUserMessage(
+                targetUserId: targetUserId,
+                adminId: adminId,
+                adminName: adminName,
+                title: titleController.text.trim(),
+                content: contentController.text.trim(),
+              );
+
+              if (dialogCtx.mounted) {
+                Navigator.pop(dialogCtx);
+              }
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success ? 'Mesaj kullanıcıya iletildi 📨' : 'Mesaj gönderilemedi',
+                    ),
+                    backgroundColor: success ? Colors.green : Colors.red,
+                  ),
+                );
+              }
+            },
+          ),
         ],
+      ),
+    );
+  }
+
+  void _showBadgeDialog(AppUser user) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+          title: Text(
+            'Rozet Yönetimi: ${user.displayName}',
+            style: TextStyle(color: isDark ? Colors.white : Colors.black),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final awarded = await _userService.checkAndAwardBadges(user.uid);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              awarded.isNotEmpty
+                                  ? 'Otomatik kontrol tamamlandı. ${awarded.length} yeni rozet verildi!'
+                                  : 'Yeni rozet koşulu sağlanmadı.',
+                            ),
+                            backgroundColor: awarded.isNotEmpty ? Colors.green : Colors.grey[700],
+                          ),
+                        );
+                        Navigator.pop(dialogCtx);
+                      }
+                    },
+                    icon: const Icon(Icons.auto_awesome, size: 16),
+                    label: const Text('Otomatik Rozet Kontrolü Yap'),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Mevcut Rozetler:',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (user.badges.isEmpty)
+                    Text(
+                      'Henüz rozet yok',
+                      style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 12),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: user.badges.map((badgeId) {
+                        final badge = BadgeHelper.getBadgeInfo(badgeId);
+                        if (badge == null) return const SizedBox.shrink();
+                        return Chip(
+                          avatar: Text(badge.icon),
+                          label: Text(badge.name),
+                          backgroundColor: badge.color.withValues(alpha: 0.2),
+                          deleteIcon: Icon(Icons.close, size: 16, color: badge.color),
+                          onDeleted: () async {
+                            await _removeBadge(user.uid, badgeId);
+                            setDialogState(() {
+                              user.badges.remove(badgeId);
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Rozet Ekle:',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: BadgeHelper.getAllBadgeIds()
+                        .where((badgeId) => !user.badges.contains(badgeId))
+                        .map((badgeId) {
+                      final badge = BadgeHelper.getBadgeInfo(badgeId)!;
+                      return ActionChip(
+                        avatar: Text(badge.icon),
+                        label: Text(badge.name),
+                        backgroundColor: badge.color.withValues(alpha: 0.1),
+                        onPressed: () async {
+                          await _addBadge(user.uid, badgeId);
+                          setDialogState(() {
+                            if (!user.badges.contains(badgeId)) {
+                              user.badges.add(badgeId);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text(
+                'Kapat',
+                style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1867,10 +2518,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
+              const SnackBar(
                 content: Text('Rozet eklendi ✅'),
                 backgroundColor: Colors.green,
-                duration: const Duration(seconds: 2),
+                duration: Duration(seconds: 2),
               ),
             );
           }
@@ -1879,10 +2530,12 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     } catch (e) {
       _log('Rozet ekleme hatası: $e');
       if (mounted) {
+        final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Hata: $e'),
+            content: Text('Rozet eklenirken hata oluştu: $cleanMsg'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -1901,10 +2554,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Text('Rozet kaldırıldı ✅'),
               backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 2),
+              duration: Duration(seconds: 2),
             ),
           );
         }
@@ -1912,528 +2565,16 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     } catch (e) {
       _log('Rozet kaldırma hatası: $e');
       if (mounted) {
+        final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Hata: $e'),
+            content: Text('Rozet kaldırılırken hata oluştu: $cleanMsg'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
     }
-  }
-
-  Future<void> _deleteAllMessages(int count) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Tüm Mesajları Sil'),
-        content: Text(
-          'Toplam $count adet mesajı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Evet, Sil'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      final deletedCount = await _firestoreService.deleteAllMessages();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$deletedCount mesaj silindi 🗑️'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  // Admin için mesaj listesi
-  Widget _buildMessagesList() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).colorScheme.primary;
-
-    return StreamBuilder<List<Message>>(
-      stream: _firestoreService.getAllMessagesStream(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const ChatListSkeleton(itemCount: 6, padding: EdgeInsets.all(16));
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Text('Hata: ${snapshot.error}'),
-          );
-        }
-
-        final messages = snapshot.data ?? [];
-
-        if (messages.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.message_outlined,
-                  size: 64,
-                  color: Colors.grey[400],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Henüz mesaj yok',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => _deleteAllMessages(messages.length),
-                  icon: const Icon(Icons.delete_sweep, size: 20),
-                  label: Text('Tüm Mesajları Sil (${messages.length})'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: messages.length,
-                itemBuilder: (context, index) {
-                  final message = messages[index];
-                  final isUnreadByAdmin = !message.isReadByAdmin;
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    color: isUnreadByAdmin
-                        ? (isDark
-                            ? primaryColor.withValues(alpha: 0.15)
-                            : primaryColor.withValues(alpha: 0.1))
-                        : null,
-                    child: InkWell(
-                      onTap: () {
-                        // Mesaj detayını göster
-                        _showMessageDetail(message);
-                        // Admin tarafından okundu olarak işaretle
-                        if (isUnreadByAdmin) {
-                          _firestoreService.markMessageAsReadByAdmin(message.id);
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                ClipOval(
-                                  child: message.senderImageUrl.isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: message.senderImageUrl,
-                                          width: 40,
-                                          height: 40,
-                                          fit: BoxFit.cover,
-                                          placeholder: (context, url) =>
-                                              const CircularProgressIndicator(strokeWidth: 2),
-                                          errorWidget: (context, url, error) =>
-                                              const Icon(Icons.person, size: 40),
-                                        )
-                                      : const Icon(Icons.person, size: 40),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              '${message.senderName} → ${message.receiverName}',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: isUnreadByAdmin
-                                                    ? FontWeight.w700
-                                                    : FontWeight.w600,
-                                                color: isDark ? Colors.white : Colors.black87,
-                                              ),
-                                            ),
-                                          ),
-                                          if (isUnreadByAdmin)
-                                            Container(
-                                              width: 10,
-                                              height: 10,
-                                              decoration: BoxDecoration(
-                                                color: primaryColor,
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        DateFormat('d MMMM yyyy, HH:mm', 'tr_TR').format(message.createdAt),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.05)
-                                    : Colors.grey[100],
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                message.text,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: isDark ? Colors.white : Colors.black87,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(
-                                  message.isRead ? Icons.done_all : Icons.done,
-                                  size: 16,
-                                  color: message.isRead
-                                      ? Colors.blue
-                                      : Colors.grey,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  message.isRead ? 'Okundu' : 'Gönderildi',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark ? Colors.grey[400] : Colors.grey[600],
-                                  ),
-                                ),
-                                const Spacer(),
-                                if (isUnreadByAdmin)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: primaryColor,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Text(
-                                      'Yeni',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Mesaj detayını göster
-  void _showMessageDetail(Message message) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        title: Row(
-          children: [
-            ClipOval(
-              child: message.senderImageUrl.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: message.senderImageUrl,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) =>
-                          const CircularProgressIndicator(strokeWidth: 2),
-                      errorWidget: (context, url, error) =>
-                          const Icon(Icons.person, size: 40),
-                    )
-                  : const Icon(Icons.person, size: 40),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    message.senderName,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                  Text(
-                    '→ ${message.receiverName}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isDark ? Colors.grey[400] : Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  message.text,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: isDark ? Colors.white : Colors.black87,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Gönderilme: ${DateFormat('d MMMM yyyy, HH:mm', 'tr_TR').format(message.createdAt)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.grey[400] : Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    message.isRead ? Icons.done_all : Icons.done,
-                    size: 16,
-                    color: message.isRead ? Colors.blue : Colors.grey,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    message.isRead ? 'Alıcı tarafından okundu' : 'Gönderildi',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? Colors.grey[400] : Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Kapat'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfileScreen(userId: message.senderId),
-                ),
-              );
-            },
-            child: const Text('Gönderen Profili'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _startMobileTestCommandListener() {
-    _mobileTestCommandSubscription?.cancel();
-    _mobileTestCommandSubscription = FirebaseFirestore.instance
-        .collection('mobileTestCommands')
-        .where('status', isEqualTo: 'pending')
-        .snapshots()
-        .listen((snapshot) async {
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final url = data['url'] as String?;
-        if (url == null || url.isEmpty) continue;
-
-        // Initialize logs list and write initial running state
-        final localLogs = <String>[];
-        localLogs.add('[Mobile App] Test komutu alındı. Kazıcı başlatılıyor...');
-        await doc.reference.update({
-          'status': 'running',
-          'logs': localLogs,
-        });
-
-        // Set up periodic timer to flush logs to Firestore
-        bool needsUpdate = false;
-        final timer = Timer.periodic(const Duration(milliseconds: 500), (t) {
-          if (needsUpdate) {
-            doc.reference.update({'logs': localLogs});
-            needsUpdate = false;
-          }
-        });
-
-        // Redirect logs locally
-        final subscription = LinkPreviewLogger.logStream.listen((logLine) {
-          localLogs.add(logLine);
-          needsUpdate = true;
-        });
-
-        try {
-          // Fetch metadata
-          final preview = await LinkPreviewService().fetchMetadata(url).timeout(
-            const Duration(seconds: 15),
-          );
-
-          if (preview == null) {
-            throw Exception("Kazıma başarısız oldu (Preview boş).");
-          }
-
-          // Category detection
-          String category = 'diger';
-          String? subCategory;
-          final titleToClassify = '${preview.breadcrumbs?.join(" ") ?? ""} ${preview.title ?? ""}';
-          final catResult = CategoryDetectionService.detectCategory(titleToClassify);
-          if (catResult != null) {
-            category = catResult['categoryId']!;
-            subCategory = catResult['subCategory'];
-          }
-
-          // AI Analysis
-          final aiResult = await AIService.analyzeProduct(
-            url: url,
-            title: preview.title ?? "",
-            description: preview.description ?? "",
-          );
-
-          String finalTitle = preview.title ?? "Fırsat Ürünü";
-          double finalPrice = preview.price ?? 0.0;
-          String finalStore = preview.provider ?? "Diğer";
-
-          if (aiResult['success'] == true) {
-            if (aiResult.containsKey('title') && aiResult['title'] != null) {
-              finalTitle = aiResult['title'];
-            }
-            if (aiResult.containsKey('price') && aiResult['price'] != null) {
-              finalPrice = double.tryParse(aiResult['price'].toString()) ?? finalPrice;
-            }
-            if (aiResult.containsKey('store') && aiResult['store'] != null) {
-              finalStore = aiResult['store'];
-            }
-            if (aiResult.containsKey('category') && aiResult['category'] != null) {
-              category = aiResult['category'];
-              subCategory = null;
-            }
-          }
-
-          // Save test deal to Firestore
-          final deal = Deal(
-            id: '',
-            title: finalTitle,
-            description: preview.description ?? 'Mobil test açıklaması',
-            price: finalPrice,
-            originalPrice: finalPrice > 0 ? finalPrice * 1.2 : 0.0,
-            discountRate: finalPrice > 0 ? 20 : 0,
-            store: finalStore,
-            category: category,
-            subCategory: subCategory,
-            link: url,
-            imageUrl: preview.imageUrl ?? '',
-            hotVotes: 0,
-            coldVotes: 0,
-            commentCount: 0,
-            postedBy: 'admin_test_mobil',
-            createdAt: DateTime.now(),
-            isEditorPick: false,
-            isApproved: false,
-            isUserSubmitted: false,
-            isTest: true,
-          );
-
-          await FirebaseFirestore.instance.collection('deals').add(deal.toFirestore());
-
-          localLogs.add('[Mobile App] Test başarıyla tamamlandı ve Firestore\'a kaydedildi.');
-          await doc.reference.update({
-            'status': 'completed',
-            'logs': localLogs,
-          });
-        } catch (e) {
-          localLogs.add('[Mobile App] HATA: $e');
-          await doc.reference.update({
-            'status': 'failed',
-            'logs': localLogs,
-          });
-        } finally {
-          subscription.cancel();
-          timer.cancel();
-        }
-      }
-    });
   }
 }
+

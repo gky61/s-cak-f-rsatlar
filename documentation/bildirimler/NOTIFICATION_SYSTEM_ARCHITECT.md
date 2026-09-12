@@ -268,14 +268,14 @@ Tüm fonksiyonlar `functions/index.js` içerisinde modüler olarak tanımlanmı�
 | :--- | :--- | :--- |
 | **`onDealCreated`** | Firestore `deals/{dealId}` (onCreate) | Fırsat oluşturulduğunda küfür/profanity moderasyonu yapar. Fırsat onaysız ise `admin_deals` FCM konusuna admin bildirimi gönderir ve `adminMessages` oluşturur. Onaylıysa bildirimleri üretir. |
 | **`onDealUpdated`** | Firestore `deals/{dealId}` (onUpdate) | Fırsat `isApproved: false ➔ true` olduğunda herkese bildirim üretir (`matchAndCreateDealNotifications`). Kullanıcı fırsatı onaylandığında veya reddedildiğinde `submission_status` bildirimi yazar. |
-| **`onCommentCreated`** | Firestore `deals/{dealId}/comments/{commentId}` (onCreate) | Yorum moderasyonu yapar. Eğer yorum başka bir yoruma cevap ise alıcıya `comment_reply` bildirim dokümanı oluşturur. |
+| **`onCommentCreated`** | Firestore `deals/{dealId}/comments/{commentId}` (onCreate) | Yorum moderasyonu yapar. Bir yoruma yanıt yazıldığında (`parentCommentId`) alıcıya `comment_reply`, fırsata ana yorum yazıldığında ise fırsat sahibine (`deal.postedBy`) `comment` bildirim dokümanı oluşturur. |
 | **`onAdminMessageCreated`**| Firestore `adminToUserMessages/{messageId}` (onCreate) | Admin panelinden kullanıcıya mesaj atıldığında `users/{uid}/notifications/admin_msg_{messageId}` belgesini yazar. Push gönderimini `onNotificationCreated` motoruna bırakır. |
 | **`onUserMessageCreated`** | Firestore `messages/{messageId}` (onCreate) | Birebir sohbette yeni mesaj geldiğinde alıcının cihazlarına **data-only payload** iletir. |
-| **`onNotificationCreated`** | Firestore `users/{uid}/notifications/{id}` (onCreate) | **Merkezi Push Motoru:** Tüm bildirim dokümanlarını dinler; sistem şalteri, sessiz saatler, kategori limitleri, kullanıcı tercihleri ve cihaz token kontrollerini yaparak FCM push gönderir. |
+| **`onNotificationCreated`** | Firestore `users/{uid}/notifications/{id}` (onCreate) | **Merkezi Push Motoru:** Tüm bildirim dokümanlarını dinler; sistem şalteri, sessiz saatler, kategori limitleri, kullanıcı tercihleri ve cihaz token kontrollerini yaparak FCM push gönderir. Yazar fırsatlarını `follow_channel` kanalına yönlendirir. Başarılı teslimatta (`successCount > 0`) günlük `notificationStats` sayacını anında artırır. |
 | **`purgeOldDeals`** | PubSub Schedule (`0 4 * * 0` - Her Pazar 04:00) | **30 Günlük Derin Temizlik:** 30 günden eski fırsatları, yorumları, favori referanslarını ve **tüm kullanıcılardaki (`collectionGroup('notifications')`) 30 günü geçmiş bildirimleri** kalıcı olarak siler. |
 | **`purgeOldDealsManual`** | HTTPS Callable (`onCall`) | Admin panelinden 30+ günlük eski fırsatları ve ilişkili eski bildirimleri manuel olarak kalıcı siler. |
 | **`purgeOldNotificationsManual`** | HTTPS Callable (`onCall`) | Admin yetkisiyle yalnızca 30 günü geçmiş bildirim dokümanlarını (`collectionGroup`) toplu siler. |
-| **`sendManualNotification`**| HTTPS Callable (`onCall`) | Admin panelinden Tüm Kullanıcılara (`all`), Tekil UID'ye (`uid`) veya Belirli Token'a (`token`) anlık bildirim gönderir. `notificationLogs` ve `notificationStats` günceller. |
+| **`sendManualNotification`**| HTTPS Callable (`onCall`) | Admin panelinden Tüm Kullanıcılara (`all`), Tekil UID'ye (`uid`) veya Belirli Token'a (`token`) anlık bildirim gönderir. `notificationCategory` (`admin_message` veya `marketing`) tercihiyle sessiz saat ve kullanıcı filtrelerine uyum sağlar. `notificationLogs` ve `notificationStats` günceller. |
 | **`cleanupInvalidTokens`** | HTTPS Callable (`onCall`) | `userDevices` içerisindeki aktif FCM token'ları dryRun ile test ederek geçersiz olanları `active: false` yapar. |
 | **`onUserDeleted`** | Auth `user().onDelete` | Kullanıcı silindiğinde `userDevices`, `notificationSubscriptions`, `notifications` ve `notificationPreferences` verilerini kalıcı temizler. |
 
@@ -324,7 +324,7 @@ Uygulama tamamen kapalıyken bildirime tıklandığında:
 | :--- | :--- | :---: | :---: | :--- |
 | **`sicak_firsatlar_general_v2`** | Sıcak Fırsatlar Bildirimleri | `max` | `#FF6B35` | Genel fırsat, kategori ve pazarlama bildirimleri |
 | **`keyword_alerts_channel`** | Özel Fırsat Bildirimleri | `max` | `#FF9800` | Takip edilen anahtar kelime eşleşmeleri |
-| **`comment_replies_channel`** | Yorum Cevapları | `high` | `#2196F3` | Yorumlara gelen yanıtlar |
+| **`comment_replies_channel`** | Yorum Cevapları | `high` | `#2196F3` | Yorumlara gelen yanıtlar ve fırsat sahibine gelen ilk yorumlar |
 | **`messages_channel_v3`** | Mesaj Bildirimleri | `max` | `#2196F3` | Kullanıcılar arası sohbet mesajları |
 | **`admin_messages_channel_v3`** | Admin Mesaj Bildirimleri | `max` | `#FF5722` | Resmi yönetici duyuru ve uyarıları |
 | **`follow_channel`** | Takip Bildirimleri | `high` | `#4CAF50` | Takip edilen avcıların paylaşımları |
@@ -371,26 +371,29 @@ Kullanıcılar arası mesajlaşmada bildirim deneyimini kusursuz kılmak ve spam
 
 ## 9. 💻 Web Admin Paneli Bildirim Yetenekleri
 
-Web yönetim paneli (`web/admin/`), bildirim sistemini yönetmek için şu araçları sunar:
-1. **Manuel Push Gönderimi:** Başlık, içerik ve isteğe bağlı görsel URL girilerek `Tüm Kullanıcılar`, `Belirli UID` veya `Belirli FCM Token` hedeflenerek bildirim gönderilir.
-2. **Geçersiz Token Temizliği (`cleanupInvalidTokens`):** Veritabanındaki aktif cihazların token geçerliliğini test edip bayat token'ları otomatik pasife alır.
-3. **Sistem Limitleri Yönetimi:** Kategori saatlik ve günlük hız limitleri doğrudan `systemConfig/notifications` üzerinden güncellenir.
-4. **30+ Günlük Fırsat ve Bildirim Temizliği (`purgeOldDealsWeb`):** 30 günden eski fırsatları ve **tüm kullanıcılardaki 30+ günlük eski bildirimleri** sunucudaki `purgeOldDealsManual` Cloud Function'ını çağırarak Admin SDK yetkisiyle anında temizler.
-5. **Bildirim Grafikleri:** Günlük gönderilen bildirim istatistikleri `notificationStats` koleksiyonundan çekilerek çizgi grafiklerle görselleştirilir.
+Web yönetim paneli (`web/admin/`), bildirim sistemini yönetmek için şu araçları ve operasyonel modülleri sunar:
+1. **Global Push Şalteri & Canlı Durum Kartı:** `systemConfig/notifications.enabled` değerini anlık gösteren durum rozeti ve tek tıkla tüm push motorunu acil durdurma/başlatma anahtarı.
+2. **Kategori Hız Limitleri Canlı Yönetimi:** Kategori saatlik (`categoryHourlyLimit`) ve günlük (`categoryDailyLimit`) hız kotalarını Bildirim Merkezi ekranından anında görüntüleme ve güncelleme.
+3. **Manuel Push Gönderimi & Kategori Seçimi:** Başlık, içerik, isteğe bağlı görsel URL, opsiyonel `dealId` ve bildirim türü (`Yönetici Duyurusu` vs `Pazarlama / Kampanya`) girilerek `Tüm Kullanıcılar`, `Belirli UID` veya `Belirli FCM Token` hedeflenerek bildirim gönderilir. `dealId` girildiğinde mobil kullanıcı bildirime tıkladığı anda doğrudan ilgili fırsat detay ekranı açılır.
+4. **Geçersiz Token Temizliği (`cleanupInvalidTokens`):** Veritabanındaki aktif cihazların token geçerliliğini test edip bayat token'ları otomatik pasife alır.
+5. **30+ Günlük Eski Bildirim Temizliği (`purgeOldNotificationsManual`):** Sunucu tarafındaki callable Cloud Function aracılığıyla 30 günü geçmiş eski bildirim dokümanlarını (`collectionGroup`) tek tıkla temizler.
+6. **Canlı Bildirim Akışı ve Çift Yönlü Filtreleme:** `collectionGroup('notifications')` üzerinden en son bildirimleri canlı izler; `Durum Filtresi` (`Tümü`, `Gönderildi`, `Sessiz Saat`, `Limit Aşıldı`, `Tercih Kapalı`, `Cihaz Yok`, `Hata`) ve `Kanal Filtresi` (`Tümü`, `Yönetici`, `Kampanya`, `Topluluk`, `Yazar`, `Kategori`, `Anahtar Kelime`) ile kombine filtreleme sunar.
+7. **Bildirim Detay İnceleme Modalı:** Tıklanan bildirim dokümanının tüm teknik detaylarını (reasons eşleşme haritası, alıcı cihaz, hata ayrıntıları) modal pencerede gösterir.
+8. **Bildirim Gönderim Trendi (Son 7 Gün) Grafiği:** `notificationStats` günlük sayaç dokümanları ile `collectionGroup('notifications')` kayıtlarını dinamik olarak harmanlayan hibrit agregasyon algoritması sayesinde hiçbir veri kaybı olmadan son 7 günün push dağılımını çizer.
 
 ---
 
 ## 10. 🧪 Otomatik Test Süitleri ve Doğrulama
 
-Tüm bildirim sistemi ve senaryoları 4 ayrı test paketiyle tam kapsamlı (%100) doğrulanmaktadır:
+Tüm bildirim sistemi ve senaryoları tam kapsamlı (%100) doğrulanmaktadır:
 
 | Test Dosyası | Kapsam | Komut |
 | :--- | :--- | :--- |
 | **`test/messaging_and_anti_spam_test.dart`** | Anti-spam (5s/max 3 msg), deterministik notifId & tag, payload parser, instant seeding & dedup birim testleri (11 Test) | `flutter test test/messaging_and_anti_spam_test.dart` |
-| **`test/notification_logic_test.dart`** | Flutter birim testleri, serileştirme (toMap/fromFirestore), Master Switch State Preservation | `flutter test test/notification_logic_test.dart` |
+| **`test/notification_logic_test.dart`** | Flutter birim testleri, serileştirme (toMap/fromFirestore), Master Switch State Preservation (3 Test) | `flutter test test/notification_logic_test.dart` |
 | **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
 | **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |
-| **`functions/tests/test_all_notification_scenarios.js`** | Çaprazlama Uçtan Uca Bütünleşik Test Süiti: 10 Senaryonun tamamını canlı veritabanı üzerinde çapraz kontrol eder | `node functions/tests/test_all_notification_scenarios.js` |
+| **`functions/tests/test_all_notification_scenarios.js`** | 21 Senaryoluk Çaprazlama Uçtan Uca Bütünleşik Test Süiti: 10 Senaryo + varyasyonlarını canlı veritabanı üzerinde çapraz kontrol eder | `node functions/tests/test_all_notification_scenarios.js` |
 
 ---
 

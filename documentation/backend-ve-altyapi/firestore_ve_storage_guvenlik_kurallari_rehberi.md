@@ -90,6 +90,8 @@ function canWrite() {
 ### 3.2 `deals` (Fırsatlar) Koleksiyonu
 * **Okuma:** `allow read: if true;` (Onaylı fırsatlar herkese açıktır).
 * **Oluşturma:** `canWrite()` olan (giriş yapmış ve banlanmamış) kullanıcılar ekleyebilir.
+  - **Ban Koruması:** `dealBannedUsers` koleksiyonunda kaydı bulunan kullanıcılar engellenir.
+  - **Alan Güvenliği:** Normal kullanıcılar `postedBy == userId()` şartıyla ekler; `hotVotes == 0`, `coldVotes == 0`, `isEditorPick == false` ve admin onayı zorunluluğunda `isApproved == false` olmak zorundadır.
 * **Alan Bazlı Güvenli Güncelleme:** Normal bir kullanıcı başkasının fırsatının fiyatını veya linkini değiştiremez; yalnızca oy/yorum sayacını artırabilir:
   ```rules
   allow update: if canWrite() && (
@@ -99,7 +101,10 @@ function canWrite() {
       .hasOnly(['hotVotes', 'coldVotes', 'expiredVotes', 'isExpired', 'commentCount', 'updatedAt'])
   );
   ```
-* **Alt Koleksiyonlar:** `votes`, `expired_votes` ve `comments` için kullanıcı UID eşleşmesi zorunludur.
+* **Alt Koleksiyonlar:**
+  - `votes`: Oy veren kullanıcının kendi UID'si ile eşleşmesi zorunludur (`userId() == voteUserId`).
+  - `comments`: Yorum eklerken `commentBannedUsers` kontrolü ve `userId == request.auth.uid` zorunludur. Güncellemede yalnızca yorum sahibi, admin veya `['reactions']` (emoji tepkisi) izni vardır.
+  - `collectionGroup('comments')`: Raporlama ve bildirimler için yalnızca **okuma** (`allow read: if true;`) yetkisine sahiptir; yazma işlemleri ana yol üzerinden denetlenir.
 
 ---
 

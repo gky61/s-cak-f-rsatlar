@@ -288,7 +288,7 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                             Padding(
                               padding: const EdgeInsets.all(16),
                               child: Text(
-                                'Hata: ${snapshot.error}',
+                                'Yorumlar yüklenirken bir sorun oluştu. Lütfen tekrar deneyin.',
                                 style: TextStyle(
                                   color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
                                 ),

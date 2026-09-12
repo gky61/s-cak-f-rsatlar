@@ -74,6 +74,19 @@ class DealAdminDialogs {
     firestoreService: firestoreService,
   );
 
+  /// Tekrar yayına alma.
+  static Future<void> reactivateDeal({
+    required BuildContext context,
+    required String dealId,
+    required FirestoreService firestoreService,
+    required VoidCallback onDealUpdated,
+  }) => approval.reactivateDeal(
+    context: context,
+    dealId: dealId,
+    firestoreService: firestoreService,
+    onDealUpdated: onDealUpdated,
+  );
+
   /// Kategori seçici bottom sheet.
   static Future<void> showCategorySelector({
     required BuildContext context,

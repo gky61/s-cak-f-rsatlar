@@ -331,10 +331,12 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
         }
       } catch (e) {
         if (mounted) {
+          final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Hesap silinirken hata oluştu: $e'),
+              content: Text('Hesap silinirken hata oluştu: $cleanMsg'),
               backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
             ),
           );
         }

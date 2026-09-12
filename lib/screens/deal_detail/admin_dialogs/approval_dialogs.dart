@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../../../models/deal.dart';
@@ -121,7 +122,12 @@ Future<void> _approveDeal({
 }) async {
   final updates = <String, dynamic>{
     'isApproved': true,
+    'isRejected': false,
+    'isExpired': false,
+    'status': 'active',
     'isEditorPick': isEditorPick,
+    'approvedAt': FieldValue.serverTimestamp(),
+    'updatedAt': FieldValue.serverTimestamp(),
   };
   if (hidePrice) {
     updates['hidePrice'] = true;
@@ -266,7 +272,11 @@ Future<void> unpublishDeal({
 
   if (confirm != true || !context.mounted) return;
 
-  await firestoreService.updateDeal(dealId, {'isExpired': true});
+  await firestoreService.updateDeal(dealId, {
+    'isExpired': true,
+    'status': 'expired',
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -275,6 +285,55 @@ Future<void> unpublishDeal({
       ),
     );
     Navigator.of(context).pop();
+  }
+}
+
+/// Tekrar yayına alma (Süresi biten veya pasif fırsatı aktifleştirme)
+Future<void> reactivateDeal({
+  required BuildContext context,
+  required String dealId,
+  required FirestoreService firestoreService,
+  required VoidCallback onDealUpdated,
+}) async {
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Tekrar Yayına Al'),
+      content: const Text('Bu fırsatı tekrar yayına almak istediğinize emin misiniz?\n\nFırsat aktifleştirilecek ve ana ekranda görünür olacaktır.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('İptal'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: TextButton.styleFrom(foregroundColor: Colors.green),
+          child: const Text('Evet, Yayına Al'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true || !context.mounted) return;
+
+  final success = await firestoreService.unexpireDeal(dealId);
+  if (context.mounted) {
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fırsat tekrar yayına alındı 🚀'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      onDealUpdated();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('İşlem başarısız oldu ❌'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 
@@ -306,7 +365,13 @@ Future<void> rejectDeal({
 
   if (confirm != true || !context.mounted) return;
 
-  await firestoreService.updateDeal(dealId, {'isExpired': true});
+  await firestoreService.updateDeal(dealId, {
+    'isRejected': true,
+    'isApproved': false,
+    'isExpired': true,
+    'status': 'rejected',
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
   onDealUpdated();
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(

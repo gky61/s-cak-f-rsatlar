@@ -104,8 +104,9 @@ Tüm backend fonksiyonları [functions/index.js](file:///d:/firsatkolik/function
 
 ## 3. ⚙️ Ortam Yönetimi ve Flavor Mimarisi (DEV vs PROD)
 
-> 🔗 **Detaylı Referans Dokümanı:**
+> 🔗 **Detaylı Referans Dokümanları:**
 > - [Ortam Yönetimi ve Canlıya Geçiş Kılavuzu](file:///d:/firsatkolik/documentation/backend-ve-altyapi/environment_management_guide.md) — DEV/PROD build komutları, Play Store AAB derleme ve Shorebird live code push stratejileri.
+> - [DEV vs PROD Eşitleme ve Senkronizasyon Kılavuzu](file:///d:/firsatkolik/documentation/backend-ve-altyapi/dev_prod_synchronization_and_audit_guide.md) — 18 noktalı denetim matrisi, eşitleme komutları ve pre-flight kontrol listesi.
 
 FırsatKolik, **Geliştirme (DEV)** ve **Canlı (PROD)** olmak üzere iki tamamen izole Firebase projesi ve derleme ortamı üzerinde çalışır:
 
@@ -119,8 +120,10 @@ FırsatKolik, **Geliştirme (DEV)** ve **Canlı (PROD)** olmak üzere iki tamame
 | **AdMob Reklamları** | Google Test Banner ID (`ca-app-pub-3940...`) | Gerçek Banner ID (`ca-app-pub-6853...`) |
 | **App Check Sağlayıcısı**| Debug Provider (Debug Token) | Play Integrity API (Google Play Store) |
 | **Android Keystore** | Varsayılan Debug Keystore | `android/app/upload-keystore.jks` (Alias: upload) |
-| **Web Admin URL** | `localhost` / `sicak-firsatlar-e6eae.web.app` | `https://firsatkolik-prod-e6eae.web.app` |
-| **Telegram Bot Portu** | Port `8081` (`dev-bot`) | Port `8082` (`prod-bot`) |
+| **Cloud Functions** | 26 Bağımsız Fonksiyon (İzole Trigger & Cron) | 26 Bağımsız Fonksiyon (İzole Trigger & Cron) |
+| **Web Admin URL** | `localhost:5000` / `sicak-firsatlar-e6eae.web.app` | `https://firsatkolik-prod-e6eae.web.app` ve `firsatkolik.app` |
+| **Telegram Bot Portu** | Port `8081` (`dev-bot` Container) | Port `8082` (`prod-bot` Container) |
+| **Cihazda Yan Yana Kurulum** | Desteklenir (Paket ID: `com.sicakfirsatlar...`) | Desteklenir (Paket ID: `com.firsatkolik.app`) |
 
 ### Hızlı Operasyon Komutları:
 ```bash

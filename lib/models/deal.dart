@@ -32,6 +32,7 @@ class Deal {
   final DateTime createdAt;
   final bool isEditorPick;
   final bool? isApproved; // Nullable: Bot'un yazdığı verilerde olmayabilir
+  final bool isRejected; // Fırsat admin tarafından reddedildi mi?
   final bool isExpired;
   final bool isUserSubmitted; // Kullanıcı tarafından paylaşıldı mı?
   final bool isTest; // Test verisi mi?
@@ -69,6 +70,7 @@ class Deal {
     required this.createdAt,
     required this.isEditorPick,
     this.isApproved,
+    this.isRejected = false,
     this.isExpired = false,
     this.isUserSubmitted = false,
     this.isTest = false,
@@ -91,6 +93,15 @@ class Deal {
       postedBy == 'botkolik' ||
       postedBy.startsWith('telegram_') ||
       postedBy.isEmpty;
+
+  /// Fırsatın onay bekleyip beklemediğini (inceleme durumunda olup olmadığını) döner
+  bool get isPending => isApproved == false && !isRejected && !isExpired;
+
+  /// Fırsatın onaylanmış ve yayında olup olmadığını döner
+  bool get isApprovedClean => isApproved == true;
+
+  /// Fırsatın admin tarafından reddedilip edilmediğini döner
+  bool get isRejectedClean => isRejected == true;
 
   /// Fırsatın kaynak adını (Telegram Kanalı / Kazıma Sayfası veya Kullanıcı Adı) döner
   String get sourceDisplayName {
@@ -380,7 +391,8 @@ class Deal {
       createdAt: createdAt,
       isEditorPick: data['isEditorPick'] == true,
       isApproved: data.containsKey('isApproved') ? data['isApproved'] as bool? : null, // Alan yoksa null, varsa değerini al
-      isExpired: data['isExpired'] == true,
+      isRejected: data['isRejected'] == true || data['status'] == 'rejected',
+      isExpired: data['isExpired'] == true || data['status'] == 'expired',
       isUserSubmitted: data['isUserSubmitted'] == true,
       isTest: data['isTest'] == true,
       cleanUrl: data['cleanUrl'] ?? cleanProductUrl(data['link'] ?? data['url'] ?? ''),
@@ -422,7 +434,9 @@ class Deal {
       'createdAt': Timestamp.fromDate(createdAt),
       'isEditorPick': isEditorPick,
       'isApproved': isApproved,
+      'isRejected': isRejected,
       'isExpired': isExpired,
+      'status': isRejected ? 'rejected' : (isExpired ? 'expired' : (isApproved == true ? 'active' : 'pending')),
       'isUserSubmitted': isUserSubmitted,
       'couponCode': couponCode,
       'isTest': isTest,

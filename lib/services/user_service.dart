@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:http/http.dart' as http;
 import '../models/user.dart';
 import '../models/deal.dart';
 import '../utils/badge_helper.dart';
@@ -374,8 +377,138 @@ class UserService {
 
   Future<bool> blockUser(String userId) async {
     try {
-      await _firestore.collection('blockedUsers').doc(userId).set({'blockedAt': FieldValue.serverTimestamp()});
+      await _firestore.collection('blockedUsers').doc(userId).set({
+        'blockedAt': FieldValue.serverTimestamp(),
+        'blockedBy': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+      });
       return true;
-    } catch (e) { return false; }
+    } catch (e) {
+      _log('Kullanıcı engelleme hatası: $e');
+      return false;
+    }
+  }
+
+  Future<bool> unblockUser(String userId) async {
+    try {
+      await _firestore.collection('blockedUsers').doc(userId).delete();
+      return true;
+    } catch (e) {
+      _log('Kullanıcı engel kaldırma hatası: $e');
+      return false;
+    }
+  }
+
+  Future<bool> isUserCommentBanned(String userId) async {
+    try {
+      final doc = await _firestore.collection('commentBannedUsers').doc(userId).get();
+      return doc.exists;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> banUserComments(String userId, {String? adminId}) async {
+    try {
+      await _firestore.collection('commentBannedUsers').doc(userId).set({
+        'bannedAt': FieldValue.serverTimestamp(),
+        'bannedBy': adminId ?? FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+      });
+      return true;
+    } catch (e) {
+      _log('Yorum engelleme hatası: $e');
+      return false;
+    }
+  }
+
+  Future<bool> unbanUserComments(String userId) async {
+    try {
+      await _firestore.collection('commentBannedUsers').doc(userId).delete();
+      return true;
+    } catch (e) {
+      _log('Yorum engel kaldırma hatası: $e');
+      return false;
+    }
+  }
+
+  Future<bool> isUserDealBanned(String userId) async {
+    try {
+      final doc = await _firestore.collection('dealBannedUsers').doc(userId).get();
+      return doc.exists;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> banUserDeals(String userId, {String? adminId}) async {
+    try {
+      await _firestore.collection('dealBannedUsers').doc(userId).set({
+        'bannedAt': FieldValue.serverTimestamp(),
+        'bannedBy': adminId ?? FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+      });
+      return true;
+    } catch (e) {
+      _log('Paylaşım engelleme hatası: $e');
+      return false;
+    }
+  }
+
+  Future<bool> unbanUserDeals(String userId) async {
+    try {
+      await _firestore.collection('dealBannedUsers').doc(userId).delete();
+      return true;
+    } catch (e) {
+      _log('Paylaşım engel kaldırma hatası: $e');
+      return false;
+    }
+  }
+
+  Future<bool> toggleUserAdminStatus(String userId, bool makeAdmin) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'isAdmin': makeAdmin,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      _log('Admin yetki güncelleme hatası: $e');
+      return false;
+    }
+  }
+
+  /// Cloud Functions adminDeleteUser callable endpoint'ini HTTP POST ile çağırır
+  Future<bool> deleteUserAccountAdmin(String targetUid) async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) throw Exception('Giriş yapmış admin bulunamadı.');
+      final idToken = await currentUser.getIdToken();
+      final projectId = _firestore.app.options.projectId;
+      final uri = Uri.parse('https://us-central1-$projectId.cloudfunctions.net/adminDeleteUser');
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (idToken != null) 'Authorization': 'Bearer $idToken',
+        },
+        body: jsonEncode({
+          'data': {
+            'targetUid': targetUid,
+          },
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final resData = jsonDecode(response.body);
+        if (resData is Map && resData.containsKey('error')) {
+          throw Exception(resData['error']?['message'] ?? 'Bilinmeyen fonksiyon hatası');
+        }
+        return true;
+      } else {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      _log('Kullanıcı hesabı silme hatası: $e');
+      rethrow;
+    }
   }
 }

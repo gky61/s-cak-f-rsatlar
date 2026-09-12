@@ -1013,7 +1013,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _log('   💰 Fiyat: ${_priceController.text.trim()} TL');
         _log('═══════════════════════════════════════════════════════════');
 
-        await _firestoreService.createDeal(
+        final submitResult = await _firestoreService.createDeal(
           title: _titleController.text.trim(),
           description: AdvertisingComplianceService.ensureDisclosure(_descriptionController.text.trim()),
           price: double.tryParse(_priceController.text.trim()) ?? 0.0,
@@ -1036,10 +1036,14 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
         if (mounted) {
           Navigator.pop(context);
+          final isDirectlyApproved = submitResult?.isApproved == true;
           _showCustomSnackBar(
-            message: '🎉 Fırsat başarıyla paylaşıldı!',
-            icon: Icons.check_circle_rounded,
-            backgroundColor: AppTheme.primary,
+            message: isDirectlyApproved
+                ? '🎉 Fırsatınız paylaşıldı ve anında yayına alındı!'
+                : '🎉 Fırsatınız paylaşıldı ve incelemeye alındı! Onaylandıktan sonra yayına girecektir. Durumunu profilinizden takip edebilirsiniz.',
+            icon: isDirectlyApproved ? Icons.check_circle_rounded : Icons.hourglass_top_rounded,
+            backgroundColor: isDirectlyApproved ? const Color(0xFF2E7D32) : const Color(0xFFD97706),
+            duration: const Duration(seconds: 4),
           );
         }
       } catch (e) {
@@ -1060,8 +1064,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final cleanError = e.toString().replaceAll('Exception: ', '').trim();
         _showCustomSnackBar(
-          message: 'Hata: $e',
+          message: cleanError.isNotEmpty ? cleanError : 'Fırsat paylaşılırken bir hata oluştu.',
           icon: Icons.error_outline_rounded,
           backgroundColor: const Color(0xFFC62828),
           duration: const Duration(seconds: 4),

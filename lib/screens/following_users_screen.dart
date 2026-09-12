@@ -90,13 +90,20 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
 
           if (snapshot.hasError) {
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline_rounded, size: 52, color: Colors.red[400]),
-                  const SizedBox(height: 12),
-                  Text('Hata: ${snapshot.error}', style: TextStyle(color: Colors.red[400])),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline_rounded, size: 52, color: Colors.red[400]),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Takip edilen kullanıcılar yüklenirken bir sorun oluştu.',
+                      style: TextStyle(color: Colors.red[400], fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             );
           }

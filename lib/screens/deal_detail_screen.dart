@@ -536,6 +536,80 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       );
     }
     
+    // Onaysız fırsat yetki kontrolü (Yalnızca Sahibi veya Admin görüntüleyebilir)
+    if (_currentDeal!.isApproved == false) {
+      final currentUserId = _authService.currentUser?.uid;
+      final isOwner = (currentUserId != null && _currentDeal!.postedBy == currentUserId);
+      final canViewPending = isOwner || _isAdmin;
+
+      if (!canViewPending) {
+        return Scaffold(
+          backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.background,
+          appBar: AppBar(
+            title: const Text('İnceleme Aşamasında'),
+            backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
+          ),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.hourglass_top_rounded, size: 56, color: Color(0xFFD97706)),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Bu Fırsat İnceleme Aşamasında',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Bu paylaşım henüz moderasyon ekibimiz tarafından onaylanmamıştır veya yayında değildir.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                    child: const Text('Geri Dön', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    
     return _buildDealDetail(context, _currentDeal!);
   }
 
@@ -711,6 +785,57 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Onay Bekliyor / İncelemede Bilgilendirme Kartı (Sahibi veya Admin için)
+                              if (deal.isApproved == false)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF78350F).withValues(alpha: 0.35)
+                                        : const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.4 : 0.6),
+                                      width: 1.1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.hourglass_top_rounded,
+                                        size: 20,
+                                        color: Color(0xFFD97706),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'Paylaşımınız İncelemede',
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: Color(0xFFD97706),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Bu fırsat şu anda moderasyon ekibimiz tarafından incelenmektedir. Onaylandıktan sonra tüm kullanıcılara açılacaktır.',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                height: 1.35,
+                                                color: isDark ? const Color(0xFFFCD34D) : const Color(0xFF92400E),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
                               // Info Section - 2 Column Layout
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1420,53 +1545,79 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           ],
                         ),
 
-                        // Admin approval / rejection controls (for pending deals)
-                        if (_isAdmin && deal.isApproved != true)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 14),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () => _rejectDeal(deal.id),
-                                    icon: const Icon(Icons.close_rounded, size: 18),
-                                    label: const Text(
-                                      'Reddet',
-                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.red,
-                                      side: const BorderSide(color: Colors.red, width: 1.5),
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
+                        // Admin approval / rejection / reactivation controls
+                        if (_isAdmin) ...[
+                          if (deal.isApproved != true && !deal.isExpired)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 14),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _rejectDeal(deal.id),
+                                      icon: const Icon(Icons.close_rounded, size: 18),
+                                      label: const Text(
+                                        'Reddet',
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.red,
+                                        side: const BorderSide(color: Colors.red, width: 1.5),
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed: () => _confirmApproval(deal.id),
-                                    icon: const Icon(Icons.check_rounded, size: 18),
-                                    label: const Text(
-                                      'Onayla',
-                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppTheme.primary,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _confirmApproval(deal.id),
+                                      icon: const Icon(Icons.check_rounded, size: 18),
+                                      label: const Text(
+                                        'Onayla',
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                                       ),
-                                      elevation: 0,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.primary,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                        elevation: 0,
+                                      ),
                                     ),
                                   ),
+                                ],
+                              ),
+                            )
+                          else if (deal.isExpired)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 14),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _reactivateDeal(deal.id),
+                                  icon: const Icon(Icons.play_circle_outline_rounded, size: 20),
+                                  label: const Text(
+                                    'Tekrar Yayına Al (Aktifleştir)',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: 0,
+                                  ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1637,15 +1788,30 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           color: const Color(0xFFFF9800),
                           onTap: () => _showAdminEditDialog(deal),
                         ),
-                        if (deal.isApproved == true) ...[
+                        if (deal.isApproved == true && !deal.isExpired) ...[
                           const SizedBox(width: 8),
                           _buildGlassCircleButton(
-                            icon: Icons.close_rounded,
+                            icon: Icons.visibility_off_rounded,
                             isDark: isDark,
                             color: Colors.orangeAccent,
                             onTap: () => _unpublishDeal(deal.id),
                           ),
+                        ] else if (deal.isExpired) ...[
+                          const SizedBox(width: 8),
+                          _buildGlassCircleButton(
+                            icon: Icons.play_circle_outline_rounded,
+                            isDark: isDark,
+                            color: Colors.greenAccent,
+                            onTap: () => _reactivateDeal(deal.id),
+                          ),
                         ],
+                        const SizedBox(width: 8),
+                        _buildGlassCircleButton(
+                          icon: Icons.delete_outline_rounded,
+                          isDark: isDark,
+                          color: Colors.redAccent,
+                          onTap: () => _deleteDeal(deal),
+                        ),
                       ],
                     ],
                   ),
@@ -1743,7 +1909,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     context: context, dealId: id, firestoreService: _firestoreService,
   );
 
+  Future<void> _reactivateDeal(String id) => DealAdminDialogs.reactivateDeal(
+    context: context, dealId: id, firestoreService: _firestoreService, onDealUpdated: _loadDeal,
+  );
 
+  Future<void> _deleteDeal(Deal deal) => DealAdminDialogs.showDeleteDialog(
+    context: context, deal: deal, firestoreService: _firestoreService,
+  );
 
   Future<void> _rejectDeal(String id) => DealAdminDialogs.rejectDeal(
     context: context, dealId: id,

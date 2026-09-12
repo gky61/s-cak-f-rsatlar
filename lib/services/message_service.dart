@@ -485,6 +485,32 @@ class MessageService {
     await _firestore.collection('adminToUserMessages').doc(messageId).delete();
   }
 
+  /// Yönetici tarafından kullanıcıya resmi duyuru/mesaj gönderir (adminToUserMessages)
+  Future<bool> sendAdminToUserMessage({
+    required String targetUserId,
+    required String adminId,
+    required String adminName,
+    required String title,
+    required String content,
+  }) async {
+    try {
+      final ref = _firestore.collection('adminToUserMessages').doc();
+      await ref.set({
+        'id': ref.id,
+        'userId': targetUserId,
+        'adminId': adminId,
+        'adminName': adminName,
+        'title': title,
+        'content': content,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // Admin Paneli - Tüm Kullanıcı Mesajları
   Stream<List<Message>> getAllMessagesStream() {
     return _firestore.collection('messages').orderBy('createdAt', descending: true).snapshots().map((snapshot) {
@@ -512,6 +538,16 @@ class MessageService {
     } catch (e) {
       _log('deleteAllMessages error: $e');
       return 0;
+    }
+  }
+
+  Future<bool> deleteSingleMessage(String messageId) async {
+    try {
+      await _firestore.collection('messages').doc(messageId).delete();
+      return true;
+    } catch (e) {
+      _log('deleteSingleMessage error: $e');
+      return false;
     }
   }
 

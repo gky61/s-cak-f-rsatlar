@@ -295,6 +295,36 @@ class HepsiburadaScraper extends BaseProductScraper {
 
   // --- Private Helper Methods for API Calls ---
 
+  _isIgnoredHbTag(tag) {
+    if (!tag) return false;
+    const lower = tag.toLowerCase().trim();
+    return lower.includes('premium-a-gec') ||
+           lower.includes('premiuma-gec') ||
+           lower.includes('premium-gec') ||
+           lower.includes('premiuma-gecis') ||
+           lower.includes('ilk-siparis') ||
+           lower.includes('yeni-uye');
+  }
+
+  _isValidPremiumCampaignResult(premiumResult) {
+    if (!premiumResult) return false;
+    const campaigns = premiumResult['campaigns'];
+    if (Array.isArray(campaigns) && campaigns.length > 0) {
+      for (const camp of campaigns) {
+        if (camp && typeof camp === 'object') {
+          const name = (camp['name'] || '').toString().toLowerCase();
+          if (name.includes("premium'a geç") ||
+              name.includes("premiuma geç") ||
+              name.includes("premium'a katıl") ||
+              name.includes("premiuma katıl")) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
   async _fetchWithoutAffordabilityPrice(reduxData) {
     const productState = reduxData['productState'];
     if (!productState) return null;
@@ -342,7 +372,7 @@ class HepsiburadaScraper extends BaseProductScraper {
     const productTags = [];
     const tagList = product['tagList'] || [];
     for (const item of tagList) {
-      if (item && item['tagId']) {
+      if (item && item['tagId'] && !this._isIgnoredHbTag(item['tagId'])) {
         productTags.push(item['tagId'].toString());
       }
     }
@@ -441,7 +471,7 @@ class HepsiburadaScraper extends BaseProductScraper {
             const campEval = promoData['campaignEvaluateResult'];
             if (campEval) {
               const premiumResult = campEval['evaluateAsPremiumResult'];
-              if (premiumResult) {
+              if (premiumResult && this._isValidPremiumCampaignResult(premiumResult)) {
                 updateLowest(premiumResult['discountedPrice'], true, premiumResult['campaignText']);
               }
               const evalResult = campEval['evaluateResult'];
@@ -542,13 +572,13 @@ class HepsiburadaScraper extends BaseProductScraper {
       const itemTags = [];
       const rawItemTags = item['productTags'] || [];
       for (const tagObj of rawItemTags) {
-        if (tagObj && tagObj['tagId']) {
+        if (tagObj && tagObj['tagId'] && !this._isIgnoredHbTag(tagObj['tagId'])) {
           itemTags.push(tagObj['tagId'].toString());
         }
       }
       if (itemTags.length === 0 && item['paymentTag']) {
         const payTagStr = item['paymentTag'].toString();
-        itemTags.push(...payTagStr.split(',').map(s => s.trim()).filter(s => s.length > 0));
+        itemTags.push(...payTagStr.split(',').map(s => s.trim()).filter(s => s.length > 0 && !this._isIgnoredHbTag(s)));
       }
 
       const itemCampaignIds = [];
@@ -667,7 +697,7 @@ class HepsiburadaScraper extends BaseProductScraper {
               const campEval = promoData['campaignEvaluateResult'];
               if (campEval) {
                 const premiumResult = campEval['evaluateAsPremiumResult'];
-                if (premiumResult) {
+                if (premiumResult && this._isValidPremiumCampaignResult(premiumResult)) {
                   updateListingLowest(premiumResult['discountedPrice'], true, premiumResult['campaignText']);
                 }
                 const evalResult = campEval['evaluateResult'];

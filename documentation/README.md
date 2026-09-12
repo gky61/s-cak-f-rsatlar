@@ -337,6 +337,7 @@ documentation/
 │   ├── 📄 cloud_functions_rehberi.md                         # 26 Adet Cloud Function Detaylı Kullanım ve Tetikleme Rehberi
 │   ├── 📄 firestore_ve_storage_guvenlik_kurallari_rehberi.md # [YENİ] firestore.rules & storage.rules Güvenlik Mimarisi
 │   ├── 📄 environment_management_guide.md                    # DEV vs PROD Ortam Yönetimi ve Flavor El Kitabı
+│   ├── 📄 dev_prod_synchronization_and_audit_guide.md        # [MASTER REHBER] DEV vs PROD Eşitleme, 25 Noktalı Denetim ve Pre-Flight Checklist Kılavuzu
 │   ├── 📄 google_cloud_cost_analysis.md                      # GCP Maliyet Analizi ve Free Tier VM Tasarruf Raporu
 │   └── 📄 project_secrets_and_credentials_updated.md         # API Anahtarları, Oturumlar, Portlar ve Keystore Envanteri
 │

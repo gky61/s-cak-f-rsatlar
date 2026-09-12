@@ -81,8 +81,17 @@ service cloud.firestore {
       // Herkes onaylı fırsatları okuyabilir
       allow read: if true;
       
-      // Giriş yapmış ve engellenmemiş kullanıcılar fırsat ekleyebilir
-      allow create: if canWrite();
+      // Giriş yapmış ve engellenmemiş kullanıcılar fırsat ekleyebilir (deal ban kontrolü ve alan doğrulama)
+      allow create: if canWrite() && 
+                    !exists(/databases/$(database)/documents/dealBannedUsers/$(request.auth.uid)) &&
+                    (isAdmin() || (
+                      request.resource.data.postedBy == userId() &&
+                      request.resource.data.hotVotes == 0 &&
+                      request.resource.data.coldVotes == 0 &&
+                      (!('isEditorPick' in request.resource.data) || request.resource.data.isEditorPick == false) &&
+                      (!('isApproved' in request.resource.data) || request.resource.data.isApproved == false || 
+                       (exists(/databases/$(database)/documents/settings/app) && get(/databases/$(database)/documents/settings/app).data.dealApprovalRequired == false))
+                    ));
       
       // Sahibi veya admin tüm alanları güncelleyebilir.
       // Herhangi bir giriş yapmış kullanıcı sadece oy/yorum sayacı alanlarını güncelleyebilir.
@@ -112,7 +121,9 @@ service cloud.firestore {
       // Comments subcollection
       match /comments/{commentId} {
         allow read: if true;
-        allow create: if canWrite();
+        allow create: if canWrite() && 
+                      !exists(/databases/$(database)/documents/commentBannedUsers/$(request.auth.uid)) &&
+                      request.resource.data.userId == userId();
         allow update: if canWrite() && 
                       (resource.data.userId == userId() || 
                        isAdmin() ||
@@ -239,10 +250,9 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     
-    // Comments collectionGroup rule for notifications/reports
+    // Comments collectionGroup rule for notifications/reports (Sadece okuma; yazma işlemleri /deals/{dealId}/comments yolundan denetlenir)
     match /{path=**}/comments/{commentId} {
       allow read: if true;
-      allow write: if canWrite();
     }
 
     // ========================================
@@ -296,8 +306,8 @@ service cloud.firestore {
     // USER DEVICES
     // ========================================
     match /userDevices/{deviceId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.uid == userId());
-      allow write: if canWrite() && (request.resource == null || request.resource.data.uid == userId()) && (resource == null || resource.data.uid == userId());
+      allow read: if isAdmin() || (isAuthenticated() && (resource == null || resource.data.uid == userId()));
+      allow write: if isAdmin() || (canWrite() && (request.resource == null || request.resource.data.uid == userId()) && (resource == null || resource.data.uid == userId()));
     }
 
     // ========================================

@@ -630,7 +630,13 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+                        SnackBar(
+                          content: Text('E-posta uygulaması başlatılamadı. Lütfen $email adresine yazın.'),
+                          backgroundColor: Colors.orange[800],
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          margin: const EdgeInsets.all(16),
+                        ),
                       );
                     }
                   }

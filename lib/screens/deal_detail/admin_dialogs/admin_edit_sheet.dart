@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../models/deal.dart';
@@ -82,8 +83,16 @@ void showAdminEditSheet({
   String selectedCategoryId = initialCategoryId;
   String? selectedSubCategory = deal.subCategory;
   bool isEditorPick = deal.isEditorPick;
-  bool isApproved = deal.isApproved ?? false;
-  bool isExpired = deal.isExpired;
+  String selectedStatus;
+  if (deal.isExpired) {
+    selectedStatus = 'expired';
+  } else if (deal.isRejected) {
+    selectedStatus = 'rejected';
+  } else if (deal.isApproved == true) {
+    selectedStatus = 'active';
+  } else {
+    selectedStatus = 'pending';
+  }
   bool isHidePrice = deal.hidePrice;
   bool isAmazonWarehouse = deal.isAmazonWarehouse;
   bool isSaving = false;
@@ -251,6 +260,12 @@ void showAdminEditSheet({
               }
             }
 
+            final status = selectedStatus;
+            final isApproved = (status == 'active');
+            final isRejected = (status == 'rejected');
+            final isExpired = (status == 'expired' || status == 'rejected');
+
+            final finalImageUrl = imageUrlController.text.trim();
             final updates = <String, dynamic>{
               'title': titleController.text.trim(),
               'description': descriptionController.text.trim(),
@@ -261,7 +276,7 @@ void showAdminEditSheet({
               'cleanUrl': finalCleanUrl.isNotEmpty ? finalCleanUrl : null,
               'link': finalLink,
               'url': finalLink,
-              'imageUrl': imageUrlController.text.trim(),
+              'imageUrl': finalImageUrl,
               'price': price ?? 0.0,
               'originalPrice': (originalPrice ?? 0) > 0 ? originalPrice : null,
               'discountRate': (discountRate ?? 0) > 0 ? discountRate : null,
@@ -270,11 +285,22 @@ void showAdminEditSheet({
               'ratingCount': parseInt(ratingCountController.text),
               'isEditorPick': isEditorPick,
               'isApproved': isApproved,
+              'isRejected': isRejected,
               'isExpired': isExpired,
+              'status': status,
               'hidePrice': isHidePrice,
               'isAmazonWarehouse': isAmazonWarehouse,
               'couponCode': couponCodeController.text.trim().isNotEmpty ? couponCodeController.text.trim().toUpperCase() : null,
+              'updatedAt': FieldValue.serverTimestamp(),
             };
+
+            if (finalImageUrl.isNotEmpty) {
+              updates['imageUrls'] = [finalImageUrl];
+            }
+
+            if (isApproved && (deal.isApproved != true || deal.isExpired)) {
+              updates['approvedAt'] = FieldValue.serverTimestamp();
+            }
 
             final success = await firestoreService.updateDeal(deal.id, updates);
 
@@ -856,7 +882,67 @@ void showAdminEditSheet({
                         // Section 6: Özellikler & Rozetler
                         _buildSectionCard(
                           isDark: isDark,
-                          title: 'Özellikler & Durum',
+                          title: 'Yayın Durumu (Moderasyon)',
+                          icon: Icons.traffic_rounded,
+                          children: [
+                            Text(
+                              'Fırsatın sistemdeki yayın ve moderasyon durumunu belirleyin:',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: isDark ? AppTheme.darkTextSecondary : Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _buildStatusChip(
+                                  label: 'Onay Bekliyor',
+                                  value: 'pending',
+                                  isSelected: selectedStatus == 'pending',
+                                  color: Colors.amber,
+                                  icon: Icons.pending_actions_rounded,
+                                  isDark: isDark,
+                                  onTap: () => setSheetState(() => selectedStatus = 'pending'),
+                                ),
+                                _buildStatusChip(
+                                  label: 'Yayında',
+                                  value: 'active',
+                                  isSelected: selectedStatus == 'active',
+                                  color: Colors.green,
+                                  icon: Icons.check_circle_rounded,
+                                  isDark: isDark,
+                                  onTap: () => setSheetState(() => selectedStatus = 'active'),
+                                ),
+                                _buildStatusChip(
+                                  label: 'Reddedildi',
+                                  value: 'rejected',
+                                  isSelected: selectedStatus == 'rejected',
+                                  color: Colors.red,
+                                  icon: Icons.cancel_rounded,
+                                  isDark: isDark,
+                                  onTap: () => setSheetState(() => selectedStatus = 'rejected'),
+                                ),
+                                _buildStatusChip(
+                                  label: 'Süresi Bitti',
+                                  value: 'expired',
+                                  isSelected: selectedStatus == 'expired',
+                                  color: Colors.orange,
+                                  icon: Icons.timer_off_rounded,
+                                  isDark: isDark,
+                                  onTap: () => setSheetState(() => selectedStatus = 'expired'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        _buildSectionCard(
+                          isDark: isDark,
+                          title: 'Öne Çıkarma & Rozet Ayarları',
                           icon: Icons.tune_rounded,
                           children: [
                             _buildSwitchTile(
@@ -876,24 +962,6 @@ void showAdminEditSheet({
                               activeColor: const Color(0xFFF57C00),
                               icon: Icons.star_rounded,
                               onChanged: (val) => setSheetState(() => isEditorPick = val),
-                            ),
-                            _buildSwitchTile(
-                              isDark: isDark,
-                              value: isApproved,
-                              title: 'Onaylı Fırsat',
-                              subtitle: 'Yayında görüntülenir',
-                              activeColor: Colors.green,
-                              icon: Icons.check_circle_rounded,
-                              onChanged: (val) => setSheetState(() => isApproved = val),
-                            ),
-                            _buildSwitchTile(
-                              isDark: isDark,
-                              value: isExpired,
-                              title: 'Fırsat Bitti (Pasif)',
-                              subtitle: 'Süresi bitenler sekmesine alır',
-                              activeColor: const Color(0xFFE53935),
-                              icon: Icons.timer_off_rounded,
-                              onChanged: (val) => setSheetState(() => isExpired = val),
                             ),
                           ],
                         ),
@@ -1155,7 +1223,7 @@ Widget _buildSwitchTile({
       onChanged: onChanged,
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      activeColor: activeColor,
+      activeThumbColor: activeColor,
       title: Row(
         children: [
           Icon(icon, size: 18, color: value ? activeColor : Colors.grey),
@@ -1183,6 +1251,66 @@ Widget _buildSwitchTile({
         ),
       ),
     ),
+    ),
+  );
+}
+
+Widget _buildStatusChip({
+  required String label,
+  required String value,
+  required bool isSelected,
+  required Color color,
+  required IconData icon,
+  required bool isDark,
+  required VoidCallback onTap,
+}) {
+  return Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color.withValues(alpha: isDark ? 0.25 : 0.12)
+              : (isDark ? AppTheme.darkSurface : Colors.white),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? color : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+            width: isSelected ? 1.8 : 1.0,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.18),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  )
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? color : (isDark ? Colors.grey[400] : Colors.grey[600]),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                color: isSelected ? (isDark ? Colors.white : color) : (isDark ? AppTheme.darkTextPrimary : Colors.black87),
+              ),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }

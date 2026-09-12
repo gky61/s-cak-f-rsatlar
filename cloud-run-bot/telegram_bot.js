@@ -1856,18 +1856,29 @@ server.listen(PORT, () => {
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
 });
 
-async function logErrorToFirestore(service, errorType, message, stack, severity = 'error') {
+async function logErrorToFirestore(service, errorType, message, stack, severity = 'error', options = {}) {
   try {
+    const environment = (process.env.NODE_ENV === 'production' || (process.env.PROJECT_ID && process.env.PROJECT_ID.includes('prod'))) ? 'prod' : 'dev';
+    const category = options.category || (service === 'bot' ? 'bot' : service);
+    const shortMsg = (message || '').substring(0, 80);
+    const fingerprint = `${service}_${category}_${errorType}_${shortMsg}`;
+
     await db.collection('systemErrors').add({
-      service: service,
-      errorType: errorType,
-      message: message,
-      stack: stack || null,
+      environment,
+      service,
+      category,
+      errorType: String(errorType || 'BotError'),
+      message: String(message || '').substring(0, 500),
+      stack: stack ? String(stack).substring(0, 2000) : null,
       status: 'unresolved',
-      severity: severity,
+      severity: severity || 'error',
+      fingerprint,
+      occurrenceCount: 1,
+      metadata: options.metadata || {},
+      lastOccurredAt: admin.firestore.FieldValue.serverTimestamp(),
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
-    console.log(`💾 Bot logu Firestore'a kaydedildi: [${service}] (${severity}) ${errorType}`);
+    console.log(`💾 Bot logu Firestore'a kaydedildi [${environment}]: [${service}] (${severity}) ${errorType}`);
   } catch (err) {
     console.error('❌ Bot logu Firestore\'a kaydedilemedi:', err.message);
   }

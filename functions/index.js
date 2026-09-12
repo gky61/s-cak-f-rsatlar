@@ -92,22 +92,7 @@ async function createModerationMessage({ type, userId, userName, content, dealId
   }
 }
 
-async function logErrorToFirestore(service, errorType, message, stack, severity = 'error') {
-  try {
-    await admin.firestore().collection('systemErrors').add({
-      service,
-      errorType,
-      message,
-      stack: stack || null,
-      status: 'unresolved',
-      severity,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    functions.logger.info(`💾 Log Firestore'a kaydedildi: [${service}] (${severity}) ${errorType}`);
-  } catch (err) {
-    functions.logger.error('❌ Log Firestore\'a kaydedilemedi:', err.message);
-  }
-}
+const { logErrorToFirestore } = require('./error_logger');
 
 // Higher-order function to wrap Firestore/PubSub trigger callbacks
 function wrapTrigger(name, handler) {
@@ -116,7 +101,10 @@ function wrapTrigger(name, handler) {
       return await handler(arg1, arg2);
     } catch (error) {
       functions.logger.error(`❌ [Trigger Error] ${name}:`, error.message);
-      await logErrorToFirestore('functions', `${name} Trigger Error`, error.message, error.stack, 'error');
+      await logErrorToFirestore('backend', `${name} Trigger Error`, error.message, error.stack, 'error', {
+        category: 'backend',
+        subCategory: name
+      });
       throw error;
     }
   };
@@ -129,7 +117,10 @@ function wrapRequest(name, handler) {
       return await handler(req, res);
     } catch (error) {
       functions.logger.error(`❌ [Request Error] ${name}:`, error.message);
-      await logErrorToFirestore('functions', `${name} Request Error`, error.message, error.stack, 'error');
+      await logErrorToFirestore('backend', `${name} Request Error`, error.message, error.stack, 'error', {
+        category: 'backend',
+        subCategory: name
+      });
       if (!res.headersSent) {
         res.status(500).json({ success: false, error: error.message });
       }
@@ -149,7 +140,10 @@ function wrapCall(name, handler) {
       if (error instanceof functions.https.HttpsError) {
         throw error;
       }
-      await logErrorToFirestore('functions', `${name} Call Error`, error.message, error.stack, 'error');
+      await logErrorToFirestore('backend', `${name} Call Error`, error.message, error.stack, 'error', {
+        category: 'backend',
+        subCategory: name
+      });
       throw new functions.https.HttpsError('internal', error.message);
     }
   };
@@ -724,6 +718,65 @@ exports.onDealUpdated = functions.firestore
       }
     }
 
+    // 3. Oy / Sıcaklık Değişimi: hotVotes değiştiğinde fırsat sahibinin puanını ve beğenilerini güncelle
+    const oldHotVotes = Number(oldData.hotVotes) || 0;
+    const newHotVotes = Number(newData.hotVotes) || 0;
+    const diffHot = newHotVotes - oldHotVotes;
+
+    if (diffHot !== 0 && postedBy) {
+      try {
+        const diffPoints = diffHot * 2;
+        const diffLikes = diffHot * 1;
+        const userRef = admin.firestore().collection('users').doc(postedBy);
+
+        await userRef.set({
+          points: admin.firestore.FieldValue.increment(diffPoints),
+          totalLikes: admin.firestore.FieldValue.increment(diffLikes),
+        }, { merge: true });
+
+        // Güncel kullanıcı verilerini alıp otomatik rozet kontrolü yap
+        const userSnap = await userRef.get();
+        if (userSnap.exists) {
+          const uData = userSnap.data() || {};
+          const currentBadges = Array.isArray(uData.badges) ? uData.badges : [];
+          const pts = Number(uData.points) || 0;
+          const tLikes = Number(uData.totalLikes) || 0;
+          const dCount = Number(uData.dealCount) || 0;
+
+          const eligible = [];
+          // Fırsat Paylaşım Rozetleri
+          if (dCount >= 1) eligible.push('first_spark');
+          if (dCount >= 10) eligible.push('hunter_apprentice');
+          if (dCount >= 20) eligible.push('contributor');
+          if (dCount >= 50) eligible.push('master_hunter');
+          if (dCount >= 150) eligible.push('legendary_hunter');
+
+          // Puan & Sıcaklık Rozetleri
+          if (pts >= 15) eligible.push('bronze');
+          if (pts >= 35) eligible.push('voice_of_community');
+          if (pts >= 50) eligible.push('active_voter');
+          if (pts >= 100) eligible.push('silver');
+          if (pts >= 150) eligible.push('flame_master');
+          if (pts >= 300) eligible.push('gold');
+          if (pts >= 500) eligible.push('volcanic_record');
+
+          // Beğeni Rozetleri
+          if (tLikes >= 40) eligible.push('helpful');
+          if (tLikes >= 150) eligible.push('top_reviewer');
+
+          const newBadges = eligible.filter(b => !currentBadges.includes(b));
+          if (newBadges.length > 0) {
+            await userRef.update({
+              badges: admin.firestore.FieldValue.arrayUnion(...newBadges),
+            });
+            functions.logger.info(`🎉 Kullanıcı ${postedBy} yeni rozetler kazandı:`, newBadges);
+          }
+        }
+      } catch (voteScoreErr) {
+        functions.logger.error(`❌ Oy puanı/rozet güncelleme hatası (${postedBy}):`, voteScoreErr);
+      }
+    }
+
     return null;
   }));
 
@@ -864,6 +917,44 @@ exports.onCommentCreated = functions.firestore
       } catch (err) {
         functions.logger.error('❌ Yorum yanıt bildirimi oluşturulamadı:', err);
       }
+    }
+
+    // Fırsat sahibine kök yorum bildirimi gönder (kendi yorumu değilse)
+    try {
+      const dealDoc = await admin.firestore().collection('deals').doc(dealId).get();
+      if (dealDoc.exists) {
+        const dealData = dealDoc.data() || {};
+        const dealOwnerId = dealData.postedBy;
+        const replierUserId = comment.userId;
+
+        // Fırsat sahibi var, kendi kendine yorum yapmamış ve üstte yoruma cevap bildirimi alıcısı olmamışsa
+        if (dealOwnerId && dealOwnerId !== replierUserId && (!parentCommentId)) {
+          const dealTitle = dealData.title || 'Fırsat';
+          const notificationId = `deal_comment_${commentId}_${dealOwnerId}`;
+          const notificationRef = admin.firestore()
+            .collection('users')
+            .doc(dealOwnerId)
+            .collection('notifications')
+            .doc(notificationId);
+
+          const commentUserName = comment.userName || 'Bir kullanıcı';
+          await notificationRef.set({
+            type: 'comment',
+            reason: 'comment',
+            title: `💬 ${commentUserName} fırsatınıza yorum yaptı`,
+            body: commentText.length > 100 ? `${commentText.substring(0, 100)}...` : commentText,
+            dealId: dealId,
+            dealTitle: dealTitle,
+            commentId: commentId,
+            commentUserName: commentUserName,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            read: false
+          });
+          functions.logger.info(`✅ Fırsat sahibine kök yorum bildirimi Firestore'a yazıldı: ${dealOwnerId}`);
+        }
+      }
+    } catch (dealCommentErr) {
+      functions.logger.error('❌ Fırsat sahibine yorum bildirimi hatası:', dealCommentErr);
     }
 
     return null;
@@ -1326,6 +1417,9 @@ exports.onNotificationCreated = functions.firestore
       } else if (isCategoryNotif) {
         groupName = 'category';
         groupEnabled = isCategoryPrefEnabled;
+      } else if (notification.reason === 'author') {
+        groupName = 'author';
+        groupEnabled = isDealPrefEnabled;
       } else if (type === 'deal') {
         groupName = 'deal';
         groupEnabled = isDealPrefEnabled;
@@ -1383,10 +1477,13 @@ exports.onNotificationCreated = functions.firestore
       channelId = 'admin_messages_channel_v3';
       color = '#FF5722';
       title = `🛡️ ${title}`;
+    } else if (reason === 'author' || type === 'author') {
+      channelId = 'follow_channel';
+      color = '#4CAF50';
     } else if (type === 'keyword' || reason === 'keyword') {
       channelId = 'keyword_alerts_channel';
       color = '#FF9800';
-    } else if (type === 'comment_reply') {
+    } else if (type === 'comment_reply' || type === 'comment') {
       channelId = 'comment_replies_channel';
       color = '#2196F3';
     } else if (type === 'submission_status') {
@@ -1487,6 +1584,20 @@ exports.onNotificationCreated = functions.firestore
       sentAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
+
+    if (successCount > 0) {
+      try {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const statRef = admin.firestore().collection('notificationStats').doc(todayStr);
+        await statRef.set({
+          date: todayStr,
+          count: admin.firestore.FieldValue.increment(successCount),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      } catch (statErr) {
+        functions.logger.warn('⚠️ notificationStats update error:', statErr);
+      }
+    }
 
     functions.logger.info(`✅ Push gönderim süreci tamamlandı. Başarılı cihaz sayısı: ${successCount}/${devices.length}`);
     return null;
@@ -1929,7 +2040,9 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
     throw new functions.https.HttpsError('permission-denied', 'Bu işlem için yetkiniz yok.');
   }
 
-  const { title, body, imageUrl, targetType, targetValue } = data;
+  const { title, body, imageUrl, targetType, targetValue, dealId, notificationCategory } = data;
+  const notifType = notificationCategory === 'marketing' ? 'marketing' : 'admin_message';
+  const notifReason = notificationCategory === 'marketing' ? 'marketing' : 'admin_message';
 
   if (!title || !body) {
     throw new functions.https.HttpsError('invalid-argument', 'Başlık ve mesaj içeriği zorunludur.');
@@ -1942,15 +2055,17 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
       body: body
     },
     data: {
-      type: 'manual_notification',
+      type: notifType,
+      reason: notifReason,
       click_action: 'FLUTTER_NOTIFICATION_CLICK',
       title: title,
-      body: body
+      body: body,
+      dealId: dealId ? String(dealId) : ''
     },
     android: {
       priority: 'high',
       notification: {
-        channelId: 'sicak_firsatlar_general_v2',
+        channelId: notifType === 'admin_message' ? 'admin_messages_channel_v3' : 'sicak_firsatlar_general_v2',
         sound: 'default'
       }
     },
@@ -1976,7 +2091,7 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
   const sentAt = admin.firestore.FieldValue.serverTimestamp();
 
   try {
-    functions.logger.info(`🤖 Manuel bildirim gönderiliyor. Hedef: ${targetType}`);
+    functions.logger.info(`🤖 Manuel bildirim gönderiliyor. Hedef: ${targetType}, tür: ${notifType}, dealId: ${dealId || 'none'}`);
     let responseId = 'written_to_notifications';
 
     if (targetType === 'all') {
@@ -1994,10 +2109,12 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
           .doc(notificationId);
 
         batch.set(notificationRef, {
-          type: 'admin_message',
+          type: notifType,
+          reason: notifReason,
           title: title,
           body: body,
           imageUrl: imageUrl || null,
+          dealId: dealId || null,
           read: false,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
@@ -2027,10 +2144,12 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
         .doc(notificationId);
 
       await notificationRef.set({
-        type: 'admin_message',
+        type: notifType,
+        reason: notifReason,
         title: title,
         body: body,
         imageUrl: imageUrl || null,
+        dealId: dealId || null,
         read: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
@@ -2047,8 +2166,11 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
       title,
       body,
       imageUrl: imageUrl || null,
+      dealId: dealId || null,
       targetType,
       targetValue: targetValue || null,
+      type: notifType,
+      reason: notifReason,
       sentAt,
       sentBy,
       status: 'success',
@@ -2073,6 +2195,7 @@ exports.sendManualNotification = functions.https.onCall(wrapCall('sendManualNoti
       title,
       body,
       imageUrl: imageUrl || null,
+      dealId: dealId || null,
       targetType,
       targetValue: targetValue || null,
       sentAt,

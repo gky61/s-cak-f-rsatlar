@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/deal.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/asset_path_migration.dart';
-import '../../screens/profile_screen.dart';
-import '../../screens/botkolik_profile_screen.dart';
 import '../store_price_badge.dart';
 import 'deal_card_helpers.dart';
-import 'deal_card_badge.dart';
 import '../skeletons/shimmer_box.dart';
 
 class HorizontalDealCard extends StatefulWidget {
@@ -30,7 +25,6 @@ class HorizontalDealCard extends StatefulWidget {
 }
 
 class _HorizontalDealCardState extends State<HorizontalDealCard> {
-  bool _showVoteCount = false; // Oy sayısını göster/gizle
   bool _isHovered = false; // Hover durumu takibi
   bool _isPressed = false; // Dokunma durumu takibi
 
@@ -73,12 +67,15 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
     final deal = widget.deal;
     final isExpired = deal.isExpired;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).colorScheme.primary;
     final cardBgColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
-    final cardBorderColor = deal.isEditorPick 
-        ? Colors.orange[600]! 
-        : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1));
-    final borderWidth = deal.isEditorPick ? 2.2 : 1.5;
+    final cardBorderColor = deal.isRejected
+        ? const Color(0xFFEF4444)
+        : (deal.isApproved == false
+            ? const Color(0xFFF59E0B)
+            : (deal.isEditorPick 
+                ? Colors.orange[600]! 
+                : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1))));
+    final borderWidth = (deal.isRejected || deal.isApproved == false || deal.isEditorPick) ? 2.0 : 1.5;
 
     final inceleButton = ElevatedButton(
       onPressed: () => openProductLink(context, deal.link),
@@ -130,19 +127,19 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
           borderRadius: BorderRadius.circular(16), // rounded-2xl
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(
-                isDark 
+              color: Colors.black.withValues(
+                alpha: isDark 
                     ? (_isHovered ? 0.45 : 0.25) 
-                    : (_isHovered ? 0.10 : 0.06)
+                    : (_isHovered ? 0.10 : 0.06),
               ),
               blurRadius: _isHovered ? 24 : 16,
               offset: Offset(0, _isHovered ? 8 : 4),
             ),
             BoxShadow(
-              color: Colors.black.withOpacity(
-                isDark 
+              color: Colors.black.withValues(
+                alpha: isDark 
                     ? (_isHovered ? 0.25 : 0.15) 
-                    : (_isHovered ? 0.06 : 0.04)
+                    : (_isHovered ? 0.06 : 0.04),
               ),
               blurRadius: _isHovered ? 12 : 6,
               spreadRadius: _isHovered ? 2 : 1,
@@ -223,147 +220,76 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                     ),
                                   ),
                                 ),
-                          // 🔥 Fırsat Termometresi Emoji (Sol Alt) - Gerçek Zamanlı
-                          Positioned(
-                            bottom: 6,
-                            left: 6,
-                            child: StreamBuilder<DocumentSnapshot>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('deals')
-                                  .doc(deal.id)
-                                  .snapshots(),
-                              builder: (context, snapshot) {
-                                int hotVotes = deal.hotVotes;
-                                int coldVotes = deal.coldVotes;
-                                
-                                if (snapshot.hasData && snapshot.data!.exists) {
-                                  final data = snapshot.data!.data() as Map<String, dynamic>?;
-                                  hotVotes = data?['hotVotes'] ?? deal.hotVotes;
-                                  coldVotes = data?['coldVotes'] ?? deal.coldVotes;
-                                }
-                                
-                                final totalVotes = hotVotes + coldVotes;
-                                if (totalVotes == 0) return const SizedBox.shrink();
-                                
-                                return GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _showVoteCount = true;
-                                    });
-                                    // 2 saniye sonra emoji'ye geri dön
-                                    Future.delayed(const Duration(seconds: 2), () {
-                                      if (mounted) {
-                                        setState(() {
-                                          _showVoteCount = false;
-                                        });
-                                      }
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.75),
-                                      borderRadius: BorderRadius.circular(6),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.3),
-                                          blurRadius: 2,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ],
-                                    ),
-                                    child: _showVoteCount
-                                        ? Text(
-                                            '$totalVotes',
-                                            style: const TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w700,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : Text(
-                                            getThermometerEmoji(hotVotes, coldVotes),
-                                            style: const TextStyle(fontSize: 11),
-                                          ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          // İndirim Rozeti (Sağ Alt)
-                          if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
+                          // ─── TEK ROZET ALANI (Sol Üst) ─────────────────────────
+                          // Hiyerarşi: Reddedildi > İncelemede > KAÇTI > İndirim Oranı
+                          if (deal.isRejected)
                             Positioned(
-                              bottom: 6,
-                              right: 6,
+                              top: 6,
+                              left: 6,
+                              child: _buildBadgeCapsule(
+                                text: 'REDDEDİLDİ',
+                                icon: Icons.cancel_rounded,
+                                colors: const [Color(0xFFEF4444), Color(0xFFDC2626)],
+                              ),
+                            )
+                          else if (deal.isApproved == false)
+                            Positioned(
+                              top: 6,
+                              left: 6,
+                              child: _buildBadgeCapsule(
+                                text: 'İNCELEMEDE',
+                                icon: Icons.hourglass_top_rounded,
+                                colors: const [Color(0xFFF59E0B), Color(0xFFD97706)],
+                              ),
+                            )
+                          else if (isExpired)
+                            Positioned(
+                              top: 6,
+                              left: 6,
+                              child: _buildBadgeCapsule(
+                                text: 'KAÇTI',
+                                icon: Icons.hourglass_bottom_rounded,
+                                colors: const [Color(0xFFD32F2F), Color(0xFFC62828)],
+                              ),
+                            )
+                          else if (!deal.hidePrice && deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
+                            Positioned(
+                              top: 6,
+                              left: 6,
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                                 decoration: BoxDecoration(
-                                  color: isDark 
-                                      ? primaryColor.withValues(alpha: 0.9)
-                                      : const Color(0xFFE53935),
-                                  borderRadius: BorderRadius.circular(999),
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFFF4500), Color(0xFFDC2626)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: (isDark ? primaryColor : const Color(0xFFE53935)).withValues(alpha: 0.3),
-                                      blurRadius: 2,
-                                      offset: const Offset(0, 1),
+                                      color: const Color(0xFFDC2626).withValues(alpha: 0.35),
+                                      blurRadius: 3.5,
+                                      offset: const Offset(0, 1.5),
                                     ),
                                   ],
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.trending_down,
-                                      size: 10,
-                                      color: isDark ? Colors.black : Colors.white,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      '%${deal.effectiveDiscountRate}',
-                                      style: TextStyle(
-                                        color: isDark ? Colors.black : Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                  ],
+                                child: Text(
+                                  '%${deal.effectiveDiscountRate}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: -0.2,
+                                  ),
                                 ),
                               ),
                             ),
 
-                          // Favorite ve Comment Rozeti (Sağ Üst - Glassmorphism & Modern UI)
-                          Positioned(
-                            top: 6,
-                            right: 6,
-                            child: DealCardBadge(
-                              deal: deal,
-                              isDark: isDark,
-                            ),
-                          ),
-                          // SÜRESİ DOLDU Overlay
+                          // SÜRESİ DOLDU Yarı Saydam Kaplama (Sadece bitmişse)
                           if (isExpired)
                             Positioned.fill(
                               child: Container(
-                                color: Colors.black.withOpacity(0.4),
-                                child: Center(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red[700],
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text(
-                                      'SÜRESİ DOLDU',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                                color: Colors.black.withValues(alpha: 0.28),
                               ),
                             ),
                         ],
@@ -459,116 +385,6 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                               const SizedBox(width: 3.5),
                                               StorePriceBadge(deal: deal, compact: true),
                                             ],
-                                             // Profil Resmi (Botkolik veya Kullanıcı paylaşımı)
-                                             if (deal.isBotkolik) ...[
-                                               const SizedBox(width: 6),
-                                               InkWell(
-                                                 onTap: () {
-                                                   Navigator.push(
-                                                     context,
-                                                     MaterialPageRoute(
-                                                       builder: (_) => const BotkolikProfileScreen(),
-                                                     ),
-                                                   );
-                                                 },
-                                                 borderRadius: BorderRadius.circular(10),
-                                                 child: Container(
-                                                   width: 15,
-                                                   height: 15,
-                                                   decoration: BoxDecoration(
-                                                     shape: BoxShape.circle,
-                                                     border: Border.all(
-                                                       color: const Color(0xFF00F0FF).withValues(alpha: 0.8),
-                                                       width: 1,
-                                                     ),
-                                                     boxShadow: [
-                                                       BoxShadow(
-                                                         color: const Color(0xFF00F0FF).withValues(alpha: 0.25),
-                                                         blurRadius: 3,
-                                                       ),
-                                                     ],
-                                                   ),
-                                                   child: ClipOval(
-                                                     child: Image.asset(
-                                                       'assets/botkolik.webp',
-                                                       width: 15,
-                                                       height: 15,
-                                                       fit: BoxFit.cover,
-                                                     ),
-                                                   ),
-                                                 ),
-                                               ),
-                                             ] else if (deal.isUserSubmitted && deal.postedBy.isNotEmpty) ...[
-                                                const SizedBox(width: 6),
-                                                InkWell(
-                                                  key: ValueKey('user_avatar_list_widget_${deal.postedBy}'),
-                                                  onTap: () {
-                                                    Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (_) => ProfileScreen(userId: deal.postedBy),
-                                                      ),
-                                                    );
-                                                  },
-                                                  child: ClipOval(
-                                                    child: Builder(
-                                                      builder: (context) {
-                                                        final avatarUrl = migrateAssetPath(deal.postedByAvatar ?? '');
-                                                        final primaryCol = Theme.of(context).colorScheme.primary;
-                                                        if (avatarUrl.isNotEmpty) {
-                                                          if (avatarUrl.startsWith('assets/')) {
-                                                            return Image.asset(
-                                                              avatarUrl,
-                                                              width: 14,
-                                                              height: 14,
-                                                              fit: BoxFit.cover,
-                                                              errorBuilder: (context, error, stackTrace) => Container(
-                                                                width: 14,
-                                                                height: 14,
-                                                                decoration: BoxDecoration(
-                                                                  color: primaryCol.withValues(alpha: 0.1),
-                                                                  shape: BoxShape.circle,
-                                                                ),
-                                                                child: Icon(Icons.person, size: 9, color: primaryCol),
-                                                              ),
-                                                            );
-                                                          }
-                                                          return CachedNetworkImage(
-                                                            imageUrl: avatarUrl,
-                                                            width: 14,
-                                                            height: 14,
-                                                            fit: BoxFit.cover,
-                                                            memCacheWidth: 28,
-                                                            memCacheHeight: 28,
-                                                            fadeInDuration: const Duration(milliseconds: 150),
-                                                            placeholder: (context, url) => Container(
-                                                              width: 14,
-                                                              height: 14,
-                                                              color: primaryCol.withValues(alpha: 0.1),
-                                                              child: Icon(Icons.person, size: 9, color: primaryCol),
-                                                            ),
-                                                            errorWidget: (context, url, error) => Container(
-                                                              width: 14,
-                                                              height: 14,
-                                                              color: primaryCol.withValues(alpha: 0.1),
-                                                              child: Icon(Icons.person, size: 9, color: primaryCol),
-                                                            ),
-                                                          );
-                                                        }
-                                                        return Container(
-                                                          width: 14,
-                                                          height: 14,
-                                                          decoration: BoxDecoration(
-                                                            color: primaryCol.withValues(alpha: 0.1),
-                                                            shape: BoxShape.circle,
-                                                          ),
-                                                          child: Icon(Icons.person, size: 9, color: primaryCol),
-                                                        );
-                                                      },
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
                                           ],
                                         ),
                                       ),
@@ -598,72 +414,130 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                     ),
                                     // Kırmızı çizgi (expiredVotes >= 15 veya isExpired ise)
                                     if (isExpired || deal.expiredVotes >= 15)
-                                      Positioned.fill(
+                                      const Positioned.fill(
                                         child: CustomPaint(
-                                          painter: const StrikeThroughPainter(),
+                                          painter: StrikeThroughPainter(),
                                         ),
                                       ),
                                   ],
                                 ),
                               ),
-                              // Rating (Başlık altında)
-                              if (deal.ratingValue != null || deal.ratingCount != null) ...[
-                                const SizedBox(height: 5),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.star_rounded,
-                                      size: 13,
-                                      color: Color(0xFFFFB800),
-                                    ),
-                                    const SizedBox(width: 2),
-                                    if (deal.ratingValue != null)
-                                      Text(
-                                        deal.ratingValue!.toStringAsFixed(1),
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
-                                        ),
-                                      ),
-                                    if (deal.ratingCount != null) ...[
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        '(${deal.ratingCount})',
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w500,
-                                          color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ],
+                              // Rating, Sosyal Kanıt, Saat & Termometre (Başlık altında)
+                              const SizedBox(height: 3.5),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  // Sol taraf: Değerlendirme puanı ve altındaki saat bilgisi (veya sadece saat)
+                                  Flexible(
+                                    child: deal.ratingValue != null
+                                        ? Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              // 1. Değerlendirme Puanı
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.star_rounded,
+                                                    size: 13,
+                                                    color: Color(0xFFFFB800),
+                                                  ),
+                                                  const SizedBox(width: 1.5),
+                                                  Text(
+                                                    deal.ratingValue!.toStringAsFixed(1),
+                                                    style: TextStyle(
+                                                      fontSize: 9.5,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
+                                                      height: 1.1,
+                                                    ),
+                                                  ),
+                                                  if (deal.ratingCount != null) ...[
+                                                    const SizedBox(width: 1.5),
+                                                    Text(
+                                                      '(${deal.ratingCount})',
+                                                      style: TextStyle(
+                                                        fontSize: 8.5,
+                                                        fontWeight: FontWeight.w500,
+                                                        color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                                        height: 1.1,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                              const SizedBox(height: 2),
+                                              // 2. Saat Bilgisi (Değerlendirmenin hemen altında)
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.access_time_rounded,
+                                                    size: 9.5,
+                                                    color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                                  ),
+                                                  const SizedBox(width: 2.5),
+                                                  Text(
+                                                    formatRelativeTime(deal.createdAt),
+                                                    style: TextStyle(
+                                                      fontSize: 8.5,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                                      height: 1.1,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          )
+                                        : Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.access_time_rounded,
+                                                size: 10,
+                                                color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                              ),
+                                              const SizedBox(width: 3),
+                                              Flexible(
+                                                child: Text(
+                                                  formatRelativeTime(deal.createdAt),
+                                                  style: TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                  ),
+                                  const SizedBox(width: 8),
+
+                                  // Sağ taraf: Yorum Rozeti (Daima en sağda ve cetvel hizasında)
+                                  buildDealCommentBadge(
+                                    count: deal.commentCount,
+                                    isDark: isDark,
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                           // Alt kısım: Fiyat ve Buton (Ortak Düzen)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Fiyat ve İncele butonu daima aynı row'da ve dikeyde ortalıdır
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  crossAxisAlignment: CrossAxisAlignment.center, // Tam dikey hizalama
-                                  children: [
-                                    Expanded(
-                                      child: _buildPriceAndBadgeSection(isDark, isExpired),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    inceleButton,
-                                  ],
-                                ),
-                              ],
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center, // Tam dikey hizalama
+                            children: [
+                              Expanded(
+                                child: _buildPriceAndBadgeSection(isDark, isExpired),
+                              ),
+                              const SizedBox(width: 8),
+                              inceleButton,
+                            ],
                           ),
                         ],
                       ),
@@ -678,4 +552,49 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
     ),
   );
 }
+
+  Widget _buildBadgeCapsule({
+    required String text,
+    required IconData icon,
+    required List<Color> colors,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withValues(alpha: 0.35),
+            blurRadius: 3.5,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 9,
+            color: Colors.white,
+          ),
+          const SizedBox(width: 2.5),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

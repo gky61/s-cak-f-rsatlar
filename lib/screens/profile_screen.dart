@@ -79,7 +79,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     final dealsUserId = widget.userId ?? _authService.currentUser?.uid;
     if (dealsUserId != null) {
-      _userDealsStream = _firestoreService.getUserDealsStream(dealsUserId, limit: 5);
+      _userDealsStream = _firestoreService.getUserDealsStream(
+        dealsUserId,
+        limit: 5,
+        onlyApproved: !_isOwnProfile,
+      );
     }
     
     if (_isOwnProfile) {
@@ -322,10 +326,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       _log('Kullanıcı bilgisi yükleme hatası: $e');
       if (mounted) {
+        final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Kullanıcı bilgileri yüklenirken hata: ${e.toString().length > 50 ? "${e.toString().substring(0, 50)}..." : e}'),
-            backgroundColor: Colors.orange,
+            content: Text('Kullanıcı bilgileri yüklenemedi: $cleanMsg'),
+            backgroundColor: Colors.orange.shade800,
+            behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -548,12 +554,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       _log('❌ Profil resmi güncelleme hatası: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showFloatingSnackBar('Profil resmi güncellenirken bir sorun oluştu. Lütfen tekrar deneyin.', isSuccess: false);
       }
     } finally {
       if (mounted) {
@@ -700,21 +701,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       _log('Kullanıcı adı güncelleme hatası: $e');
       if (mounted) {
-        // Hata mesajını daha kullanıcı dostu hale getir
-        String errorMessage = 'Kullanıcı adı güncellenirken bir hata oluştu';
+        String errorMessage = 'Kullanıcı adı güncellenirken bir sorun oluştu. Lütfen tekrar deneyin.';
         if (e.toString().contains('PigeonUserInfo')) {
           errorMessage = 'Kullanıcı adı güncellendi, ancak bazı bilgiler güncellenemedi. Lütfen uygulamayı yeniden başlatın.';
-        } else if (e.toString().length < 100) {
-          errorMessage = 'Hata: $e';
+        } else if (e.toString().contains('already-in-use') || e.toString().contains('kullanımda')) {
+          errorMessage = 'Bu kullanıcı adı zaten kullanılmaktadır.';
         }
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        _showFloatingSnackBar(errorMessage, isSuccess: false);
       }
     } finally {
       if (mounted) {
@@ -1855,7 +1848,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 12),
         StreamBuilder<List<Deal>>(
-          stream: _userDealsStream ?? _firestoreService.getUserDealsStream(userId, limit: 5),
+          stream: _userDealsStream ?? _firestoreService.getUserDealsStream(userId, limit: 5, onlyApproved: !_isOwnProfile),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Column(
@@ -2491,12 +2484,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       _log('Rozet ekleme hatası: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showFloatingSnackBar('Rozet eklenirken bir sorun oluştu.', isSuccess: false);
       }
     }
   }
@@ -2527,12 +2515,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       _log('Rozet kaldırma hatası: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showFloatingSnackBar('Rozet kaldırılırken bir sorun oluştu.', isSuccess: false);
       }
     }
   }
@@ -2820,7 +2803,8 @@ class _OtherUserActionBarWidgetState extends State<_OtherUserActionBarWidget> {
           _isFollowing = !nextFollowing;
           _isFollowNotificationEnabled = !nextFollowing;
         });
-        _showFloatingSnackBar('İşlem başarısız oldu: $e', isSuccess: false);
+        final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
+        _showFloatingSnackBar('İşlem gerçekleştirilemedi: $cleanMsg', isSuccess: false);
       }
     }
   }
@@ -2855,7 +2839,8 @@ class _OtherUserActionBarWidgetState extends State<_OtherUserActionBarWidget> {
         setState(() {
           _isFollowNotificationEnabled = !nextNotification;
         });
-        _showFloatingSnackBar('İşlem başarısız oldu: $e', isSuccess: false);
+        final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
+        _showFloatingSnackBar('Bildirim ayarı güncellenemedi: $cleanMsg', isSuccess: false);
       }
     }
   }

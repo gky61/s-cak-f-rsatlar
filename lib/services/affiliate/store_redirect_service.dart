@@ -136,8 +136,23 @@ class StoreRedirectService {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Mağaza bağlantısı açılamadı: $e'),
-            backgroundColor: Colors.red,
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Mağaza bağlantısı açılamadı. Lütfen bağlantınızı kontrol edip tekrar deneyin.',
+                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFC62828),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 4),
           ),
         );
       }

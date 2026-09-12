@@ -11,6 +11,8 @@ import 'user_service.dart';
 import 'message_service.dart';
 import 'comment_service.dart';
 
+export 'deal_service.dart' show DealSubmitResult;
+
 /// Bu sınıf artık bir Facade (Ön Yüz) görevi görmektedir.
 /// Tüm karmaşık işlemler alt servislere (DealService, UserService vb.) dağıtılmıştır.
 class FirestoreService {
@@ -64,7 +66,7 @@ class FirestoreService {
       return docRef.id;
   }
 
-  Future<String?> createDeal({
+  Future<DealSubmitResult?> createDeal({
     required String title,
     required String description,
     required double price,
@@ -110,7 +112,27 @@ class FirestoreService {
   
   Future<bool> markDealAsExpired(String dealId) => _dealService.markDealAsExpired(dealId);
   
-  Future<bool> unexpireDeal(String dealId) => _dealService.unexpireDeal(dealId);
+  Future<bool> unexpireDeal(
+    String dealId, {
+    bool refreshTimestamp = false,
+    bool hidePrice = false,
+    bool isEditorPick = false,
+  }) =>
+      _dealService.unexpireDeal(
+        dealId,
+        refreshTimestamp: refreshTimestamp,
+        hidePrice: hidePrice,
+        isEditorPick: isEditorPick,
+      );
+
+  Future<bool> unexpireDealsBatch(
+    List<String> dealIds, {
+    bool refreshTimestamp = false,
+  }) =>
+      _dealService.unexpireDealsBatch(
+        dealIds,
+        refreshTimestamp: refreshTimestamp,
+      );
   
   Future<void> deleteOldDeals() async {
     try {
@@ -141,12 +163,15 @@ class FirestoreService {
     // DealService tarafında implemente edilebilir veya burada kalabilir.
   }
 
-  Stream<List<Deal>> getUserDealsStream(String userId, {int? limit}) {
+  Stream<List<Deal>> getUserDealsStream(String userId, {int? limit, bool onlyApproved = false}) {
     return firestore.collection('deals')
         .where('postedBy', isEqualTo: userId)
         .snapshots()
         .map((s) {
-          final list = s.docs.map((d) => Deal.fromFirestore(d)).toList();
+          var list = s.docs.map((d) => Deal.fromFirestore(d)).toList();
+          if (onlyApproved) {
+            list = list.where((d) => d.isApproved == true && d.isTest != true).toList();
+          }
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           if (limit != null) {
             return list.take(limit).toList();
@@ -155,9 +180,10 @@ class FirestoreService {
         });
   }
 
-  /// Botkolik tarafından paylaşılan (otonom kazınan) tüm fırsatların akışı
+  /// Botkolik tarafından paylaşılan (otonom kazınan) onaylı tüm fırsatların akışı
   Stream<List<Deal>> getBotkolikDealsStream({int? limit, String? categoryId}) {
     Query query = firestore.collection('deals')
+        .where('isApproved', isEqualTo: true)
         .where('isUserSubmitted', isEqualTo: false);
 
     if (categoryId != null && categoryId.isNotEmpty && categoryId != 'all') {
@@ -165,94 +191,15 @@ class FirestoreService {
     }
 
     return query.snapshots().map((s) {
-      final list = s.docs.map((d) => Deal.fromFirestore(d)).toList();
+      final list = s.docs
+          .map((d) => Deal.fromFirestore(d))
+          .where((deal) => deal.isTest != true)
+          .toList();
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (limit != null) {
         return list.take(limit).toList();
       }
       return list;
-    });
-  }
-
-  Stream<List<Deal>> getUserLastDealsStream(String userId, {int limit = 5}) {
-    return firestore.collection('users').doc(userId).snapshots().asyncMap((doc) async {
-      if (!doc.exists) return [];
-      
-      final data = doc.data();
-      final List<dynamic> rawList = data?['sonPaylasilanFirsatlar'] ?? [];
-      
-      final now = DateTime.now();
-      final cutoffTime = now.subtract(const Duration(hours: 48));
-      List<Deal> deals = [];
-      
-      for (var item in rawList) {
-        if (item is! Map) continue;
-        final dealId = item['firsatId']?.toString() ?? '';
-        if (dealId.isEmpty) continue;
-        
-        final title = item['baslik']?.toString() ?? '';
-        final priceStr = item['fiyat']?.toString() ?? '0';
-        final price = double.tryParse(priceStr) ?? 0.0;
-        final store = item['magazaAdi']?.toString() ?? '';
-        final link = item['link']?.toString() ?? '';
-        final paylasilmaTarihiTimestamp = item['paylasilmaTarihi'] as Timestamp?;
-        final paylasilmaTarihi = paylasilmaTarihiTimestamp?.toDate() ?? now;
-        final isOld = paylasilmaTarihi.isBefore(cutoffTime);
-        
-        final dealDoc = await firestore.collection('deals').doc(dealId).get();
-        if (dealDoc.exists) {
-          final deal = Deal.fromFirestore(dealDoc);
-          if (isOld || deal.isExpired || deal.createdAt.isBefore(cutoffTime)) {
-            deals.add(Deal(
-              id: deal.id,
-              title: deal.title,
-              description: deal.description,
-              price: deal.price,
-              originalPrice: deal.originalPrice,
-              discountRate: deal.discountRate,
-              store: deal.store,
-              category: deal.category,
-              subCategory: deal.subCategory,
-              link: deal.link,
-              imageUrl: deal.imageUrl,
-              hotVotes: deal.hotVotes,
-              coldVotes: deal.coldVotes,
-              expiredVotes: deal.expiredVotes,
-              commentCount: deal.commentCount,
-              postedBy: deal.postedBy,
-              createdAt: deal.createdAt,
-              isEditorPick: deal.isEditorPick,
-              isApproved: deal.isApproved,
-              isExpired: true,
-              isUserSubmitted: deal.isUserSubmitted,
-            ));
-          } else {
-            deals.add(deal);
-          }
-        } else {
-          final savedImageUrl = (item['imageUrl'] ?? item['gorselUrl'] ?? item['image_url'])?.toString() ?? '';
-          deals.add(Deal(
-            id: dealId,
-            title: title,
-            description: 'Bu fırsatın süresi dolmuştur.',
-            price: price,
-            store: store,
-            category: 'tumu',
-            link: link,
-            imageUrl: savedImageUrl,
-            hotVotes: 0,
-            coldVotes: 0,
-            commentCount: 0,
-            postedBy: '',
-            createdAt: paylasilmaTarihi,
-            isEditorPick: false,
-            isApproved: true,
-            isExpired: true,
-            isUserSubmitted: false,
-          ));
-        }
-      }
-      return deals.take(limit).toList();
     });
   }
 
@@ -564,6 +511,7 @@ class FirestoreService {
   Stream<List<Message>> getAllMessagesStream() => _messageService.getAllMessagesStream();
   Future<void> markMessageAsReadByAdmin(String id) => _messageService.markMessageAsReadByAdmin(id);
   Future<int> deleteAllMessages() => _messageService.deleteAllMessages();
+  Future<bool> deleteSingleMessage(String id) => _messageService.deleteSingleMessage(id);
 
   Future<void> setTypingStatus({required String currentUserId, required String otherUserId, required bool isTyping}) =>
       _messageService.setTypingStatus(currentUserId: currentUserId, otherUserId: otherUserId, isTyping: isTyping);

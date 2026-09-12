@@ -59,7 +59,7 @@ class DealCardBadge extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Alev Göstergesi (Canlı Turuncu)
-          Icon(
+          const Icon(
             Icons.local_fire_department_rounded,
             size: 13,
             color: flameColor,

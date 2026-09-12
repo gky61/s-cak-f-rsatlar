@@ -63,6 +63,61 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           ),
         );
       }
+    } else if (type == 'submission_status') {
+      final status = item['status'] as String? ?? '';
+      if (status == 'approved' && dealId.isNotEmpty && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DealDetailScreen(dealId: dealId),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        final isApproved = status == 'approved';
+        await showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  isApproved ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                  color: isApproved ? Colors.green : Colors.red,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    item['title'] as String? ?? 'Fırsat Durumu',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (item['createdAt'] != null)
+                    Text(
+                      _formatDateTime(item['createdAt'] as DateTime),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  const SizedBox(height: 12),
+                  Text(item['body'] as String? ?? ''),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Tamam'),
+              ),
+            ],
+          ),
+        );
+      }
     } else if (type == 'admin_message') {
       if (mounted) {
         Navigator.push(
@@ -233,7 +288,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         final items = allItems.where((item) {
           final type = item['type'] as String;
           if (_selectedTab == 'admin') {
-            return type == 'admin_message' || type == 'admin' || type == 'marketing' || type == 'manual_notification';
+            return type == 'admin_message' || type == 'admin' || type == 'marketing' || type == 'manual_notification' || type == 'submission_status';
           } else if (_selectedTab == 'replies') {
             return type == 'comment_reply' || type == 'comment';
           }
@@ -278,7 +333,15 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             Color iconColor = Colors.orange;
             Color iconBg = isDark ? Colors.orange.withValues(alpha: 0.15) : Colors.orange[50]!;
 
-            if (type == 'comment_reply' || type == 'comment') {
+            if (type == 'submission_status') {
+              final status = item['status'] as String? ?? '';
+              final isAppr = status == 'approved';
+              icon = isAppr ? Icons.check_circle_outline_rounded : Icons.cancel_outlined;
+              iconColor = isAppr ? Colors.green : Colors.red;
+              iconBg = isDark
+                  ? (isAppr ? Colors.green.withValues(alpha: 0.15) : Colors.red.withValues(alpha: 0.15))
+                  : (isAppr ? Colors.green[50]! : Colors.red[50]!);
+            } else if (type == 'comment_reply' || type == 'comment') {
               icon = Icons.reply_rounded;
               iconColor = Colors.green;
               iconBg = isDark ? Colors.green.withValues(alpha: 0.15) : Colors.green[50]!;
@@ -557,10 +620,12 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       } catch (e) {
         if (mounted) {
           Navigator.pop(context); // Close loading dialog
+          final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Hata: $e'),
+              content: Text('Bildirim gönderilirken hata oluştu: $cleanMsg'),
               backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 3),
             ),
           );

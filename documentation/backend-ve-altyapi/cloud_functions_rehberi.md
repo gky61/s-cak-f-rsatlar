@@ -252,6 +252,65 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **26 
 
 ---
 
+## 🌐 3. Çoklu Ortam (DEV vs PROD) Çift Dağıtım ve İzolasyon Mimarisi
+
+> [!IMPORTANT]
+> **Sıfır Sızıntı ve Bağımsız Çift Dağıtım (Duplicate Deployment) Sözleşmesi:**
+> FırsatKolik backend mimarisinde Cloud Functions servisleri **iki ortam arasında asla paylaşılmaz / ortak havuzda çalıştırılmaz**.
+> Her iki Firebase projesi (`sicak-firsatlar-e6eae` ve `firsatkolik-prod-e6eae`), tamamen aynı `functions/index.js` kod tabanından beslenen ancak **tamamen bağımsız çalışan 26'şar adet bulut fonksiyonuna** sahiptir (Platform genelinde toplam 52 izole fonksiyon instance'ı barındırılır).
+
+```mermaid
+graph TD
+    subgraph DEV_Environment["⚙️ DEV Ortamı (GCP: sicak-firsatlar-e6eae)"]
+        DevFirestore[(🔥 DEV Firestore)] -->|Tetikleyici| DevTriggers[⚡ DEV 26 Cloud Functions]
+        DevScheduler[⏰ DEV Cloud Scheduler] -->|Cron| DevTriggers
+        DevAdmin[💻 DEV Web Admin / Mobil Dev] -->|HTTPS Callable| DevTriggers
+        DevTriggers -->|İzole Log| DevLogs[📋 DEV GCP Cloud Logging]
+    end
+
+    subgraph PROD_Environment["🚀 PROD Ortamı (GCP: firsatkolik-prod-e6eae)"]
+        ProdFirestore[(🔥 PROD Firestore)] -->|Tetikleyici| ProdTriggers[⚡ PROD 26 Cloud Functions]
+        ProdScheduler[⏰ PROD Cloud Scheduler] -->|Cron| ProdTriggers
+        ProdAdmin[💻 PROD Web Admin / Mobil Prod] -->|HTTPS Callable| ProdTriggers
+        ProdTriggers -->|İzole Log| ProdLogs[📋 PROD GCP Cloud Logging]
+    end
+
+    DEV_Environment -.->|🚨 KESİNLİKLE ÇAPRAZ ETKİLEŞİM YOK| PROD_Environment
+```
+
+### 🔒 Ortam İzolasyonunun 5 Temel Güvencesi
+
+1. **Olay Tetikleme İzolasyonu (Trigger Isolation):**
+   * DEV mobil uygulamasından (`com.sicakfirsatlar.sicak_firsatlar`) paylaşılan bir test fırsatı, yalnızca DEV Firestore'una yazılır ve **yalnızca DEV `onDealCreated` fonksiyonunu tetikler**.
+   * PROD ortamındaki canlı kullanıcı hareketleri yalnızca PROD Firestore'una yazılır ve yalnızca PROD fonksiyonlarını çalıştırır. İki ortamın Firestore event pipeline'ı fiziksel olarak ayrı GCP projelerindedir.
+
+2. **Zamanlanmış Cron İzolasyonu (Scheduler Isolation):**
+   * `cleanupExpiredDeals`, `purgeOldDeals`, `cleanupOldImages`, `scrapeCouponsScheduled` ve `scrapeCatalogsScheduled` gibi cron görevleri, her iki projenin kendi **GCP Cloud Scheduler** konsolunda ayrı ayrı programlanmıştır.
+   * DEV cron'ları yalnızca DEV veritabanını tarar, temizler veya kazır. PROD cron'ları ise bağımsız olarak canlı verileri yönetir.
+
+3. **Kota, Bellek ve Maliyet Ayrımı:**
+   * Google Cloud Free Tier ve kullanım kotaları (aylık 2 milyon ücretsiz Cloud Function çağrısı, 400.000 GB-saniye CPU/bellek süresi) her proje için **ayrı ayrı hesaplanır**.
+   * DEV ortamında yapılan yoğun stres ve yük testleri, PROD ortamının kotalarını veya cold-start performansını asla etkilemez.
+
+4. **Gizli Değişkenler ve API Anahtarları (Secret Manager):**
+   * Gemini AI API anahtarları, Telegram Bot token'ları ve FCM servis hesapları her projenin kendi Secret Manager / ortam yapılandırmasında (`functions.config()` veya GCP Secret Manager) ayrı ayrı saklanır.
+
+5. **Dağıtım (Deployment) Sözleşmesi:**
+   * Bir fonksiyon güncellendiğinde, geliştirici `firebase-tools` CLI üzerinden ilgili projeyi açıkça hedefleyerek dağıtır:
+     ```bash
+     # DEV Ortamındaki 26 Fonksiyonu Güncelle
+     firebase use dev
+     firebase deploy --only functions
+
+     # PROD (Canlı) Ortamındaki 26 Fonksiyonu Güncelle
+     firebase use prod
+     firebase deploy --only functions
+     ```
+
+---
+
+## 📊 4. Fonksiyon Envanteri Özet Değerlendirmesi
+
 Yapılan detaylı kod taramasında:
 1. **Canlıda Aktif Kullanılanlar (21 Adet):** Trigger'lar, bildirim mekanizmaları, admin paneli butonları, cron görevleri ve botlar eksiksiz bir şekilde doğrudan projede çağrılmakta ve çalışmaktadır.
 2. **Manuel Test & Bakım Amaçlı Fonksiyonlar (4 Adet):**
@@ -259,3 +318,4 @@ Yapılan detaylı kod taramasında:
    * `generateTestData` & `cleanupTestData` (Geliştirici test araçları)
    * `purgeOldDealsManual` (Admin callable test ucu)
 3. **Sonuç:** Kod tabanında **tamamen unutulmuş veya ölü/zararlı hiçbir fonksiyon bulunmamaktadır**. Tüm fonksiyonlar ya canlı akışın bir parçasıdır ya da geliştirme/bakım aracı olarak görev yapmaktadır.
+

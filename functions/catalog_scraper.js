@@ -2,6 +2,7 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const cheerio = require('cheerio');
 const { spawnSync } = require('child_process');
+const { logErrorToFirestore } = require('./error_logger');
 
 const STORES = [
   { code: 'a101', name: 'A101', url: 'https://www.akakce.com/brosurler/a101', keywords: ['a101', 'a-101'] },
@@ -431,10 +432,18 @@ async function scrapeAndSaveCatalogs() {
       await new Promise(r => setTimeout(r, 300));
     } catch (storeErr) {
       functions.logger.error(`❌ Error scraping store ${store.name}:`, storeErr.message);
+      await logErrorToFirestore('catalogs_coupons', 'Catalog Store Scrape Error', storeErr.message, storeErr.stack, 'warning', {
+        category: 'catalogs_coupons',
+        subCategory: store.code,
+        metadata: { storeName: store.name, url: store.url }
+      });
     }
   }
 
   if (allScrapedCatalogs.length === 0) {
+    await logErrorToFirestore('catalogs_coupons', 'Catalog Scrape Zero Result', 'Akakçe üzerinden hiçbir katalog çekilemedi. WAF engeli veya DOM yapısı değişmiş olabilir.', null, 'error', {
+      category: 'catalogs_coupons'
+    });
     return { success: false, count: 0, message: 'Hiç katalog kazınamadı.' };
   }
 

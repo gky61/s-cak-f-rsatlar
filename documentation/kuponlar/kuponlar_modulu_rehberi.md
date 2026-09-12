@@ -42,14 +42,14 @@ graph TD
     
     %% 3. Mobil İstemci ve Oylama
     Firestore -->|Canlı Dinleme Stream| KuponlarPage[📱 KuponlarPage: 2 Sekmeli TabBar]
-    KuponlarPage -->|Sekme 1: Topluluk Kuponları| Tab1[👥 Topluluk Kuponları Listesi]
-    KuponlarPage -->|Sekme 2: Kupon Radarı| Tab2[🤖 Botkolik Kupon Radarı]
+    KuponlarPage -->|Sekme 1: Kupon Radarı| Tab1[🤖 Botkolik Kupon Radarı]
+    KuponlarPage -->|Sekme 2: Topluluk Kuponları| Tab2[👥 Topluluk Kuponları Listesi]
     UserVote[🗳️ Kullanıcı Oyu: Sıcak 🔥 / Soğuk ❄️] -->|0ms Optimistic UI + 300ms Debounce| VoteTx[⚡ Firestore Transaction: votes Subcollection]
     VoteTx -->|Net Skor <= -5 ise Web Sil / Topluluk Geçersiz Yap| Firestore
 ```
 
 ### Temel Mimari Prensipler:
-* **İki Sekmeli İzolasyon:** Kullanıcıların paylaştığı "Topluluk Kuponları" ile botların web'den topladığı "Kupon Radarı" tamamen izole sekmelerde sunulur.
+* **İki Sekmeli İzolasyon:** Botların web'den topladığı "Kupon Radarı" ile kullanıcıların paylaştığı "Topluluk Kuponları" tamamen izole sekmelerde sunulur.
 * **Topluluk Koruması (Fail-Safe):** Kazıma işlemi web kuponlarını yenilerken `kaynakTipi == 'topluluk'` olan kullanıcı paylaşımlarına asla dokunmaz.
 * **Akıllı Sıralama (Wilson Score & Time Decay):** Oylanan kuponlar güvenilirlik puanına göre en üste taşınır; çalışmayan kuponlar otomatik olarak listenin sonuna atılır veya silinir.
 * **İdempotent Oylama (Vote Idempotency):** Alt koleksiyon (`kuponlar/{id}/votes/{uid}`) ve Firestore Transaction mekanizması sayesinde mükerrer oy kullanımı engellenir.
@@ -71,11 +71,11 @@ Kuponlar arayüzü [KuponlarPage](file:///d:/firsatkolik/lib/screens/kuponlar_pa
 * **Spotlight Onboarding:** Uygulama içi spotlight rehberinde (`InAppTutorialService.kuponlarChipKey`) `#FF7A00` vurgusuyla tanıtılır.
 
 ### 2.2. İki Sekmeli Tab Yapısı (`TabController`)
-1. **👥 Topluluk Kuponları Sekmesi:** Yalnızca `kaynakTipi == 'topluluk'` olan kuponları listeler.
+1. **🤖 Kupon Radarı Sekmesi:** `kaynakTipi == 'web'` olan, sistemin internetten otomatik taradığı kuponları listeler.
+   - Üst kısımda kapatılabilir **Botkolik Radar Bilgilendirme Kartı** (`_buildRadarInfoBanner`) yer alır.
+2. **👥 Topluluk Kuponları Sekmesi:** Yalnızca `kaynakTipi == 'topluluk'` olan kuponları listeler.
    - Paylaşan kullanıcının adı `@kullaniciAdi` formatında gösterilir.
    - Sayfanın sağ altındaki Floating Action Button (`+ Kupon Paylaş`) üzerinden yeni kupon eklenir.
-2. **🤖 Kupon Radarı Sekmesi:** `kaynakTipi == 'web'` olan, sistemin internetten otomatik taradığı kuponları listeler.
-   - Üst kısımda kapatılabilir **Botkolik Radar Bilgilendirme Kartı** (`_buildRadarInfoBanner`) yer alır.
 
 ### 2.3. Kupon Kartı Bileşeni Mimarisi (`_buildCouponCard`)
 Her kupon kartı 3 ana bölümden oluşur:

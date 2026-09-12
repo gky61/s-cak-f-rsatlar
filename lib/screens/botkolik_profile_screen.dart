@@ -153,7 +153,8 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
           _isFollowing = !nextFollowing;
           _isFollowNotificationEnabled = !nextFollowing;
         });
-        _showFloatingSnackBar('İşlem başarısız oldu: $e', isSuccess: false);
+        final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
+        _showFloatingSnackBar('İşlem gerçekleştirilemedi: $cleanMsg', isSuccess: false);
       }
     }
   }
@@ -186,7 +187,8 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
         setState(() {
           _isFollowNotificationEnabled = !nextNotification;
         });
-        _showFloatingSnackBar('İşlem başarısız oldu: $e', isSuccess: false);
+        final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
+        _showFloatingSnackBar('Bildirim ayarı güncellenemedi: $cleanMsg', isSuccess: false);
       }
     }
   }

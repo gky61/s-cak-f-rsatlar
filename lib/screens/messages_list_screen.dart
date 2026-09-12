@@ -160,13 +160,20 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
 
           if (snapshot.hasError) {
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline_rounded, size: 52, color: Colors.red[400]),
-                  const SizedBox(height: 12),
-                  Text('Hata: ${snapshot.error}', style: TextStyle(color: Colors.red[400])),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline_rounded, size: 52, color: Colors.red[400]),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Mesajlar yüklenirken bir sorun oluştu.',
+                      style: TextStyle(color: Colors.red[400], fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -752,7 +759,13 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
         return true;
       } catch (e) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: const Text('Sohbet silinirken bir sorun oluştu. Lütfen tekrar deneyin.'),
+            backgroundColor: Colors.red[700],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ),
         );
         return false;
       }

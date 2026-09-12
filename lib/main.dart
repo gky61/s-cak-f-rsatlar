@@ -22,6 +22,7 @@ import 'services/ai_service.dart';
 import 'services/affiliate/affiliate_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/circular_theme_transition.dart';
+import 'services/system_log_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -171,6 +172,13 @@ void main() async {
     }
     FlutterError.presentError(details);
     FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    SystemLogService.instance.logError(
+      category: 'app_crash',
+      errorType: 'FlutterError',
+      message: details.exceptionAsString(),
+      stack: details.stack,
+      severity: SystemErrorSeverity.fatal,
+    );
   };
 
   try {
@@ -307,6 +315,13 @@ void main() async {
       print('Stack: $stack');
     }
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    SystemLogService.instance.logError(
+      category: 'app_crash',
+      errorType: 'ZonedGuardedUnhandledError',
+      message: error.toString(),
+      stack: stack,
+      severity: SystemErrorSeverity.fatal,
+    );
   });
 }
 

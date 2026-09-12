@@ -175,8 +175,9 @@ class _KuponFormPageState extends State<KuponFormPage> {
       }
     } catch (e) {
       if (mounted) {
+        final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
         _showCustomSnackBar(
-          message: 'Kupon kaydedilirken hata oluştu: $e',
+          message: 'Kupon kaydedilirken hata oluştu: $cleanMsg',
           icon: Icons.error_outline_rounded,
           backgroundColor: const Color(0xFFC62828),
           duration: const Duration(seconds: 4),

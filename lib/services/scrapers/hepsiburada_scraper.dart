@@ -327,6 +327,35 @@ class HepsiburadaScraper extends BaseProductScraper {
 
   // --- Private Helper Methods for API Calls ---
 
+  bool _isIgnoredHbTag(String tag) {
+    final lower = tag.toLowerCase().trim();
+    return lower.contains('premium-a-gec') ||
+           lower.contains('premiuma-gec') ||
+           lower.contains('premium-gec') ||
+           lower.contains('premiuma-gecis') ||
+           lower.contains('ilk-siparis') ||
+           lower.contains('yeni-uye');
+  }
+
+  bool _isValidPremiumCampaignResult(dynamic premiumResult) {
+    if (premiumResult == null) return false;
+    final campaigns = premiumResult['campaigns'] as List?;
+    if (campaigns != null && campaigns.isNotEmpty) {
+      for (final camp in campaigns) {
+        if (camp is Map) {
+          final name = (camp['name'] ?? '').toString().toLowerCase();
+          if (name.contains("premium'a geç") ||
+              name.contains("premiuma geç") ||
+              name.contains("premium'a katıl") ||
+              name.contains("premiuma katıl")) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
   Future<_HbApiPriceResult?> _fetchWithoutAffordabilityPrice(dom.Document document) async {
     final script = document.getElementById('reduxStore');
     if (script == null) return null;
@@ -394,7 +423,7 @@ class HepsiburadaScraper extends BaseProductScraper {
     if (tagList != null) {
       for (final item in tagList) {
         final tagId = item['tagId']?.toString();
-        if (tagId != null && tagId.isNotEmpty) {
+        if (tagId != null && tagId.isNotEmpty && !_isIgnoredHbTag(tagId)) {
           productTags.add(tagId);
         }
       }
@@ -501,7 +530,7 @@ class HepsiburadaScraper extends BaseProductScraper {
             final campEval = promoData['campaignEvaluateResult'];
             if (campEval != null) {
               final premiumResult = campEval['evaluateAsPremiumResult'];
-              if (premiumResult != null) {
+              if (premiumResult != null && _isValidPremiumCampaignResult(premiumResult)) {
                 final premiumPrice = double.tryParse(premiumResult['discountedPrice']?.toString() ?? '');
                 final cText = premiumResult['campaignText']?.toString();
                 updateLowest(premiumPrice, true, cText);
@@ -620,7 +649,7 @@ class HepsiburadaScraper extends BaseProductScraper {
         for (final tagObj in rawItemTags) {
           if (tagObj is Map) {
             final tagId = tagObj['tagId']?.toString();
-            if (tagId != null && tagId.isNotEmpty) {
+            if (tagId != null && tagId.isNotEmpty && !_isIgnoredHbTag(tagId)) {
               itemTags.add(tagId);
             }
           }
@@ -628,7 +657,7 @@ class HepsiburadaScraper extends BaseProductScraper {
       }
       if (itemTags.isEmpty && item['paymentTag'] != null) {
         final String payTagStr = item['paymentTag'].toString();
-        itemTags.addAll(payTagStr.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty));
+        itemTags.addAll(payTagStr.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty && !_isIgnoredHbTag(s)));
       }
 
       final List<int> itemCampaignIds = [];
@@ -753,7 +782,7 @@ class HepsiburadaScraper extends BaseProductScraper {
                 final campEval = promoData['campaignEvaluateResult'];
                 if (campEval != null) {
                   final premiumResult = campEval['evaluateAsPremiumResult'];
-                  if (premiumResult != null) {
+                  if (premiumResult != null && _isValidPremiumCampaignResult(premiumResult)) {
                     final premiumPrice = double.tryParse(premiumResult['discountedPrice']?.toString() ?? '');
                     final cText = premiumResult['campaignText']?.toString();
                     updateLowest(premiumPrice, true, cText);

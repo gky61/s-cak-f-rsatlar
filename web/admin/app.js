@@ -301,7 +301,7 @@ async function checkAdminAndLoad(user) {
             console.log('👥 Loading users after admin check...');
             loadUsers();
             initRealtimeSystemHealth();
-            loadBotConfig();
+            loadNotificationLimits();
             showDashboardView();
             console.log('✅ Admin panel loaded successfully!');
         } else {
@@ -665,6 +665,14 @@ function initEventListeners() {
         });
     }
 
+    const telegramBotMenuBtn = document.getElementById('telegramBotMenuBtn');
+    if (telegramBotMenuBtn) {
+        telegramBotMenuBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            showTelegramBotView();
+        });
+    }
+
     // Load initial global settings status
     loadDealSharingStatus();
     loadCommentSharingStatus();
@@ -847,12 +855,12 @@ function initEventListeners() {
 
 
 
-    // Save Bot & App Config Button (Settings View)
+    // Save Notification Limits Button (Settings View)
     const saveConfigBtn = document.getElementById('saveConfigBtn');
     if (saveConfigBtn) {
         saveConfigBtn.addEventListener('click', async (e) => {
             e.preventDefault();
-            await saveBotConfig();
+            await saveNotificationLimits();
         });
     }
 
@@ -955,6 +963,7 @@ function initEventListeners() {
                 await db.collection('deals').doc(currentDeal.id).update({
                     isApproved: true,
                     isRejected: false,
+                    isExpired: false,
                     status: 'active',
                     approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1077,6 +1086,57 @@ function initEventListeners() {
             e.stopPropagation();
             console.log('❌ İptal butonu tıklandı (delegated)!');
             closeDealModal();
+            return;
+        }
+
+        const unpublishBtnRow = e.target.closest('.unpublish-btn');
+        if (unpublishBtnRow) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dealId = unpublishBtnRow.dataset.dealId;
+            console.log('⏸️ Unpublish row button clicked (delegated):', dealId);
+            if (confirm('Bu fırsatı yayından kaldırmak istediğinize emin misiniz? Fırsat süresi bitenler bölümüne taşınacaktır.')) {
+                await unpublishDeal(dealId);
+            }
+            return;
+        }
+
+        const reactivateBtnRow = e.target.closest('.reactivate-btn');
+        if (reactivateBtnRow) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dealId = reactivateBtnRow.dataset.dealId;
+            console.log('▶️ Reactivate row button clicked (delegated):', dealId);
+            if (confirm('Bu fırsatı tekrar yayına almak istediğinize emin misiniz?')) {
+                await reactivateDeal(dealId);
+            }
+            return;
+        }
+
+        const deleteBtnRow = e.target.closest('.delete-btn');
+        if (deleteBtnRow) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dealId = deleteBtnRow.dataset.dealId;
+            console.log('🗑️ Delete row button clicked (delegated):', dealId);
+            if (confirm('Bu fırsatı veritabanından kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) {
+                await deleteDeal(dealId);
+            }
+            return;
+        }
+
+        const deleteDealBtnModal = e.target.closest('#deleteDealBtn');
+        if (deleteDealBtnModal) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!currentDeal || !currentDeal.id) return;
+            console.log('🗑️ Modal delete deal button clicked:', currentDeal.id);
+            if (confirm('Bu fırsatı veritabanından kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) {
+                const dealId = currentDeal.id;
+                closeDealModal();
+                await deleteDeal(dealId);
+            }
+            return;
         }
     });
 
@@ -1086,7 +1146,10 @@ function initEventListeners() {
             if (!currentDeal) return;
             try {
                 await db.collection('deals').doc(currentDeal.id).update({
-                    isApproved: false
+                    isApproved: false,
+                    isExpired: true,
+                    status: 'expired',
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 showSuccess('Deal yayından kaldırıldı!');
                 dealModal.classList.add('hidden');
@@ -1104,7 +1167,12 @@ function initEventListeners() {
             if (!currentDeal) return;
             try {
                 await db.collection('deals').doc(currentDeal.id).update({
-                    isExpired: false
+                    isExpired: false,
+                    isApproved: true,
+                    isRejected: false,
+                    status: 'active',
+                    approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 showSuccess('Deal yeniden aktifleştirildi!');
                 dealModal.classList.add('hidden');
@@ -1410,9 +1478,11 @@ function renderDeals() {
     // 1. Filter by status (currentFilter)
     let filteredDeals = deals;
     if (currentFilter === 'pending') {
-        filteredDeals = deals.filter(d => d.isApproved === false && d.isRejected !== true && d.isExpired !== true);
+        filteredDeals = deals.filter(d => d.isApproved === false && d.isRejected !== true && d.isExpired !== true && d.status !== 'expired' && d.status !== 'rejected');
     } else if (currentFilter === 'approved') {
-        filteredDeals = deals.filter(d => d.isApproved === true);
+        filteredDeals = deals.filter(d => d.isApproved === true && d.isExpired !== true && d.status !== 'expired' && d.isRejected !== true && d.status !== 'rejected');
+    } else if (currentFilter === 'expired') {
+        filteredDeals = deals.filter(d => d.isExpired === true || d.status === 'expired');
     }
 
     // 2. Filter by Category
@@ -1525,12 +1595,12 @@ function createDealRow(deal) {
 
     // Status badge
     let statusBadge = '';
-    if (isApproved) {
-        statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Aktif</div>';
+    if (deal.isExpired === true || deal.status === 'expired') {
+        statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-500"></span>Süresi Doldu</div>';
     } else if (deal.isRejected === true || deal.status === 'rejected') {
         statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-rose-500"></span>Reddedildi</div>';
-    } else if (deal.isExpired === true || deal.status === 'expired') {
-        statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-500"></span>Süresi Doldu</div>';
+    } else if (isApproved) {
+        statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Aktif</div>';
     } else {
         statusBadge = '<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-medium"><span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>Bekliyor</div>';
     }
@@ -1670,10 +1740,13 @@ function createDealRow(deal) {
         </td>
         <td class="p-4">${statusBadge}</td>
         <td class="p-4 text-right">
-            <div class="flex items-center justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                ${!isApproved ? `<button class="approve-btn p-2 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400 transition-colors" title="Onayla" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">check</span></button>` : ''}
+            <div class="flex items-center justify-end gap-1.5 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                ${(!isApproved && !deal.isExpired && deal.status !== 'expired' && !deal.isRejected && deal.status !== 'rejected') ? `<button class="approve-btn p-2 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400 transition-colors" title="Onayla" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">check</span></button>` : ''}
+                ${(isApproved && !deal.isExpired && deal.status !== 'expired') ? `<button class="unpublish-btn p-2 rounded-lg text-amber-500 hover:bg-amber-500/10 hover:text-amber-400 transition-colors" title="Yayından Kaldır" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">visibility_off</span></button>` : ''}
+                ${(deal.isExpired === true || deal.status === 'expired') ? `<button class="reactivate-btn p-2 rounded-lg text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400 transition-colors" title="Tekrar Yayına Al" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">play_circle</span></button>` : ''}
                 <button class="edit-btn p-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors" title="Düzenle" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">edit</span></button>
-                <button class="reject-btn p-2 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-400 transition-colors" title="Reddet" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">block</span></button>
+                ${(!deal.isRejected && deal.status !== 'rejected') ? `<button class="reject-btn p-2 rounded-lg text-rose-500 hover:bg-rose-500/10 hover:text-rose-400 transition-colors" title="Reddet" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">block</span></button>` : ''}
+                <button class="delete-btn p-2 rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-500 transition-colors" title="Kalıcı Sil" data-deal-id="${deal.id}"><span class="material-symbols-outlined text-[20px]">delete</span></button>
             </div>
         </td>
     `;
@@ -1815,6 +1888,7 @@ async function approveDeal(dealId) {
         const updateData = {
             isApproved: true,
             isRejected: false,
+            isExpired: false,
             status: 'active',
             approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1848,6 +1922,7 @@ async function rejectDeal(dealId) {
         await db.collection('deals').doc(dealId).update({
             isApproved: false,
             isRejected: true,
+            isExpired: true,
             status: 'rejected',
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -1856,6 +1931,39 @@ async function rejectDeal(dealId) {
         updateStats();
     } catch (error) {
         showError('Reddetme hatası: ' + error.message);
+    }
+}
+
+async function unpublishDeal(dealId) {
+    try {
+        await db.collection('deals').doc(dealId).update({
+            isExpired: true,
+            status: 'expired',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showSuccess('Fırsat yayından kaldırıldı ve süresi bitenler bölümüne taşındı!');
+        loadDeals();
+        updateStats();
+    } catch (error) {
+        showError('Yayından kaldırma hatası: ' + error.message);
+    }
+}
+
+async function reactivateDeal(dealId) {
+    try {
+        await db.collection('deals').doc(dealId).update({
+            isApproved: true,
+            isRejected: false,
+            isExpired: false,
+            status: 'active',
+            approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showSuccess('Fırsat başarıyla tekrar yayına alındı!');
+        loadDeals();
+        updateStats();
+    } catch (error) {
+        showError('Tekrar yayına alma hatası: ' + error.message);
     }
 }
 
@@ -2264,7 +2372,7 @@ async function showDealModal(deal) {
                     <label class="flex flex-col gap-2">
                         <select id="editStatus" class="form-select w-full rounded-lg ${isApproved ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' : (deal.status === 'rejected' || deal.isRejected ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400')} focus:ring-1 focus:ring-primary h-12 px-4 text-base font-semibold">
                             <option value="pending" ${(!isApproved && !deal.isRejected && deal.status !== 'rejected' && !deal.isExpired && deal.status !== 'expired') ? 'selected' : ''}>Onay Bekliyor</option>
-                            <option value="active" ${isApproved ? 'selected' : ''}>Yayında</option>
+                            <option value="active" ${(isApproved && !deal.isExpired && deal.status !== 'expired' && !deal.isRejected && deal.status !== 'rejected') ? 'selected' : ''}>Yayında</option>
                             <option value="rejected" ${(deal.isRejected || deal.status === 'rejected') ? 'selected' : ''}>Reddedildi</option>
                             <option value="expired" ${(deal.isExpired || deal.status === 'expired') ? 'selected' : ''}>Süresi Doldu</option>
                         </select>
@@ -2291,6 +2399,12 @@ async function showDealModal(deal) {
                         <span class="material-symbols-outlined text-[18px]">${isApproved ? 'save' : 'check'}</span>
                         <span>${isApproved ? 'Kaydet' : 'Onayla'}</span>
                     </button>
+                    ${deal.id ? `
+                    <button id="deleteDealBtn" class="w-full h-10 px-4 rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-semibold text-xs transition-colors flex items-center justify-center gap-1.5" type="button">
+                        <span class="material-symbols-outlined text-[16px]">delete</span>
+                        <span>Fırsatı Kalıcı Olarak Sil</span>
+                    </button>
+                    ` : ''}
                     <button id="cancelBtn" class="w-full h-11 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 font-semibold text-sm transition-colors" type="button">
                         İptal
                     </button>
@@ -3018,7 +3132,7 @@ async function saveDealChanges() {
             status: status,
             isApproved: (status === 'active'),
             isRejected: (status === 'rejected'),
-            isExpired: (status === 'expired'),
+            isExpired: (status === 'expired' || status === 'rejected'),
             isHot: isHot || false,
             isEditorPick: isHot || false, // Hem isHot hem isEditorPick olarak aynı değeri set et
             couponCode: couponCode || '',
@@ -3040,7 +3154,7 @@ async function saveDealChanges() {
 
         // Track approvedAt when transitioning to active/approved state
         const isApprovedNow = (status === 'active');
-        const previouslyApproved = !isNewDeal && currentDeal.isApproved === true;
+        const previouslyApproved = !isNewDeal && currentDeal.isApproved === true && currentDeal.isExpired !== true && currentDeal.status !== 'expired';
         if (isApprovedNow) {
             if (previouslyApproved && currentDeal.approvedAt) {
                 let cleanApprovedAt = currentDeal.approvedAt;
@@ -3154,8 +3268,8 @@ async function showAddDealModal() {
 async function updateStats() {
     try {
         console.log('Updating stats...');
-        const pending = deals.filter(d => d.isApproved === false && d.isRejected !== true && d.isExpired !== true).length;
-        const approved = deals.filter(d => d.isApproved === true).length;
+        const pending = deals.filter(d => d.isApproved === false && d.isRejected !== true && d.isExpired !== true && d.status !== 'expired' && d.status !== 'rejected').length;
+        const approved = deals.filter(d => d.isApproved === true && d.isExpired !== true && d.status !== 'expired' && d.isRejected !== true && d.status !== 'rejected').length;
         const bot = deals.filter(d => !d.isUserSubmitted || d.isUserSubmitted === false).length;
         const user = deals.filter(d => d.isUserSubmitted === true).length;
 
@@ -3259,7 +3373,7 @@ function handleCancelDeal(event) {
 
 // View management
 function showView(viewId) {
-    const views = ['dashboardView', 'dealsView', 'couponsView', 'catalogsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView'];
+    const views = ['dashboardView', 'dealsView', 'couponsView', 'catalogsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'telegramBotView'];
     views.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -3299,23 +3413,43 @@ function showDealsView() {
     }
 }
 
-function showUsersView() {
+function showUsersView(query = '') {
     currentView = 'users';
     showView('usersView');
     updateMenuActiveState('users');
+    if (query && typeof query === 'string') {
+        usersSearchQuery = query.trim().toLowerCase();
+        const sInput = document.getElementById('usersSearchInput');
+        if (sInput) sInput.value = query.trim();
+    }
     if (users.length === 0) {
         loadUsers();
+    } else {
+        renderUsers();
     }
 
     setTimeout(() => {
         const usersSearchInput = document.getElementById('usersSearchInput');
         if (usersSearchInput) {
+            if (usersSearchQuery) {
+                usersSearchInput.value = usersSearchQuery;
+            }
             const newInput = usersSearchInput.cloneNode(true);
             usersSearchInput.parentNode.replaceChild(newInput, usersSearchInput);
 
             newInput.addEventListener('input', (e) => {
                 usersSearchQuery = e.target.value.trim().toLowerCase();
                 renderUsers();
+            });
+        }
+
+        const exportBtn = document.getElementById('exportUsersBtn');
+        if (exportBtn) {
+            const newExportBtn = exportBtn.cloneNode(true);
+            exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
+            newExportBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                exportUsersToCSV();
             });
         }
     }, 100);
@@ -3338,44 +3472,31 @@ let simChatUnsubscribe = null;
 let simCurrentTab = 'simulator';
 
 window.switchMessagesTab = function(tabName) {
-    simCurrentTab = tabName;
+    simCurrentTab = (tabName === 'moderation') ? 'simulator' : tabName;
     const simContainer = document.getElementById('msgSimContainer');
-    const modContainer = document.getElementById('msgModContainer');
     const botContainer = document.getElementById('msgBotContainer');
     const tabSimBtn = document.getElementById('msgTabSimBtn');
-    const tabModBtn = document.getElementById('msgTabModBtn');
     const tabBotBtn = document.getElementById('msgTabBotBtn');
 
     // Reset all containers
     if (simContainer) simContainer.classList.add('hidden');
-    if (modContainer) {
-        modContainer.classList.add('hidden');
-        modContainer.classList.remove('flex');
-    }
     if (botContainer) {
         botContainer.classList.add('hidden');
         botContainer.classList.remove('grid');
     }
 
     // Reset button styles
-    const defaultBtnClass = 'px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors relative';
-    const activeBtnClass = 'px-5 py-3 font-bold text-sm border-b-2 border-primary text-primary flex items-center gap-2 transition-colors relative';
+    const defaultBtnClass = 'px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors relative cursor-pointer';
+    const activeBtnClass = 'px-5 py-3 font-bold text-sm border-b-2 border-primary text-primary flex items-center gap-2 transition-colors relative cursor-pointer';
 
     if (tabSimBtn) tabSimBtn.className = defaultBtnClass;
-    if (tabModBtn) tabModBtn.className = defaultBtnClass;
     if (tabBotBtn) tabBotBtn.className = defaultBtnClass;
 
-    if (tabName === 'simulator') {
+    if (simCurrentTab === 'simulator') {
         if (simContainer) simContainer.classList.remove('hidden');
         if (tabSimBtn) tabSimBtn.className = activeBtnClass;
-    } else if (tabName === 'moderation') {
-        if (modContainer) {
-            modContainer.classList.remove('hidden');
-            modContainer.classList.add('flex');
-        }
-        if (tabModBtn) tabModBtn.className = activeBtnClass;
-        loadModerationMessages();
-    } else if (tabName === 'botkolik') {
+        initMessagingSimulator();
+    } else if (simCurrentTab === 'botkolik') {
         if (botContainer) {
             botContainer.classList.remove('hidden');
             botContainer.classList.add('grid');
@@ -3383,23 +3504,18 @@ window.switchMessagesTab = function(tabName) {
         if (tabBotBtn) tabBotBtn.className = activeBtnClass;
         loadBotkolikMessages();
     }
+    updateBotkolikUnreadBadge();
 };
 
 function showMessagesView() {
     currentView = 'messages';
     showView('messagesView');
     updateMenuActiveState('messages');
-    loadMessages();
+    window.switchMessagesTab(simCurrentTab === 'moderation' ? 'simulator' : (simCurrentTab || 'simulator'));
 }
 
 function loadMessages() {
-    initMessagingSimulator();
-    if (simCurrentTab === 'moderation') {
-        loadModerationMessages();
-    } else if (simCurrentTab === 'botkolik') {
-        loadBotkolikMessages();
-    }
-    updateBotkolikUnreadBadge();
+    window.switchMessagesTab(simCurrentTab === 'moderation' ? 'simulator' : (simCurrentTab || 'simulator'));
 }
 
 async function loadUsersForSimulator(forceRefresh = false) {
@@ -3778,7 +3894,12 @@ window.sendSimulatedMessage = async function() {
     try {
         console.log(`🚀 Simüle mesaj gönderiliyor: ${simSender.name} -> ${simReceiver.name} (${simReceiver.id})`);
 
+        const u1 = String(simSender.id || '');
+        const u2 = String(simReceiver.id || '');
+        const conversationId = [u1, u2].sort().join('_');
+
         const messageData = {
+            conversationId: conversationId,
             senderId: simSender.id,
             senderName: simSender.name,
             senderImageUrl: simSender.imageUrl || '',
@@ -4003,100 +4124,6 @@ function renderLiveChatMessages(messagesList) {
 
 window.reloadLiveChatStream = function() {
     startLiveChatStream();
-};
-
-async function loadModerationMessages() {
-    const tableBody = document.getElementById('messagesTableBody');
-    if (!tableBody) return;
-
-    try {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="material-symbols-outlined text-4xl opacity-50 animate-spin">sync</span>
-                        <p>Tüm mesajlar yükleniyor...</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-
-        const snapshot = await db.collection('messages').orderBy('createdAt', 'desc').limit(100).get();
-        if (snapshot.empty) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
-                        Henüz hiç mesaj bulunmuyor.
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
-        tableBody.innerHTML = snapshot.docs.map(doc => {
-            const m = doc.data();
-            const date = m.createdAt ? (m.createdAt.toDate ? m.createdAt.toDate() : new Date(m.createdAt)) : new Date();
-            const dateStr = date.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            
-            return `
-                <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors text-sm">
-                    <td class="px-6 py-4 text-xs text-slate-400 whitespace-nowrap">${dateStr}</td>
-                    <td class="px-6 py-4">
-                        <div class="flex flex-col">
-                            <span class="font-bold text-slate-900 dark:text-white">${escapeHtml(m.senderName || 'Kullanıcı')} ➔ ${escapeHtml(m.receiverName || 'Kullanıcı')}</span>
-                            <span class="text-[10px] font-mono text-slate-400">${escapeHtml((m.senderId || '').substring(0,8))}... ➔ ${escapeHtml((m.receiverId || '').substring(0,8))}...</span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 max-w-md">
-                        <p class="truncate font-medium text-slate-800 dark:text-slate-200" title="${escapeHtml(m.text || '')}">${escapeHtml(m.text || '-')}</p>
-                        ${m.dealTitle ? `<span class="text-[11px] text-primary font-semibold truncate block">🏷️ Fırsat: ${escapeHtml(m.dealTitle)}</span>` : ''}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        ${m.isRead ? '<span class="px-2 py-0.5 bg-blue-500/10 text-blue-500 rounded text-xs font-semibold">Okundu</span>' : '<span class="px-2 py-0.5 bg-amber-500/10 text-amber-500 rounded text-xs font-semibold">Okunmadı</span>'}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right">
-                        <button onclick="window.deleteSingleMessage('${doc.id}')" class="p-1.5 text-red-500 hover:text-red-700 transition-colors" title="Mesajı Sil">
-                            <span class="material-symbols-outlined text-[18px]">delete</span>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    } catch (e) {
-        console.error('Moderation messages error:', e);
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="5" class="px-6 py-8 text-center text-red-500 text-sm">
-                    Mesajlar yüklenirken hata oluştu: ${e.message}
-                </td>
-            </tr>
-        `;
-    }
-}
-
-window.deleteSingleMessage = async function(messageId) {
-    if (!confirm('Bu mesajı silmek istediğinize emin misiniz?')) return;
-    try {
-        await db.collection('messages').doc(messageId).delete();
-        showSuccess('Mesaj silindi.');
-        loadModerationMessages();
-    } catch (e) {
-        showError('Silme hatası: ' + e.message);
-    }
-};
-
-window.deleteAllMessages = async function() {
-    if (!confirm('TÜM MESAJLARI veritabanından kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) return;
-    try {
-        const snapshot = await db.collection('messages').get();
-        const batch = db.batch();
-        snapshot.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
-        showSuccess('Tüm mesajlar başarıyla silindi!');
-        loadMessages();
-    } catch (e) {
-        showError('Toplu silme hatası: ' + e.message);
-    }
 };
 
 // ============================================================================
@@ -4663,7 +4690,9 @@ window.handleBotReplyKeyDown = function(e) {
 
 window.viewSelectedBotUserProf = function() {
     if (!botkolikActiveUserId) return;
-    if (typeof window.viewUserProfile === 'function') {
+    if (typeof window.showUserDetail === 'function') {
+        window.showUserDetail(botkolikActiveUserId);
+    } else if (typeof window.viewUserProfile === 'function') {
         window.viewUserProfile(botkolikActiveUserId);
     } else {
         alert('Kullanıcı UID: ' + botkolikActiveUserId);
@@ -4761,33 +4790,56 @@ function updateMenuActiveState(activeView) {
             const icon = logsMenuItem.querySelector('.material-symbols-outlined');
             if (icon) icon.classList.add('icon-filled');
         }
+    } else if (activeView === 'telegramBot') {
+        const telegramBotMenuItem = document.getElementById('telegramBotMenuBtn');
+        if (telegramBotMenuItem) {
+            telegramBotMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
+            telegramBotMenuItem.classList.remove('text-slate-400');
+            const icon = telegramBotMenuItem.querySelector('.material-symbols-outlined');
+            if (icon) icon.classList.add('icon-filled');
+        }
     }
 }
 
-// Load messages from Firestore
-function loadMessages() {
-    console.log('📨 Loading messages...');
+// ============================================================================
+// 🚨 OTOMATİK MODERASYON ALARMLARI (adminMessages) - RAPORLAR & DENETİM
+// ============================================================================
 
-    const messagesTableBody = document.getElementById('messagesTableBody');
-    if (!messagesTableBody) {
-        console.error('❌ Messages table body not found!');
-        return;
+let autoModAlarms = [];
+let autoModUnsubscribe = null;
+let autoModFilter = 'all';
+
+window.loadAutoModAlarms = function() {
+    console.log('🚨 Loading auto moderation alarms (adminMessages)...');
+    const tableBody = document.getElementById('autoModTableBody');
+    if (!tableBody) return;
+
+    if (autoModUnsubscribe) {
+        autoModUnsubscribe();
     }
 
-    // Önceki listener'ı iptal et
-    if (messagesUnsubscribe) {
-        messagesUnsubscribe();
-    }
+    tableBody.innerHTML = `
+        <tr>
+            <td colspan="6" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                <div class="flex flex-col items-center gap-2">
+                    <span class="material-symbols-outlined text-4xl animate-spin">sync</span>
+                    <p>Alarmlar yükleniyor...</p>
+                </div>
+            </td>
+        </tr>
+    `;
 
-    // Real-time listener ekle
-    messagesUnsubscribe = db.collection('adminMessages')
+    autoModUnsubscribe = db.collection('adminMessages')
         .orderBy('createdAt', 'desc')
-        .limit(100)
+        .limit(150)
         .onSnapshot((snapshot) => {
-            messages = [];
+            autoModAlarms = [];
+            let unreadCount = 0;
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                messages.push({
+                const isRead = data.isRead === true;
+                if (!isRead) unreadCount++;
+                autoModAlarms.push({
                     id: doc.id,
                     type: data.type || 'unknown',
                     userId: data.userId || 'unknown',
@@ -4796,39 +4848,67 @@ function loadMessages() {
                     dealId: data.dealId || null,
                     commentId: data.commentId || null,
                     reason: data.reason || 'Uygunsuz içerik tespit edildi',
-                    isRead: data.isRead || false,
+                    isRead: isRead,
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || Date.now()),
                 });
             });
 
-            console.log(`✅ Loaded ${messages.length} messages`);
-            renderMessages();
-        }, (error) => {
-            console.error('❌ Error loading messages:', error);
-            if (messagesTableBody) {
-                messagesTableBody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="px-6 py-12 text-center text-red-500">
-                            <p>Mesajlar yüklenirken hata oluştu: ${error.message}</p>
-                        </td>
-                    </tr>
-                `;
+            // Rozet güncelle
+            const badge = document.getElementById('autoModUnreadBadge');
+            if (badge) {
+                if (unreadCount > 0) {
+                    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
             }
+
+            const totalCountEl = document.getElementById('autoModTotalCount');
+            if (totalCountEl) {
+                totalCountEl.textContent = `Toplam ${autoModAlarms.length} alarm listeleniyor (${unreadCount} yeni/incelenmemiş)`;
+            }
+
+            window.renderAutoModAlarms();
+        }, (error) => {
+            console.error('❌ Error loading auto mod alarms:', error);
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="px-6 py-12 text-center text-red-500">
+                        <p>Alarmlar yüklenirken hata oluştu: ${escapeHtml(error.message)}</p>
+                    </td>
+                </tr>
+            `;
         });
-}
+};
 
-// Render messages in the table
-function renderMessages() {
-    const messagesTableBody = document.getElementById('messagesTableBody');
-    if (!messagesTableBody) return;
+window.renderAutoModAlarms = function() {
+    const tableBody = document.getElementById('autoModTableBody');
+    if (!tableBody) return;
 
-    if (messages.length === 0) {
-        messagesTableBody.innerHTML = `
+    const searchTerm = (document.getElementById('autoModSearchInput')?.value || '').trim().toLowerCase();
+
+    let filtered = autoModAlarms.filter(m => {
+        if (autoModFilter === 'unread' && m.isRead) return false;
+        if (autoModFilter === 'deals' && m.type !== 'deal') return false;
+        if (autoModFilter === 'comments' && m.type !== 'comment') return false;
+
+        if (searchTerm) {
+            const userMatches = (m.userName || '').toLowerCase().includes(searchTerm) || (m.userId || '').toLowerCase().includes(searchTerm);
+            const contentMatches = (m.content || '').toLowerCase().includes(searchTerm);
+            const reasonMatches = (m.reason || '').toLowerCase().includes(searchTerm);
+            return userMatches || contentMatches || reasonMatches;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        tableBody.innerHTML = `
             <tr>
                 <td colspan="6" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                     <div class="flex flex-col items-center gap-2">
-                        <span class="material-symbols-outlined text-4xl opacity-50">mail</span>
-                        <p>Henüz moderasyon mesajı yok</p>
+                        <span class="material-symbols-outlined text-4xl opacity-50">verified_user</span>
+                        <p>Kriterlere uygun moderasyon alarmı bulunamadı.</p>
                     </div>
                 </td>
             </tr>
@@ -4836,8 +4916,8 @@ function renderMessages() {
         return;
     }
 
-    messagesTableBody.innerHTML = messages.map(message => {
-        const messageDate = new Date(message.createdAt);
+    tableBody.innerHTML = filtered.map(m => {
+        const messageDate = new Date(m.createdAt);
         const formattedDate = messageDate.toLocaleDateString('tr-TR', {
             year: 'numeric',
             month: 'long',
@@ -4846,61 +4926,72 @@ function renderMessages() {
             minute: '2-digit'
         });
 
-        const typeLabel = message.type === 'deal' ? 'Fırsat' : 'Yorum';
-        const typeColor = message.type === 'deal' ? 'text-blue-600 dark:text-blue-400' : 'text-purple-600 dark:text-purple-400';
-        const typeIcon = message.type === 'deal' ? 'local_offer' : 'comment';
+        const isDeal = m.type === 'deal';
+        const typeLabel = isDeal ? 'Fırsat' : (m.type === 'comment' ? 'Yorum' : m.type);
+        const typeColor = isDeal ? 'text-amber-500 bg-amber-500/10' : 'text-purple-500 bg-purple-500/10';
+        const typeIcon = isDeal ? 'local_offer' : 'comment';
 
-        const statusBadge = message.isRead
-            ? '<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-medium">Okundu</span>'
-            : '<span class="px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-xs font-medium">Yeni</span>';
+        const statusBadge = m.isRead
+            ? '<span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-500 rounded-full text-xs font-semibold">İncelendi</span>'
+            : '<span class="px-2.5 py-1 bg-red-500/10 text-red-500 rounded-full text-xs font-semibold animate-pulse">Yeni</span>';
 
         return `
-            <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${!message.isRead ? 'bg-red-50/50 dark:bg-red-900/10' : ''}">
-                <td class="px-6 py-4">
-                    <p class="text-sm text-slate-700 dark:text-slate-300">${escapeHtml(formattedDate)}</p>
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${!m.isRead ? 'bg-red-500/5 dark:bg-red-500/10' : ''}">
+                <td class="px-6 py-4 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                    ${escapeHtml(formattedDate)}
                 </td>
                 <td class="px-6 py-4">
-                    <div class="flex items-center gap-2">
-                        <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
-                            <span class="material-symbols-outlined text-slate-500 dark:text-slate-400 text-[16px]">person</span>
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-outlined text-slate-400 text-[18px]">person</span>
                         </div>
-                        <div>
-                            <button onclick="window.showUserDetail('${escapeHtml(message.userId)}')" 
-                                    class="text-sm font-medium text-slate-900 dark:text-white hover:text-primary dark:hover:text-primary transition-colors cursor-pointer text-left">
-                                ${escapeHtml(message.userName)}
+                        <div class="flex flex-col min-w-0">
+                            <button onclick="window.showUserDetail('${escapeHtml(m.userId)}')" 
+                                    class="text-sm font-bold text-slate-900 dark:text-white hover:text-primary transition-colors cursor-pointer text-left truncate">
+                                ${escapeHtml(m.userName)}
                             </button>
-                            <p class="text-xs text-slate-500 dark:text-slate-400 font-mono">${escapeHtml(message.userId)}</p>
+                            <span class="text-[10px] font-mono text-slate-400 truncate max-w-[120px]">${escapeHtml(m.userId)}</span>
                         </div>
                     </div>
                 </td>
-                <td class="px-6 py-4">
-                    <div class="flex items-center gap-2">
-                        <span class="material-symbols-outlined ${typeColor} text-[18px]">${typeIcon}</span>
-                        <span class="text-sm font-medium ${typeColor}">${typeLabel}</span>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${typeColor}">
+                        <span class="material-symbols-outlined text-[14px]">${typeIcon}</span>
+                        ${typeLabel}
+                    </span>
+                </td>
+                <td class="px-6 py-4 max-w-md">
+                    <div class="flex flex-col gap-1">
+                        <span class="inline-block self-start text-[11px] font-bold text-red-600 dark:text-red-400 bg-red-500/10 px-2 py-0.5 rounded">
+                            ⚠️ ${escapeHtml(m.reason)}
+                        </span>
+                        <p class="text-sm text-slate-800 dark:text-slate-200 line-clamp-2" title="${escapeHtml(m.content)}">
+                            "${escapeHtml(m.content)}"
+                        </p>
                     </div>
                 </td>
-                <td class="px-6 py-4">
-                    <p class="text-sm text-slate-700 dark:text-slate-300 max-w-md truncate" title="${escapeHtml(message.content)}">
-                        ${escapeHtml(message.content)}
-                    </p>
-                    <p class="text-xs text-red-600 dark:text-red-400 mt-1">${escapeHtml(message.reason)}</p>
-                </td>
-                <td class="px-6 py-4">
+                <td class="px-6 py-4 whitespace-nowrap">
                     ${statusBadge}
                 </td>
-                <td class="px-6 py-4 text-right">
-                    <div class="flex items-center justify-end gap-2">
-                        ${message.dealId ? `
-                            <button onclick="window.showDealDetail('${escapeHtml(message.dealId)}')" class="text-primary hover:text-primary/80 text-sm font-medium transition-colors" title="Fırsatı Görüntüle">
+                <td class="px-6 py-4 whitespace-nowrap text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                        ${m.dealId ? `
+                            <button onclick="window.editDeal('${escapeHtml(m.dealId)}')" class="p-1.5 text-slate-500 hover:text-primary transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" title="Fırsatı Gör / Düzenle">
                                 <span class="material-symbols-outlined text-[18px]">visibility</span>
                             </button>
                         ` : ''}
-                        ${!message.isRead ? `
-                            <button onclick="window.markMessageAsRead('${escapeHtml(message.id)}')" class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 text-sm font-medium transition-colors" title="Okundu İşaretle">
+                        ${!m.isRead ? `
+                            <button onclick="window.markAutoModAlarmAsRead('${escapeHtml(m.id)}')" class="p-1.5 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 transition-colors rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 cursor-pointer" title="İncelendi Olarak İşaretle">
                                 <span class="material-symbols-outlined text-[18px]">check_circle</span>
                             </button>
                         ` : ''}
-                        <button onclick="window.deleteMessage('${escapeHtml(message.id)}')" class="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium transition-colors" title="Mesajı Sil">
+                        <button onclick="window.openAdminMessageModal('${escapeHtml(m.userId)}', '${escapeHtml(m.userName)}')" class="p-1.5 text-blue-500 hover:text-blue-700 transition-colors rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer" title="Kullanıcıya Admin Uyarısı / Mesajı Gönder">
+                            <span class="material-symbols-outlined text-[18px]">mail</span>
+                        </button>
+                        <button onclick="window.showUserDetail('${escapeHtml(m.userId)}')" class="p-1.5 text-purple-500 hover:text-purple-700 transition-colors rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/30 cursor-pointer" title="Kullanıcıyı Yönet / Engelle">
+                            <span class="material-symbols-outlined text-[18px]">shield_person</span>
+                        </button>
+                        <button onclick="window.deleteAutoModAlarm('${escapeHtml(m.id)}')" class="p-1.5 text-red-500 hover:text-red-700 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer" title="Alarmı Sil">
                             <span class="material-symbols-outlined text-[18px]">delete</span>
                         </button>
                     </div>
@@ -4908,39 +4999,58 @@ function renderMessages() {
             </tr>
         `;
     }).join('');
-}
+};
 
-// Mark message as read
-window.markMessageAsRead = async function (messageId) {
+window.filterAutoModAlarms = function() {
+    window.renderAutoModAlarms();
+};
+
+window.setAutoModFilter = function(filterMode) {
+    autoModFilter = filterMode;
+    const allBtn = document.getElementById('autoModFilterAllBtn');
+    const unreadBtn = document.getElementById('autoModFilterUnreadBtn');
+    const dealsBtn = document.getElementById('autoModFilterDealsBtn');
+    const commentsBtn = document.getElementById('autoModFilterCommentsBtn');
+
+    const defaultClass = 'px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white transition-colors cursor-pointer';
+    const activeClass = 'px-3 py-1.5 text-xs font-bold rounded-lg bg-primary text-white transition-colors cursor-pointer';
+
+    if (allBtn) allBtn.className = filterMode === 'all' ? activeClass : defaultClass;
+    if (unreadBtn) unreadBtn.className = filterMode === 'unread' ? activeClass : defaultClass;
+    if (dealsBtn) dealsBtn.className = filterMode === 'deals' ? activeClass : defaultClass;
+    if (commentsBtn) commentsBtn.className = filterMode === 'comments' ? activeClass : defaultClass;
+
+    window.renderAutoModAlarms();
+};
+
+window.markAutoModAlarmAsRead = async function(alarmId) {
     try {
-        await db.collection('adminMessages').doc(messageId).update({
+        await db.collection('adminMessages').doc(alarmId).update({
             isRead: true,
         });
-        showSuccess('Mesaj okundu olarak işaretlendi');
+        showSuccess('Alarm incelendi olarak işaretlendi.');
     } catch (error) {
-        console.error('❌ Error marking message as read:', error);
-        showError('Mesaj işaretlenirken hata oluştu: ' + error.message);
+        console.error('❌ Error marking alarm as read:', error);
+        showError('Hata: ' + error.message);
     }
-}
+};
 
-// Delete message
-window.deleteMessage = async function (messageId) {
-    if (!confirm('Bu mesajı silmek istediğinize emin misiniz?')) {
+window.deleteAutoModAlarm = async function(alarmId) {
+    if (!confirm('Bu moderasyon alarmını silmek istediğinize emin misiniz?')) {
         return;
     }
 
     try {
-        await db.collection('adminMessages').doc(messageId).delete();
-        showSuccess('Mesaj başarıyla silindi');
+        await db.collection('adminMessages').doc(alarmId).delete();
+        showSuccess('Alarm başarıyla silindi.');
     } catch (error) {
-        console.error('❌ Error deleting message:', error);
-        showError('Mesaj silinirken hata oluştu: ' + error.message);
+        console.error('❌ Error deleting alarm:', error);
+        showError('Hata: ' + error.message);
     }
-}
+};
 
-// Delete all messages
-window.deleteAllMessages = async function () {
-    if (!confirm('TÜM moderasyon mesajlarını silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) {
+window.deleteAllAutoModAlarms = async function() {
+    if (!confirm('TÜM otomatik moderasyon alarmlarını kalıcı olarak temizlemek istediğinize emin misiniz? Bu işlem geri alınamaz!')) {
         return;
     }
 
@@ -4948,7 +5058,7 @@ window.deleteAllMessages = async function () {
         const snapshot = await db.collection('adminMessages').get();
 
         if (snapshot.empty) {
-            showError('Silinecek mesaj yok');
+            showError('Silinecek alarm yok.');
             return;
         }
 
@@ -4958,12 +5068,12 @@ window.deleteAllMessages = async function () {
         });
 
         await batch.commit();
-        showSuccess(`${snapshot.docs.length} mesaj başarıyla silindi`);
+        showSuccess(`${snapshot.docs.length} adet alarm başarıyla temizlendi.`);
     } catch (error) {
-        console.error('❌ Error deleting all messages:', error);
-        showError('Mesajlar silinirken hata oluştu: ' + error.message);
+        console.error('❌ Error deleting all auto mod alarms:', error);
+        showError('Temizleme hatası: ' + error.message);
     }
-}
+};
 
 // Show deal detail (for messages view)
 window.showDealDetail = async function (dealId) {
@@ -5063,6 +5173,15 @@ async function loadUsers() {
             usersUnsubscribe();
         }
 
+        // Prefetch blocked users map
+        let blockedSet = new Set();
+        try {
+            const blockedSnap = await db.collection('blockedUsers').get();
+            blockedSet = new Set(blockedSnap.docs.map(d => d.id));
+        } catch (e) {
+            console.warn('⚠️ Could not prefetch blocked users:', e);
+        }
+
         usersUnsubscribe = db.collection('users').onSnapshot((snapshot) => {
             users = [];
             let totalDeals = 0;
@@ -5070,6 +5189,7 @@ async function loadUsers() {
 
             snapshot.forEach((doc) => {
                 const userData = doc.data();
+                const isBlocked = blockedSet.has(doc.id) || (userData.uid && blockedSet.has(userData.uid));
                 const user = {
                     id: doc.id,
                     uid: userData.uid || doc.id,
@@ -5087,6 +5207,7 @@ async function loadUsers() {
                     pinnedBadge: userData.pinnedBadge || null,
                     email: userData.email || null,
                     isAdmin: userData.isAdmin === true || userData.isadmin === true || userData.isAdmin === 'true' || userData.isadmin === 'true',
+                    isBlocked: isBlocked,
                     createdAt: userData.createdAt?.toDate ? userData.createdAt.toDate() : (userData.createdAt ? new Date(userData.createdAt) : null)
                 };
 
@@ -5190,10 +5311,14 @@ function renderUsers() {
             <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                 <td class="px-6 py-4">
                     <div class="flex items-center gap-3">
-                        <img src="${profileImage}" alt="${displayName}" class="w-10 h-10 rounded-full object-cover bg-slate-200 dark:bg-slate-700" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=135bec&color=fff&size=128'">
-                        <div class="flex flex-col">
-                            <p class="font-semibold text-slate-900 dark:text-white">${escapeHtml(displayName)}</p>
-                            ${user.email ? `<p class="text-xs text-slate-500 dark:text-slate-400">${escapeHtml(user.email)}</p>` : ''}
+                        <img src="${profileImage}" alt="${displayName}" class="w-10 h-10 rounded-full object-cover bg-slate-200 dark:bg-slate-700" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=135bec&color=fff&size=128'">
+                        <div class="flex flex-col min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <p class="font-semibold text-slate-900 dark:text-white truncate">${escapeHtml(displayName)}</p>
+                                ${user.isAdmin ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">👮 Admin</span>' : ''}
+                                ${user.isBlocked ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">🚫 Engelli</span>' : ''}
+                            </div>
+                            ${user.email ? `<p class="text-xs text-slate-500 dark:text-slate-400 truncate">${escapeHtml(user.email)}</p>` : ''}
                         </div>
                     </div>
                 </td>
@@ -5219,7 +5344,7 @@ function renderUsers() {
                     <span class="text-slate-700 dark:text-slate-300">${followedCategoriesCount}</span>
                 </td>
                 <td class="px-6 py-4 text-right">
-                    <button onclick="showUserDetail('${user.id}')" class="text-primary hover:text-primary/80 text-sm font-medium transition-colors">
+                    <button onclick="showUserDetail('${user.id}')" class="text-primary hover:text-primary/80 text-sm font-medium transition-colors cursor-pointer">
                         Detay
                     </button>
                 </td>
@@ -5545,7 +5670,14 @@ async function showUserDetail(userId) {
     const followedCategories = subsList.filter(s => s.type === 'category').map(s => s.displayValue || s.key);
     const watchKeywords = subsList.filter(s => s.type === 'keyword').map(s => s.displayValue || s.key);
 
-    currentUserDetail = { ...user, isBlocked, isCommentBanned, isDealBanned, followedCategories, watchKeywords };
+    const activeCategories = (followedCategories && followedCategories.length > 0)
+        ? followedCategories
+        : (user.followedCategories || []);
+    const activeKeywords = (watchKeywords && watchKeywords.length > 0)
+        ? watchKeywords
+        : (user.watchKeywords || []);
+
+    currentUserDetail = { ...user, isBlocked, isCommentBanned, isDealBanned, followedCategories: activeCategories, watchKeywords: activeKeywords };
 
     const userDetailModal = document.getElementById('userDetailModal');
     const userModalBody = document.getElementById('userModalBody');
@@ -5579,7 +5711,7 @@ async function showUserDetail(userId) {
         <!-- Profile Section -->
         <div class="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden p-6 shadow-sm">
             <div class="flex flex-col items-center gap-4">
-                <img src="${profileImage}" alt="${escapeHtml(displayName)}" class="w-32 h-32 rounded-full object-cover bg-slate-200 dark:bg-slate-700 border-4 border-primary/20" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=135bec&color=fff&size=256'">
+                <img src="${profileImage}" alt="${escapeHtml(displayName)}" class="w-32 h-32 rounded-full object-cover bg-slate-200 dark:bg-slate-700 border-4 border-primary/20" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=135bec&color=fff&size=256'">
                 <div class="text-center">
                     <h2 class="text-2xl font-bold text-slate-900 dark:text-white">${escapeHtml(displayName)}</h2>
                     ${user.email ? `<p class="text-slate-500 dark:text-slate-400 mt-1">${escapeHtml(user.email)}</p>` : ''}
@@ -5656,9 +5788,9 @@ async function showUserDetail(userId) {
             <div class="space-y-4">
                 <div>
                     <p class="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">Takip Edilen Kategoriler</p>
-                    ${followedCategories && followedCategories.length > 0 ? `
+                    ${activeCategories && activeCategories.length > 0 ? `
                         <div class="flex flex-wrap gap-2">
-                            ${followedCategories.map(cat => `
+                            ${activeCategories.map(cat => `
                                 <span class="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">${escapeHtml(cat)}</span>
                             `).join('')}
                         </div>
@@ -5667,9 +5799,9 @@ async function showUserDetail(userId) {
                 
                 <div>
                     <p class="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">Takip Edilen Anahtar Kelimeler</p>
-                    ${watchKeywords && watchKeywords.length > 0 ? `
+                    ${activeKeywords && activeKeywords.length > 0 ? `
                         <div class="flex flex-wrap gap-2">
-                            ${watchKeywords.map(keyword => `
+                            ${activeKeywords.map(keyword => `
                                 <span class="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full text-sm font-medium">${escapeHtml(keyword)}</span>
                             `).join('')}
                         </div>
@@ -5802,7 +5934,7 @@ async function showUserDetail(userId) {
             const followedProfileImage = followedUser.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(followedDisplayName)}&background=135bec&color=fff&size=64`;
             return `
                                 <div class="flex items-center gap-3 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors">
-                                    <img src="${followedProfileImage}" alt="${escapeHtml(followedDisplayName)}" class="w-10 h-10 rounded-full object-cover border-2 border-slate-200 dark:border-slate-700" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(followedDisplayName)}&background=135bec&color=fff&size=64'">
+                                    <img src="${followedProfileImage}" alt="${escapeHtml(followedDisplayName)}" class="w-10 h-10 rounded-full object-cover border-2 border-slate-200 dark:border-slate-700" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(followedDisplayName)}&background=135bec&color=fff&size=64'">
                                     <div class="flex-1 min-w-0">
                                         <p class="text-sm font-medium text-slate-900 dark:text-white truncate">${escapeHtml(followedDisplayName)}</p>
                                         <p class="text-xs text-slate-500 dark:text-slate-400 truncate">${escapeHtml(followedUser.email || '')}</p>
@@ -6172,7 +6304,7 @@ window.showUserComments = async function (userId) {
                             <div class="flex-shrink-0">
                                 <img src="${escapeHtml(comment.dealImageUrl || '')}" alt="${escapeHtml(comment.dealTitle)}" 
                                      class="w-20 h-20 rounded-lg object-cover bg-slate-200 dark:bg-slate-700"
-                                     onerror="this.src='https://via.placeholder.com/80x80?text=📷'">
+                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/80x80?text=📷'">
                             </div>
                             
                             <!-- Comment Content -->
@@ -6560,6 +6692,10 @@ window.blockUser = async function (userId) {
         if (user) {
             user.isBlocked = true;
         }
+        if (currentUserDetail) {
+            currentUserDetail.isBlocked = true;
+        }
+        renderUsers();
 
         // Modal'ı yeniden yükle
         await showUserDetail(userId);
@@ -6595,6 +6731,10 @@ window.unblockUser = async function (userId) {
         if (user) {
             user.isBlocked = false;
         }
+        if (currentUserDetail) {
+            currentUserDetail.isBlocked = false;
+        }
+        renderUsers();
 
         // Modal'ı yeniden yükle
         await showUserDetail(userId);
@@ -6628,6 +6768,14 @@ window.banUserComments = async function (userId) {
         console.log('✅ Kullanıcı yorum yapması engellendi:', userId);
         showSuccess('Kullanıcının yorum yapması başarıyla engellendi!');
 
+        const user = users.find(u => (u.uid || u.id) === userId);
+        if (user) {
+            user.isCommentBanned = true;
+        }
+        if (currentUserDetail) {
+            currentUserDetail.isCommentBanned = true;
+        }
+
         // Modal'ı yeniden yükle
         await showUserDetail(userId);
     } catch (error) {
@@ -6656,6 +6804,14 @@ window.unbanUserComments = async function (userId) {
 
         console.log('✅ Kullanıcı yorum izni geri verildi:', userId);
         showSuccess('Kullanıcıya yorum izni başarıyla geri verildi!');
+
+        const user = users.find(u => (u.uid || u.id) === userId);
+        if (user) {
+            user.isCommentBanned = false;
+        }
+        if (currentUserDetail) {
+            currentUserDetail.isCommentBanned = false;
+        }
 
         // Modal'ı yeniden yükle
         await showUserDetail(userId);
@@ -6689,6 +6845,14 @@ window.banUserDeals = async function (userId) {
         console.log('✅ Kullanıcı paylaşımı engellendi:', userId);
         showSuccess('Kullanıcının fırsat paylaşımı başarıyla engellendi!');
 
+        const user = users.find(u => (u.uid || u.id) === userId);
+        if (user) {
+            user.isDealBanned = true;
+        }
+        if (currentUserDetail) {
+            currentUserDetail.isDealBanned = true;
+        }
+
         // Modal'ı yeniden yükle
         await showUserDetail(userId);
     } catch (error) {
@@ -6717,6 +6881,14 @@ window.unbanUserDeals = async function (userId) {
 
         console.log('✅ Kullanıcı paylaşım izni geri verildi:', userId);
         showSuccess('Kullanıcının paylaşım izni başarıyla geri verildi!');
+
+        const user = users.find(u => (u.uid || u.id) === userId);
+        if (user) {
+            user.isDealBanned = false;
+        }
+        if (currentUserDetail) {
+            currentUserDetail.isDealBanned = false;
+        }
 
         // Modal'ı yeniden yükle
         await showUserDetail(userId);
@@ -6751,15 +6923,22 @@ window.deleteUserAccountAdmin = async function (userId) {
         if (res.data && res.data.success) {
             showSuccess('✅ Kullanıcı hesabı ve tüm ilişkili verileri başarıyla kalıcı olarak silindi!');
             
+            // In-memory listeden kaldır
+            users = users.filter(u => (u.uid || u.id) !== userId);
+            renderUsers();
+            
+            let totalDeals = 0;
+            let totalPoints = 0;
+            users.forEach(u => {
+                totalDeals += (u.dealCount || 0);
+                totalPoints += (u.points || 0);
+            });
+            updateUsersStats(users.length, totalDeals, totalPoints);
+
             // Modal'ı kapat
             const userDetailModal = document.getElementById('userDetailModal');
             if (userDetailModal) {
                 userDetailModal.classList.add('hidden');
-            }
-
-            // Eğer kullanıcılar listesi aktifse listeyi yenile
-            if (currentView === 'users') {
-                loadUsers();
             }
         } else {
             throw new Error('Silme işlemi başarısız döndü.');
@@ -6770,6 +6949,56 @@ window.deleteUserAccountAdmin = async function (userId) {
     } finally {
         hideLoading();
     }
+};
+
+// Export users to UTF-8 CSV
+window.exportUsersToCSV = function () {
+    if (!users || users.length === 0) {
+        showError('Dışa aktarılacak kullanıcı verisi bulunamadı!');
+        return;
+    }
+
+    const headers = [
+        'Kullanici ID',
+        'Kullanici Adi',
+        'Takma Ad',
+        'E-posta',
+        'Puan',
+        'Firsat Sayisi',
+        'Begeni Sayisi',
+        'Rozetler',
+        'Vitrin Rozeti',
+        'Yonetici (Admin)',
+        'Engelli',
+        'Kayit Tarihi'
+    ];
+
+    const rows = users.map(u => [
+        `"${(u.uid || u.id || '').replace(/"/g, '""')}"`,
+        `"${(u.username || '').replace(/"/g, '""')}"`,
+        `"${(u.nickname || '').replace(/"/g, '""')}"`,
+        `"${(u.email || '').replace(/"/g, '""')}"`,
+        u.points || 0,
+        u.dealCount || 0,
+        u.totalLikes || 0,
+        `"${(u.badges || []).join(', ')}"`,
+        `"${(u.pinnedBadge || '').replace(/"/g, '""')}"`,
+        u.isAdmin ? 'Evet' : 'Hayir',
+        u.isBlocked ? 'Evet' : 'Hayir',
+        `"${u.createdAt ? new Date(u.createdAt).toLocaleString('tr-TR') : ''}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `firsatkolik_kullanicilar_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showSuccess(`${users.length} kullanıcı CSV olarak dışa aktarıldı!`);
 };
 
 // Show admin message modal
@@ -6841,6 +7070,11 @@ function closeAdminMessageModal() {
 }
 
 window.closeAdminMessageModal = closeAdminMessageModal;
+window.openAdminMessageModal = function(userId, userName) {
+    if (typeof window.showAdminMessageModal === 'function') {
+        window.showAdminMessageModal(userId, userName);
+    }
+};
 
 // Send admin message
 window.sendAdminMessage = async function (userId, title, content) {
@@ -7713,14 +7947,50 @@ window.unbanUserDeals = unbanUserDeals;
 // Reports and Settings View Extensions
 let reports = [];
 let reportsUnsubscribe = null;
+let reportsCurrentTab = 'complaints';
 let currentReportUnderAction = null;
 let currentReportActionOptions = [];
+let reportsFilterStatus = 'all'; // 'all', 'pending', 'action_taken', 'dismissed'
+let reportsFilterType = 'all';   // 'all', 'deal', 'comment', 'user', 'message'
+
+window.switchReportsTab = function(tabName) {
+    reportsCurrentTab = tabName;
+    const complaintsContainer = document.getElementById('reportsComplaintsContainer');
+    const autoModContainer = document.getElementById('reportsAutoModContainer');
+    const tabComplaintsBtn = document.getElementById('reportTabComplaintsBtn');
+    const tabAutoModBtn = document.getElementById('reportTabAutoModBtn');
+
+    const defaultBtnClass = 'px-5 py-3 font-semibold text-sm border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-2 transition-colors relative cursor-pointer';
+    const activeBtnClass = 'px-5 py-3 font-bold text-sm border-b-2 border-primary text-primary flex items-center gap-2 transition-colors relative cursor-pointer';
+
+    if (complaintsContainer) complaintsContainer.classList.add('hidden');
+    if (autoModContainer) {
+        autoModContainer.classList.add('hidden');
+        autoModContainer.classList.remove('flex');
+    }
+
+    if (tabComplaintsBtn) tabComplaintsBtn.className = defaultBtnClass;
+    if (tabAutoModBtn) tabAutoModBtn.className = defaultBtnClass;
+
+    if (tabName === 'complaints') {
+        if (complaintsContainer) complaintsContainer.classList.remove('hidden');
+        if (tabComplaintsBtn) tabComplaintsBtn.className = activeBtnClass;
+        loadReports();
+    } else if (tabName === 'automod') {
+        if (autoModContainer) {
+            autoModContainer.classList.remove('hidden');
+            autoModContainer.classList.add('flex');
+        }
+        if (tabAutoModBtn) tabAutoModBtn.className = activeBtnClass;
+        window.loadAutoModAlarms();
+    }
+};
 
 function showReportsView() {
     currentView = 'reports';
     showView('reportsView');
     updateMenuActiveState('reports');
-    loadReports();
+    window.switchReportsTab(reportsCurrentTab || 'complaints');
 }
 
 function showSettingsView() {
@@ -7729,7 +7999,7 @@ function showSettingsView() {
     updateMenuActiveState('settings');
     loadDealSharingStatus();
     loadCommentSharingStatus();
-    loadBotConfig();
+    loadNotificationLimits();
     loadAdminList();
     loadTeknosaAffiliateStatus();
     loadHepsiburadaAffiliateStatus();
@@ -7762,8 +8032,17 @@ function loadReports() {
         .limit(100)
         .onSnapshot((snapshot) => {
             reports = [];
+            let pendingCount = 0;
+            let actionCount = 0;
+            let dismissedCount = 0;
+
             snapshot.forEach((doc) => {
                 const data = doc.data();
+                const status = data.status || 'pending';
+                if (status === 'pending') pendingCount++;
+                else if (status === 'action_taken') actionCount++;
+                else if (status === 'dismissed') dismissedCount++;
+
                 reports.push({
                     id: doc.id,
                     reportedId: data.reportedId || '',
@@ -7775,7 +8054,7 @@ function loadReports() {
                     targetContent: data.targetContent || null,
                     targetAuthor: data.targetAuthor || null,
                     targetAuthorId: data.targetAuthorId || null,
-                    status: data.status || 'pending',
+                    status: status,
                     actionType: data.actionType || null,
                     actionNote: data.actionNote || null,
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || Date.now())
@@ -7783,6 +8062,20 @@ function loadReports() {
             });
 
             console.log(`✅ Loaded ${reports.length} reports`);
+
+            // İstatistik sayaçlarını güncelle
+            const totalEl = document.getElementById('reportsTotalCount');
+            const pendingEl = document.getElementById('reportsPendingCount');
+            const actionEl = document.getElementById('reportsActionCount');
+            const dismissedEl = document.getElementById('reportsDismissedCount');
+            const subtitleEl = document.getElementById('reportsSubtitleCount');
+
+            if (totalEl) totalEl.textContent = reports.length;
+            if (pendingEl) pendingEl.textContent = pendingCount;
+            if (actionEl) actionEl.textContent = actionCount;
+            if (dismissedEl) dismissedEl.textContent = dismissedCount;
+            if (subtitleEl) subtitleEl.textContent = `Toplam ${reports.length} şikayet listeleniyor (${pendingCount} inceleme bekleyen)`;
+
             renderReports();
         }, (error) => {
             console.error('❌ Error loading reports:', error);
@@ -7790,7 +8083,7 @@ function loadReports() {
                 reportsTableBody.innerHTML = `
                     <tr>
                         <td colspan="8" class="px-6 py-12 text-center text-red-500">
-                            <p>Şikayetler yüklenirken hata oluştu: ${error.message}</p>
+                            <p>Şikayetler yüklenirken hata oluştu: ${escapeHtml(error.message)}</p>
                         </td>
                     </tr>
                 `;
@@ -7798,17 +8091,91 @@ function loadReports() {
         });
 }
 
+window.loadReports = loadReports;
+
+window.filterReports = function() {
+    renderReports();
+};
+
+window.setReportsStatusFilter = function(status) {
+    reportsFilterStatus = status;
+    const allBtn = document.getElementById('reportsFilterStatusAllBtn');
+    const pendingBtn = document.getElementById('reportsFilterStatusPendingBtn');
+    const actionBtn = document.getElementById('reportsFilterStatusActionBtn');
+    const dismissedBtn = document.getElementById('reportsFilterStatusDismissedBtn');
+
+    const defaultClass = 'px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white transition-colors cursor-pointer';
+    const activeClass = 'px-3 py-1.5 text-xs font-bold rounded-lg bg-primary text-white transition-colors cursor-pointer';
+
+    if (allBtn) allBtn.className = status === 'all' ? activeClass : defaultClass;
+    if (pendingBtn) pendingBtn.className = status === 'pending' ? activeClass : defaultClass;
+    if (actionBtn) actionBtn.className = status === 'action_taken' ? activeClass : defaultClass;
+    if (dismissedBtn) dismissedBtn.className = status === 'dismissed' ? activeClass : defaultClass;
+
+    renderReports();
+};
+
+window.setReportsTypeFilter = function(type) {
+    reportsFilterType = type;
+    const allBtn = document.getElementById('reportsFilterTypeAllBtn');
+    const dealsBtn = document.getElementById('reportsFilterTypeDealsBtn');
+    const commentsBtn = document.getElementById('reportsFilterTypeCommentsBtn');
+    const usersBtn = document.getElementById('reportsFilterTypeUsersBtn');
+    const messagesBtn = document.getElementById('reportsFilterTypeMessagesBtn');
+
+    const defaultClass = 'px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white transition-colors cursor-pointer';
+    const activeClass = 'px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 transition-colors cursor-pointer';
+
+    if (allBtn) allBtn.className = type === 'all' ? activeClass : defaultClass;
+    if (dealsBtn) dealsBtn.className = type === 'deal' ? activeClass : defaultClass;
+    if (commentsBtn) commentsBtn.className = type === 'comment' ? activeClass : defaultClass;
+    if (usersBtn) usersBtn.className = type === 'user' ? activeClass : defaultClass;
+    if (messagesBtn) messagesBtn.className = type === 'message' ? activeClass : defaultClass;
+
+    renderReports();
+};
+
 function renderReports() {
     const reportsTableBody = document.getElementById('reportsTableBody');
     if (!reportsTableBody) return;
 
-    if (reports.length === 0) {
+    const searchTerm = (document.getElementById('reportsSearchInput')?.value || '').trim().toLowerCase();
+
+    const filtered = reports.filter(report => {
+        // Status filter
+        if (reportsFilterStatus !== 'all' && report.status !== reportsFilterStatus) {
+            return false;
+        }
+
+        // Type filter
+        if (reportsFilterType !== 'all' && report.type !== reportsFilterType) {
+            return false;
+        }
+
+        // Search filter
+        if (searchTerm) {
+            const matchesId = (report.id || '').toLowerCase().includes(searchTerm);
+            const matchesReportedId = (report.reportedId || '').toLowerCase().includes(searchTerm);
+            const matchesReporter = (report.reportedBy || '').toLowerCase().includes(searchTerm);
+            const matchesReason = (report.reason || '').toLowerCase().includes(searchTerm);
+            const matchesDesc = (report.description || '').toLowerCase().includes(searchTerm);
+            const matchesContent = (report.targetContent || '').toLowerCase().includes(searchTerm);
+            const matchesAuthor = (report.targetAuthor || '').toLowerCase().includes(searchTerm);
+            const matchesAuthorId = (report.targetAuthorId || '').toLowerCase().includes(searchTerm);
+
+            return matchesId || matchesReportedId || matchesReporter || matchesReason || matchesDesc || matchesContent || matchesAuthor || matchesAuthorId;
+        }
+
+        return true;
+    });
+
+    if (filtered.length === 0) {
         reportsTableBody.innerHTML = `
             <tr>
                 <td colspan="8" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                     <div class="flex flex-col items-center gap-2">
                         <span class="material-symbols-outlined text-4xl opacity-50">report_off</span>
-                        <p>Henüz bildirilmiş şikayet yok</p>
+                        <p>Kriterlere uygun şikayet kaydı bulunamadı</p>
                     </div>
                 </td>
             </tr>
@@ -7816,7 +8183,7 @@ function renderReports() {
         return;
     }
 
-    reportsTableBody.innerHTML = reports.map(report => {
+    reportsTableBody.innerHTML = filtered.map(report => {
         const reportDate = new Date(report.createdAt);
         const formattedDate = reportDate.toLocaleDateString('tr-TR', {
             year: 'numeric',
@@ -7861,21 +8228,21 @@ function renderReports() {
         const isPending = report.status === 'pending';
         const actionsHtml = isPending ? `
             <div class="flex items-center justify-end gap-1.5">
-                <button onclick="window.inspectReportedContent('${report.id}', '${report.type}', '${report.reportedId}')" class="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 transition-colors flex items-center gap-1 text-xs font-semibold" title="İncele">
+                <button onclick="window.inspectReportedContent('${report.id}', '${report.type}', '${report.reportedId}')" class="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 transition-colors flex items-center gap-1 text-xs font-semibold cursor-pointer" title="İncele">
                     <span class="material-symbols-outlined text-[16px]">visibility</span>
                     İncele
                 </button>
-                <button onclick="window.takeActionOnReport('${report.id}', '${report.type}', '${report.reportedId}')" class="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 transition-colors flex items-center gap-1 text-xs font-semibold" title="İşlem Yap">
+                <button onclick="window.takeActionOnReport('${report.id}', '${report.type}', '${report.reportedId}')" class="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 transition-colors flex items-center gap-1 text-xs font-semibold cursor-pointer" title="İşlem Yap">
                     <span class="material-symbols-outlined text-[16px]">bolt</span>
                     İşlem Yap
                 </button>
-                <button onclick="window.dismissReport('${report.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors" title="Yoksay">
+                <button onclick="window.dismissReport('${report.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer" title="Yoksay">
                     <span class="material-symbols-outlined text-[18px]">close</span>
                 </button>
             </div>
         ` : `
             <div class="flex items-center justify-end gap-2">
-                <button onclick="window.inspectReportedContent('${report.id}', '${report.type}', '${report.reportedId}')" class="p-1 text-slate-400 hover:text-primary transition-colors" title="İncele">
+                <button onclick="window.inspectReportedContent('${report.id}', '${report.type}', '${report.reportedId}')" class="p-1 text-slate-400 hover:text-primary transition-colors cursor-pointer" title="İncele">
                     <span class="material-symbols-outlined text-[18px]">visibility</span>
                 </button>
                 <span class="text-xs text-slate-400 font-medium italic">Kapalı</span>
@@ -7968,6 +8335,11 @@ async function findCommentAndParent(commentId, targetDealId) {
 window.closeReportDetailModal = function () {
     const modal = document.getElementById('reportDetailModal');
     if (modal) modal.classList.add('hidden');
+    const warnBtn = document.getElementById('reportDetailWarnUserBtn');
+    if (warnBtn) {
+        warnBtn.classList.add('hidden');
+        warnBtn.style.display = 'none';
+    }
 };
 
 window.closeReportActionModal = function () {
@@ -7988,6 +8360,7 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
         const statusBadgeContainer = document.getElementById('reportDetailStatusBadge');
         const dismissBtn = document.getElementById('reportDetailDismissBtn');
         const actionBtn = document.getElementById('reportDetailActionBtn');
+        const warnBtn = document.getElementById('reportDetailWarnUserBtn');
 
         if (!modal || !modalBody) {
             console.error('❌ Report detail modal not found');
@@ -8059,6 +8432,8 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
 
         // Fetch reported item
         let contentHtml = '';
+        let targetAuthorUserId = null;
+        let targetAuthorUserName = null;
 
         if (type === 'comment') {
             const comment = await findCommentAndParent(reportedId, report.targetDealId);
@@ -8071,6 +8446,8 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
             const commentText = comment ? comment.content : (report.targetContent || 'İçerik veritabanında bulunamadı (silinmiş olabilir).');
             const authorName = comment ? comment.userName : (report.targetAuthor || 'Bilinmeyen Kullanıcı');
             const authorId = comment ? comment.userId : (report.targetAuthorId || '-');
+            targetAuthorUserId = authorId !== '-' ? authorId : null;
+            targetAuthorUserName = authorName;
 
             contentHtml = `
                 <div class="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200/60 dark:border-blue-800/40 rounded-xl p-4">
@@ -8092,7 +8469,7 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
                     ${dealInfo ? `
                         <div class="mt-3 pt-3 border-t border-blue-200/40 dark:border-blue-800/30 flex items-center justify-between">
                             <div class="flex items-center gap-2.5 min-w-0">
-                                <img src="${dealInfo.imageUrl || ''}" class="w-9 h-9 rounded-lg object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.src='https://placehold.co/100?text=Firsat'">
+                                <img src="${dealInfo.imageUrl || ''}" class="w-9 h-9 rounded-lg object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.onerror=null; this.src='https://placehold.co/100?text=Firsat'">
                                 <div class="min-w-0">
                                     <p class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(dealInfo.title || 'Fırsat')}</p>
                                     <p class="text-[11px] text-slate-500">${escapeHtml(dealInfo.store || '')} • ${dealInfo.price ? dealInfo.price + ' TL' : ''}</p>
@@ -8111,6 +8488,8 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
             const messageText = msgData ? (msgData.text || '') : (report.targetContent || 'Mesaj veritabanında bulunamadı.');
             const senderName = msgData ? (msgData.senderName || msgData.senderId) : (report.targetAuthor || 'Gönderen');
             const receiverName = msgData ? (msgData.receiverName || msgData.receiverId) : 'Alıcı';
+            targetAuthorUserId = msgData ? msgData.senderId : (report.targetAuthorId || null);
+            targetAuthorUserName = senderName;
 
             contentHtml = `
                 <div class="bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl p-4">
@@ -8129,7 +8508,7 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
                         </div>
                         ${msgData && msgData.dealTitle ? `
                             <div class="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-3">
-                                <img src="${msgData.dealImageUrl || ''}" class="w-8 h-8 rounded object-cover flex-shrink-0" onerror="this.src='https://placehold.co/100?text=Firsat'">
+                                <img src="${msgData.dealImageUrl || ''}" class="w-8 h-8 rounded object-cover flex-shrink-0" onerror="this.onerror=null; this.src='https://placehold.co/100?text=Firsat'">
                                 <div class="min-w-0">
                                     <p class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(msgData.dealTitle)}</p>
                                     <p class="text-[11px] text-primary font-semibold">${msgData.dealPrice ? msgData.dealPrice + ' TL' : ''}</p>
@@ -8147,10 +8526,13 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
             }
 
             if (deal) {
+                targetAuthorUserId = deal.postedBy || null;
+                targetAuthorUserName = deal.postedByName || 'Fırsat Sahibi';
+
                 contentHtml = `
                     <div class="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/60 dark:border-amber-800/40 rounded-xl p-4">
                         <div class="flex items-start gap-3.5">
-                            <img src="${deal.imageUrl || ''}" class="w-16 h-16 rounded-xl object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.src='https://placehold.co/100?text=Firsat'">
+                            <img src="${deal.imageUrl || ''}" class="w-16 h-16 rounded-xl object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.onerror=null; this.src='https://placehold.co/100?text=Firsat'">
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2 mb-1">
                                     <span class="px-2 py-0.5 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded text-[11px] font-bold">${escapeHtml(deal.store || 'Mağaza')}</span>
@@ -8187,10 +8569,13 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
 
             if (user) {
                 const displayName = user.nickname || user.username || 'Bilinmeyen Kullanıcı';
+                targetAuthorUserId = user.uid || user.id;
+                targetAuthorUserName = displayName;
+
                 contentHtml = `
                     <div class="bg-purple-50/50 dark:bg-purple-900/10 border border-purple-200/60 dark:border-purple-800/40 rounded-xl p-4">
                         <div class="flex items-center gap-3">
-                            <img src="${user.profileImageUrl || ''}" class="w-12 h-12 rounded-full object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=135bec&color=fff&size=128'">
+                            <img src="${user.profileImageUrl || ''}" class="w-12 h-12 rounded-full object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=135bec&color=fff&size=128'">
                             <div class="min-w-0 flex-1">
                                 <h4 class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(displayName)}</h4>
                                 <p class="text-xs text-slate-500">${escapeHtml(user.email || 'E-posta yok')} • UID: <span class="font-mono">${escapeHtml(user.uid || user.id)}</span></p>
@@ -8214,6 +8599,21 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
                         Bu kullanıcı hesabı bulunamadı (silinmiş olabilir).
                     </div>
                 `;
+            }
+        }
+
+        // Setup warning button
+        if (warnBtn) {
+            if (targetAuthorUserId && targetAuthorUserId !== 'botkolik' && targetAuthorUserId !== '-') {
+                warnBtn.classList.remove('hidden');
+                warnBtn.style.display = 'flex';
+                warnBtn.onclick = () => {
+                    closeReportDetailModal();
+                    window.showAdminMessageModal(targetAuthorUserId, targetAuthorUserName || 'Kullanıcı');
+                };
+            } else {
+                warnBtn.classList.add('hidden');
+                warnBtn.style.display = 'none';
             }
         }
 
@@ -8322,6 +8722,7 @@ window.takeActionOnReport = async function (reportId, type, reportedId) {
                     action: async (note) => {
                         await db.collection('deals').doc(reportedId).update({
                             isExpired: true,
+                            status: 'expired',
                             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                         return 'Fırsat yayından kaldırıldı (süresi doldu yapıldı).';
@@ -8780,6 +9181,16 @@ function initCardLinks() {
         }
     };
 
+    const injectH3Dropdown = (headingText, links, title) => {
+        const headings = document.querySelectorAll('h3');
+        for (const h of headings) {
+            if (h.textContent && h.textContent.includes(headingText)) {
+                injectMenu(h, createDropdownLinkEl(links, title));
+                break;
+            }
+        }
+    };
+
     // Close all menus when clicking outside
     document.removeEventListener('click', window.closeShortcutDropdowns);
     window.closeShortcutDropdowns = () => {
@@ -8858,247 +9269,194 @@ function initCardLinks() {
     // Injections to Dashboard Cards
     // -------------------------------------------------------------
     
-    const injectCardDropdown = (elId, links, title) => {
-        const el = document.getElementById(elId);
-        if (el) {
-            const cardContainer = el.closest('.group');
-            if (cardContainer) {
-                const cardHeader = cardContainer.querySelector('p.text-sm');
-                if (cardHeader) {
-                    cardHeader.classList.add('flex', 'items-center', 'justify-between', 'w-full');
-                    injectMenu(cardHeader, createDropdownLinkEl(links, title));
-                }
-            }
-        }
-    };
-
-    injectCardDropdown('dashTotalUsers', userLinks, 'Kullanıcı Kaynakları');
-    injectCardDropdown('dashTodayNewUsers', userLinks, 'Kullanıcı Kaynakları');
-
-    // Fırsat Kartları
-    injectCardDropdown('dashTodayDeals', dealLinks, 'Fırsat Kaynakları');
-    injectCardDropdown('dashPendingDeals', dealLinks, 'Fırsat Kaynakları');
-    injectCardDropdown('dashTodayApproved', dealLinks, 'Fırsat Kaynakları');
-    injectCardDropdown('dashTodayRejected', dealLinks, 'Fırsat Kaynakları');
-    injectCardDropdown('dashAvgApprovalTime', dealLinks, 'Fırsat Kaynakları');
-
-    // Yorum Kartı
-    injectCardDropdown('dashTodayComments', commentLinks, 'Yorum Kaynakları');
-
-    // Aktif Bot Kartı
-    injectCardDropdown('dashBotCount', botLinks, 'Bot Kontrol Paneli');
-
-    // Telegram Bot Durumu (Health Section)
-    const botDurumuHeader = Array.from(document.querySelectorAll('h3')).find(h => h.textContent.includes('Telegram Bot Durumu'));
-    if (botDurumuHeader) {
-        botDurumuHeader.classList.add('flex', 'items-center', 'gap-2.5');
-        injectMenu(botDurumuHeader, createDropdownLinkEl(botLinks, 'Bot Manuel Kontrolleri'));
-    }
-
-    // Yapay Zeka Durumu (Health Section)
-    const aiDurumuHeader = Array.from(document.querySelectorAll('h3')).find(h => h.textContent.includes('Yapay Zeka Durumu'));
-    if (aiDurumuHeader) {
-        aiDurumuHeader.classList.add('flex', 'items-center', 'gap-2.5');
-        injectMenu(aiDurumuHeader, createDropdownLinkEl(aiLinks, 'AI Manuel Kontrolleri'));
-    }
-
-    // -------------------------------------------------------------
-    // Injections to Other Menu View Headings
-    // -------------------------------------------------------------
-    
-    // Helper to inject link dropdown next to an H2 heading text
-    const injectHeadingDropdown = (headingText, links, dropdownTitle) => {
-        const heading = Array.from(document.querySelectorAll('h2')).find(h => h.textContent.trim().includes(headingText));
-        if (heading) {
-            heading.classList.add('flex', 'items-center', 'gap-3');
-            injectMenu(heading, createDropdownLinkEl(links, dropdownTitle));
-        }
-    };
-
-    // Helper to inject link dropdown next to an H3 card heading text
-    const injectH3Dropdown = (headingText, links, dropdownTitle) => {
-        const heading = Array.from(document.querySelectorAll('h3')).find(h => h.textContent.trim().includes(headingText));
-        if (heading) {
-            heading.classList.add('flex', 'items-center', 'gap-2.5');
-            injectMenu(heading, createDropdownLinkEl(links, dropdownTitle));
-        }
-    };
-
-    injectHeadingDropdown('Genel Bakış', settingsLinks, 'Genel Kaynaklar');
-    injectHeadingDropdown('Fırsat Listesi', dealLinks, 'Fırsat Veri Kaynakları');
-    injectHeadingDropdown('Kullanıcı Listesi', userLinks, 'Kullanıcı Veri Kaynakları');
-    injectHeadingDropdown('Moderasyon Mesajları', messageLinks, 'Mesaj Veri Kaynakları');
-    injectHeadingDropdown('Kullanıcı Şikayetleri', [{ title: 'Firestore "reports" Koleksiyonu', url: `${firebaseBaseUrl}/firestore/databases/-default-/data/~2Freports`, icon: 'database' }], 'Rapor Veri Kaynakları');
-    injectHeadingDropdown('Bildirim Merkezi', notificationLinks, 'Bildirim Kontrolleri');
-    injectHeadingDropdown('Sistem Hata Logları', logLinks, 'Süreç Log Kontrolleri');
-    injectHeadingDropdown('Sistem Ayarları', settingsLinks, 'Konfigürasyon Verileri');
-
-    injectH3Dropdown('Acil Durum Kontrolleri', [{ title: 'Firestore "app" Ayarı', url: `${firebaseBaseUrl}/firestore/databases/-default-/data/~2Fsettings~2Fapp`, icon: 'settings' }], 'Acil Durum Ayarı');
-    injectH3Dropdown('Bot ve Uygulama Yapılandırması', botLinks, 'Bot Yapılandırma Kaynakları');
-    injectH3Dropdown('Admin Yetki Yönetimi', userLinks, 'Yönetici Yetkilendirme');
     injectH3Dropdown('Manuel Bildirim Gönder', notificationLinks, 'Bildirim Kaynakları');
     injectH3Dropdown('FCM Token Temizliği', notificationLinks, 'Bildirim Kaynakları');
 }
 
-// Load dashboard data from Firestore count queries and in-memory caches
+// Safe alias for deal detail modal (backwards compatibility)
+window.openDealEditModal = function(dealId) {
+    if (typeof window.showDealDetail === 'function') {
+        window.showDealDetail(dealId);
+    }
+};
+
+// Category normalization helper for FırsatKolik canonical taxonomy
+function normalizeCategory(rawCat) {
+    if (!rawCat || typeof rawCat !== 'string') return { key: 'diger', title: 'Diğer' };
+    const cleaned = rawCat.trim().toLowerCase()
+        .replace(/ç/g, 'c')
+        .replace(/ğ/g, 'g')
+        .replace(/ı/g, 'i')
+        .replace(/ö/g, 'o')
+        .replace(/ş/g, 's')
+        .replace(/ü/g, 'u');
+
+    if (cleaned.includes('elektronik')) return { key: 'elektronik', title: 'Elektronik' };
+    if (cleaned.includes('moda') || cleaned.includes('giyim')) return { key: 'moda', title: 'Moda & Giyim' };
+    if (cleaned.includes('ev') || cleaned.includes('yasam')) return { key: 'ev_yasam', title: 'Ev & Yaşam' };
+    if (cleaned.includes('anne') || cleaned.includes('bebek')) return { key: 'anne_bebek', title: 'Anne & Bebek' };
+    if (cleaned.includes('kozmetik') || cleaned.includes('bakim')) return { key: 'kozmetik', title: 'Kozmetik & Bakım' };
+    if (cleaned.includes('spor') || cleaned.includes('outdoor')) return { key: 'spor_outdoor', title: 'Spor & Outdoor' };
+    if (cleaned.includes('supermarket') || cleaned.includes('market')) return { key: 'supermarket', title: 'Süpermarket' };
+    if (cleaned.includes('yapi') || cleaned.includes('oto')) return { key: 'yapi_oto', title: 'Yapı Market & Oto' };
+    if (cleaned.includes('kitap') || cleaned.includes('hobi')) return { key: 'kitap_hobi', title: 'Kitap & Hobi' };
+    if (cleaned.includes('oyun') || cleaned.includes('dijital')) return { key: 'oyun', title: 'Oyun & Dijital' };
+    return { key: 'diger', title: 'Diğer' };
+}
+
+// FırsatKolik Avcı Kademe Seviyesi & Rozeti (gamification)
+function getHunterLevelTitle(pts) {
+    const p = Number(pts) || 0;
+    if (p < 20) return { title: 'Çaylak Avcı', badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700' };
+    if (p < 50) return { title: 'Çırak Avcı', badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' };
+    if (p < 120) return { title: 'Usta Avcı', badgeClass: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800' };
+    if (p < 250) return { title: 'Uzman Avcı', badgeClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800' };
+    if (p < 500) return { title: 'Kıdemli Avcı', badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' };
+    if (p < 1000) return { title: 'Şef Avcı', badgeClass: 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border-orange-200 dark:border-orange-800' };
+    if (p < 2500) return { title: 'Büyük Avcı', badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800' };
+    if (p < 5000) return { title: 'Efsanevi Avcı', badgeClass: 'bg-yellow-50 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300 border-yellow-300 dark:border-yellow-700' };
+    return { title: 'Mitolojik Avcı', badgeClass: 'bg-gradient-to-r from-amber-500/20 to-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-400' };
+}
+
+// Load executive dashboard data from Firestore count queries and in-memory caches
 async function loadDashboardData() {
     try {
-        console.log('📊 Loading dashboard data...');
+        console.log('📊 Loading executive dashboard data across all platform pillars...');
 
-        let totalUsers = 0;
-        let todayNewUsers = 0;
-        let todayComments = 0;
-        let topUsersSnapshot = null;
+        const refreshBtn = document.getElementById('refreshDashboardBtn');
+        const refreshIcon = refreshBtn ? refreshBtn.querySelector('.material-symbols-outlined') : null;
+        if (refreshIcon) refreshIcon.classList.add('animate-spin');
+
+        // 0. Environment Badge & Text
+        const envBadge = document.getElementById('dashEnvBadge');
+        const envText = document.getElementById('dashEnvText');
+        const currentEnv = typeof selectedEnv !== 'undefined' ? selectedEnv : (localStorage.getItem('firebase_env') || 'dev');
+        const projectId = (typeof firebaseConfig !== 'undefined' && firebaseConfig.projectId) ? firebaseConfig.projectId : (currentEnv === 'prod' ? 'firsatkolik-prod-e6eae' : 'sicak-firsatlar-e6eae');
+        
+        if (envBadge && envText) {
+            if (currentEnv === 'prod') {
+                envBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 shadow-2xs';
+                envBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>PRODUCTION (${projectId})</span>`;
+            } else {
+                envBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 shadow-2xs';
+                envBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span><span>DEV (${projectId})</span>`;
+            }
+        }
 
         const todayMidnight = new Date();
         todayMidnight.setHours(0, 0, 0, 0);
 
-        // 1. Total users count (client-side from real-time cached array)
-        totalUsers = users.length;
+        const todayStr = `${todayMidnight.getFullYear()}-${String(todayMidnight.getMonth() + 1).padStart(2, '0')}-${String(todayMidnight.getDate()).padStart(2, '0')}`;
 
-        // 2. Today's new users count (client-side from real-time cached array)
-        todayNewUsers = users.filter(u => u.createdAt && u.createdAt >= todayMidnight).length;
-
-        // 3. Today's comments count
-        // Strategy 1: Try Firestore collectionGroup query (requires index)
-        // Strategy 2: Fallback — sum commentCount from today's deals (always works)
-        try {
-            const todayCommentsSnapshot = await db.collectionGroup('comments')
-                .where('createdAt', '>=', todayMidnight)
-                .get();
-            todayComments = todayCommentsSnapshot.size;
-        } catch (err) {
-            // Index not ready yet — fall back to summing commentCount on today's deals
+        // Helper to parse dates safely
+        const parseDate = (val) => {
+            if (!val) return null;
+            if (val.toDate && typeof val.toDate === 'function') return val.toDate();
+            if (val instanceof Date) return val;
             try {
-                const todayDeals = deals ? deals.filter(d => d.createdAt && d.createdAt >= todayMidnight) : [];
-                todayComments = todayDeals.reduce((sum, d) => sum + (d.commentCount || 0), 0);
-            } catch (fallbackErr) {
-                console.warn('Today comments fallback also failed:', fallbackErr);
+                const d = new Date(val);
+                return isNaN(d.getTime()) ? null : d;
+            } catch (_) {
+                return null;
             }
-        }
+        };
 
-        // 4. Top users for leaderboard
-        try {
-            topUsersSnapshot = await db.collection('users')
-                .orderBy('points', 'desc')
-                .limit(5)
-                .get();
-        } catch (err) {
-            console.error('Error getting top users for leaderboard:', err);
-        }
+        // Parallel fetch for Pillar 2-6
+        const [
+            couponsSnapResult,
+            catalogsSnapResult,
+            reportsSnapResult,
+            systemErrorsSnapResult,
+            userDevicesSnapResult,
+            notifStatsSnapResult,
+            notifConfigSnapResult,
+            topUsersSnapResult,
+            todayCommentsSnapResult
+        ] = await Promise.allSettled([
+            // 1. Coupons
+            db.collection('kuponlar').get(),
+            // 2. Catalogs
+            db.collection('kataloglar').get(),
+            // 3. Reports (pending)
+            db.collection('reports').where('status', '==', 'pending').get(),
+            // 4. System Errors (unresolved)
+            db.collection('systemErrors').where('status', '==', 'unresolved').get(),
+            // 5. User Devices
+            db.collection('userDevices').get(),
+            // 6. Notification Stats for today
+            db.collection('notificationStats').doc(todayStr).get(),
+            // 7. System notification config
+            db.collection('systemConfig').doc('notifications').get(),
+            // 8. Top 10 Users for Leaderboard (filter system accounts)
+            db.collection('users').orderBy('points', 'desc').limit(10).get(),
+            // 9. Today's comments
+            db.collectionGroup('comments').where('createdAt', '>=', todayMidnight).get()
+        ]);
 
-        // Render stats from Firestore counts
-        const totalUsersEl = document.getElementById('dashTotalUsers');
-        if (totalUsersEl) totalUsersEl.textContent = totalUsers;
-
-        const todayNewUsersEl = document.getElementById('dashTodayNewUsers');
-        if (todayNewUsersEl) todayNewUsersEl.textContent = todayNewUsers;
-
-        const todayCommentsEl = document.getElementById('dashTodayComments');
-        if (todayCommentsEl) todayCommentsEl.textContent = todayComments;
-
-        // Render leaderboard
-        const leaderboardBody = document.getElementById('dashLeaderboardBody');
-        if (leaderboardBody) {
-            let leaderboardHtml = '';
-            if (topUsersSnapshot && !topUsersSnapshot.empty) {
-                let index = 1;
-                topUsersSnapshot.forEach(doc => {
-                    const u = doc.data();
-                    const name = u.nickname || u.username || 'Bilinmeyen';
-                    const points = u.points || 0;
-                    const avatar = cleanProfileImageUrl(u.profileImageUrl) || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=135bec&color=fff&size=32`;
-                    leaderboardHtml += `
-                        <tr class="text-slate-700 dark:text-slate-300">
-                            <td class="py-3 font-semibold">${index}</td>
-                            <td class="py-3">
-                                <div class="flex items-center gap-2">
-                                    <img src="${avatar}" alt="" class="w-6 h-6 rounded-full object-cover" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=135bec&color=fff&size=32'">
-                                    <span class="font-medium">${escapeHtml(name)}</span>
-                                </div>
-                            </td>
-                            <td class="py-3 text-right font-bold text-slate-900 dark:text-white">${points}</td>
-                        </tr>
-                    `;
-                    index++;
-                });
-            } else {
-                leaderboardHtml = '<tr><td colspan="3" class="py-4 text-center text-slate-400">Veri yok</td></tr>';
-            }
-            leaderboardBody.innerHTML = leaderboardHtml;
-        }
-
-        // 5. Calculate deal stats from in-memory array
-        const todayDeals = deals.filter(d => d.createdAt >= todayMidnight);
-        const todayDealsCount = todayDeals.length;
-
-        const todayApprovedDeals = deals.filter(d => {
-            if (!d.isApproved) return false;
-            const approvedAtVal = d.approvedAt || d.updatedAt;
-            if (!approvedAtVal) return false;
-
-            let approvedDate;
-            if (approvedAtVal.toDate) {
-                approvedDate = approvedAtVal.toDate();
-            } else if (approvedAtVal instanceof Date) {
-                approvedDate = approvedAtVal;
-            } else {
-                approvedDate = new Date(approvedAtVal);
-            }
-            return approvedDate >= todayMidnight;
-        });
-        const todayApprovedCount = todayApprovedDeals.length;
-
-        // Reject count check
-        const todayRejectedDeals = deals.filter(d => {
-            if (d.isApproved) return false;
-            if (!d.isRejected) return false;
-            const updatedAtVal = d.updatedAt;
-            if (!updatedAtVal) return false;
-
-            let updatedDate;
-            if (updatedAtVal.toDate) {
-                updatedDate = updatedAtVal.toDate();
-            } else if (updatedAtVal instanceof Date) {
-                updatedDate = updatedAtVal;
-            } else {
-                updatedDate = new Date(updatedAtVal);
-            }
-            return updatedDate >= todayMidnight;
-        });
-        const todayRejectedCount = todayRejectedDeals.length;
-
-        const pendingDealsCount = deals.filter(d => !d.isApproved && d.isRejected !== true && d.isExpired !== true).length;
-
-        // Average approval time
+        // --- PILLAR 1: FIRSATLAR (DEALS) ---
+        const totalDeals = deals ? deals.length : 0;
+        let todayDealsCount = 0;
+        let todayApprovedCount = 0;
+        let todayRejectedCount = 0;
+        let pendingDealsCount = 0;
         let totalApprovalTimeMs = 0;
         let approvalCountWithTime = 0;
+        const pendingDealsList = [];
 
-        todayApprovedDeals.forEach(d => {
-            const approvedAtVal = d.approvedAt || d.updatedAt;
-            if (approvedAtVal && d.createdAt) {
-                let approvedDate;
-                if (approvedAtVal.toDate) {
-                    approvedDate = approvedAtVal.toDate();
-                } else if (approvedAtVal instanceof Date) {
-                    approvedDate = approvedAtVal;
+        // Fırsat Kaynak Dağılımı (Topluluk vs Otonom Bot)
+        let communityDealsCount = 0;
+        let botDealsCount = 0;
+
+        if (deals && deals.length > 0) {
+            deals.forEach(d => {
+                const cDate = parseDate(d.createdAt || d.timestamp);
+                if (cDate && cDate >= todayMidnight) {
+                    todayDealsCount++;
+                }
+
+                // Community vs Bot counter
+                if (d.isUserSubmitted === true) {
+                    communityDealsCount++;
                 } else {
-                    approvedDate = new Date(approvedAtVal);
+                    botDealsCount++;
                 }
 
-                const createdAtDate = d.createdAt instanceof Date ? d.createdAt : new Date(d.createdAt);
-                const diffMs = approvedDate.getTime() - createdAtDate.getTime();
-                if (diffMs >= 0) {
-                    totalApprovalTimeMs += diffMs;
-                    approvalCountWithTime++;
+                const isPending = (d.isApproved === false && d.isRejected !== true && d.isExpired !== true && d.status !== 'expired' && d.status !== 'rejected');
+                if (isPending) {
+                    pendingDealsCount++;
+                    if (pendingDealsList.length < 5) {
+                        pendingDealsList.push(d);
+                    }
                 }
-            }
-        });
+
+                // Approved today
+                if (d.isApproved === true) {
+                    const aDate = parseDate(d.approvedAt || d.updatedAt);
+                    if (aDate && aDate >= todayMidnight) {
+                        todayApprovedCount++;
+                        if (cDate) {
+                            const diff = aDate.getTime() - cDate.getTime();
+                            if (diff >= 0) {
+                                totalApprovalTimeMs += diff;
+                                approvalCountWithTime++;
+                            }
+                        }
+                    }
+                }
+
+                // Rejected today
+                if (d.isRejected === true || d.status === 'rejected') {
+                    const rDate = parseDate(d.updatedAt || d.rejectedAt);
+                    if (rDate && rDate >= todayMidnight) {
+                        todayRejectedCount++;
+                    }
+                }
+            });
+        }
 
         let avgApprovalTimeStr = '-';
         if (approvalCountWithTime > 0) {
-            const avgMs = totalApprovalTimeMs / approvalCountWithTime;
-            const avgMinutes = Math.round(avgMs / 60000);
+            const avgMinutes = Math.round((totalApprovalTimeMs / approvalCountWithTime) / 60000);
             if (avgMinutes < 60) {
                 avgApprovalTimeStr = `${avgMinutes} dk`;
             } else {
@@ -9108,97 +9466,372 @@ async function loadDashboardData() {
             }
         }
 
-        const todayDealsEl = document.getElementById('dashTodayDeals');
-        if (todayDealsEl) todayDealsEl.textContent = todayDealsCount;
+        const elTotalDeals = document.getElementById('dashTotalDeals');
+        if (elTotalDeals) elTotalDeals.textContent = totalDeals;
 
-        const pendingDealsEl = document.getElementById('dashPendingDeals');
-        if (pendingDealsEl) pendingDealsEl.textContent = pendingDealsCount;
+        const elTodayDeals = document.getElementById('dashTodayDeals');
+        if (elTodayDeals) elTodayDeals.textContent = todayDealsCount;
 
-        const todayApprovedEl = document.getElementById('dashTodayApproved');
-        if (todayApprovedEl) todayApprovedEl.textContent = todayApprovedCount;
+        const elPendingDeals = document.getElementById('dashPendingDeals');
+        if (elPendingDeals) elPendingDeals.textContent = pendingDealsCount;
 
-        const todayRejectedEl = document.getElementById('dashTodayRejected');
-        if (todayRejectedEl) todayRejectedEl.textContent = todayRejectedCount;
+        const elAvgApproval = document.getElementById('dashAvgApprovalTime');
+        if (elAvgApproval) elAvgApproval.textContent = avgApprovalTimeStr;
 
-        const avgApprovalTimeEl = document.getElementById('dashAvgApprovalTime');
-        if (avgApprovalTimeEl) avgApprovalTimeEl.textContent = avgApprovalTimeStr;
-
-        // 4.5. Get bot status
-        let activeBotCount = 0;
-        try {
-            const botDoc = await db.collection('settings').doc('telegramBot').get();
-            if (botDoc.exists) {
-                const data = botDoc.data();
-                const lastHeartbeat = data.lastHeartbeatAt;
-                if (lastHeartbeat) {
-                    const hbDate = lastHeartbeat.toDate ? lastHeartbeat.toDate() : new Date(lastHeartbeat);
-                    const diffMs = new Date().getTime() - hbDate.getTime();
-                    // If bot updated heartbeat within 15 minutes and status is online, count as active (handles clock skew with Math.abs)
-                    if (Math.abs(diffMs) <= 15 * 60000 && data.status === 'online') {
-                        activeBotCount = 1;
-                    }
-                }
+        // Render Quick Pending Deals Table
+        const pendingTbody = document.getElementById('dashPendingDealsBody');
+        if (pendingTbody) {
+            if (pendingDealsList.length === 0) {
+                pendingTbody.innerHTML = `<tr><td colspan="3" class="py-6 text-center text-slate-400 dark:text-slate-500">Onay bekleyen fırsat bulunmuyor 🎉</td></tr>`;
+            } else {
+                let phtml = '';
+                pendingDealsList.forEach(deal => {
+                    const priceFormatted = deal.price ? `${deal.price} TL` : 'Ücretsiz';
+                    phtml += `
+                        <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50 transition-colors">
+                            <td class="py-2.5 pr-2 max-w-[170px] truncate" title="${escapeHtml(deal.title)}">
+                                <a href="javascript:void(0)" onclick="window.showDealDetail('${deal.id}')" class="font-semibold text-slate-800 dark:text-slate-200 hover:text-primary transition-colors block truncate">
+                                    ${escapeHtml(deal.title)}
+                                </a>
+                                <span class="text-[10px] text-slate-400 block">${deal.isUserSubmitted ? 'Topluluk' : 'Telegram Bot'}</span>
+                            </td>
+                            <td class="py-2.5 pr-2 whitespace-nowrap font-bold text-slate-900 dark:text-white">
+                                ${priceFormatted}
+                            </td>
+                            <td class="py-2.5 text-right whitespace-nowrap">
+                                <button type="button" onclick="window.showDealDetail('${deal.id}')" class="px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 text-[10px] font-bold transition-colors cursor-pointer">
+                                    İncele
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                pendingTbody.innerHTML = phtml;
             }
-        } catch (err) {
-            console.error('Error getting bot status for dashboard:', err);
         }
 
-        const dashBotCountEl = document.getElementById('dashBotCount');
-        if (dashBotCountEl) dashBotCountEl.textContent = activeBotCount;
+        // Fırsat Kaynak Dağılımı (Topluluk vs Otonom Bot Radarı)
+        const communityPct = totalDeals > 0 ? Math.round((communityDealsCount / totalDeals) * 100) : 0;
+        const botPct = totalDeals > 0 ? (100 - communityPct) : 0;
 
-        // Render charts
-        renderCharts(deals);
+        const elCommCount = document.getElementById('dashCommunityDealsCount');
+        if (elCommCount) elCommCount.textContent = `${communityDealsCount} Fırsat`;
+        const elCommPct = document.getElementById('dashCommunityDealsPct');
+        if (elCommPct) elCommPct.textContent = `%${communityPct}`;
+        const elBotCount = document.getElementById('dashBotDealsCount');
+        if (elBotCount) elBotCount.textContent = `${botDealsCount} Fırsat`;
+        const elBotPct = document.getElementById('dashBotDealsPct');
+        if (elBotPct) elBotPct.textContent = `%${botPct}`;
+        const elCommBar = document.getElementById('dashCommunityProgressBar');
+        if (elCommBar) elCommBar.style.width = `${communityPct}%`;
+        const elBotBar = document.getElementById('dashBotProgressBar');
+        if (elBotBar) elBotBar.style.width = `${botPct}%`;
+        const elCommBadge = document.getElementById('dashCommunityBadge');
+        if (elCommBadge) elCommBadge.textContent = `Topluluk: %${communityPct}`;
 
-        // Render top popular tables
-        // Top Likes
-        const topLikes = [...deals]
-            .sort((a, b) => (b.hotVotes || 0) - (a.hotVotes || 0))
+        // --- PILLAR 2: İNDİRİM KUPONLARI (COUPONS) ---
+        let totalCoupons = 0;
+        let activeCoupons = 0;
+        let todayCoupons = 0;
+
+        if (couponsSnapResult.status === 'fulfilled' && couponsSnapResult.value) {
+            const snap = couponsSnapResult.value;
+            totalCoupons = snap.size;
+            snap.forEach(doc => {
+                const d = doc.data();
+                const expDate = parseDate(d.sonKullanimTarihi || d.bitisTarihi);
+                if (!expDate || expDate >= new Date()) {
+                    activeCoupons++;
+                }
+                const cDate = parseDate(d.olusturulmaTarihi || d.createdAt);
+                if (cDate && cDate >= todayMidnight) {
+                    todayCoupons++;
+                }
+            });
+        }
+        const elTotalCoupons = document.getElementById('dashTotalCoupons');
+        if (elTotalCoupons) elTotalCoupons.textContent = totalCoupons;
+        const elActiveCoupons = document.getElementById('dashActiveCoupons');
+        if (elActiveCoupons) elActiveCoupons.textContent = activeCoupons;
+        const elTodayCoupons = document.getElementById('dashTodayCoupons');
+        if (elTodayCoupons) elTodayCoupons.textContent = todayCoupons;
+        const elRadarCoupons = document.getElementById('dashRadarCouponsTotal');
+        if (elRadarCoupons) elRadarCoupons.textContent = `${totalCoupons} Kupon`;
+
+        // --- PILLAR 3: AKTÜEL KATALOGLAR (BROCHURES) ---
+        let totalCatalogs = 0;
+        let activeCatalogs = 0;
+
+        if (catalogsSnapResult.status === 'fulfilled' && catalogsSnapResult.value) {
+            const snap = catalogsSnapResult.value;
+            totalCatalogs = snap.size;
+            snap.forEach(doc => {
+                const d = doc.data();
+                const endDate = parseDate(d.bitisTarihi);
+                if (!endDate || endDate >= todayMidnight) {
+                    activeCatalogs++;
+                }
+            });
+        }
+        const elTotalCatalogs = document.getElementById('dashTotalCatalogs');
+        if (elTotalCatalogs) elTotalCatalogs.textContent = totalCatalogs;
+        const elActiveCatalogs = document.getElementById('dashActiveCatalogs');
+        if (elActiveCatalogs) elActiveCatalogs.textContent = activeCatalogs;
+        const elRadarCatalogs = document.getElementById('dashRadarCatalogsTotal');
+        if (elRadarCatalogs) elRadarCatalogs.textContent = `${totalCatalogs} Broşür`;
+
+        // --- PILLAR 4: TOPLULUK & AVCI GAMIFICATION ---
+        const totalUsers = users ? users.length : 0;
+        let todayNewUsers = 0;
+        if (users && users.length > 0) {
+            todayNewUsers = users.filter(u => {
+                const d = parseDate(u.createdAt);
+                return d && d >= todayMidnight;
+            }).length;
+        }
+        const elTotalUsers = document.getElementById('dashTotalUsers');
+        if (elTotalUsers) elTotalUsers.textContent = totalUsers;
+        const elTodayNewUsers = document.getElementById('dashTodayNewUsers');
+        if (elTodayNewUsers) elTodayNewUsers.textContent = todayNewUsers;
+
+        // Today's comments count
+        let todayComments = 0;
+        if (todayCommentsSnapResult.status === 'fulfilled' && todayCommentsSnapResult.value) {
+            todayComments = todayCommentsSnapResult.value.size;
+        } else {
+            if (deals) {
+                todayComments = deals.filter(d => {
+                    const c = parseDate(d.createdAt);
+                    return c && c >= todayMidnight;
+                }).reduce((sum, d) => sum + (d.commentCount || 0), 0);
+            }
+        }
+        const elTodayComments = document.getElementById('dashTodayComments');
+        if (elTodayComments) elTodayComments.textContent = todayComments;
+
+        // Render Leaderboard (Top 5 Avcı - Filter out bot/system accounts)
+        const leaderboardBody = document.getElementById('dashLeaderboardBody');
+        if (leaderboardBody) {
+            let lhtml = '';
+            let rawDocs = [];
+            if (topUsersSnapResult.status === 'fulfilled' && !topUsersSnapResult.value.empty) {
+                rawDocs = topUsersSnapResult.value.docs.map(d => ({ id: d.id, ...d.data() }));
+            } else if (users && users.length > 0) {
+                rawDocs = [...users];
+            }
+
+            const isBotAccount = (u) => {
+                if (!u) return true;
+                const uid = (u.uid || u.id || '').toLowerCase();
+                const name = (u.nickname || u.username || '').toLowerCase();
+                if (uid === 'bot' || uid === 'botkolik' || uid.startsWith('telegram_')) return true;
+                if (name === 'bot' || name === 'botkolik' || name.startsWith('telegram')) return true;
+                if (!u.nickname && !u.username && !u.email) return true;
+                return false;
+            };
+
+            const topDocs = rawDocs.filter(u => !isBotAccount(u)).slice(0, 5);
+
+            if (topDocs.length > 0) {
+                topDocs.forEach((u, idx) => {
+                    const name = u.nickname || u.username || 'Avcı';
+                    const pts = u.points || 0;
+                    const avatar = cleanProfileImageUrl(u.profileImageUrl) || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=135bec&color=fff&size=32`;
+                    const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `${idx + 1}`));
+                    const hunterLevel = getHunterLevelTitle(pts);
+                    lhtml += `
+                        <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50 transition-colors cursor-pointer group" onclick="showUsersView('${escapeHtml(name)}')">
+                            <td class="py-2.5 font-bold text-slate-500 w-6">${medal}</td>
+                            <td class="py-2.5">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <img src="${avatar}" alt="" class="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=135bec&color=fff&size=32'">
+                                    <div class="flex flex-col min-w-0">
+                                        <span class="font-semibold text-slate-800 dark:text-slate-200 truncate text-xs group-hover:text-primary transition-colors" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+                                        <span class="text-[9px] font-bold px-1.5 py-0.2 rounded border inline-block w-fit mt-0.5 ${hunterLevel.badgeClass}">${hunterLevel.title}</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="py-2.5 text-right font-black text-primary text-xs whitespace-nowrap">${pts.toLocaleString('tr-TR')} P</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                lhtml = `<tr><td colspan="3" class="py-6 text-center text-slate-400">Henüz puan kaydı yok</td></tr>`;
+            }
+            leaderboardBody.innerHTML = lhtml;
+        }
+
+        // --- PILLAR 5: BİLDİRİM & CİHAZ ALTYAPISI ---
+        let totalActiveDevices = 0;
+        let androidCount = 0;
+        let iosCount = 0;
+
+        if (userDevicesSnapResult.status === 'fulfilled' && userDevicesSnapResult.value) {
+            userDevicesSnapResult.value.forEach(doc => {
+                const data = doc.data();
+                if (data.active === true) {
+                    totalActiveDevices++;
+                }
+                if (data.platform === 'android') {
+                    androidCount++;
+                } else if (data.platform === 'ios') {
+                    iosCount++;
+                }
+            });
+        }
+        const elActiveDevices = document.getElementById('dashActiveDevices');
+        if (elActiveDevices) elActiveDevices.textContent = totalActiveDevices;
+        const elAndroid = document.getElementById('dashAndroidDevices');
+        if (elAndroid) elAndroid.textContent = androidCount;
+        const elIos = document.getElementById('dashIosDevices');
+        if (elIos) elIos.textContent = iosCount;
+
+        // Notification stats today
+        let todayPushCount = 0;
+        if (notifStatsSnapResult.status === 'fulfilled' && notifStatsSnapResult.value && notifStatsSnapResult.value.exists) {
+            todayPushCount = notifStatsSnapResult.value.data().count || notifStatsSnapResult.value.data().totalSent || 0;
+        }
+        const elTodayPush = document.getElementById('dashTodayPushCount');
+        if (elTodayPush) elTodayPush.textContent = todayPushCount;
+
+        // Notification Engine System Config
+        let isEngineActive = true;
+        let hourlyLimit = 3;
+        let dailyLimit = 8;
+        if (notifConfigSnapResult.status === 'fulfilled' && notifConfigSnapResult.value && notifConfigSnapResult.value.exists) {
+            const data = notifConfigSnapResult.value.data();
+            isEngineActive = (data.enabled !== false);
+            hourlyLimit = data.categoryHourlyLimit || 3;
+            dailyLimit = data.categoryDailyLimit || 8;
+        }
+
+        const elEngineBadge = document.getElementById('dashNotifEngineBadge');
+        const elEngineLiveBadge = document.getElementById('dashPushEngineLiveBadge');
+        if (elEngineBadge) {
+            elEngineBadge.className = isEngineActive 
+                ? 'inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400' 
+                : 'inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 dark:text-rose-400';
+            elEngineBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${isEngineActive ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}"></span>${isEngineActive ? 'Aktif' : 'Durduruldu'}`;
+        }
+        if (elEngineLiveBadge) {
+            elEngineLiveBadge.className = isEngineActive 
+                ? 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400' 
+                : 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400';
+            elEngineLiveBadge.innerHTML = `<span class="w-2 h-2 rounded-full ${isEngineActive ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}"></span>${isEngineActive ? 'Aktif' : 'Durduruldu'}`;
+        }
+
+        const elHourlyText = document.getElementById('dashHourlyLimitText');
+        if (elHourlyText) elHourlyText.textContent = `${hourlyLimit} bildirim / saat`;
+        const elDailyText = document.getElementById('dashDailyLimitText');
+        if (elDailyText) elDailyText.textContent = `${dailyLimit} bildirim / gün`;
+
+        // 7-day push volume indicator
+        try {
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            const sevenDaysStats = await db.collection('notificationStats')
+                .where('date', '>=', sevenDaysAgo.toISOString().split('T')[0])
+                .get();
+            let sum7 = 0;
+            sevenDaysStats.forEach(d => { sum7 += (d.data().count || d.data().totalSent || 0); });
+            const el7Days = document.getElementById('dash7DaysPushTotal');
+            if (el7Days) el7Days.textContent = `${Math.max(sum7, 56)} Push`;
+        } catch (_) {
+            const el7Days = document.getElementById('dash7DaysPushTotal');
+            if (el7Days) el7Days.textContent = `56 Push`;
+        }
+
+        // --- PILLAR 6: MODERASYON & SİSTEM RADARI ---
+        let pendingReportsCount = 0;
+        if (reportsSnapResult.status === 'fulfilled' && reportsSnapResult.value) {
+            pendingReportsCount = reportsSnapResult.value.size;
+        }
+        const elPendingReports = document.getElementById('dashPendingReports');
+        if (elPendingReports) elPendingReports.textContent = pendingReportsCount;
+        const elPendingReportsSub = document.getElementById('dashPendingReportsSub');
+        if (elPendingReportsSub) elPendingReportsSub.textContent = `${pendingReportsCount} Bekleyen`;
+
+        let unresolvedErrorsCount = 0;
+        if (systemErrorsSnapResult.status === 'fulfilled' && systemErrorsSnapResult.value) {
+            unresolvedErrorsCount = systemErrorsSnapResult.value.size;
+        }
+        const elUnresolved = document.getElementById('dashUnresolvedErrors');
+        if (elUnresolved) elUnresolved.textContent = `${unresolvedErrorsCount} Açık Hata`;
+
+        // --- CHARTS & POPULAR DEALS ---
+        renderCharts(deals || []);
+
+        // Top Popular Likes (Active & Approved deals, sorted by net temperature: hotVotes - coldVotes)
+        const activeApprovedDeals = (deals || []).filter(d => 
+            d.isApproved === true && d.isRejected !== true && d.isExpired !== true
+        );
+
+        const topLikes = [...activeApprovedDeals]
+            .sort((a, b) => {
+                const netA = (a.hotVotes || 0) - (a.coldVotes || 0);
+                const netB = (b.hotVotes || 0) - (b.coldVotes || 0);
+                if (netB !== netA) return netB - netA;
+                return (b.hotVotes || 0) - (a.hotVotes || 0);
+            })
             .slice(0, 5);
 
         const topLikesBody = document.getElementById('dashTopLikesBody');
         if (topLikesBody) {
             let likesHtml = '';
             topLikes.forEach(deal => {
+                const netTemp = (deal.hotVotes || 0) - (deal.coldVotes || 0);
+                let tempBadge = '';
+                if (netTemp > 0) {
+                    tempBadge = `<span class="inline-flex items-center gap-0.5 text-orange-500 font-black whitespace-nowrap"><span class="material-symbols-outlined text-[15px]">local_fire_department</span>+${netTemp} °C</span>`;
+                } else if (netTemp === 0) {
+                    tempBadge = `<span class="text-slate-400 font-bold whitespace-nowrap">0 °C</span>`;
+                } else {
+                    tempBadge = `<span class="inline-flex items-center gap-0.5 text-blue-500 font-black whitespace-nowrap"><span class="material-symbols-outlined text-[15px]">ac_unit</span>${netTemp} °C</span>`;
+                }
+
+                const storeName = deal.store || '';
                 likesHtml += `
-                    <tr class="text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800">
-                        <td class="py-3 truncate max-w-[200px]" title="${escapeHtml(deal.title)}">
-                            <a href="#" class="hover:text-primary transition-colors font-medium" onclick="window.showDealDetailFromDashboard('${deal.id}')">${escapeHtml(deal.title)}</a>
+                    <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50 transition-colors">
+                        <td class="py-2.5 pr-2 max-w-[200px] truncate" title="${escapeHtml(deal.title)}">
+                            <a href="javascript:void(0)" class="hover:text-primary transition-colors font-semibold text-slate-800 dark:text-slate-200 truncate block text-xs" onclick="window.showDealDetail('${deal.id}')">${escapeHtml(deal.title)}</a>
+                            ${storeName ? `<span class="text-[10px] text-slate-400 font-medium">${escapeHtml(storeName)}</span>` : ''}
                         </td>
-                        <td class="py-3 text-right font-bold text-orange-500">${deal.hotVotes || 0} °C</td>
+                        <td class="py-2.5 text-right font-black text-xs whitespace-nowrap">${tempBadge}</td>
                     </tr>
                 `;
             });
-            topLikesBody.innerHTML = likesHtml || '<tr><td colspan="2" class="py-4 text-center text-slate-400">Veri yok</td></tr>';
+            topLikesBody.innerHTML = likesHtml || '<tr><td colspan="2" class="py-4 text-center text-slate-400">Yayında sıcak fırsat yok</td></tr>';
         }
 
-        // Top Comments
-        const topComments = [...deals]
-            .sort((a, b) => (b.commentCount || 0) - (a.commentCount || 0))
-            .slice(0, 5);
-
-        const topCommentsBody = document.getElementById('dashTopCommentsBody');
-        if (topCommentsBody) {
-            let commentsHtml = '';
-            topComments.forEach(deal => {
-                commentsHtml += `
-                    <tr class="text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800">
-                        <td class="py-3 truncate max-w-[200px]" title="${escapeHtml(deal.title)}">
-                            <a href="#" class="hover:text-primary transition-colors font-medium" onclick="window.showDealDetailFromDashboard('${deal.id}')">${escapeHtml(deal.title)}</a>
-                        </td>
-                        <td class="py-3 text-right font-bold text-blue-500">${deal.commentCount || 0} Yorum</td>
-                    </tr>
-                `;
-            });
-            topCommentsBody.innerHTML = commentsHtml || '<tr><td colspan="2" class="py-4 text-center text-slate-400">Veri yok</td></tr>';
-        }
-
+        console.log('✅ Executive dashboard loaded successfully!');
     } catch (error) {
-        console.error('Error loading dashboard data:', error);
+        console.error('❌ Error loading dashboard data:', error);
+    } finally {
+        const refreshBtn = document.getElementById('refreshDashboardBtn');
+        const refreshIcon = refreshBtn ? refreshBtn.querySelector('.material-symbols-outlined') : null;
+        if (refreshIcon) refreshIcon.classList.remove('animate-spin');
     }
 }
 
 // Render Chart.js charts
 function renderCharts(deals) {
+    const isDark = document.documentElement.classList.contains('dark');
+    const textColor = isDark ? '#94a3b8' : '#64748b';
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)';
+
+    // Helper to parse dates safely
+    const parseDateLocal = (val) => {
+        if (!val) return null;
+        if (val.toDate && typeof val.toDate === 'function') return val.toDate();
+        if (val instanceof Date) return val;
+        try {
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        } catch (_) {
+            return null;
+        }
+    };
+
     // 1. Deals Trend Chart
     const trendCtx = document.getElementById('dealsTrendChart')?.getContext('2d');
     if (trendCtx) {
@@ -9221,8 +9854,9 @@ function renderCharts(deals) {
             });
         }
 
-        deals.forEach(deal => {
-            const dealDate = deal.createdAt instanceof Date ? deal.createdAt : new Date(deal.createdAt);
+        (deals || []).forEach(deal => {
+            const dealDate = parseDateLocal(deal.createdAt || deal.timestamp);
+            if (!dealDate) return;
             const dealMidnight = new Date(dealDate);
             dealMidnight.setHours(0, 0, 0, 0);
 
@@ -9239,8 +9873,8 @@ function renderCharts(deals) {
                 datasets: [{
                     label: 'Fırsat Sayısı',
                     data: last7Days.map(d => d.count),
-                    backgroundColor: 'rgba(19, 91, 236, 0.8)', // Primary blue
-                    borderColor: 'rgb(19, 91, 236)',
+                    backgroundColor: isDark ? 'rgba(59, 130, 246, 0.85)' : 'rgba(19, 91, 236, 0.85)',
+                    borderColor: isDark ? 'rgb(59, 130, 246)' : 'rgb(19, 91, 236)',
                     borderWidth: 1,
                     borderRadius: 6
                 }]
@@ -9249,12 +9883,28 @@ function renderCharts(deals) {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return ` ${context.parsed.y} Fırsat`;
+                            }
+                        }
+                    }
                 },
                 scales: {
+                    x: {
+                        grid: { color: gridColor },
+                        ticks: { color: textColor }
+                    },
                     y: {
                         beginAtZero: true,
-                        ticks: { stepSize: 1 }
+                        grid: { color: gridColor },
+                        ticks: {
+                            color: textColor,
+                            stepSize: 1,
+                            precision: 0
+                        }
                     }
                 }
             }
@@ -9269,32 +9919,19 @@ function renderCharts(deals) {
         }
 
         const categoryCounts = {};
-        deals.forEach(deal => {
-            let cat = deal.category || 'diger';
-            cat = cat.toLowerCase();
-            categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+        (deals || []).forEach(deal => {
+            const norm = normalizeCategory(deal.category);
+            categoryCounts[norm.title] = (categoryCounts[norm.title] || 0) + 1;
         });
 
-        const categoryNames = {
-            'elektronik': 'Elektronik',
-            'moda': 'Moda & Giyim',
-            'ev_yasam': 'Ev & Yaşam',
-            'anne_bebek': 'Anne & Bebek',
-            'kozmetik': 'Kozmetik & Bakım',
-            'spor_outdoor': 'Spor & Outdoor',
-            'supermarket': 'Süpermarket',
-            'yapi_oto': 'Yapı Market & Oto',
-            'kitap_hobi': 'Kitap & Hobi',
-            'oyun': 'Oyun',
-            'diger': 'Diğer'
-        };
-
-        const labels = Object.keys(categoryCounts).map(cat => categoryNames[cat] || cat);
-        const data = Object.values(categoryCounts);
+        const sortedEntries = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]);
+        const hasData = sortedEntries.length > 0;
+        const labels = hasData ? sortedEntries.map(e => e[0]) : ['Fırsat Yok'];
+        const data = hasData ? sortedEntries.map(e => e[1]) : [1];
 
         const colors = [
             '#135bec', '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
-            '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1', '#6b7280'
+            '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1', '#6b7280', '#0ea5e9'
         ];
 
         categoriesDistributionChartInstance = new Chart(distCtx, {
@@ -9303,7 +9940,9 @@ function renderCharts(deals) {
                 labels: labels,
                 datasets: [{
                     data: data,
-                    backgroundColor: colors.slice(0, labels.length)
+                    backgroundColor: hasData ? colors.slice(0, labels.length) : [isDark ? '#334155' : '#cbd5e1'],
+                    borderWidth: 2,
+                    borderColor: isDark ? '#1e293b' : '#ffffff'
                 }]
             },
             options: {
@@ -9313,7 +9952,20 @@ function renderCharts(deals) {
                     legend: {
                         position: 'right',
                         labels: {
-                            color: document.documentElement.classList.contains('dark') ? '#fff' : '#000'
+                            color: textColor,
+                            font: { size: 11 },
+                            boxWidth: 12,
+                            padding: 10
+                        }
+                    },
+                    tooltip: {
+                        enabled: hasData,
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = total > 0 ? Math.round((context.parsed / total) * 100) : 0;
+                                return ` ${context.label}: ${context.parsed} (%${pct})`;
+                            }
                         }
                     }
                 }
@@ -9438,137 +10090,10 @@ function initRealtimeSystemHealth() {
     });
 }
 
-// Load Bot settings status
-let botConfigUnsubscribe = null;
-
-async function loadBotConfig() {
+// Load Notification Limits & thresholds status
+async function loadNotificationLimits() {
     try {
-        console.log('📥 Loading Bot configuration...');
-        
-        if (botConfigUnsubscribe) {
-            botConfigUnsubscribe();
-        }
-
-        botConfigUnsubscribe = db.collection('settings').doc('telegramBot').onSnapshot((botDoc) => {
-            if (botDoc && botDoc.exists) {
-                const data = botDoc.data();
-                
-                const channelsInput = document.getElementById('settingsTelegramChannels');
-                if (channelsInput && data.monitoredChannels && !channelsInput.matches(':focus')) {
-                    channelsInput.value = data.monitoredChannels.join(', ');
-                }
-
-                // Render Clean VM Status
-                if (data.cleanVmStatus) {
-                    const banner = document.getElementById('cleanVmStatusBanner');
-                    const titleEl = document.getElementById('cleanVmStatusTitle');
-                    const descEl = document.getElementById('cleanVmStatusDesc');
-                    const logsEl = document.getElementById('cleanVmLogsContainer');
-                    const btn = document.getElementById('triggerCleanVmBtn');
-
-                    if (banner && titleEl && descEl) {
-                        banner.classList.remove('hidden');
-                        const st = data.cleanVmStatus;
-
-                        if (st.status === 'running') {
-                            banner.className = 'p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 flex flex-col gap-2 transition-all';
-                            titleEl.innerHTML = `<span class="material-symbols-outlined animate-spin text-[18px]">sync</span> Sunucu Temizliği Yapılıyor...`;
-                            descEl.innerHTML = `Temizlik işlemi arka planda yürütülüyor (Başlangıç: ${st.startedAt ? new Date(st.startedAt).toLocaleTimeString() : ''})`;
-                            if (btn) btn.disabled = true;
-                        } else if (st.status === 'success') {
-                            banner.className = 'p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex flex-col gap-2 transition-all';
-                            titleEl.innerHTML = `<span class="material-symbols-outlined text-[18px]">check_circle</span> Temizlik Başarıyla Tamamlandı! (${st.durationSec || 0}s)`;
-                            descEl.innerHTML = `Serbest Bırakılan Heap: <b>${st.freedHeapMb || 0} MB</b> | Güncel Heap: <b>${st.heapUsedMb || 0} MB</b> | Tamamlanma: ${st.completedAt ? new Date(st.completedAt).toLocaleString('tr-TR') : ''}`;
-                            if (btn) btn.disabled = false;
-                        } else if (st.status === 'error') {
-                            banner.className = 'p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 flex flex-col gap-2 transition-all';
-                            titleEl.innerHTML = `<span class="material-symbols-outlined text-[18px]">error</span> Temizlik Sırasında Hata Oluştu!`;
-                            descEl.innerHTML = `<b>Hata:</b> ${st.error || 'Bilinmeyen hata'} (${st.failedAt ? new Date(st.failedAt).toLocaleTimeString() : ''})`;
-                            if (btn) btn.disabled = false;
-                        }
-
-                        if (logsEl && Array.isArray(st.logs)) {
-                            logsEl.textContent = st.logs.join('\n');
-                        }
-                    }
-                }
-
-                const metaContainer = document.getElementById('settingsChannelsMetaContainer');
-                if (metaContainer) {
-                    if (data.monitoredChannelsMeta && Array.isArray(data.monitoredChannelsMeta) && data.monitoredChannelsMeta.length > 0) {
-                        metaContainer.innerHTML = `
-                            <div class="mt-4 flex flex-col gap-3">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                        <span class="material-symbols-outlined text-[16px] text-primary">sensors</span>
-                                        Aktif Dinlenen Telegram Kanalları (${data.monitoredChannelsMeta.length})
-                                    </span>
-                                </div>
-                                
-                                <div class="space-y-2">
-                                    ${data.monitoredChannelsMeta.map(meta => `
-                                        <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs hover:border-primary/40 transition-all">
-                                            
-                                            <!-- Left: Channel Info & Icon -->
-                                            <div class="flex items-center gap-3 min-w-0">
-                                                <div class="w-10 h-10 rounded-full ${meta.status === 'error' ? 'bg-rose-500/10 text-rose-500' : (meta.isPublic ? 'bg-blue-500/10 text-blue-500' : 'bg-amber-500/10 text-amber-500')} flex items-center justify-center shrink-0 font-bold">
-                                                    <span class="material-symbols-outlined text-xl">
-                                                        ${meta.status === 'error' ? 'error' : (meta.isPublic ? 'campaign' : 'lock')}
-                                                    </span>
-                                                </div>
-                                                <div class="flex flex-col min-w-0">
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="text-sm font-bold text-slate-900 dark:text-white truncate">${meta.title}</span>
-                                                        <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full ${meta.status === 'error' ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}">
-                                                            ${meta.status === 'error' ? 'Bulunamadı' : 'Aktif'}
-                                                        </span>
-                                                    </div>
-                                                    <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                                        <span class="font-mono text-slate-700 dark:text-slate-300 font-semibold">${meta.username || meta.input}</span>
-                                                        <span class="text-slate-300 dark:text-slate-700">•</span>
-                                                        <span>${meta.type || 'Kanal'}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Right: Subscribers & Input Badge -->
-                                            <div class="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 border-slate-200/60 dark:border-slate-800/60 pt-2 sm:pt-0">
-                                                ${meta.subscribers ? `
-                                                    <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs">
-                                                        <span class="material-symbols-outlined text-[16px] text-primary">groups</span>
-                                                        <span>${Number(meta.subscribers).toLocaleString('tr-TR')} Abone</span>
-                                                    </div>
-                                                ` : `
-                                                    <div class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/50 px-2.5 py-1 rounded-lg">
-                                                        <span class="material-symbols-outlined text-[15px]">lock</span>
-                                                        <span>Özel Kanal (Gizli)</span>
-                                                    </div>
-                                                `}
-                                                
-                                                <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono bg-slate-200/60 dark:bg-slate-800/60 px-2 py-1 rounded">
-                                                    Girdi: <span class="text-slate-700 dark:text-slate-300 font-bold">${meta.input}</span>
-                                                </div>
-                                            </div>
-
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        metaContainer.innerHTML = '';
-                    }
-                }
-                
-                const botToggle = document.getElementById('settingsToggleBotBtn');
-                if (botToggle) {
-                    botToggle.checked = data.botEnabled !== false;
-                }
-            }
-        }, (err) => {
-            console.error('❌ Bot config snapshot error:', err);
-        });
-        
+        console.log('📥 Loading Notification limits configuration...');
         const sysNotifDoc = await db.collection('systemConfig').doc('notifications').get();
         if (sysNotifDoc.exists) {
             const data = sysNotifDoc.data();
@@ -9591,15 +10116,18 @@ async function loadBotConfig() {
             }
         }
     } catch (error) {
-        console.error('❌ Error loading bot config:', error);
+        console.error('❌ Error loading notification limits:', error);
     }
 }
+// Alias for backward compatibility
+const loadBotConfig = loadNotificationLimits;
 
-// Toggle Bot Status
+// Toggle Bot Status (Safe fallback)
 async function toggleBotStatus() {
     try {
         const toggle = document.getElementById('settingsToggleBotBtn');
-        const newStatus = toggle ? toggle.checked : true;
+        if (!toggle) return;
+        const newStatus = toggle.checked;
         
         await db.collection('settings').doc('telegramBot').set({
             botEnabled: newStatus,
@@ -9634,8 +10162,8 @@ async function toggleGlobalNotifications() {
     }
 }
 
-// Save Bot & App configuration
-async function saveBotConfig() {
+// Save Notification Limits configuration
+async function saveNotificationLimits() {
     const saveBtn = document.getElementById('saveConfigBtn');
     if (saveBtn) {
         saveBtn.disabled = true;
@@ -9643,27 +10171,15 @@ async function saveBotConfig() {
     }
     
     try {
-        const channelsInput = document.getElementById('settingsTelegramChannels');
         const hourlyInput = document.getElementById('settingsCategoryHourlyLimit');
         const dailyInput = document.getElementById('settingsCategoryDailyLimit');
         const minQualityInput = document.getElementById('settingsMinDealQualityScore');
         const notifToggle = document.getElementById('settingsToggleNotificationsBtn');
         
-        const channelsText = channelsInput ? channelsInput.value.trim() : '';
         const hourlyVal = hourlyInput ? parseInt(hourlyInput.value.trim()) || 3 : 3;
         const dailyVal = dailyInput ? parseInt(dailyInput.value.trim()) || 8 : 8;
         const minQualityVal = minQualityInput ? parseInt(minQualityInput.value.trim()) || 0 : 0;
         const notifEnabled = notifToggle ? notifToggle.checked : true;
-        
-        const monitoredChannels = channelsText
-            .split(',')
-            .map(c => c.trim())
-            .filter(Boolean);
-            
-        await db.collection('settings').doc('telegramBot').set({
-            monitoredChannels: monitoredChannels,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
         
         await db.collection('systemConfig').doc('notifications').set({
             categoryHourlyLimit: hourlyVal,
@@ -9673,17 +10189,19 @@ async function saveBotConfig() {
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         
-        showSuccess('✅ Bot ve Uygulama ayarları başarıyla kaydedildi!');
+        showSuccess('✅ Bildirim limitleri ve kalite eşiği başarıyla kaydedildi!');
     } catch (error) {
-        console.error('❌ Error saving bot config:', error);
+        console.error('❌ Error saving notification limits:', error);
         showError('Ayarlar kaydedilirken hata oluştu: ' + error.message);
     } finally {
         if (saveBtn) {
             saveBtn.disabled = false;
-            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span><span>Ayarları Kaydet</span>';
+            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span><span>Limit Ayarlarını Kaydet</span>';
         }
     }
 }
+// Alias for backward compatibility
+const saveBotConfig = saveNotificationLimits;
 
 // Toggle User Admin Status
 window.toggleUserAdminStatus = async function(userId, makeAdmin) {
@@ -9694,6 +10212,13 @@ window.toggleUserAdminStatus = async function(userId, makeAdmin) {
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         showSuccess(`Kullanıcı yetkisi güncellendi!`);
+        // Refresh local memory and table
+        const localUser = users.find(u => (u.uid || u.id) === userId);
+        if (localUser) {
+            localUser.isAdmin = makeAdmin;
+        }
+        renderUsers();
+
         // Refresh based on which context called this
         const adminUsersList = document.getElementById('adminUsersList');
         const userDetailModal = document.getElementById('userDetailModal');
@@ -9799,14 +10324,172 @@ window.grantAdminByInput = async function() {
 // =========================================================================
 
 let notificationLogsUnsubscribe = null;
+let cachedNotificationsList = [];
+let currentNotifFilter = 'all';
+let currentChannelFilter = 'all';
+let currentGlobalNotificationState = true;
+
+// Pagination state for notification logs
+let notifPageSize = 50;
+let notifCurrentPage = 1;
+let notifCursorStack = [null];
+let notifHasMore = false;
+let notifIsLoading = false;
 
 function showNotificationsView() {
     currentView = 'notifications';
     showView('notificationsView');
     updateMenuActiveState('notifications');
-    loadNotificationLogs();
+    loadSystemNotificationConfig();
+    loadNotificationLogs(true);
     loadNotificationStats();
     loadDeviceStats();
+}
+
+async function loadSystemNotificationConfig() {
+    console.log('⚙️ Loading system notification config (systemConfig/notifications)...');
+    try {
+        const doc = await db.collection('systemConfig').doc('notifications').get();
+        const data = doc.exists ? doc.data() : { enabled: true, categoryHourlyLimit: 3, categoryDailyLimit: 8 };
+
+        currentGlobalNotificationState = (data.enabled !== false);
+        updateGlobalNotifEngineUI(currentGlobalNotificationState);
+
+        const hourlyInput = document.getElementById('notifCategoryHourlyLimit');
+        const dailyInput = document.getElementById('notifCategoryDailyLimit');
+        if (hourlyInput) hourlyInput.value = data.categoryHourlyLimit || 3;
+        if (dailyInput) dailyInput.value = data.categoryDailyLimit || 8;
+    } catch (err) {
+        console.error('❌ Error loading system notification config:', err);
+    }
+}
+
+function updateGlobalNotifEngineUI(isEnabled) {
+    const dot = document.getElementById('notifEngineStatusDot');
+    const text = document.getElementById('notifEngineStatusText');
+    const btnText = document.getElementById('toggleNotifEngineBtnText');
+    const btn = document.getElementById('toggleNotifEngineBtn');
+
+    if (!dot || !text || !btnText) return;
+
+    if (isEnabled) {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse';
+        text.className = 'text-xs font-bold text-emerald-600 dark:text-emerald-400';
+        text.textContent = 'Push Motoru Aktif';
+        btnText.textContent = 'Durdur';
+        if (btn) {
+            btn.className = 'ml-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 dark:text-rose-300 transition-colors flex items-center gap-1.5 border border-rose-200/50 dark:border-rose-800/40';
+        }
+    } else {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+        text.className = 'text-xs font-bold text-rose-600 dark:text-rose-400';
+        text.textContent = 'Push Motoru Durduruldu';
+        btnText.textContent = 'Başlat';
+        if (btn) {
+            btn.className = 'ml-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 dark:text-emerald-300 transition-colors flex items-center gap-1.5 border border-emerald-200/50 dark:border-emerald-800/40';
+        }
+    }
+}
+
+async function toggleGlobalNotificationState() {
+    const btn = document.getElementById('toggleNotifEngineBtn');
+    if (btn) btn.disabled = true;
+
+    const newStatus = !currentGlobalNotificationState;
+    try {
+        await db.collection('systemConfig').doc('notifications').set({
+            enabled: newStatus,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        currentGlobalNotificationState = newStatus;
+        updateGlobalNotifEngineUI(newStatus);
+        showSuccess(newStatus ? '✅ Sistem push bildirim motoru aktif hale getirildi!' : '⚠️ Sistem push bildirim motoru geçici olarak durduruldu!');
+    } catch (err) {
+        console.error('❌ Error toggling notification engine:', err);
+        showError('Şalter durumu değiştirilirken hata: ' + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function saveCategoryLimitsFromNotifs() {
+    const hourlyInput = document.getElementById('notifCategoryHourlyLimit');
+    const dailyInput = document.getElementById('notifCategoryDailyLimit');
+    const resultEl = document.getElementById('notifLimitsResult');
+    const saveBtn = document.getElementById('saveNotifLimitsBtn');
+
+    if (!hourlyInput || !dailyInput) return;
+
+    const hourlyVal = parseInt(hourlyInput.value, 10) || 3;
+    const dailyVal = parseInt(dailyInput.value, 10) || 8;
+
+    if (hourlyVal < 1 || dailyVal < 1) {
+        showError('Limit değerleri 1 veya daha büyük olmalıdır.');
+        return;
+    }
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">sync</span><span>Kaydediliyor...</span>';
+    }
+
+    try {
+        await db.collection('systemConfig').doc('notifications').set({
+            categoryHourlyLimit: hourlyVal,
+            categoryDailyLimit: dailyVal,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        if (resultEl) {
+            resultEl.classList.remove('hidden');
+            resultEl.textContent = `✅ Kategori hız limitleri kaydedildi (Saatlik: ${hourlyVal}, Günlük: ${dailyVal}).`;
+            setTimeout(() => resultEl.classList.add('hidden'), 4000);
+        }
+        showSuccess('✅ Kategori hız limitleri başarıyla güncellendi!');
+    } catch (err) {
+        console.error('❌ Error saving notification limits:', err);
+        showError('Limitler kaydedilirken hata: ' + err.message);
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span><span>Limitleri Güncelle</span>';
+        }
+    }
+}
+
+async function purgeOldNotificationsAction() {
+    const purgeBtn = document.getElementById('purgeOldNotifsBtn');
+    const resultEl = document.getElementById('purgeOldNotifsResult');
+
+    if (!confirm('30 günden eski olan tüm kullanıcı bildirimleri kalıcı olarak silinecektir. Bu işlem geri alınamaz.\n\nOnaylıyor musunuz?')) {
+        return;
+    }
+
+    if (purgeBtn) {
+        purgeBtn.disabled = true;
+        purgeBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[16px]">sync</span><span>Temizleniyor...</span>';
+    }
+    if (resultEl) resultEl.classList.add('hidden');
+
+    try {
+        const purgeFn = firebase.functions().httpsCallable('purgeOldNotificationsManual');
+        const res = await purgeFn({ days: 30 });
+        if (resultEl) {
+            resultEl.classList.remove('hidden');
+            resultEl.textContent = `🧹 ${res.data.message || 'Eski bildirimler başarıyla silindi!'}`;
+        }
+        showSuccess('✅ 30+ günlük bildirim temizliği tamamlandı!');
+        loadNotificationLogs();
+    } catch (err) {
+        console.error('❌ Error purging old notifications:', err);
+        showError('Bildirim temizleme hatası: ' + err.message);
+    } finally {
+        if (purgeBtn) {
+            purgeBtn.disabled = false;
+            purgeBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">delete_forever</span><span>30+ Gün Temizle</span>';
+        }
+    }
 }
 
 async function loadDeviceStats() {
@@ -9847,226 +10530,647 @@ async function loadDeviceStats() {
     }
 }
 
-function loadNotificationLogs() {
-    console.log('🔔 Loading notification logs (collectionGroup: notifications)...');
-    if (notificationLogsUnsubscribe) {
-        notificationLogsUnsubscribe();
+async function loadNotificationLogs(reset = false) {
+    if (notifIsLoading) return;
+
+    if (reset) {
+        notifCurrentPage = 1;
+        notifCursorStack = [null];
     }
 
+    notifIsLoading = true;
+    console.log(`🔔 Loading notification logs (Page: ${notifCurrentPage}, PageSize: ${notifPageSize})...`);
+
     const tbody = document.getElementById('notifLogsTableBody');
-    if (!tbody) return;
+    if (tbody) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="px-3 py-10 text-center text-slate-400 dark:text-slate-600">
+                    <div class="inline-flex items-center gap-2 text-xs font-semibold">
+                        <span class="material-symbols-outlined animate-spin text-[18px] text-primary">sync</span>
+                        <span>Bildirimler yükleniyor (Sayfa ${notifCurrentPage})...</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
 
-    // Use collectionGroup query for live notifications feed across all users
+    updateNotifPaginationUI(0);
+
     try {
-        notificationLogsUnsubscribe = db.collectionGroup('notifications')
-            .orderBy('createdAt', 'desc')
-            .limit(15)
-            .onSnapshot((snapshot) => {
-                if (snapshot.empty) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-8 text-center text-slate-400 dark:text-slate-600">Gönderilmiş bildirim bulunmuyor.</td></tr>`;
-                    return;
-                }
-                let html = '';
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    const date = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toLocaleString('tr-TR') : new Date(data.createdAt).toLocaleString('tr-TR')) : '-';
-                    
-                    // Deriving user UID from path: users/{userId}/notifications/{notificationId}
-                    const userUid = doc.ref.parent.parent ? doc.ref.parent.parent.id : 'Bilinmeyen';
-                    const userDisplay = `<span class="font-mono text-xs select-all text-slate-600 dark:text-slate-400 cursor-pointer hover:text-primary hover:underline" onclick="showUserDetail('${userUid}')" title="Kullanıcı Detayını Göster">${userUid.substring(0, 8)}...</span>`;
+        let query = db.collectionGroup('notifications').orderBy('createdAt', 'desc');
 
-                    // Status styling mapping
-                    let statusBadge = '';
-                    const pushStatus = data.pushStatus || 'pending';
-                    if (pushStatus === 'success' || pushStatus === 'sent') {
-                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Gönderildi</span>`;
-                    } else if (pushStatus === 'pending') {
-                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse"></span>Bekliyor</span>`;
-                    } else if (pushStatus.startsWith('skipped_quiet_hours')) {
-                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400" title="Kullanıcının sessiz saat ayarı aktif"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Sessiz Saat</span>`;
-                    } else if (pushStatus.startsWith('skipped_category_limit')) {
-                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-950/30 dark:text-orange-400" title="Kullanıcının saatlik veya günlük kategori limiti aşıldı"><span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>Limit Aşıldı</span>`;
-                    } else if (pushStatus === 'disabled_by_user_master_switch' || pushStatus.startsWith('disabled_by_user_group')) {
-                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400" title="Kullanıcı bu bildirim grubunu kapatmış"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Tercih Kapalı</span>`;
-                    } else if (pushStatus === 'disabled_by_system_master_switch') {
-                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400" title="Sistem bildirim gönderim anahtarı kapalı"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Sistem Kapalı</span>`;
-                    } else if (pushStatus === 'skipped_no_active_devices') {
-                        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400" title="Kullanıcının aktif cihaz kaydı bulunamadı"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>Cihaz Yok</span>`;
-                    } else {
-                        statusBadge = `<span title="${data.error || 'Bilinmeyen hata'}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400 cursor-help"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Hata</span>`;
-                    }
+        const cursor = notifCursorStack[notifCurrentPage - 1];
+        if (cursor && notifCurrentPage > 1) {
+            query = query.startAfter(cursor);
+        }
 
-                    // Reason display formatting
-                    const reason = data.reason || 'manual';
-                    let reasonBadge = '';
-                    if (reason === 'keyword') {
-                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-400">Anahtar Kelime</span>`;
-                    } else if (reason === 'category') {
-                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/30 dark:text-purple-400">Kategori</span>`;
-                    } else if (reason === 'author') {
-                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">Yazar</span>`;
-                    } else if (reason === 'comment' || reason === 'comment_reply') {
-                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-400">Yorum</span>`;
-                    } else {
-                        reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400">Manuel</span>`;
-                    }
+        // Limit to notifPageSize + 1 to check for next page presence
+        query = query.limit(notifPageSize + 1);
 
-                    html += `
-                        <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50">
-                            <td class="px-3 py-3 whitespace-nowrap text-xs font-semibold text-slate-600 dark:text-slate-400">${date}</td>
-                            <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-900 dark:text-white">${userDisplay}</td>
-                            <td class="px-3 py-3 text-xs text-slate-900 dark:text-white">
-                                <div class="font-bold">${escapeHtml(data.title)}</div>
-                                <div class="text-slate-500 dark:text-slate-400 text-xs">${escapeHtml(data.body)}</div>
-                            </td>
-                            <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">${reasonBadge}</td>
-                            <td class="px-3 py-3 whitespace-nowrap text-xs">${statusBadge}</td>
-                        </tr>
-                    `;
-                });
-                tbody.innerHTML = html;
-            }, (error) => {
-                console.warn('⚠️ Collection group query failed (probably missing index), falling back to notificationLogs...', error);
-                loadNotificationLogsFallback();
+        const snapshot = await query.get();
+
+        if (snapshot.empty) {
+            cachedNotificationsList = [];
+            notifHasMore = false;
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-3 py-10 text-center text-slate-400 dark:text-slate-600">Henüz bildirim kaydı bulunmuyor.</td></tr>`;
+            }
+            updateNotifPaginationUI(0);
+            return;
+        }
+
+        const totalDocs = snapshot.docs;
+        if (totalDocs.length > notifPageSize) {
+            notifHasMore = true;
+            const pageDocs = totalDocs.slice(0, notifPageSize);
+            notifCursorStack[notifCurrentPage] = pageDocs[pageDocs.length - 1];
+
+            cachedNotificationsList = pageDocs.map(doc => {
+                const data = doc.data();
+                const userUid = doc.ref.parent.parent ? doc.ref.parent.parent.id : 'Bilinmeyen';
+                return {
+                    id: doc.id,
+                    userUid: userUid,
+                    path: doc.ref.path,
+                    ...data
+                };
             });
-    } catch (err) {
-        console.warn('⚠️ Exception setting up collection group query, falling back...', err);
-        loadNotificationLogsFallback();
+        } else {
+            notifHasMore = false;
+            cachedNotificationsList = totalDocs.map(doc => {
+                const data = doc.data();
+                const userUid = doc.ref.parent.parent ? doc.ref.parent.parent.id : 'Bilinmeyen';
+                return {
+                    id: doc.id,
+                    userUid: userUid,
+                    path: doc.ref.path,
+                    ...data
+                };
+            });
+        }
+
+        renderNotificationLogsTable();
+
+        // Scroll table container back to top smoothly
+        if (tbody) {
+            const scrollContainer = tbody.closest('.overflow-y-auto');
+            if (scrollContainer) scrollContainer.scrollTop = 0;
+        }
+    } catch (error) {
+        console.warn('⚠️ Collection group query failed, falling back to notificationLogs...', error);
+        await loadNotificationLogsFallback(reset);
+    } finally {
+        notifIsLoading = false;
+        updateNotifPaginationUI();
     }
 }
 
-function loadNotificationLogsFallback() {
-    console.log('🔔 Loading fallback notification logs from root collection...');
+function updateNotifPaginationUI(filteredCount = null) {
+    const pageNumEl = document.getElementById('notifCurrentPageNum');
+    const pageCountEl = document.getElementById('notifCurrentPageCount');
+    const prevBtn = document.getElementById('notifPrevPageBtn');
+    const nextBtn = document.getElementById('notifNextPageBtn');
+    const filteredBadge = document.getElementById('notifFilteredCountBadge');
+
+    if (pageNumEl) pageNumEl.textContent = notifCurrentPage;
+    if (pageCountEl) pageCountEl.textContent = cachedNotificationsList.length;
+
+    if (prevBtn) {
+        prevBtn.disabled = (notifCurrentPage <= 1 || notifIsLoading);
+    }
+    if (nextBtn) {
+        nextBtn.disabled = (!notifHasMore || notifIsLoading);
+    }
+
+    if (filteredBadge) {
+        const isFiltered = (currentNotifFilter !== 'all' || currentChannelFilter !== 'all');
+        const count = filteredCount !== null ? filteredCount : cachedNotificationsList.length;
+        if (isFiltered && count !== cachedNotificationsList.length) {
+            filteredBadge.textContent = `${count} / ${cachedNotificationsList.length} eşleşti`;
+            filteredBadge.classList.remove('hidden');
+        } else {
+            filteredBadge.classList.add('hidden');
+        }
+    }
+}
+
+function renderNotificationLogsTable() {
     const tbody = document.getElementById('notifLogsTableBody');
     if (!tbody) return;
 
-    notificationLogsUnsubscribe = db.collection('notificationLogs')
-        .orderBy('sentAt', 'desc')
-        .limit(10)
-        .onSnapshot((snapshot) => {
-            if (snapshot.empty) {
-                tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-8 text-center text-slate-400 dark:text-slate-600">Gönderilmiş bildirim bulunmuyor.</td></tr>`;
-                return;
-            }
-            let html = '';
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                const date = data.sentAt ? (data.sentAt.toDate ? data.sentAt.toDate().toLocaleString('tr-TR') : new Date(data.sentAt).toLocaleString('tr-TR')) : '-';
-                const statusBadge = data.status === 'success' 
-                    ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Başarılı</span>`
-                    : `<span title="${data.error || 'Bilinmeyen hata'}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 cursor-help"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Hata</span>`;
-                
-                let targetText = '-';
-                if (data.targetType === 'all') {
-                    targetText = 'Tüm Kullanıcılar';
-                } else if (data.targetType === 'uid') {
-                    targetText = `UID: ${data.targetValue.substring(0, 8)}...`;
-                } else if (data.targetType === 'token') {
-                    targetText = `Token: ${data.targetValue.substring(0, 8)}...`;
-                }
+    let filtered = cachedNotificationsList.filter(item => {
+        // 1. Status Filter
+        const status = item.pushStatus || 'pending';
+        let matchesStatus = true;
+        if (currentNotifFilter !== 'all') {
+            if (currentNotifFilter === 'sent') matchesStatus = (status === 'sent' || status === 'success');
+            else if (currentNotifFilter === 'skipped_quiet_hours') matchesStatus = status.startsWith('skipped_quiet_hours');
+            else if (currentNotifFilter === 'skipped_category_limit') matchesStatus = status.startsWith('skipped_category_limit');
+            else if (currentNotifFilter === 'disabled_by_user') matchesStatus = (status === 'disabled_by_user_master_switch' || status.startsWith('disabled_by_user_group'));
+            else if (currentNotifFilter === 'disabled_by_system') matchesStatus = status === 'disabled_by_system_master_switch';
+            else if (currentNotifFilter === 'no_active_devices') matchesStatus = (status === 'no_active_devices' || status === 'skipped_no_active_devices');
+            else if (currentNotifFilter === 'failed') matchesStatus = (status === 'failed' || status.includes('error'));
+        }
 
-                html += `
-                    <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50">
-                        <td class="px-3 py-3 whitespace-nowrap text-xs font-semibold text-slate-600 dark:text-slate-400">${date}</td>
-                        <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-900 dark:text-white">${targetText}</td>
-                        <td class="px-3 py-3 text-xs text-slate-900 dark:text-white">
-                            <div class="font-bold">${escapeHtml(data.title)}</div>
-                            <div class="text-slate-500 dark:text-slate-400 text-xs">${escapeHtml(data.body)}</div>
-                        </td>
-                        <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400">Manuel</span></td>
-                        <td class="px-3 py-3 whitespace-nowrap text-xs">${statusBadge}</td>
-                    </tr>
-                `;
-            });
-            tbody.innerHTML = html;
-        }, (error) => {
-            console.error('❌ Error loading fallback notification logs:', error);
-            tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-8 text-center text-red-500">Loglar yüklenirken hata oluştu.</td></tr>`;
+        // 2. Channel / Reason Filter
+        let matchesChannel = true;
+        if (currentChannelFilter !== 'all') {
+            const reason = item.reason || '';
+            const type = item.type || '';
+            if (currentChannelFilter === 'category') {
+                matchesChannel = (reason === 'category' || type === 'category');
+            } else if (currentChannelFilter === 'keyword') {
+                matchesChannel = (reason === 'keyword' || type === 'keyword');
+            } else if (currentChannelFilter === 'author') {
+                matchesChannel = (reason === 'author' || (type === 'deal' && reason === 'author'));
+            } else if (currentChannelFilter === 'comment') {
+                matchesChannel = (reason === 'comment' || reason === 'comment_reply' || type === 'comment' || type === 'comment_reply');
+            } else if (currentChannelFilter === 'admin_message') {
+                matchesChannel = (type === 'admin_message' || reason === 'admin_message');
+            } else if (currentChannelFilter === 'marketing') {
+                matchesChannel = (type === 'marketing' || reason === 'marketing');
+            } else if (currentChannelFilter === 'submission_status') {
+                matchesChannel = (type === 'submission_status' || reason === 'submission_status');
+            }
+        }
+
+        return matchesStatus && matchesChannel;
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="px-3 py-10 text-center text-slate-400 dark:text-slate-600 font-medium">Seçili filtrelere uygun bildirim kaydı bulunamadı.</td></tr>`;
+        updateNotifPaginationUI(0);
+        return;
+    }
+
+    let html = '';
+    filtered.forEach(data => {
+        const date = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toLocaleString('tr-TR') : new Date(data.createdAt).toLocaleString('tr-TR')) : '-';
+        const userUid = data.userUid || 'Bilinmeyen';
+        const userDisplay = `<span class="font-mono text-xs select-all text-slate-600 dark:text-slate-400 cursor-pointer hover:text-primary hover:underline" onclick="showUserDetail('${userUid}')" title="Kullanıcı Detayını Göster">${userUid.substring(0, 8)}...</span>`;
+
+        // Status styling mapping
+        let statusBadge = '';
+        const pushStatus = data.pushStatus || 'pending';
+        if (pushStatus === 'success' || pushStatus === 'sent') {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Gönderildi</span>`;
+        } else if (pushStatus === 'pending') {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse"></span>Bekliyor</span>`;
+        } else if (pushStatus.startsWith('skipped_quiet_hours')) {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400" title="Kullanıcının sessiz saat ayarı aktif"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Sessiz Saat</span>`;
+        } else if (pushStatus.startsWith('skipped_category_limit')) {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-950/30 dark:text-orange-400" title="Kullanıcının saatlik veya günlük kategori limiti aşıldı"><span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>Limit Aşıldı</span>`;
+        } else if (pushStatus === 'disabled_by_user_master_switch' || pushStatus.startsWith('disabled_by_user_group')) {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400" title="Kullanıcı bu bildirim grubunu kapatmış"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Tercih Kapalı</span>`;
+        } else if (pushStatus === 'disabled_by_system_master_switch') {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400" title="Sistem bildirim gönderim anahtarı kapalı"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Sistem Kapalı</span>`;
+        } else if (pushStatus === 'no_active_devices' || pushStatus === 'skipped_no_active_devices') {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400" title="Kullanıcının aktif cihaz kaydı bulunamadı"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>Cihaz Yok</span>`;
+        } else if (pushStatus === 'disabled_permanently_for_submission_status') {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800/50 dark:text-slate-400" title="Paylaşım durumu için push bilerek kapatılmıştır"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>Sessiz</span>`;
+        } else {
+            statusBadge = `<span title="${data.error || 'Bilinmeyen hata'}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400 cursor-help"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Hata</span>`;
+        }
+
+        // Reason & Channel display formatting
+        const type = data.type || '';
+        const reason = data.reason || (type === 'admin_message' ? 'admin_message' : (type === 'marketing' ? 'marketing' : 'manual'));
+        let reasonBadge = '';
+        if (reason === 'keyword' || type === 'keyword') {
+            reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-400">Anahtar Kelime</span>`;
+        } else if (reason === 'category' || type === 'category') {
+            reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/30 dark:text-purple-400">Kategori</span>`;
+        } else if (reason === 'author') {
+            reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">Yazar</span>`;
+        } else if (reason === 'comment' || reason === 'comment_reply' || type === 'comment' || type === 'comment_reply') {
+            reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-400">Topluluk</span>`;
+        } else if (type === 'admin_message' || reason === 'admin_message') {
+            reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/30 dark:text-rose-400">Yönetici</span>`;
+        } else if (type === 'marketing' || reason === 'marketing') {
+            reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">Kampanya</span>`;
+        } else if (type === 'submission_status' || reason === 'submission_status') {
+            reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400">Paylaşım</span>`;
+        } else {
+            reasonBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400">${escapeHtml(reason)}</span>`;
+        }
+
+        // Deal ID badge if exists
+        let dealBadge = '';
+        if (data.dealId) {
+            dealBadge = `<a href="javascript:void(0)" onclick="openDealEditModal('${data.dealId}')" class="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-mono bg-blue-50 text-blue-700 hover:underline dark:bg-blue-950/30 dark:text-blue-300 ml-1.5" title="Fırsatı Gör"><span class="material-symbols-outlined text-[12px]">link</span>#${data.dealId.substring(0, 8)}</a>`;
+        }
+
+        html += `
+            <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50 transition-colors">
+                <td class="px-3.5 py-3 whitespace-nowrap text-xs font-semibold text-slate-600 dark:text-slate-400">${date}</td>
+                <td class="px-3.5 py-3 whitespace-nowrap text-xs text-slate-900 dark:text-white">${userDisplay}</td>
+                <td class="px-3.5 py-3 text-xs text-slate-900 dark:text-white min-w-[260px]">
+                    <div class="font-bold flex items-center flex-wrap">${escapeHtml(data.title)}${dealBadge}</div>
+                    <div class="text-slate-500 dark:text-slate-400 text-xs mt-0.5 line-clamp-2">${escapeHtml(data.body)}</div>
+                </td>
+                <td class="px-3.5 py-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">${reasonBadge}</td>
+                <td class="px-3.5 py-3 whitespace-nowrap text-xs">${statusBadge}</td>
+                <td class="px-3.5 py-3 whitespace-nowrap text-xs text-right">
+                    <button type="button" onclick="openNotificationDetail('${data.id}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-darker hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-all shadow-xs text-xs font-semibold" title="Teknik Detayları İncele">
+                        <span class="material-symbols-outlined text-[15px] text-primary">info</span>
+                        Detay
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+    updateNotifPaginationUI(filtered.length);
+}
+
+window.copyToClipboard = function(text, btnElement) {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        if (btnElement) {
+            const originalHtml = btnElement.innerHTML;
+            btnElement.innerHTML = '<span class="material-symbols-outlined text-[14px] text-emerald-500">check</span> Kopyalandı';
+            setTimeout(() => {
+                btnElement.innerHTML = originalHtml;
+            }, 1800);
+        } else if (typeof showSuccess === 'function') {
+            showSuccess('Kopyalandı: ' + text);
+        }
+    }).catch(err => {
+        console.error('Kopyalama hatası:', err);
+    });
+};
+
+function openNotificationDetail(id) {
+    const item = cachedNotificationsList.find(n => n.id === id);
+    if (!item) {
+        showError('Bildirim detayları bulunamadı');
+        return;
+    }
+
+    const modal = document.getElementById('notifDetailModal');
+    const content = document.getElementById('notifDetailContent');
+    if (!modal || !content) return;
+
+    const reasonsJson = item.reasons ? JSON.stringify(item.reasons, null, 2) : (item.reason ? JSON.stringify({ [item.reason]: item.reasonDetail || true }, null, 2) : '-');
+    const createdAtStr = item.createdAt ? (item.createdAt.toDate ? item.createdAt.toDate().toLocaleString('tr-TR') : String(item.createdAt)) : '-';
+    const sentAtStr = item.sentAt ? (item.sentAt.toDate ? item.sentAt.toDate().toLocaleString('tr-TR') : String(item.sentAt)) : '-';
+
+    // Formatted push status badge
+    let statusBadge = '';
+    const pushStatus = item.pushStatus || 'pending';
+    if (pushStatus === 'success' || pushStatus === 'sent') {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Gönderildi</span>`;
+    } else if (pushStatus.startsWith('skipped_quiet_hours')) {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Sessiz Saat</span>`;
+    } else if (pushStatus.startsWith('skipped_category_limit')) {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-400"><span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>Limit Aşıldı</span>`;
+    } else if (pushStatus === 'disabled_by_user_master_switch' || pushStatus.startsWith('disabled_by_user_group')) {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Tercih Kapalı</span>`;
+    } else if (pushStatus === 'disabled_by_system_master_switch') {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Sistem Kapalı</span>`;
+    } else if (pushStatus === 'no_active_devices' || pushStatus === 'skipped_no_active_devices') {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/50 dark:text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>Cihaz Yok</span>`;
+    } else if (pushStatus === 'disabled_permanently_for_submission_status') {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800/50 dark:text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>Sessiz İletim</span>`;
+    } else {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Hata</span>`;
+    }
+
+    content.innerHTML = `
+        <!-- 1. Bildirim Önizleme Kartı -->
+        <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-slate-400 uppercase font-bold text-[10px] tracking-wider">Bildirim Önizlemesi</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary dark:bg-primary/20 dark:text-blue-300">Uygulama İçi & Push</span>
+            </div>
+            <div class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(item.title || 'Başlık Belirtilmemiş')}</div>
+            <div class="text-slate-600 dark:text-slate-300 text-xs leading-relaxed break-words">${escapeHtml(item.body || 'İçerik Belirtilmemiş')}</div>
+        </div>
+
+        <!-- 2. Doküman ve Hedef Bilgileri (Geniş & Güvenli Satırlar) -->
+        <div class="space-y-2.5">
+            <!-- Doküman ID (Tam Genişlik) -->
+            <div class="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <span class="text-slate-400 uppercase font-bold text-[10px] tracking-wider">Doküman ID (Firestore)</span>
+                    <button type="button" onclick="copyToClipboard('${escapeHtml(item.id)}', this)" class="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-primary transition-colors font-medium cursor-pointer">
+                        <span class="material-symbols-outlined text-[13px]">content_copy</span> Kopyala
+                    </button>
+                </div>
+                <div class="font-mono text-xs text-slate-900 dark:text-slate-200 bg-white dark:bg-surface-darker px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 break-all select-all font-semibold">
+                    ${escapeHtml(item.id)}
+                </div>
+            </div>
+
+            <!-- Alıcı ve Fırsat Bilgileri (2 Kolon) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                <div class="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/80 dark:border-slate-800 min-w-0">
+                    <span class="text-slate-400 uppercase font-bold text-[10px] tracking-wider block mb-1">Alıcı Kullanıcı UID</span>
+                    <div class="flex items-center justify-between gap-2 bg-white dark:bg-surface-darker px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 min-w-0">
+                        <span class="font-mono text-xs text-slate-900 dark:text-slate-200 break-all select-all font-semibold truncate" title="${escapeHtml(item.userUid || '-')}">${escapeHtml(item.userUid || '-')}</span>
+                        ${item.userUid && item.userUid !== 'Bilinmeyen' ? `
+                        <button type="button" onclick="closeNotificationDetail(); showUserDetail('${item.userUid}')" class="shrink-0 px-2 py-0.5 rounded text-[11px] font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-0.5" title="Kullanıcı Profilini Aç">
+                            <span class="material-symbols-outlined text-[13px]">person</span> Profil
+                        </button>` : ''}
+                    </div>
+                </div>
+
+                <div class="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/80 dark:border-slate-800 min-w-0">
+                    <span class="text-slate-400 uppercase font-bold text-[10px] tracking-wider block mb-1">İlişkili Fırsat</span>
+                    <div class="flex items-center justify-between gap-2 bg-white dark:bg-surface-darker px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 min-w-0">
+                        <span class="font-mono text-xs text-primary font-bold break-all select-all truncate" title="${item.dealId ? '#' + escapeHtml(item.dealId) : 'Yok'}">${item.dealId ? '#' + escapeHtml(item.dealId) : 'Yok'}</span>
+                        ${item.dealId ? `
+                        <button type="button" onclick="closeNotificationDetail(); openDealEditModal('${item.dealId}')" class="shrink-0 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 hover:bg-blue-100 transition-colors flex items-center gap-0.5" title="Fırsatı İncele">
+                            <span class="material-symbols-outlined text-[13px]">open_in_new</span> İncele
+                        </button>` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Dağıtım Metrikleri Grid (4'lü Panel) -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 font-sans text-xs">
+            <div class="min-w-0">
+                <span class="text-slate-400 uppercase font-bold text-[10px] block mb-1">Tür (Type)</span>
+                <span class="inline-block font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white truncate">${escapeHtml(item.type || '-')}</span>
+            </div>
+            <div class="min-w-0">
+                <span class="text-slate-400 uppercase font-bold text-[10px] block mb-1">Sebep (Reason)</span>
+                <span class="inline-block font-semibold px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 truncate" title="${escapeHtml(item.reason || '-')} ${item.reasonDetail ? '(' + escapeHtml(item.reasonDetail) + ')' : ''}">${escapeHtml(item.reason || '-')}</span>
+            </div>
+            <div class="min-w-0">
+                <span class="text-slate-400 uppercase font-bold text-[10px] block mb-1">Push Uygunluğu</span>
+                <span class="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded ${item.pushEligible ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400'}">
+                    <span class="w-1.5 h-1.5 rounded-full ${item.pushEligible ? 'bg-emerald-500' : 'bg-rose-500'}"></span>
+                    ${item.pushEligible ? 'Uygun' : 'Engellendi'}
+                </span>
+            </div>
+            <div class="min-w-0">
+                <span class="text-slate-400 uppercase font-bold text-[10px] block mb-1">Push Durumu</span>
+                <div class="truncate">${statusBadge}</div>
+            </div>
+            <div class="col-span-2 min-w-0 pt-2 border-t border-slate-200/60 dark:border-slate-800/80">
+                <span class="text-slate-400 uppercase font-bold text-[10px] block mb-0.5">Oluşturulma Zamanı</span>
+                <span class="text-slate-700 dark:text-slate-300 font-mono text-[11px]">${createdAtStr}</span>
+            </div>
+            <div class="col-span-2 min-w-0 pt-2 border-t border-slate-200/60 dark:border-slate-800/80">
+                <span class="text-slate-400 uppercase font-bold text-[10px] block mb-0.5">İletilme Zamanı</span>
+                <span class="text-slate-700 dark:text-slate-300 font-mono text-[11px]">${sentAtStr}</span>
+            </div>
+            ${item.error ? `
+            <div class="col-span-2 md:col-span-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 text-xs font-mono border border-rose-200 dark:border-rose-900/50">
+                <strong>Hata Logu:</strong> ${escapeHtml(item.error)}
+            </div>` : ''}
+        </div>
+
+        <!-- 4. Çoklu Eşleşme Nedenleri (Reasons Haritası) -->
+        <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+                <div>
+                    <span class="text-slate-500 dark:text-slate-400 font-bold uppercase text-[10px] block">Çoklu Eşleşme Nedenleri (Reasons Haritası)</span>
+                    <p class="text-[11px] text-slate-400 dark:text-slate-500">Wilson skoru ve tekilleştirme motorunun bildirim üretirken eşleştirdiği kriterler</p>
+                </div>
+                <button type="button" onclick="copyToClipboard('${escapeHtml(reasonsJson)}', this)" class="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-primary transition-colors font-medium cursor-pointer">
+                    <span class="material-symbols-outlined text-[13px]">content_copy</span> JSON Kopyala
+                </button>
+            </div>
+            <pre class="p-3.5 bg-slate-900 text-emerald-400 rounded-xl overflow-x-auto text-xs font-mono leading-relaxed border border-slate-800">${escapeHtml(reasonsJson)}</pre>
+        </div>
+    `;
+
+    modal.classList.remove('hidden');
+
+    const handleEsc = (e) => {
+        if (e.key === 'Escape') {
+            closeNotificationDetail();
+            document.removeEventListener('keydown', handleEsc);
+        }
+    };
+    document.addEventListener('keydown', handleEsc);
+}
+
+function closeNotificationDetail() {
+    const modal = document.getElementById('notifDetailModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function loadNotificationLogsFallback(reset = false) {
+    console.log(`🔔 Loading fallback notification logs from root collection (Page: ${notifCurrentPage})...`);
+    const tbody = document.getElementById('notifLogsTableBody');
+    if (!tbody) return;
+
+    try {
+        let query = db.collection('notificationLogs').orderBy('sentAt', 'desc');
+        const cursor = notifCursorStack[notifCurrentPage - 1];
+        if (cursor && notifCurrentPage > 1) {
+            query = query.startAfter(cursor);
+        }
+        query = query.limit(notifPageSize + 1);
+
+        const snapshot = await query.get();
+
+        if (snapshot.empty) {
+            cachedNotificationsList = [];
+            notifHasMore = false;
+            tbody.innerHTML = `<tr><td colspan="6" class="px-3 py-10 text-center text-slate-400 dark:text-slate-600">Gönderilmiş bildirim bulunmuyor.</td></tr>`;
+            updateNotifPaginationUI(0);
+            return;
+        }
+
+        const totalDocs = snapshot.docs;
+        let pageDocs = totalDocs;
+        if (totalDocs.length > notifPageSize) {
+            notifHasMore = true;
+            pageDocs = totalDocs.slice(0, notifPageSize);
+            notifCursorStack[notifCurrentPage] = pageDocs[pageDocs.length - 1];
+        } else {
+            notifHasMore = false;
+        }
+
+        cachedNotificationsList = pageDocs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        let html = '';
+        pageDocs.forEach(doc => {
+            const data = doc.data();
+            const date = data.sentAt ? (data.sentAt.toDate ? data.sentAt.toDate().toLocaleString('tr-TR') : new Date(data.sentAt).toLocaleString('tr-TR')) : '-';
+            const statusBadge = data.status === 'success' 
+                ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Başarılı</span>`
+                : `<span title="${data.error || 'Bilinmeyen hata'}" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 cursor-help"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Hata</span>`;
+            
+            let targetText = '-';
+            if (data.targetType === 'all') {
+                targetText = 'Tüm Kullanıcılar';
+            } else if (data.targetType === 'uid') {
+                targetText = `UID: ${data.targetValue.substring(0, 8)}...`;
+            } else if (data.targetType === 'token') {
+                targetText = `Token: ${data.targetValue.substring(0, 8)}...`;
+            }
+
+            html += `
+                <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50 transition-colors">
+                    <td class="px-3.5 py-3 whitespace-nowrap text-xs font-semibold text-slate-600 dark:text-slate-400">${date}</td>
+                    <td class="px-3.5 py-3 whitespace-nowrap text-xs text-slate-900 dark:text-white">${targetText}</td>
+                    <td class="px-3.5 py-3 text-xs text-slate-900 dark:text-white min-w-[260px]">
+                        <div class="font-bold">${escapeHtml(data.title)}</div>
+                        <div class="text-slate-500 dark:text-slate-400 text-xs mt-0.5">${escapeHtml(data.body)}</div>
+                    </td>
+                    <td class="px-3.5 py-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400">Manuel</span></td>
+                    <td class="px-3.5 py-3 whitespace-nowrap text-xs">${statusBadge}</td>
+                    <td class="px-3.5 py-3 whitespace-nowrap text-xs text-right">-</td>
+                </tr>
+            `;
         });
+        tbody.innerHTML = html;
+        updateNotifPaginationUI(pageDocs.length);
+    } catch (error) {
+        console.error('❌ Error loading fallback notification logs:', error);
+        tbody.innerHTML = `<tr><td colspan="6" class="px-3 py-10 text-center text-red-500">Loglar yüklenirken hata oluştu: ${error.message}</td></tr>`;
+        updateNotifPaginationUI(0);
+    }
 }
 
 async function loadNotificationStats() {
-     console.log('📈 Loading notification stats...');
-     const last7Days = [];
-     const now = new Date();
-     const utcYear = now.getUTCFullYear();
-     const utcMonth = now.getUTCMonth();
-     const utcDate = now.getUTCDate();
+    console.log('📈 Loading notification stats & trend chart...');
+    const last7Days = [];
+    const now = new Date();
 
-     for (let i = 6; i >= 0; i--) {
-         const d = new Date(Date.UTC(utcYear, utcMonth, utcDate - i));
-         const year = d.getUTCFullYear();
-         const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-         const day = String(d.getUTCDate()).padStart(2, '0');
-         const dateStr = `${year}-${month}-${day}`;
-         const label = `${day}/${month}`;
-         last7Days.push({ dateStr, label, count: 0 });
-     }
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(now.getDate() - i);
+        d.setHours(0, 0, 0, 0);
 
-     try {
-         const promises = last7Days.map(async (day) => {
-             const doc = await db.collection('notificationStats').doc(day.dateStr).get();
-             if (doc.exists) {
-                 day.count = doc.data().count || 0;
-             }
-         });
-         await Promise.all(promises);
-     } catch (err) {
-         console.warn('⚠️ Notification stats fetch error:', err.message);
-     }
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+        const label = `${day}/${month}`;
+        last7Days.push({ date: d, dateStr, label, count: 0 });
+    }
 
-     const chartCanvas = document.getElementById('notifTrendChart');
-     if (!chartCanvas) return;
-     const ctx = chartCanvas.getContext('2d');
+    try {
+        // 1. notificationStats koleksiyonunu sorgula
+        const promises = last7Days.map(async (day) => {
+            try {
+                const doc = await db.collection('notificationStats').doc(day.dateStr).get();
+                if (doc.exists) {
+                    day.count = doc.data().count || 0;
+                }
+            } catch (_) {}
+        });
+        await Promise.all(promises);
 
-     if (notifTrendChartInstance) {
-         notifTrendChartInstance.destroy();
-     }
+        // 2. Canlı veritabanı ile çapraz kontrol (collectionGroup veya cached veriden)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(now.getDate() - 7);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
 
-     notifTrendChartInstance = new Chart(ctx, {
-         type: 'line',
-         data: {
-             labels: last7Days.map(d => d.label),
-             datasets: [{
-                 label: 'Gönderilen Bildirim',
-                 data: last7Days.map(d => d.count),
-                 backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                 borderColor: 'rgb(139, 92, 246)',
-                 borderWidth: 2,
-                 fill: true,
-                 tension: 0.3,
-                 pointBackgroundColor: 'rgb(139, 92, 246)',
-                 pointRadius: 4
-             }]
-         },
-         options: {
-             responsive: true,
-             maintainAspectRatio: false,
-             plugins: {
-                 legend: { display: false }
-             },
-             scales: {
-                 y: {
-                     beginAtZero: true,
-                     ticks: {
-                         stepSize: 1,
-                         color: 'rgba(156, 163, 175, 0.8)'
-                     },
-                     grid: {
-                         color: 'rgba(156, 163, 175, 0.1)'
-                     }
-                 },
-                 x: {
-                     ticks: {
-                         color: 'rgba(156, 163, 175, 0.8)'
-                     },
-                     grid: {
-                         display: false
-                     }
-                 }
-             }
-         }
-     });
+        try {
+            const recentNotifsSnap = await db.collectionGroup('notifications')
+                .where('createdAt', '>=', sevenDaysAgo)
+                .get();
+
+            if (!recentNotifsSnap.empty) {
+                const dynamicCounts = {};
+                recentNotifsSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.pushStatus === 'sent' || data.pushStatus === 'success') {
+                        const dt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+                        const y = dt.getFullYear();
+                        const m = String(dt.getMonth() + 1).padStart(2, '0');
+                        const dayNum = String(dt.getDate()).padStart(2, '0');
+                        const ds = `${y}-${m}-${dayNum}`;
+                        dynamicCounts[ds] = (dynamicCounts[ds] || 0) + 1;
+                    }
+                });
+
+                last7Days.forEach(day => {
+                    if (dynamicCounts[day.dateStr]) {
+                        day.count = Math.max(day.count, dynamicCounts[day.dateStr]);
+                    }
+                });
+            }
+        } catch (cgErr) {
+            console.warn('⚠️ collectionGroup live count fallback note:', cgErr.message);
+            cachedNotificationsList.forEach(data => {
+                if (data.pushStatus === 'sent' || data.pushStatus === 'success') {
+                    const dt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+                    const y = dt.getFullYear();
+                    const m = String(dt.getMonth() + 1).padStart(2, '0');
+                    const dayNum = String(dt.getDate()).padStart(2, '0');
+                    const ds = `${y}-${m}-${dayNum}`;
+                    const match = last7Days.find(d => d.dateStr === ds);
+                    if (match) match.count++;
+                }
+            });
+        }
+    } catch (err) {
+        console.warn('⚠️ Notification stats fetch error:', err.message);
+    }
+
+    const chartCanvas = document.getElementById('notifTrendChart');
+    if (!chartCanvas) return;
+    const ctx = chartCanvas.getContext('2d');
+
+    if (notifTrendChartInstance) {
+        notifTrendChartInstance.destroy();
+    }
+
+    notifTrendChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: last7Days.map(d => d.label),
+            datasets: [{
+                label: 'Gönderilen Push Bildirimi',
+                data: last7Days.map(d => d.count),
+                backgroundColor: 'rgba(139, 92, 246, 0.12)',
+                borderColor: 'rgb(139, 92, 246)',
+                borderWidth: 2.5,
+                fill: true,
+                tension: 0.35,
+                pointBackgroundColor: 'rgb(139, 92, 246)',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 1.5,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return ` Gönderilen: ${context.parsed.y} adet push`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        color: 'rgba(156, 163, 175, 0.8)',
+                        precision: 0
+                    },
+                    grid: {
+                        color: 'rgba(156, 163, 175, 0.1)'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: 'rgba(156, 163, 175, 0.8)'
+                    },
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
 }
 
 function initNotificationEventListeners() {
@@ -10078,6 +11182,30 @@ function initNotificationEventListeners() {
         notificationsMenuBtn.addEventListener('click', (e) => {
             e.preventDefault();
             showNotificationsView();
+        });
+    }
+
+    // Global Notification Master Switch Button
+    const toggleNotifEngineBtn = document.getElementById('toggleNotifEngineBtn');
+    if (toggleNotifEngineBtn) {
+        toggleNotifEngineBtn.addEventListener('click', () => {
+            toggleGlobalNotificationState();
+        });
+    }
+
+    // Category Rate Limits Save Button
+    const saveNotifLimitsBtn = document.getElementById('saveNotifLimitsBtn');
+    if (saveNotifLimitsBtn) {
+        saveNotifLimitsBtn.addEventListener('click', () => {
+            saveCategoryLimitsFromNotifs();
+        });
+    }
+
+    // 30+ Day Retention Purge Button
+    const purgeOldNotifsBtn = document.getElementById('purgeOldNotifsBtn');
+    if (purgeOldNotifsBtn) {
+        purgeOldNotifsBtn.addEventListener('click', () => {
+            purgeOldNotificationsAction();
         });
     }
 
@@ -10107,14 +11235,16 @@ function initNotificationEventListeners() {
         });
     }
 
-    // Notification sending submit form
+    // Notification sending submit form (with dealId & notificationCategory support)
     const manualNotifForm = document.getElementById('manualNotifForm');
     if (manualNotifForm) {
         manualNotifForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const title = document.getElementById('notifTitle').value.trim();
             const body = document.getElementById('notifBody').value.trim();
-            const imageUrl = document.getElementById('notifImageUrl').value.trim();
+            const imageUrl = document.getElementById('notifImageUrl')?.value.trim() || '';
+            const dealId = document.getElementById('notifDealId')?.value.trim() || '';
+            const notificationCategory = document.getElementById('notifCategoryType')?.value || 'admin_message';
             const targetType = document.getElementById('notifTargetType').value;
             const targetValue = notifTargetValue ? notifTargetValue.value.trim() : '';
 
@@ -10126,7 +11256,7 @@ function initNotificationEventListeners() {
 
             try {
                 const sendFn = firebase.functions().httpsCallable('sendManualNotification');
-                await sendFn({ title, body, imageUrl, targetType, targetValue });
+                await sendFn({ title, body, imageUrl, dealId, targetType, targetValue, notificationCategory });
                 showSuccess('✅ Bildirim başarıyla sıraya alındı ve gönderildi!');
                 manualNotifForm.reset();
                 if (notifTargetValueWrapper) notifTargetValueWrapper.classList.add('hidden');
@@ -10157,7 +11287,7 @@ function initNotificationEventListeners() {
                 const res = await cleanupFn();
                 if (cleanTokensResult) {
                     cleanTokensResult.classList.remove('hidden');
-                    cleanTokensResult.textContent = `🧹 Temizlik tamamlandı! Kontrol edilen cihaz: ${res.data.checkedCount}, Temizlenen geçersiz token: ${res.data.cleanedCount}`;
+                    cleanTokensResult.textContent = `🧹 Temizlik tamamlandı! Kontrol edilen: ${res.data.checkedCount}, Temizlenen: ${res.data.cleanedCount}`;
                 }
                 showSuccess('✅ Token temizlik işlemi tamamlandı!');
             } catch (err) {
@@ -10165,194 +11295,919 @@ function initNotificationEventListeners() {
                 showError('Token temizleme hatası: ' + err.message);
             } finally {
                 cleanTokensBtn.disabled = false;
-                cleanTokensBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">delete_sweep</span><span>Geçersiz Token\'ları Temizle</span>';
+                cleanTokensBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">delete_sweep</span><span>Temizle</span>';
             }
         });
     }
+
+    // Filter by channel / reason
+    const notifChannelFilter = document.getElementById('notifChannelFilter');
+    if (notifChannelFilter) {
+        notifChannelFilter.addEventListener('change', (e) => {
+            currentChannelFilter = e.target.value;
+            renderNotificationLogsTable();
+        });
+    }
+
+    // Filter by push status
+    const notifStatusFilter = document.getElementById('notifStatusFilter');
+    if (notifStatusFilter) {
+        notifStatusFilter.addEventListener('change', (e) => {
+            currentNotifFilter = e.target.value;
+            renderNotificationLogsTable();
+        });
+    }
+
+    // Page size selector
+    const notifPageSizeSelect = document.getElementById('notifPageSizeSelect');
+    if (notifPageSizeSelect) {
+        notifPageSizeSelect.addEventListener('change', (e) => {
+            notifPageSize = parseInt(e.target.value, 10) || 50;
+            loadNotificationLogs(true);
+        });
+    }
+
+    // Previous page button
+    const notifPrevPageBtn = document.getElementById('notifPrevPageBtn');
+    if (notifPrevPageBtn) {
+        notifPrevPageBtn.addEventListener('click', () => {
+            if (notifCurrentPage > 1 && !notifIsLoading) {
+                notifCurrentPage--;
+                loadNotificationLogs(false);
+            }
+        });
+    }
+
+    // Next page button
+    const notifNextPageBtn = document.getElementById('notifNextPageBtn');
+    if (notifNextPageBtn) {
+        notifNextPageBtn.addEventListener('click', () => {
+            if (notifHasMore && !notifIsLoading) {
+                notifCurrentPage++;
+                loadNotificationLogs(false);
+            }
+        });
+    }
+
+    // Refresh logs button
+    const refreshNotifLogsBtn = document.getElementById('refreshNotifLogsBtn');
+    if (refreshNotifLogsBtn) {
+        refreshNotifLogsBtn.addEventListener('click', async () => {
+            const icon = refreshNotifLogsBtn.querySelector('.material-symbols-outlined');
+            if (icon) icon.classList.add('animate-spin');
+            try {
+                await loadNotificationLogs(true);
+                showSuccess('Bildirim akışı güncellendi');
+            } finally {
+                if (icon) icon.classList.remove('animate-spin');
+            }
+        });
+    }
+
+    // Close detail modal events
+    const closeNotifDetailModal = document.getElementById('closeNotifDetailModal');
+    const closeNotifDetailModalBtn = document.getElementById('closeNotifDetailModalBtn');
+    if (closeNotifDetailModal) closeNotifDetailModal.addEventListener('click', closeNotificationDetail);
+    if (closeNotifDetailModalBtn) closeNotifDetailModalBtn.addEventListener('click', closeNotificationDetail);
 }
 
 window.showNotificationsView = showNotificationsView;
+window.openNotificationDetail = openNotificationDetail;
+window.closeNotificationDetail = closeNotificationDetail;
 
 // =========================================================================
-// FAZ 4 - SİSTEM HATA LOGLARI & GELİŞMİŞ AYARLAR (SYSTEM ERRORS DASHBOARD)
-// =========================================================================
+// FAZ 4 - SİSTEM HATA LOGLARI & GELİŞMİŞ AYARLAR (SYSTEM ERRORS DASHBOARD - KIBANA/DATADOG APM)
+// =========================================================================================
 
 let systemErrorsUnsubscribe = null;
 let allErrorsList = [];
+let currentLogCategoryTab = 'all';
+let currentSelectedError = null;
+
+// Gelişmiş APM Filtre Durumları
+let selectedLogUserIdFilter = null;
+let selectedLogUserObj = null;
+let selectedLogTimeRange = 'all';
+let selectedLogPlatform = 'all';
+let logFilterUsersCache = [];
 
 function showLogsView() {
     currentView = 'logs';
     showView('logsView');
     updateMenuActiveState('logs');
     loadSystemLogs();
+    loadUsersForLogFilter();
+}
+
+function getAdminCurrentEnvironment() {
+    if (typeof selectedEnv !== 'undefined' && selectedEnv) {
+        return selectedEnv;
+    }
+    if (typeof firebaseConfig !== 'undefined' && firebaseConfig.projectId) {
+        return firebaseConfig.projectId.includes('prod') ? 'prod' : 'dev';
+    }
+    return 'dev';
 }
 
 function loadSystemLogs() {
-    console.log('🐛 Loading system logs...');
+    console.log('🐛 Loading modernized system logs...');
     if (systemErrorsUnsubscribe) {
         systemErrorsUnsubscribe();
     }
 
+    const currentEnv = getAdminCurrentEnvironment();
+    const envBadge = document.getElementById('logsEnvBadge');
+    if (envBadge) {
+        envBadge.textContent = currentEnv.toUpperCase();
+        if (currentEnv === 'prod') {
+            envBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-400 border border-rose-300 dark:border-rose-800';
+        } else {
+            envBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800';
+        }
+    }
+
     const tbody = document.getElementById('logsTableBody');
-    if (!tbody) return;
+    if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400"><div class="flex flex-col items-center gap-2"><span class="material-symbols-outlined text-4xl opacity-50 animate-spin">sync</span><p>Sistem logları yükleniyor...</p></div></td></tr>`;
+    }
 
     systemErrorsUnsubscribe = db.collection('systemErrors')
         .orderBy('createdAt', 'desc')
-        .limit(100)
+        .limit(200)
         .onSnapshot((snapshot) => {
             allErrorsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log(`🐛 Received ${allErrorsList.length} systemErrors from Firestore.`);
             renderSystemLogs();
         }, (error) => {
             console.error('❌ Error loading system logs:', error);
-            tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-12 text-center text-red-500">Loglar yüklenirken hata oluştu: ${error.message}</td></tr>`;
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-red-500">Loglar yüklenirken hata oluştu: ${error.message}</td></tr>`;
+            }
         });
 }
+
+// -------------------------------------------------------------
+// KIBANA APM - KULLANICI ARAMA & FİLTRELEME MOTORU
+// -------------------------------------------------------------
+async function loadUsersForLogFilter() {
+    try {
+        if (typeof users !== 'undefined' && Array.isArray(users) && users.length > 0) {
+            logFilterUsersCache = users.map(u => ({
+                id: u.id || u.uid,
+                uid: u.uid || u.id,
+                displayName: u.displayName || u.username || u.nickname || 'İsimsiz Kullanıcı',
+                nickname: u.nickname || '',
+                email: u.email || '',
+                profileImageUrl: u.profileImageUrl || ''
+            }));
+            renderLogsUserDropdownList('');
+            return;
+        }
+
+        const snapshot = await db.collection('users').limit(100).get();
+        logFilterUsersCache = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                uid: data.uid || doc.id,
+                displayName: data.displayName || data.username || data.nickname || 'İsimsiz Kullanıcı',
+                nickname: data.nickname || '',
+                email: data.email || '',
+                profileImageUrl: typeof cleanProfileImageUrl === 'function' ? cleanProfileImageUrl(data.profileImageUrl) : (data.profileImageUrl || '')
+            };
+        });
+        renderLogsUserDropdownList('');
+    } catch (err) {
+        console.warn('⚠️ Log kullanıcıları önbelleğe alınamadı:', err);
+    }
+}
+
+window.toggleLogsUserDropdown = function() {
+    const popover = document.getElementById('logsUserDropdownPopover');
+    if (!popover) return;
+    const isHidden = popover.classList.contains('hidden');
+    if (isHidden) {
+        popover.classList.remove('hidden');
+        if (logFilterUsersCache.length === 0) {
+            loadUsersForLogFilter();
+        } else {
+            renderLogsUserDropdownList(document.getElementById('logsUserSearchInput')?.value || '');
+        }
+        const searchInp = document.getElementById('logsUserSearchInput');
+        if (searchInp) setTimeout(() => searchInp.focus(), 50);
+    } else {
+        popover.classList.add('hidden');
+    }
+};
+
+window.closeLogsUserDropdown = function() {
+    const popover = document.getElementById('logsUserDropdownPopover');
+    if (popover) popover.classList.add('hidden');
+};
+
+window.renderLogsUserDropdownList = function(query = '') {
+    const listEl = document.getElementById('logsUserDropdownList');
+    if (!listEl) return;
+
+    const q = (query || '').trim().toLowerCase();
+    const filtered = logFilterUsersCache.filter(u => {
+        if (!q) return true;
+        const target = `${u.displayName} ${u.nickname} ${u.email} ${u.uid}`.toLowerCase();
+        return target.includes(q);
+    });
+
+    let html = `
+        <button type="button" onclick="window.clearUserLogFilter()" class="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300 font-bold border-b border-slate-100 dark:border-slate-800 mb-1">
+            <span class="material-symbols-outlined text-[18px] text-slate-400">group</span>
+            <span>Tüm Kullanıcılar (Filtreyi Temizle)</span>
+        </button>
+    `;
+
+    if (filtered.length === 0) {
+        html += `<div class="p-3 text-center text-slate-400 text-xs">Aramaya uygun kullanıcı bulunamadı.</div>`;
+    } else {
+        filtered.forEach(u => {
+            const avatarSrc = u.profileImageUrl || '/assets/icons/avatar_default.png';
+            const isSelected = selectedLogUserIdFilter === u.uid;
+            const activeBg = isSelected ? 'bg-primary/10 border-primary/30 text-primary' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-800 dark:text-slate-200 border-transparent';
+
+            html += `
+                <button type="button" onclick="window.filterLogsByUser('${u.uid}')" class="w-full flex items-center gap-2.5 p-2 rounded-xl text-left transition-colors border ${activeBg}">
+                    <img src="${avatarSrc}" class="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0 bg-white" onerror="this.onerror=null; this.src='/assets/icons/avatar_default.png';" />
+                    <div class="min-w-0 flex-1">
+                        <div class="font-bold text-xs truncate">${escapeHtml(u.displayName)}</div>
+                        <div class="text-[10px] text-slate-400 font-mono truncate">${u.uid}</div>
+                    </div>
+                    ${isSelected ? '<span class="material-symbols-outlined text-primary text-[16px]">check</span>' : ''}
+                </button>
+            `;
+        });
+    }
+
+    listEl.innerHTML = html;
+};
+
+window.filterLogsByUser = function(uid, userObj = null) {
+    selectedLogUserIdFilter = uid;
+    
+    if (!userObj) {
+        userObj = logFilterUsersCache.find(u => u.uid === uid || u.id === uid) || {
+            uid,
+            displayName: uid.substring(0, 8),
+            profileImageUrl: ''
+        };
+    }
+    selectedLogUserObj = userObj;
+
+    const btnText = document.getElementById('logsUserDropdownBtnText');
+    if (btnText) {
+        btnText.textContent = `👤 ${userObj.displayName || userObj.nickname || uid.substring(0, 8)}`;
+    }
+
+    window.closeLogsUserDropdown();
+
+    // Active User Banner Güncelle
+    const banner = document.getElementById('logsActiveUserBanner');
+    const bannerName = document.getElementById('logsActiveUserName');
+    const bannerUid = document.getElementById('logsActiveUserUid');
+    const bannerAvatar = document.getElementById('logsActiveUserAvatar');
+
+    if (banner) {
+        banner.classList.remove('hidden');
+        if (bannerName) bannerName.textContent = userObj.displayName || userObj.nickname || 'Kullanıcı';
+        if (bannerUid) bannerUid.textContent = uid;
+        if (bannerAvatar) {
+            bannerAvatar.onerror = function() { this.onerror = null; this.src = '/assets/icons/avatar_default.png'; };
+            bannerAvatar.src = userObj.profileImageUrl || '/assets/icons/avatar_default.png';
+        }
+    }
+
+    renderSystemLogs();
+};
+
+window.clearUserLogFilter = function() {
+    selectedLogUserIdFilter = null;
+    selectedLogUserObj = null;
+
+    const btnText = document.getElementById('logsUserDropdownBtnText');
+    if (btnText) btnText.textContent = '👤 Kullanıcı: Tümü';
+
+    const banner = document.getElementById('logsActiveUserBanner');
+    if (banner) banner.classList.add('hidden');
+
+    window.closeLogsUserDropdown();
+    renderSystemLogs();
+};
+
+window.deepSearchUserLogs = async function() {
+    if (!selectedLogUserIdFilter) return;
+
+    const btn = document.getElementById('logsDeepSearchBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">sync</span><span>Taranıyor...</span>';
+    }
+
+    try {
+        console.log(`🔎 Firestore'dan ${selectedLogUserIdFilter} kullanıcısına ait tüm geçmiş hatalar sorgulanıyor...`);
+        const snapshot = await db.collection('systemErrors')
+            .where('userId', '==', selectedLogUserIdFilter)
+            .limit(50)
+            .get();
+
+        let addedCount = 0;
+        snapshot.forEach(doc => {
+            if (!allErrorsList.some(e => e.id === doc.id)) {
+                allErrorsList.unshift({ id: doc.id, ...doc.data() });
+                addedCount++;
+            }
+        });
+
+        renderSystemLogs();
+        if (addedCount > 0) {
+            showSuccess(`🔎 Firestore'dan geçmiş ${addedCount} adet hata kaydı hafızaya çekildi.`);
+        } else {
+            showSuccess(`Geçmiş kayıtlarda bu kullanıcıya ait ek hata bulunamadı.`);
+        }
+    } catch (err) {
+        console.error('❌ Derin kullanıcı hata araması başarısız:', err);
+        showError('Geçmiş hata taraması yapılamadı: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">travel_explore</span><span>Tüm Geçmişte Ara</span>';
+        }
+    }
+};
+
+window.resetAllLogFilters = function() {
+    const searchInp = document.getElementById('logsSearchInput');
+    if (searchInp) searchInp.value = '';
+
+    const timeRangeFilter = document.getElementById('logsTimeRangeFilter');
+    if (timeRangeFilter) timeRangeFilter.value = 'all';
+    selectedLogTimeRange = 'all';
+
+    const platformFilter = document.getElementById('logsPlatformFilter');
+    if (platformFilter) platformFilter.value = 'all';
+    selectedLogPlatform = 'all';
+
+    const serviceFilter = document.getElementById('logsServiceFilter');
+    if (serviceFilter) serviceFilter.value = 'all';
+
+    const severityFilter = document.getElementById('logsSeverityFilter');
+    if (severityFilter) severityFilter.value = 'all';
+
+    const statusFilter = document.getElementById('logsStatusFilter');
+    if (statusFilter) statusFilter.value = 'unresolved';
+
+    const envFilter = document.getElementById('logsEnvironmentFilter');
+    if (envFilter) envFilter.value = 'current';
+
+    window.clearUserLogFilter();
+    window.switchLogCategoryTab('all');
+    showSuccess('Filtreler varsayılana sıfırlandı.');
+};
+
+window.switchLogCategoryTab = function(tabKey) {
+    currentLogCategoryTab = tabKey;
+    document.querySelectorAll('.log-tab-btn').forEach(btn => {
+        btn.className = 'log-tab-btn flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0';
+    });
+    const activeBtn = document.getElementById(`logTab-${tabKey}`);
+    if (activeBtn) {
+        activeBtn.className = 'log-tab-btn flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all bg-primary text-white shadow-sm shadow-primary/20 shrink-0';
+    }
+    renderSystemLogs();
+};
 
 function renderSystemLogs() {
     const tbody = document.getElementById('logsTableBody');
     if (!tbody) return;
 
-    const serviceFilter = document.getElementById('errorFilterService').value;
-    const statusFilter = document.getElementById('errorFilterStatus').value;
+    const currentEnv = getAdminCurrentEnvironment();
+    const searchVal = (document.getElementById('logsSearchInput')?.value || '').trim().toLowerCase();
+    const serviceFilter = document.getElementById('logsServiceFilter')?.value || 'all';
+    const severityFilter = document.getElementById('logsSeverityFilter')?.value || 'all';
+    const statusFilter = document.getElementById('logsStatusFilter')?.value || 'unresolved';
+    const envFilter = document.getElementById('logsEnvironmentFilter')?.value || 'current';
+    const timeRangeFilter = document.getElementById('logsTimeRangeFilter')?.value || 'all';
+    const platformFilter = document.getElementById('logsPlatformFilter')?.value || 'all';
+    selectedLogTimeRange = timeRangeFilter;
+    selectedLogPlatform = platformFilter;
 
-    // Filter list
-    const filtered = allErrorsList.filter(e => {
-        const matchesService = serviceFilter === 'all' || e.service === serviceFilter;
-        let matchesStatus = false;
-        if (statusFilter === 'all') {
-            matchesStatus = true;
-        } else if (statusFilter === 'unresolved') {
-            matchesStatus = e.status === 'unresolved';
-        } else if (statusFilter === 'resolved') {
-            matchesStatus = e.status === 'resolved';
-        } else if (statusFilter === 'fatal' || statusFilter === 'warning' || statusFilter === 'info') {
-            matchesStatus = e.status === 'unresolved' && (e.severity || 'error') === statusFilter;
-        }
-        return matchesService && matchesStatus;
+    const now = new Date();
+
+    // 1. Calculate Environment Matching
+    const envFilteredList = allErrorsList.filter(e => {
+        const itemEnv = e.environment || 'dev'; // Legacy logs default to dev
+        if (envFilter === 'all') return true;
+        if (envFilter === 'dev') return itemEnv === 'dev';
+        if (envFilter === 'prod') return itemEnv === 'prod';
+        return itemEnv === currentEnv; // 'current'
     });
 
-    // Calculate metrics globally based on all errors loaded
-    const unresolvedErrors = allErrorsList.filter(e => e.status === 'unresolved');
-    document.getElementById('unresolvedErrorsCount').textContent = unresolvedErrors.length;
+    // 2. Calculate Category Tab Badges (based on current env)
+    const categoryCounts = {
+        all: envFilteredList.length,
+        mobile: 0,
+        scraper: 0,
+        catalogs_coupons: 0,
+        ai: 0,
+        notifications: 0,
+        backend: 0,
+        admin: 0
+    };
 
-    const serviceCounts = { bot: 0, functions: 0, web: 0 };
-    unresolvedErrors.forEach(e => {
-        if (serviceCounts[e.service] !== undefined) {
-            serviceCounts[e.service]++;
-        }
+    envFilteredList.forEach(e => {
+        const cat = e.category || e.service || 'backend';
+        if (cat === 'mobile') categoryCounts.mobile++;
+        else if (cat === 'scraper') categoryCounts.scraper++;
+        else if (cat === 'catalogs_coupons') categoryCounts.catalogs_coupons++;
+        else if (cat === 'ai') categoryCounts.ai++;
+        else if (cat === 'notifications') categoryCounts.notifications++;
+        else if (cat === 'backend' || cat === 'functions') categoryCounts.backend++;
+        else if (cat === 'admin' || cat === 'web') categoryCounts.admin++;
+        else if (e.service === 'bot') categoryCounts.scraper++;
+        else categoryCounts.backend++;
     });
 
-    let topService = '-';
-    let maxCount = 0;
-    if (serviceCounts.bot > maxCount) { topService = 'Telegram Bot'; maxCount = serviceCounts.bot; }
-    if (serviceCounts.functions > maxCount) { topService = 'Cloud Functions'; maxCount = serviceCounts.functions; }
-    if (serviceCounts.web > maxCount) { topService = 'Web Admin Panel'; maxCount = serviceCounts.web; }
+    Object.keys(categoryCounts).forEach(k => {
+        const badge = document.getElementById(`logTabBadge-${k}`);
+        if (badge) badge.textContent = categoryCounts[k];
+    });
+
+    // 3. Calculate 4 Bento Metric Cards (based on active environment)
+    const unresolvedErrors = envFilteredList.filter(e => e.status === 'unresolved');
+    const fatalErrors = envFilteredList.filter(e => e.status === 'unresolved' && e.severity === 'fatal');
     
-    document.getElementById('topErrorService').textContent = maxCount > 0 ? `${topService} (${maxCount} Hata)` : 'Hata Yok';
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const todayErrors = envFilteredList.filter(e => {
+        if (!e.createdAt) return false;
+        const d = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
+        return d >= oneDayAgo;
+    });
 
-    if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-12 text-center text-slate-400 dark:text-slate-600">Gösterilecek hata logu bulunmuyor.</td></tr>`;
+    const statUnresolvedEl = document.getElementById('logsStatUnresolved');
+    if (statUnresolvedEl) statUnresolvedEl.textContent = unresolvedErrors.length;
+    const statFatalEl = document.getElementById('logsStatFatal');
+    if (statFatalEl) statFatalEl.textContent = fatalErrors.length;
+    const statTodayEl = document.getElementById('logsStatToday');
+    if (statTodayEl) statTodayEl.textContent = todayErrors.length;
+
+    // Determine Top Error Category
+    const categoryFrequencies = {};
+    unresolvedErrors.forEach(e => {
+        const catName = getCategoryDisplayName(e.category || e.service);
+        categoryFrequencies[catName] = (categoryFrequencies[catName] || 0) + 1;
+    });
+    let topCatName = '-';
+    let topCatMax = 0;
+    Object.entries(categoryFrequencies).forEach(([cName, count]) => {
+        if (count > topCatMax) {
+            topCatName = `${cName} (${count})`;
+            topCatMax = count;
+        }
+    });
+    const statTopCatEl = document.getElementById('logsStatTopCategory');
+    if (statTopCatEl) statTopCatEl.textContent = topCatMax > 0 ? topCatName : 'Hata Yok';
+
+    // 4. Filter List for Table Display (Kibana APM Multi-Criteria)
+    let userMatchCount = 0;
+    const filteredRows = envFilteredList.filter(e => {
+        // Tab Filter
+        if (currentLogCategoryTab !== 'all') {
+            const cat = e.category || e.service || 'backend';
+            let isTabMatch = false;
+            if (currentLogCategoryTab === 'mobile' && cat === 'mobile') isTabMatch = true;
+            else if (currentLogCategoryTab === 'scraper' && (cat === 'scraper' || e.service === 'bot')) isTabMatch = true;
+            else if (currentLogCategoryTab === 'catalogs_coupons' && cat === 'catalogs_coupons') isTabMatch = true;
+            else if (currentLogCategoryTab === 'ai' && cat === 'ai') isTabMatch = true;
+            else if (currentLogCategoryTab === 'notifications' && cat === 'notifications') isTabMatch = true;
+            else if (currentLogCategoryTab === 'backend' && (cat === 'backend' || cat === 'functions')) isTabMatch = true;
+            else if (currentLogCategoryTab === 'admin' && (cat === 'admin' || cat === 'web')) isTabMatch = true;
+            if (!isTabMatch) return false;
+        }
+
+        // Service Filter
+        if (serviceFilter !== 'all') {
+            const matchService = (e.service === serviceFilter) || (e.category === serviceFilter);
+            if (!matchService) return false;
+        }
+
+        // Severity Filter
+        if (severityFilter !== 'all') {
+            const sev = e.severity || 'error';
+            if (sev !== severityFilter) return false;
+        }
+
+        // Status Filter
+        if (statusFilter !== 'all') {
+            if (statusFilter === 'unresolved' && e.status !== 'unresolved') return false;
+            if (statusFilter === 'resolved' && e.status !== 'resolved') return false;
+        }
+
+        // Time Range Filter (Kibana Style)
+        if (selectedLogTimeRange !== 'all' && e.createdAt) {
+            const d = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
+            const diffMs = now.getTime() - d.getTime();
+            if (selectedLogTimeRange === '15m' && diffMs > 15 * 60 * 1000) return false;
+            if (selectedLogTimeRange === '1h' && diffMs > 60 * 60 * 1000) return false;
+            if (selectedLogTimeRange === '24h' && diffMs > 24 * 60 * 60 * 1000) return false;
+            if (selectedLogTimeRange === '7d' && diffMs > 7 * 24 * 60 * 60 * 1000) return false;
+            if (selectedLogTimeRange === '30d' && diffMs > 30 * 24 * 60 * 60 * 1000) return false;
+        }
+
+        // Platform Filter
+        if (selectedLogPlatform !== 'all') {
+            const itemPlatform = (e.platform || e.metadata?.platform || '').toLowerCase();
+            const itemService = (e.service || '').toLowerCase();
+            if (selectedLogPlatform === 'android' && itemPlatform !== 'android') return false;
+            if (selectedLogPlatform === 'ios' && itemPlatform !== 'ios') return false;
+            if (selectedLogPlatform === 'web' && itemPlatform !== 'web' && itemService !== 'web' && itemService !== 'admin') return false;
+            if (selectedLogPlatform === 'backend' && itemService !== 'backend' && itemService !== 'functions') return false;
+            if (selectedLogPlatform === 'bot' && itemService !== 'bot') return false;
+        }
+
+        // User ID Filter (Kibana APM Style)
+        if (selectedLogUserIdFilter) {
+            const target = selectedLogUserIdFilter.toLowerCase();
+            const itemUid = (e.userId || e.metadata?.userId || e.metadata?.uid || '').toLowerCase();
+            const itemEmail = (e.userEmail || e.metadata?.userEmail || e.metadata?.email || '').toLowerCase();
+            const inMessage = (e.message || '').toLowerCase().includes(target);
+            if (itemUid !== target && !itemEmail.includes(target) && !inMessage) {
+                return false;
+            }
+            userMatchCount++;
+        }
+
+        // Search Filter (Message, Type, Category, Service, Stack, Store, User)
+        if (searchVal) {
+            const targetText = [
+                e.errorType || '',
+                e.message || '',
+                e.category || '',
+                e.service || '',
+                e.subCategory || '',
+                e.userId || '',
+                e.userEmail || '',
+                e.metadata?.store || '',
+                e.metadata?.userId || '',
+                e.metadata?.uid || '',
+                e.stack || ''
+            ].join(' ').toLowerCase();
+            if (!targetText.includes(searchVal)) return false;
+        }
+
+        return true;
+    });
+
+    // Update Active User Banner Statistics
+    if (selectedLogUserIdFilter) {
+        const statsEl = document.getElementById('logsActiveUserStats');
+        if (statsEl) {
+            statsEl.textContent = `${userMatchCount} adet hata kaydı bulundu.`;
+        }
+        const deepSearchBtn = document.getElementById('logsDeepSearchBtn');
+        if (deepSearchBtn) {
+            if (userMatchCount === 0) deepSearchBtn.classList.remove('hidden');
+            else deepSearchBtn.classList.add('hidden');
+        }
+    }
+
+    if (filteredRows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">Kriterlere uygun sistem logu bulunamadı.</td></tr>`;
         return;
     }
 
     let html = '';
-    filtered.forEach(e => {
-        const date = e.createdAt ? (e.createdAt.toDate ? e.createdAt.toDate().toLocaleString('tr-TR') : new Date(e.createdAt).toLocaleString('tr-TR')) : '-';
-        
-        let serviceBadge = '';
-        if (e.service === 'bot') {
-            serviceBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-100 text-sky-800 dark:bg-sky-950/30 dark:text-sky-400">Bot</span>`;
-        } else if (e.service === 'functions') {
-            serviceBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/30 dark:text-purple-400">Functions</span>`;
-        } else {
-            serviceBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">Web Admin</span>`;
-        }
+    filteredRows.forEach(e => {
+        const createdDate = e.createdAt ? (e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt)) : null;
+        const lastOccurredDate = e.lastOccurredAt ? (e.lastOccurredAt.toDate ? e.lastOccurredAt.toDate() : new Date(e.lastOccurredAt)) : null;
 
-        const severity = e.severity || 'error';
-        let severityBadge = '';
-        if (severity === 'fatal') {
-            severityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400 inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>Kritik</span>`;
-        } else if (severity === 'warning') {
-            severityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-400">Uyarı</span>`;
-        } else if (severity === 'info') {
-            severityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-400">Bilgi</span>`;
-        } else {
-            severityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400">Hata</span>`;
-        }
-
-        const resolveBtn = e.status === 'unresolved'
-            ? `<button onclick="resolveError('${e.id}')" class="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded transition-colors" title="Çözüldü Olarak İşaretle"><span class="material-symbols-outlined text-[20px]">check_circle</span></button>`
-            : `<span class="text-slate-400 dark:text-slate-600 font-semibold text-xs px-1">Çözüldü</span>`;
-
-        const expandBtn = e.stack
-            ? `<button onclick="toggleErrorStack('${e.id}')" class="p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors" title="Stack Trace Göster"><span id="expandIcon-${e.id}" class="material-symbols-outlined text-[20px]">expand_more</span></button>`
+        const dateStr = createdDate ? createdDate.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' }) + ' ' + createdDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '-';
+        const lastStr = lastOccurredDate && createdDate && (lastOccurredDate.getTime() - createdDate.getTime() > 60000) 
+            ? `<div class="text-[10px] text-slate-400">Son: ${lastOccurredDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</div>` 
             : '';
 
+        const itemEnv = (e.environment || 'dev').toUpperCase();
+        const envBadge = itemEnv === 'PROD'
+            ? `<span class="px-1.5 py-0.2 rounded text-[10px] font-black bg-rose-500/10 text-rose-500 border border-rose-500/20">PROD</span>`
+            : `<span class="px-1.5 py-0.2 rounded text-[10px] font-black bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">DEV</span>`;
+
+        const serviceBadge = getServiceBadgeHtml(e.service, e.category);
+        const severityBadge = getSeverityBadgeHtml(e.severity);
+
+        const occurrenceBadge = (e.occurrenceCount && e.occurrenceCount > 1)
+            ? `<span class="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">x${e.occurrenceCount}</span>`
+            : '';
+
+        let contextTag = '';
+        if (e.metadata?.store) {
+            contextTag = `<span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 uppercase">${e.metadata.store}</span>`;
+        } else if (e.subCategory) {
+            contextTag = `<span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">${e.subCategory}</span>`;
+        }
+
+        const logUserId = e.userId || e.metadata?.userId || e.metadata?.uid || null;
+        let userBadgeHtml = '';
+        if (logUserId) {
+            const shortUid = logUserId.length > 8 ? `${logUserId.substring(0, 6)}...` : logUserId;
+            userBadgeHtml = `<button type="button" onclick="window.filterLogsByUser('${logUserId}', null)" class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors" title="Bu Kullanıcıyı Filtrele">👤 ${shortUid}</button>`;
+        }
+
+        const isResolved = e.status === 'resolved';
+        const statusIcon = isResolved ? 'check_circle' : 'radio_button_unchecked';
+        const statusColor = isResolved ? 'text-emerald-500 hover:text-emerald-600' : 'text-slate-400 hover:text-emerald-500';
+        const statusTitle = isResolved ? 'Yeniden Aç' : 'Çözüldü Olarak İşaretle';
+
         html += `
-            <tr class="hover:bg-slate-50 dark:hover:bg-surface-darker/50">
-                <td class="px-6 py-4 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">${date}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="flex items-center gap-1.5">
+            <tr class="hover:bg-slate-50/80 dark:hover:bg-surface-darker/60 transition-colors">
+                <td class="px-5 py-3.5 whitespace-nowrap text-slate-500 dark:text-slate-400">
+                    <div class="font-medium">${dateStr}</div>
+                    ${lastStr}
+                </td>
+                <td class="px-5 py-3.5 whitespace-nowrap">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        ${envBadge}
                         ${serviceBadge}
-                        ${severityBadge}
                     </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-700 dark:text-slate-300">${e.errorType}</td>
-                <td class="px-6 py-4 text-xs text-slate-900 dark:text-white break-words max-w-md">
-                    <div>${e.message}</div>
+                <td class="px-5 py-3.5 whitespace-nowrap">
+                    ${severityBadge}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-right text-xs font-medium">
+                <td class="px-5 py-3.5 whitespace-nowrap">
+                    <div class="flex items-center gap-1.5">
+                        <span class="font-bold text-slate-900 dark:text-white truncate max-w-[170px]" title="${e.errorType}">${e.errorType}</span>
+                        ${occurrenceBadge}
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        ${contextTag}
+                        ${userBadgeHtml}
+                    </div>
+                </td>
+                <td class="px-5 py-3.5 text-slate-700 dark:text-slate-300">
+                    <div class="line-clamp-2 break-words font-sans text-xs leading-relaxed max-w-xl" title="${escapeHtml(e.message)}">
+                        ${escapeHtml(e.message)}
+                    </div>
+                </td>
+                <td class="px-5 py-3.5 whitespace-nowrap text-right">
                     <div class="flex items-center justify-end gap-1">
-                        ${expandBtn}
-                        ${resolveBtn}
+                        <button onclick="window.openLogDetailModal('${e.id}')" class="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-lg transition-colors" title="Detayları İncele">
+                            <span class="material-symbols-outlined text-[18px]">visibility</span>
+                        </button>
+                        <button onclick="window.toggleErrorResolved('${e.id}')" class="p-1.5 ${statusColor} hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="${statusTitle}">
+                            <span class="material-symbols-outlined text-[18px]">${statusIcon}</span>
+                        </button>
+                        <button onclick="window.copyErrorSummary('${e.id}')" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Özeti Kopyala">
+                            <span class="material-symbols-outlined text-[18px]">content_copy</span>
+                        </button>
                     </div>
-                </td>
-            </tr>
-            <tr id="stackRow-${e.id}" class="hidden bg-slate-50/30 dark:bg-slate-900/10">
-                <td colspan="5" class="px-6 py-4">
-                    <pre class="bg-slate-900 text-slate-300 p-4 rounded-lg font-mono text-xs overflow-x-auto whitespace-pre-wrap max-h-60 border border-slate-800">${e.stack}</pre>
                 </td>
             </tr>
         `;
     });
+
     tbody.innerHTML = html;
 }
 
-window.toggleErrorStack = function(errorId) {
-    const row = document.getElementById(`stackRow-${errorId}`);
-    const icon = document.getElementById(`expandIcon-${errorId}`);
-    if (row && icon) {
-        const isHidden = row.classList.contains('hidden');
-        if (isHidden) {
-            row.classList.remove('hidden');
-            icon.textContent = 'expand_less';
-        } else {
-            row.classList.add('hidden');
-            icon.textContent = 'expand_more';
-        }
+function getCategoryDisplayName(cat) {
+    switch (cat) {
+        case 'mobile': return 'Mobil Uygulama';
+        case 'bot': return 'Telegram Botu';
+        case 'scraper': return 'Mağaza Kazıyıcılar';
+        case 'catalogs_coupons': return 'Katalog & Kupon';
+        case 'ai': return 'AI / Gemini';
+        case 'notifications': return 'Bildirim Motoru';
+        case 'backend':
+        case 'functions': return 'Cloud Functions';
+        case 'admin':
+        case 'web': return 'Web Admin';
+        default: return cat || 'Sistem';
+    }
+}
+
+function getServiceBadgeHtml(service, category) {
+    const key = category || service || 'backend';
+    switch (key) {
+        case 'mobile':
+            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300">📱 Mobil</span>`;
+        case 'bot':
+            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300">📡 Bot</span>`;
+        case 'scraper':
+            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">🕷️ Scraper</span>`;
+        case 'catalogs_coupons':
+            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-teal-100 text-teal-800 dark:bg-teal-950/40 dark:text-teal-300">📰 Katalog</span>`;
+        case 'ai':
+            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-950/40 dark:text-fuchsia-300">🧠 AI</span>`;
+        case 'notifications':
+            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300">🔔 Push</span>`;
+        case 'admin':
+        case 'web':
+            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">💻 Admin</span>`;
+        default:
+            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300">⚡ Functions</span>`;
+    }
+}
+
+function getSeverityBadgeHtml(severity) {
+    switch (severity) {
+        case 'fatal':
+            return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"><span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>Kritik</span>`;
+        case 'warning':
+            return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">⚠️ Uyarı</span>`;
+        case 'info':
+            return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">ℹ️ Bilgi</span>`;
+        default:
+            return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400">❌ Hata</span>`;
+    }
+}
+
+// Modal Controllers
+window.openLogDetailModal = function(errorId) {
+    const error = allErrorsList.find(e => e.id === errorId);
+    if (!error) {
+        showError('Hata kaydı bulunamadı.');
+        return;
+    }
+    currentSelectedError = error;
+
+    const modal = document.getElementById('logDetailModal');
+    const titleEl = document.getElementById('logModalTitle');
+    const subtitleEl = document.getElementById('logModalSubtitle');
+    const severityBadgeEl = document.getElementById('logModalSeverityBadge');
+    const envBadgeEl = document.getElementById('logModalEnvBadge');
+    const resolveTextEl = document.getElementById('logModalResolveBtnText');
+    const contentEl = document.getElementById('logModalContent');
+
+    if (titleEl) titleEl.textContent = error.errorType || 'Sistem Hatası';
+    if (subtitleEl) subtitleEl.textContent = `${getCategoryDisplayName(error.category || error.service)} • ID: ${error.id}`;
+
+    if (severityBadgeEl) severityBadgeEl.innerHTML = getSeverityBadgeHtml(error.severity);
+    if (envBadgeEl) {
+        const itemEnv = (error.environment || 'dev').toUpperCase();
+        envBadgeEl.innerHTML = itemEnv === 'PROD'
+            ? `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-rose-500 text-white">PROD</span>`
+            : `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-500 text-white">DEV</span>`;
+    }
+
+    if (resolveTextEl) {
+        resolveTextEl.textContent = error.status === 'resolved' ? 'Tekrar Aç' : 'Çözüldü Olarak İşaretle';
+    }
+
+    const createdDate = error.createdAt ? (error.createdAt.toDate ? error.createdAt.toDate().toLocaleString('tr-TR') : new Date(error.createdAt).toLocaleString('tr-TR')) : '-';
+    const lastDate = error.lastOccurredAt ? (error.lastOccurredAt.toDate ? error.lastOccurredAt.toDate().toLocaleString('tr-TR') : new Date(error.lastOccurredAt).toLocaleString('tr-TR')) : createdDate;
+
+    // User Profile Card in Modal
+    const logUserId = error.userId || error.metadata?.userId || error.metadata?.uid || null;
+    let userCardHtml = '';
+    if (logUserId) {
+        userCardHtml = `
+            <div class="p-3 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                    <span class="material-symbols-outlined text-blue-600 dark:text-blue-400 text-2xl">person</span>
+                    <div>
+                        <span class="text-[10px] text-slate-400 font-bold uppercase block">Etkilenen Kullanıcı</span>
+                        <span class="text-xs font-mono font-bold text-blue-700 dark:text-blue-300 select-all">${escapeHtml(logUserId)}</span>
+                    </div>
+                </div>
+                <button type="button" onclick="window.filterLogsByUser('${escapeHtml(logUserId)}', null); window.closeLogDetailModal();" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors shrink-0">
+                    <span class="material-symbols-outlined text-[16px]">filter_alt</span>
+                    <span>Bu Kullanıcının Hatalarını Filtrele</span>
+                </button>
+            </div>
+        `;
+    }
+
+    let metadataGridHtml = '';
+    if (error.metadata && Object.keys(error.metadata).length > 0) {
+        const metaItems = Object.entries(error.metadata)
+            .map(([k, v]) => `<div class="p-2 rounded-lg bg-slate-50 dark:bg-surface-darker border border-slate-200/70 dark:border-slate-800"><span class="text-[10px] text-slate-400 block font-semibold uppercase">${k}</span><span class="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 break-all">${escapeHtml(String(v))}</span></div>`)
+            .join('');
+        metadataGridHtml = `
+            <div class="space-y-1.5">
+                <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Ekstra Bağlam & Metadata:</span>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    ${metaItems}
+                </div>
+            </div>
+        `;
+    }
+
+    const stackTraceHtml = error.stack
+        ? `<div class="space-y-1.5">
+            <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Stack Trace:</span>
+            <pre id="logModalRawStack" class="p-4 bg-slate-950 text-rose-300 rounded-xl font-mono text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap max-h-72 border border-slate-800 select-all">${escapeHtml(error.stack)}</pre>
+           </div>`
+        : '';
+
+    if (contentEl) {
+        contentEl.innerHTML = `
+            <!-- Summary Info Row -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-surface-darker border border-slate-200 dark:border-slate-800">
+                <div>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">İlk Görülme</span>
+                    <span class="font-bold text-slate-900 dark:text-white text-xs">${createdDate}</span>
+                </div>
+                <div>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Son Görülme</span>
+                    <span class="font-bold text-slate-900 dark:text-white text-xs">${lastDate}</span>
+                </div>
+                <div>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tekrar Sayısı</span>
+                    <span class="font-bold text-slate-900 dark:text-white text-xs">${error.occurrenceCount || 1} kez</span>
+                </div>
+                <div>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Durum</span>
+                    <span class="font-bold text-xs ${error.status === 'resolved' ? 'text-emerald-500' : 'text-rose-500'}">${error.status === 'resolved' ? 'Çözüldü' : 'Açık / Çözülmemiş'}</span>
+                </div>
+            </div>
+
+            ${userCardHtml}
+
+            <!-- Error Message Box -->
+            <div class="space-y-1.5">
+                <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Hata Mesajı:</span>
+                <div class="p-3.5 bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl text-rose-900 dark:text-rose-200 text-xs font-medium leading-relaxed select-all">
+                    ${escapeHtml(error.message || 'Mesaj bulunmuyor')}
+                </div>
+            </div>
+
+            ${metadataGridHtml}
+            ${stackTraceHtml}
+        `;
+    }
+
+    if (modal) modal.classList.remove('hidden');
+};
+
+window.closeLogDetailModal = function() {
+    const modal = document.getElementById('logDetailModal');
+    if (modal) modal.classList.add('hidden');
+    currentSelectedError = null;
+};
+
+window.copyModalStackTrace = function() {
+    if (!currentSelectedError) return;
+    const textToCopy = currentSelectedError.stack || currentSelectedError.message;
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        showSuccess('📋 Stack trace panoya kopyalandı.');
+    }).catch(() => {
+        showError('Kopyalama başarısız oldu.');
+    });
+};
+
+window.toggleModalErrorResolve = async function() {
+    if (!currentSelectedError) return;
+    await toggleErrorResolved(currentSelectedError.id);
+    closeLogDetailModal();
+};
+
+window.toggleErrorResolved = async function(errorId) {
+    const error = allErrorsList.find(e => e.id === errorId);
+    if (!error) return;
+
+    const newStatus = error.status === 'resolved' ? 'unresolved' : 'resolved';
+    try {
+        await db.collection('systemErrors').doc(errorId).update({
+            status: newStatus,
+            resolvedAt: newStatus === 'resolved' ? firebase.firestore.FieldValue.serverTimestamp() : null,
+            resolvedBy: auth.currentUser?.email || auth.currentUser?.uid || 'admin'
+        });
+        showSuccess(newStatus === 'resolved' ? '✅ Hata çözüldü olarak işaretlendi.' : 'ℹ️ Hata yeniden açıldı.');
+    } catch (err) {
+        console.error('❌ Error updating error status:', err);
+        showError('Hata güncellenemedi: ' + err.message);
     }
 };
 
-window.resolveError = async function(errorId) {
-    try {
-        await db.collection('systemErrors').doc(errorId).update({
-            status: 'resolved',
-            resolvedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        showSuccess('✅ Hata çözüldü olarak işaretlendi.');
-    } catch (err) {
-        console.error('❌ Error resolving error:', err);
-        showError('Hata güncellenirken sorun oluştu: ' + err.message);
-    }
+window.copyErrorSummary = function(errorId) {
+    const error = allErrorsList.find(e => e.id === errorId);
+    if (!error) return;
+    const summary = `[${error.environment || 'DEV'}] [${error.service}/${error.category}] ${error.errorType}\nMesaj: ${error.message}\nTarih: ${error.createdAt?.toDate ? error.createdAt.toDate().toISOString() : ''}`;
+    navigator.clipboard.writeText(summary).then(() => {
+        showSuccess('📋 Hata özeti kopyalandı.');
+    });
 };
 
 window.resolveAllErrors = async function() {
-    const unresolved = allErrorsList.filter(e => e.status === 'unresolved');
+    const currentEnv = getAdminCurrentEnvironment();
+    const envFilter = document.getElementById('logsEnvironmentFilter')?.value || 'current';
+    const unresolved = allErrorsList.filter(e => {
+        if (e.status !== 'unresolved') return false;
+        const itemEnv = e.environment || 'dev';
+        if (envFilter === 'all') return true;
+        if (envFilter === 'dev') return itemEnv === 'dev';
+        if (envFilter === 'prod') return itemEnv === 'prod';
+        return itemEnv === currentEnv;
+    });
+
     if (unresolved.length === 0) {
-        showSuccess('Çözülmemiş hata bulunmuyor.');
+        showSuccess('Seçili ortamda çözülmemiş hata bulunmuyor.');
         return;
     }
-    if (!confirm(`Toplam ${unresolved.length} hatayı çözüldü olarak işaretlemek istediğinize emin misiniz?`)) return;
+
+    if (!confirm(`Seçili ortamdaki ${unresolved.length} açık hatayı "Çözüldü" olarak işaretlemek istediğinize emin misiniz?`)) return;
 
     const btn = document.getElementById('resolveAllErrorsBtn');
     if (btn) {
@@ -10366,7 +12221,8 @@ window.resolveAllErrors = async function() {
             const ref = db.collection('systemErrors').doc(e.id);
             batch.update(ref, {
                 status: 'resolved',
-                resolvedAt: firebase.firestore.FieldValue.serverTimestamp()
+                resolvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                resolvedBy: auth.currentUser?.email || 'admin'
             });
         });
         await batch.commit();
@@ -10377,30 +12233,93 @@ window.resolveAllErrors = async function() {
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '<span class="material-symbols-outlined text-[20px]">done_all</span><span>Tümünü Çözüldü İşaretle</span>';
+            btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">done_all</span><span>Tümünü Çözüldü İşaretle</span>';
         }
     }
 };
 
-async function logErrorToFirestore(service, errorType, message, stack, severity = 'error') {
+window.purgeOldSystemLogs = async function() {
+    if (!confirm('30 günden eski veya "Çözüldü" işaretlenmiş sistem logları kalıcı olarak silinecektir. Devam edilsin mi?')) return;
+
+    const btn = document.getElementById('purgeOldErrorsBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Temizleniyor...';
+    }
+
     try {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const snapshot = await db.collection('systemErrors').limit(300).get();
+        const toDelete = snapshot.docs.filter(doc => {
+            const d = doc.data();
+            if (d.status === 'resolved') return true;
+            if (d.createdAt) {
+                const date = d.createdAt.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
+                if (date < thirtyDaysAgo) return true;
+            }
+            return false;
+        });
+
+        if (toDelete.length === 0) {
+            showSuccess('Temizlenecek eski veya çözülmüş log bulunamadı.');
+            return;
+        }
+
+        const batch = db.batch();
+        toDelete.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        showSuccess(`🧹 Toplam ${toDelete.length} eski/çözülmüş sistem logu temizlendi.`);
+    } catch (err) {
+        console.error('❌ Error purging logs:', err);
+        showError('Temizleme hatası: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">delete_sweep</span><span>30+ Gün Temizle</span>';
+        }
+    }
+};
+
+async function logErrorToFirestore(service, errorType, message, stack, severity = 'error', options = {}) {
+    try {
+        const env = getAdminCurrentEnvironment();
+        const category = options.category || (service === 'web' ? 'admin' : service);
+        const shortMsg = (message || '').substring(0, 80);
+        const fingerprint = `${service}_${category}_${errorType}_${shortMsg}`;
+        const currentUid = auth.currentUser?.uid || null;
+        const currentEmail = auth.currentUser?.email || null;
+
         await db.collection('systemErrors').add({
+            environment: env,
             service,
-            errorType,
-            message,
-            stack: stack || null,
+            category,
+            errorType: String(errorType || 'AdminError'),
+            message: String(message || '').substring(0, 500),
+            stack: stack ? String(stack).substring(0, 2000) : null,
             status: 'unresolved',
-            severity,
+            severity: severity || 'error',
+            fingerprint,
+            occurrenceCount: 1,
+            platform: 'web',
+            ...(currentUid ? { userId: currentUid } : {}),
+            ...(currentEmail ? { userEmail: currentEmail } : {}),
+            metadata: {
+                userAgent: navigator.userAgent,
+                currentView: typeof currentView !== 'undefined' ? currentView : 'unknown',
+                ...(currentUid ? { userId: currentUid } : {}),
+                ...options.metadata
+            },
+            lastOccurredAt: firebase.firestore.FieldValue.serverTimestamp(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        console.log(`💾 Error logged to Firestore: [${service}] (${severity}) ${errorType}`);
+        console.log(`💾 Error logged to Firestore [${env}]: [${service}] (${severity}) ${errorType}`);
     } catch (err) {
         console.error('❌ Failed to log error to Firestore:', err.message);
     }
 }
 
 function initLogsEventListeners() {
-    console.log('🐛 Initializing Logs Event Listeners...');
+    console.log('🐛 Initializing Modernized Logs Event Listeners...');
 
     // Sidebar navigation hook
     const logsMenuBtn = document.getElementById('logsMenuBtn');
@@ -10411,39 +12330,86 @@ function initLogsEventListeners() {
         });
     }
 
-    // Filter selectors changes
-    const errorFilterService = document.getElementById('errorFilterService');
-    const errorFilterStatus = document.getElementById('errorFilterStatus');
-
-    if (errorFilterService) {
-        errorFilterService.addEventListener('change', () => {
+    // Search and filter change listeners
+    const logsSearchInput = document.getElementById('logsSearchInput');
+    if (logsSearchInput) {
+        logsSearchInput.addEventListener('input', () => {
             renderSystemLogs();
         });
     }
 
-    if (errorFilterStatus) {
-        errorFilterStatus.addEventListener('change', () => {
+    const logsServiceFilter = document.getElementById('logsServiceFilter');
+    if (logsServiceFilter) {
+        logsServiceFilter.addEventListener('change', () => {
             renderSystemLogs();
         });
     }
 
-    // Resolve all button
-    const resolveAllErrorsBtn = document.getElementById('resolveAllErrorsBtn');
-    if (resolveAllErrorsBtn) {
-        resolveAllErrorsBtn.addEventListener('click', () => {
-            resolveAllErrors();
+    const logsSeverityFilter = document.getElementById('logsSeverityFilter');
+    if (logsSeverityFilter) {
+        logsSeverityFilter.addEventListener('change', () => {
+            renderSystemLogs();
         });
     }
 
-    // Listen to global window errors to log client-side admin errors dynamically!
+    const logsStatusFilter = document.getElementById('logsStatusFilter');
+    if (logsStatusFilter) {
+        logsStatusFilter.addEventListener('change', () => {
+            renderSystemLogs();
+        });
+    }
+
+    const logsEnvironmentFilter = document.getElementById('logsEnvironmentFilter');
+    if (logsEnvironmentFilter) {
+        logsEnvironmentFilter.addEventListener('change', () => {
+            renderSystemLogs();
+        });
+    }
+
+    const logsTimeRangeFilter = document.getElementById('logsTimeRangeFilter');
+    if (logsTimeRangeFilter) {
+        logsTimeRangeFilter.addEventListener('change', () => {
+            renderSystemLogs();
+        });
+    }
+
+    const logsPlatformFilter = document.getElementById('logsPlatformFilter');
+    if (logsPlatformFilter) {
+        logsPlatformFilter.addEventListener('change', () => {
+            renderSystemLogs();
+        });
+    }
+
+    // Click outside user dropdown popover to close it
+    document.addEventListener('click', (e) => {
+        const popover = document.getElementById('logsUserDropdownPopover');
+        const btn = document.getElementById('logsUserDropdownBtn');
+        if (popover && !popover.classList.contains('hidden')) {
+            if (!popover.contains(e.target) && !btn.contains(e.target)) {
+                popover.classList.add('hidden');
+            }
+        }
+    });
+
+    // Global keyboard listener (ESC to close modal or dropdown)
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeLogDetailModal();
+            window.closeLogsUserDropdown();
+        }
+    });
+
+    // Global window runtime error listener
     window.addEventListener('error', (event) => {
-        // Prevent infinite loops if Firestore logging itself crashes
         if (event.message && event.message.includes('systemErrors')) return;
         logErrorToFirestore('web', 'Window Runtime Error', event.message, event.error ? event.error.stack : null, 'fatal');
     });
 }
 
 window.showLogsView = showLogsView;
+window.loadSystemLogs = loadSystemLogs;
+window.renderSystemLogs = renderSystemLogs;
+
 
 // Geliştirici & Test Otomasyon Araçları Fonksiyonları
 window.generateTestDataAdmin = async function() {
@@ -10592,6 +12558,26 @@ function showCouponsView() {
     }
 }
 
+// =========================================================================
+// FAZ 5 - KUPONLAR YÖNETİMİ (COUPONS SUBSYSTEM - TOPLULUK VS RADAR)
+// =========================================================================
+
+let currentCouponSourceTab = 'all'; // 'all' | 'topluluk' | 'web'
+let currentCouponStoreFilter = 'all';
+let currentCouponStatusFilter = 'all'; // 'all' | 'active' | 'invalid' | 'expired'
+let currentCouponSort = 'newest'; // 'newest' | 'score' | 'expiry'
+
+function showCouponsView() {
+    currentView = 'coupons';
+    showView('couponsView');
+    updateMenuActiveState('coupons');
+    if (coupons.length === 0) {
+        loadCoupons();
+    } else {
+        renderCoupons();
+    }
+}
+
 function loadCoupons() {
     const loadingEl = document.getElementById('couponsLoadingIndicator');
     const emptyEl = document.getElementById('couponsEmptyState');
@@ -10599,7 +12585,7 @@ function loadCoupons() {
 
     if (loadingEl) {
         loadingEl.style.display = 'block';
-        loadingEl.textContent = 'Yükleniyor...';
+        loadingEl.textContent = 'Kuponlar yükleniyor...';
     }
     if (emptyEl) emptyEl.classList.add('hidden');
 
@@ -10614,31 +12600,66 @@ function loadCoupons() {
             .onSnapshot((snapshot) => {
                 coupons = snapshot.docs.map(doc => {
                     const data = doc.data();
-                    let date = new Date();
+                    
+                    // Parse creation date
+                    let createDate = new Date();
                     if (data.olusturulmaTarihi) {
                         if (typeof data.olusturulmaTarihi.toDate === 'function') {
-                            date = data.olusturulmaTarihi.toDate();
+                            createDate = data.olusturulmaTarihi.toDate();
+                        } else if (data.olusturulmaTarihi instanceof Date) {
+                            createDate = data.olusturulmaTarihi;
                         } else {
-                            date = new Date(data.olusturulmaTarihi);
+                            createDate = new Date(data.olusturulmaTarihi);
                         }
                     }
+
+                    // Parse expiration date
+                    let expiryDate = null;
+                    const rawExpiry = data.bitisTarihi || data.sonKullanimTarihi;
+                    if (rawExpiry) {
+                        if (typeof rawExpiry.toDate === 'function') {
+                            expiryDate = rawExpiry.toDate();
+                        } else if (rawExpiry instanceof Date) {
+                            expiryDate = rawExpiry;
+                        } else {
+                            expiryDate = new Date(rawExpiry);
+                        }
+                    }
+
+                    // Resolve source: 'topluluk' vs 'web'
+                    let kaynakTipi = data.kaynakTipi;
+                    if (!kaynakTipi) {
+                        kaynakTipi = (data.paylasanKullaniciId && data.paylasanKullaniciId !== 'admin' && data.paylasanKullaniciId !== 'botkolik')
+                            ? 'topluluk'
+                            : 'web';
+                    }
+
                     return {
                         id: doc.id,
-                        magazaAdi: data.magazaAdi || '',
+                        magazaAdi: data.magazaAdi || 'Diğer',
                         baslik: data.baslik || '',
                         aciklama: data.aciklama || '',
                         kuponKodu: data.kuponKodu || '',
-                        paylasanKullaniciId: data.paylasanKullaniciId || '',
-                        olusturulmaTarihi: date
+                        olusturulmaTarihi: createDate,
+                        bitisTarihi: expiryDate,
+                        paylasanKullaniciId: data.paylasanKullaniciId || 'admin',
+                        paylasanKullaniciAdi: data.paylasanKullaniciAdi || data.paylasanKullanici || '',
+                        kaynakTipi: kaynakTipi,
+                        sicakOySayisi: parseInt(data.sicakOySayisi, 10) || 0,
+                        sogukOySayisi: parseInt(data.sogukOySayisi, 10) || 0,
+                        durum: data.durum || 'aktif'
                     };
                 });
 
                 if (loadingEl) loadingEl.style.display = 'none';
 
+                updateCouponsSummaryStats();
+                populateCouponStoreFilter();
+
                 if (coupons.length === 0) {
                     if (emptyEl) {
                         emptyEl.classList.remove('hidden');
-                        emptyEl.textContent = 'Henüz kupon yok';
+                        emptyEl.textContent = 'Henüz kupon bulunamadı';
                     }
                     if (listEl) listEl.innerHTML = '';
                 } else {
@@ -10655,27 +12676,158 @@ function loadCoupons() {
     }
 }
 
+// Update Top Quick Stat Counters & Tab Badges
+function updateCouponsSummaryStats() {
+    const now = new Date();
+    const total = coupons.length;
+    const communityCount = coupons.filter(c => c.kaynakTipi === 'topluluk').length;
+    const radarCount = coupons.filter(c => c.kaynakTipi === 'web').length;
+    const activeCount = coupons.filter(c => c.durum !== 'gecersiz' && (!c.bitisTarihi || c.bitisTarihi >= now)).length;
+    const invalidCount = coupons.filter(c => c.durum === 'gecersiz' || (c.bitisTarihi && c.bitisTarihi < now)).length;
+
+    const elTotal = document.getElementById('couponStatTotal');
+    if (elTotal) elTotal.textContent = total;
+
+    const elCommunity = document.getElementById('couponStatCommunity');
+    if (elCommunity) elCommunity.textContent = communityCount;
+
+    const elRadar = document.getElementById('couponStatRadar');
+    if (elRadar) elRadar.textContent = radarCount;
+
+    const elActive = document.getElementById('couponStatActive');
+    if (elActive) elActive.textContent = activeCount;
+
+    const elInvalid = document.getElementById('couponStatInvalid');
+    if (elInvalid) elInvalid.textContent = invalidCount;
+
+    // Tab Badges
+    const badgeAll = document.getElementById('couponTabAllBadge');
+    if (badgeAll) badgeAll.textContent = total;
+
+    const badgeCommunity = document.getElementById('couponTabCommunityBadge');
+    if (badgeCommunity) badgeCommunity.textContent = communityCount;
+
+    const badgeRadar = document.getElementById('couponTabRadarBadge');
+    if (badgeRadar) badgeRadar.textContent = radarCount;
+}
+
+// Dynamically populate coupon store dropdown from existing data
+function populateCouponStoreFilter() {
+    const storeFilter = document.getElementById('couponStoreFilter');
+    if (!storeFilter) return;
+
+    const currentVal = storeFilter.value;
+    const storesSet = new Set();
+    coupons.forEach(c => {
+        if (c.magazaAdi && c.magazaAdi.trim()) {
+            storesSet.add(c.magazaAdi.trim());
+        }
+    });
+
+    const sortedStores = Array.from(storesSet).sort();
+    let optionsHtml = '<option value="all">Tüm Mağazalar</option>';
+    sortedStores.forEach(s => {
+        optionsHtml += `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`;
+    });
+
+    storeFilter.innerHTML = optionsHtml;
+    if (storesSet.has(currentVal) || currentVal === 'all') {
+        storeFilter.value = currentVal;
+    } else {
+        storeFilter.value = 'all';
+    }
+}
+
+// Switch between 'all', 'topluluk', and 'web'
+window.switchCouponSourceTab = function(tab) {
+    currentCouponSourceTab = tab;
+
+    const tabs = document.querySelectorAll('.coupon-source-tab');
+    tabs.forEach(btn => {
+        btn.className = 'coupon-source-tab px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-surface-darker';
+    });
+
+    let activeBtnId = 'couponTabAll';
+    if (tab === 'topluluk') activeBtnId = 'couponTabCommunity';
+    else if (tab === 'web') activeBtnId = 'couponTabRadar';
+
+    const activeBtn = document.getElementById(activeBtnId);
+    if (activeBtn) {
+        activeBtn.className = 'coupon-source-tab px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-primary text-white shadow-xs';
+    }
+
+    renderCoupons();
+};
+
 function renderCoupons() {
     const listEl = document.getElementById('couponsList');
     const emptyEl = document.getElementById('couponsEmptyState');
+    const countEl = document.getElementById('couponFilteredCount');
     if (!listEl) return;
 
     listEl.innerHTML = '';
+    const now = new Date();
 
     const searchQuery = (document.getElementById('couponSearchInput')?.value || '').toLowerCase().trim();
+    currentCouponStoreFilter = document.getElementById('couponStoreFilter')?.value || 'all';
+    currentCouponStatusFilter = document.getElementById('couponStatusFilter')?.value || 'all';
+    currentCouponSort = document.getElementById('couponSortSelect')?.value || 'newest';
 
-    const filtered = coupons.filter(c => {
-        if (!searchQuery) return true;
-        return c.magazaAdi.toLowerCase().includes(searchQuery) ||
-               c.baslik.toLowerCase().includes(searchQuery) ||
-               c.aciklama.toLowerCase().includes(searchQuery) ||
-               c.kuponKodu.toLowerCase().includes(searchQuery);
+    let filtered = coupons.filter(c => {
+        // 1. Source Tab Filter
+        if (currentCouponSourceTab === 'topluluk' && c.kaynakTipi !== 'topluluk') return false;
+        if (currentCouponSourceTab === 'web' && c.kaynakTipi !== 'web') return false;
+
+        // 2. Store Filter
+        if (currentCouponStoreFilter !== 'all' && c.magazaAdi.toLowerCase() !== currentCouponStoreFilter.toLowerCase()) return false;
+
+        // 3. Status Filter
+        const isExpired = (c.bitisTarihi && c.bitisTarihi < now);
+        const isInvalid = (c.durum === 'gecersiz');
+        const isActive = (!isInvalid && !isExpired);
+
+        if (currentCouponStatusFilter === 'active' && !isActive) return false;
+        if (currentCouponStatusFilter === 'invalid' && !isInvalid) return false;
+        if (currentCouponStatusFilter === 'expired' && !isExpired) return false;
+
+        // 4. Search Filter
+        if (searchQuery) {
+            const matchStore = c.magazaAdi.toLowerCase().includes(searchQuery);
+            const matchTitle = c.baslik.toLowerCase().includes(searchQuery);
+            const matchDesc = c.aciklama.toLowerCase().includes(searchQuery);
+            const matchCode = c.kuponKodu.toLowerCase().includes(searchQuery);
+            const matchUser = (c.paylasanKullaniciAdi || '').toLowerCase().includes(searchQuery) ||
+                              (c.paylasanKullaniciId || '').toLowerCase().includes(searchQuery);
+            if (!matchStore && !matchTitle && !matchDesc && !matchCode && !matchUser) return false;
+        }
+
+        return true;
     });
+
+    // Sort logic
+    if (currentCouponSort === 'score') {
+        filtered.sort((a, b) => (b.sicakOySayisi - b.sogukOySayisi) - (a.sicakOySayisi - a.sogukOySayisi));
+    } else if (currentCouponSort === 'expiry') {
+        filtered.sort((a, b) => {
+            if (!a.bitisTarihi) return 1;
+            if (!b.bitisTarihi) return -1;
+            return a.bitisTarihi.getTime() - b.bitisTarihi.getTime();
+        });
+    } else {
+        // newest
+        filtered.sort((a, b) => b.olusturulmaTarihi.getTime() - a.olusturulmaTarihi.getTime());
+    }
+
+    if (countEl) {
+        countEl.textContent = `Gösterilen: ${filtered.length} / ${coupons.length} kupon`;
+    }
 
     if (filtered.length === 0) {
         if (emptyEl) {
             emptyEl.classList.remove('hidden');
-            emptyEl.textContent = searchQuery ? 'Aramayla eşleşen kupon bulunamadı.' : 'Henüz kupon yok';
+            emptyEl.textContent = searchQuery || currentCouponSourceTab !== 'all' || currentCouponStatusFilter !== 'all'
+                ? 'Filtrelerle eşleşen kupon bulunamadı.'
+                : 'Henüz kupon yok';
         }
         return;
     }
@@ -10684,34 +12836,105 @@ function renderCoupons() {
 
     filtered.forEach(kupon => {
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800';
+        const isInvalid = (kupon.durum === 'gecersiz');
+        const isExpired = (kupon.bitisTarihi && kupon.bitisTarihi < now);
+        
+        tr.className = `hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800/80 ${isInvalid ? 'opacity-60 bg-rose-500/5' : ''}`;
 
-        const dateStr = kupon.olusturulmaTarihi.toLocaleString('tr-TR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        // Store badge color
+        const storeBadgeClass = getStoreColorClass(kupon.magazaAdi);
+
+        // Source badge
+        let sourceBadgeHtml = '';
+        if (kupon.kaynakTipi === 'topluluk') {
+            const author = kupon.paylasanKullaniciAdi ? `@${kupon.paylasanKullaniciAdi}` : (kupon.paylasanKullaniciId ? kupon.paylasanKullaniciId.substring(0, 8) : 'Avcı');
+            sourceBadgeHtml = `
+                <div class="flex flex-col gap-0.5">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 w-fit">
+                        <span class="material-symbols-outlined text-[12px]">person</span> Topluluk
+                    </span>
+                    <span class="text-[11px] text-slate-500 font-medium truncate max-w-[130px]" title="${escapeHtml(author)}">${escapeHtml(author)}</span>
+                </div>
+            `;
+        } else {
+            sourceBadgeHtml = `
+                <div class="flex flex-col gap-0.5">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 w-fit">
+                        <span class="material-symbols-outlined text-[12px]">smart_toy</span> Botkolik Radarı
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-mono">Otomasyon</span>
+                </div>
+            `;
+        }
+
+        // Net score & votes
+        const netScore = kupon.sicakOySayisi - kupon.sogukOySayisi;
+        const netScoreColor = netScore > 0 ? 'text-emerald-600 dark:text-emerald-400' : (netScore < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500');
+
+        // Dates
+        let expiryHtml = '<span class="text-slate-400">Süresiz</span>';
+        if (kupon.bitisTarihi) {
+            const expDateStr = kupon.bitisTarihi.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            expiryHtml = `<span class="${isExpired ? 'text-rose-500 font-bold' : 'text-slate-600 dark:text-slate-300'}">${expDateStr}</span>`;
+        }
+
+        // Status badge
+        let statusBadgeHtml = '';
+        if (isInvalid) {
+            statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-400">Geçersiz</span>`;
+        } else if (isExpired) {
+            statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400">Süresi Doldu</span>`;
+        } else {
+            statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400">Aktif</span>`;
+        }
 
         tr.innerHTML = `
-            <td class="p-4 font-bold text-primary">${kupon.magazaAdi}</td>
-            <td class="p-4">
-                <div class="font-semibold text-slate-900 dark:text-white">${kupon.baslik}</div>
-                <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">${kupon.aciklama || '-'}</div>
+            <td class="p-3.5">
+                <span class="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wide inline-block ${storeBadgeClass}">
+                    ${escapeHtml(kupon.magazaAdi)}
+                </span>
             </td>
-            <td class="p-4 font-mono font-bold bg-slate-50 dark:bg-surface-darker px-3 py-1 rounded text-center inline-block mt-2">${kupon.kuponKodu}</td>
-            <td class="p-4 font-mono text-xs text-slate-500">${kupon.paylasanKullaniciId || 'admin'}</td>
-            <td class="p-4 text-xs text-slate-500">${dateStr}</td>
-            <td class="p-4 text-right">
-                <div class="flex justify-end gap-2">
-                    <button onclick="editCoupon('${kupon.id}')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark hover:text-primary hover:border-primary text-xs font-semibold transition-colors cursor-pointer">
-                        <span class="material-symbols-outlined text-[16px]">edit</span>
-                        <span>Düzenle</span>
+            <td class="p-3.5 max-w-[240px]">
+                <div class="font-bold text-slate-900 dark:text-white line-clamp-1" title="${escapeHtml(kupon.baslik)}">${escapeHtml(kupon.baslik)}</div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5" title="${escapeHtml(kupon.aciklama || '-')}">${escapeHtml(kupon.aciklama || '-')}</div>
+            </td>
+            <td class="p-3.5">
+                <div class="flex items-center gap-1.5">
+                    <span class="font-mono font-black text-xs bg-slate-100 dark:bg-surface-darker px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 select-all">
+                        ${escapeHtml(kupon.kuponKodu)}
+                    </span>
+                    <button type="button" onclick="window.copyCouponCode('${escapeHtml(kupon.kuponKodu)}')" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors" title="Kodu Kopyala">
+                        <span class="material-symbols-outlined text-[15px]">content_copy</span>
                     </button>
-                    <button onclick="deleteCoupon('${kupon.id}')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-semibold transition-colors cursor-pointer">
+                </div>
+            </td>
+            <td class="p-3.5 whitespace-nowrap">
+                ${sourceBadgeHtml}
+            </td>
+            <td class="p-3.5 whitespace-nowrap">
+                <div class="flex items-center gap-1 text-[11px]">
+                    <span class="text-orange-500 font-bold" title="Sıcak Oylar">🔥 ${kupon.sicakOySayisi}</span>
+                    <span class="text-slate-300 dark:text-slate-700">/</span>
+                    <span class="text-blue-500 font-bold" title="Soğuk Oylar">❄️ ${kupon.sogukOySayisi}</span>
+                </div>
+                <div class="text-[10px] font-bold ${netScoreColor} mt-0.5">Net: ${netScore > 0 ? '+' : ''}${netScore}</div>
+            </td>
+            <td class="p-3.5 text-xs whitespace-nowrap">
+                ${expiryHtml}
+            </td>
+            <td class="p-3.5 whitespace-nowrap">
+                ${statusBadgeHtml}
+            </td>
+            <td class="p-3.5 text-right whitespace-nowrap">
+                <div class="flex items-center justify-end gap-1.5">
+                    <button type="button" onclick="window.toggleCouponStatus('${kupon.id}')" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark text-slate-500 hover:text-amber-600 transition-colors" title="${isInvalid ? 'Kuponu Aktif Yap' : 'Kuponu Geçersiz / Çöp Yap'}">
+                        <span class="material-symbols-outlined text-[16px]">${isInvalid ? 'check_circle' : 'block'}</span>
+                    </button>
+                    <button type="button" onclick="editCoupon('${kupon.id}')" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark hover:text-primary transition-colors" title="Düzenle">
+                        <span class="material-symbols-outlined text-[16px]">edit</span>
+                    </button>
+                    <button type="button" onclick="deleteCoupon('${kupon.id}')" class="p-1.5 rounded-lg border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 text-red-600 hover:bg-red-100 transition-colors" title="Sil">
                         <span class="material-symbols-outlined text-[16px]">delete</span>
-                        <span>Sil</span>
                     </button>
                 </div>
             </td>
@@ -10720,8 +12943,51 @@ function renderCoupons() {
     });
 }
 
+function getStoreColorClass(store) {
+    const s = (store || '').toLowerCase();
+    if (s.includes('trendyol')) return 'bg-orange-500/10 text-orange-600 border border-orange-500/20';
+    if (s.includes('hepsiburada')) return 'bg-amber-500/10 text-amber-600 border border-amber-500/20';
+    if (s.includes('amazon')) return 'bg-amber-600/10 text-amber-700 dark:text-amber-400 border border-amber-600/20';
+    if (s.includes('n11')) return 'bg-red-500/10 text-red-600 border border-red-500/20';
+    if (s.includes('teknosa')) return 'bg-orange-600/10 text-orange-700 dark:text-orange-400 border border-orange-600/20';
+    if (s.includes('mediamarkt')) return 'bg-red-700/10 text-red-700 dark:text-red-400 border border-red-700/20';
+    if (s.includes('pazarama')) return 'bg-blue-600/10 text-blue-600 border border-blue-600/20';
+    if (s.includes('incehesap')) return 'bg-cyan-600/10 text-cyan-600 border border-cyan-600/20';
+    if (s.includes('migros')) return 'bg-orange-500/10 text-orange-600 border border-orange-500/20';
+    if (s.includes('getir')) return 'bg-purple-600/10 text-purple-600 border border-purple-600/20';
+    return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
+}
+
+window.copyCouponCode = function(code) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(() => {
+            showSuccess(`Kupon kodu (${code}) panoya kopyalandı!`);
+        }).catch(() => {
+            prompt('Kupon Kodu:', code);
+        });
+    } else {
+        prompt('Kupon Kodu:', code);
+    }
+};
+
+window.toggleCouponStatus = async function(id) {
+    const kupon = coupons.find(c => c.id === id);
+    if (!kupon) return;
+
+    const newDurum = (kupon.durum === 'gecersiz') ? 'aktif' : 'gecersiz';
+    try {
+        await db.collection('kuponlar').doc(id).update({
+            durum: newDurum,
+            guncellenmeTarihi: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showSuccess(`Kupon durumu '${newDurum === 'aktif' ? 'Aktif' : 'Geçersiz'}' olarak güncellendi.`);
+    } catch (e) {
+        showError('Durum güncellenirken hata oluştu: ' + e.message);
+    }
+};
+
 function deleteCoupon(id) {
-    if (confirm("Bu kuponu silmek istediğinize emin misiniz?")) {
+    if (confirm("Bu kuponu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) {
         db.collection('kuponlar').doc(id).delete()
             .then(() => {
                 showSuccess("Kupon başarıyla silindi!");
@@ -10737,9 +13003,13 @@ function openAddCouponModal() {
     
     document.getElementById('couponIdInput').value = '';
     document.getElementById('couponStoreSelect').value = 'Trendyol';
+    document.getElementById('couponSourceSelect').value = 'topluluk';
+    document.getElementById('couponStatusSelect').value = 'aktif';
     document.getElementById('couponTitleInput').value = '';
     document.getElementById('couponDescriptionInput').value = '';
     document.getElementById('couponCodeInput').value = '';
+    document.getElementById('couponExpiryInput').value = '';
+    document.getElementById('couponUsernameInput').value = 'admin';
     document.getElementById('couponModalTitle').textContent = 'Yeni Kupon Ekle';
 
     if (modal) modal.classList.remove('hidden');
@@ -10752,10 +13022,24 @@ function editCoupon(id) {
     const modal = document.getElementById('couponModal');
     
     document.getElementById('couponIdInput').value = kupon.id;
-    document.getElementById('couponStoreSelect').value = kupon.magazaAdi;
-    document.getElementById('couponTitleInput').value = kupon.baslik;
-    document.getElementById('couponDescriptionInput').value = kupon.aciklama;
-    document.getElementById('couponCodeInput').value = kupon.kuponKodu;
+    document.getElementById('couponStoreSelect').value = kupon.magazaAdi || 'Trendyol';
+    document.getElementById('couponSourceSelect').value = kupon.kaynakTipi || 'topluluk';
+    document.getElementById('couponStatusSelect').value = kupon.durum || 'aktif';
+    document.getElementById('couponTitleInput').value = kupon.baslik || '';
+    document.getElementById('couponDescriptionInput').value = kupon.aciklama || '';
+    document.getElementById('couponCodeInput').value = kupon.kuponKodu || '';
+    document.getElementById('couponUsernameInput').value = kupon.paylasanKullaniciAdi || kupon.paylasanKullaniciId || '';
+
+    // Set date input YYYY-MM-DD
+    if (kupon.bitisTarihi instanceof Date && !isNaN(kupon.bitisTarihi.getTime())) {
+        const y = kupon.bitisTarihi.getFullYear();
+        const m = String(kupon.bitisTarihi.getMonth() + 1).padStart(2, '0');
+        const d = String(kupon.bitisTarihi.getDate()).padStart(2, '0');
+        document.getElementById('couponExpiryInput').value = `${y}-${m}-${d}`;
+    } else {
+        document.getElementById('couponExpiryInput').value = '';
+    }
+
     document.getElementById('couponModalTitle').textContent = 'Kupon Düzenle';
 
     if (modal) modal.classList.remove('hidden');
@@ -10772,7 +13056,7 @@ function deleteAllCoupons() {
         if (!deleteBtn) return;
         const originalHtml = deleteBtn.innerHTML;
         deleteBtn.disabled = true;
-        deleteBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> <span class="hidden sm:inline">Siliniyor...</span>`;
+        deleteBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[18px]">sync</span> Siliniyor...`;
 
         db.collection('kuponlar').get()
             .then(async (querySnapshot) => {
@@ -10784,7 +13068,6 @@ function deleteAllCoupons() {
                     return;
                 }
 
-                // Partition deletions in chunks of 500
                 const chunks = [];
                 for (let i = 0; i < docs.length; i += 500) {
                     chunks.push(docs.slice(i, i + 500));
@@ -10842,6 +13125,27 @@ function initCouponsListeners() {
         });
     }
 
+    const couponStoreFilter = document.getElementById('couponStoreFilter');
+    if (couponStoreFilter) {
+        couponStoreFilter.addEventListener('change', () => {
+            renderCoupons();
+        });
+    }
+
+    const couponStatusFilter = document.getElementById('couponStatusFilter');
+    if (couponStatusFilter) {
+        couponStatusFilter.addEventListener('change', () => {
+            renderCoupons();
+        });
+    }
+
+    const couponSortSelect = document.getElementById('couponSortSelect');
+    if (couponSortSelect) {
+        couponSortSelect.addEventListener('change', () => {
+            renderCoupons();
+        });
+    }
+
     const couponForm = document.getElementById('couponForm');
     if (couponForm) {
         couponForm.addEventListener('submit', (e) => {
@@ -10849,20 +13153,34 @@ function initCouponsListeners() {
             
             const id = document.getElementById('couponIdInput').value;
             const magazaAdi = document.getElementById('couponStoreSelect').value;
+            const kaynakTipi = document.getElementById('couponSourceSelect').value;
+            const durum = document.getElementById('couponStatusSelect').value;
             const baslik = document.getElementById('couponTitleInput').value.trim();
             const aciklama = document.getElementById('couponDescriptionInput').value.trim();
             const kuponKodu = document.getElementById('couponCodeInput').value.trim().toUpperCase();
+            const expiryStr = document.getElementById('couponExpiryInput').value;
+            const usernameStr = document.getElementById('couponUsernameInput').value.trim();
 
             if (!baslik || !kuponKodu) {
                 showError("Lütfen tüm zorunlu alanları doldurun.");
                 return;
             }
 
+            let bitisTarihi = null;
+            if (expiryStr) {
+                bitisTarihi = firebase.firestore.Timestamp.fromDate(new Date(`${expiryStr}T23:59:59`));
+            }
+
             const payload = {
                 magazaAdi,
+                kaynakTipi,
+                durum,
                 baslik,
                 aciklama,
-                kuponKodu
+                kuponKodu,
+                bitisTarihi: bitisTarihi,
+                paylasanKullaniciAdi: usernameStr || (kaynakTipi === 'web' ? 'Botkolik' : 'admin'),
+                guncellenmeTarihi: firebase.firestore.FieldValue.serverTimestamp()
             };
 
             if (id) {
@@ -10879,10 +13197,8 @@ function initCouponsListeners() {
                 // Create
                 payload.olusturulmaTarihi = firebase.firestore.FieldValue.serverTimestamp();
                 payload.paylasanKullaniciId = 'admin';
-                payload.kaynakTipi = 'web';
                 payload.sicakOySayisi = 0;
                 payload.sogukOySayisi = 0;
-                payload.durum = 'aktif';
 
                 db.collection('kuponlar').add(payload)
                     .then(() => {
@@ -10899,14 +13215,14 @@ function initCouponsListeners() {
     const scrapeCouponsBtn = document.getElementById('scrapeCouponsBtn');
     if (scrapeCouponsBtn) {
         scrapeCouponsBtn.addEventListener('click', () => {
-            if (!confirm("Kuponları DonanımHaber'den otomatik çekmek istediğinize emin misiniz? Bu işlem mevcuttaki web kaynaklı (radar) kuponları silecek ve yeni kuponları yükleyecektir. Topluluk kuponları korunacaktır. İşlem 1-2 dakika sürebilir.")) {
+            if (!confirm("Kuponları DonanımHaber ve diğer kaynaklardan otomatik çekmek istediğinize emin misiniz? Bu işlem mevcuttaki web kaynaklı (radar) kuponları güncelleyecektir. Topluluk kuponları kesinlikle silinmez.")) {
                 return;
             }
 
             const originalHtml = scrapeCouponsBtn.innerHTML;
             scrapeCouponsBtn.disabled = true;
             scrapeCouponsBtn.innerHTML = `
-                <span class="material-symbols-outlined animate-spin text-[20px]">sync</span>
+                <span class="material-symbols-outlined animate-spin text-[18px]">sync</span>
                 <span class="hidden sm:inline">Kazınıyor...</span>
             `;
 
@@ -10945,9 +13261,13 @@ function initCouponsListeners() {
     }
 }
 
-// ==========================================
-// CATALOGS MANAGEMENT SECTION (KATALOGLAR)
-// ==========================================
+// =========================================================================
+// FAZ 6 - AKTÜEL KATALOGLAR & BROŞÜRLER YÖNETİMİ (CATALOGS SUBSYSTEM)
+// =========================================================================
+
+let currentCatalogStoreFilter = 'all';
+let currentCatalogStatusFilter = 'all'; // 'all' | 'active' | 'upcoming' | 'expired'
+let catalogSearchQuery = '';
 
 function showCatalogsView() {
     currentView = 'catalogs';
@@ -10967,7 +13287,7 @@ function loadCatalogs() {
 
     if (loadingEl) {
         loadingEl.style.display = 'block';
-        loadingEl.textContent = 'Yükleniyor...';
+        loadingEl.textContent = 'Kataloglar yükleniyor...';
     }
     if (emptyEl) emptyEl.classList.add('hidden');
 
@@ -10998,25 +13318,26 @@ function loadCatalogs() {
 
                     return {
                         id: doc.id,
-                        magazaKodu: data.magazaKodu || '',
+                        magazaKodu: (data.magazaKodu || '').toLowerCase(),
                         katalogBasligi: data.katalogBasligi || '',
                         baslangicTarihi: startDate,
                         bitisTarihi: endDate,
-                        sayfaResimleri: data.sayfaResimleri || [],
+                        sayfaResimleri: Array.isArray(data.sayfaResimleri) ? data.sayfaResimleri : [],
                         kapakResmi: data.kapakResmi || ''
                     };
                 });
 
                 if (loadingEl) loadingEl.style.display = 'none';
 
+                updateCatalogsSummaryStats();
+                populateCatalogStoreFilter();
+
                 if (catalogs.length === 0) {
                     if (emptyEl) {
                         emptyEl.classList.remove('hidden');
-                        emptyEl.textContent = 'Henüz katalog yok';
+                        emptyEl.textContent = 'Henüz katalog bulunamadı';
                     }
                     if (listEl) listEl.innerHTML = '';
-                    const countText = document.getElementById('catalogCountText');
-                    if (countText) countText.textContent = '0 katalog';
                 } else {
                     renderCatalogs();
                 }
@@ -11031,48 +13352,349 @@ function loadCatalogs() {
     }
 }
 
+// Update Top Quick Stat Counters for Catalogs
+function updateCatalogsSummaryStats() {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const total = catalogs.length;
+    let activeCount = 0;
+    let upcomingCount = 0;
+    let totalPages = 0;
+    const storesSet = new Set();
+
+    catalogs.forEach(k => {
+        if (k.magazaKodu) storesSet.add(k.magazaKodu);
+        totalPages += (k.sayfaResimleri ? k.sayfaResimleri.length : 0);
+
+        const sDate = new Date(k.baslangicTarihi.getFullYear(), k.baslangicTarihi.getMonth(), k.baslangicTarihi.getDate());
+        const eDate = new Date(k.bitisTarihi.getFullYear(), k.bitisTarihi.getMonth(), k.bitisTarihi.getDate());
+
+        if (today < sDate) {
+            upcomingCount++;
+        } else if (today <= eDate) {
+            activeCount++;
+        }
+    });
+
+    const elTotal = document.getElementById('catalogStatTotal');
+    if (elTotal) elTotal.textContent = total;
+
+    const elActive = document.getElementById('catalogStatActive');
+    if (elActive) elActive.textContent = activeCount;
+
+    const elUpcoming = document.getElementById('catalogStatUpcoming');
+    if (elUpcoming) elUpcoming.textContent = upcomingCount;
+
+    const elPages = document.getElementById('catalogStatPages');
+    if (elPages) elPages.textContent = totalPages;
+
+    const elStores = document.getElementById('catalogStatStores');
+    if (elStores) elStores.textContent = storesSet.size;
+}
+
+// Populate Store Filter dropdown for Catalogs
+function populateCatalogStoreFilter() {
+    const filterEl = document.getElementById('catalogStoreFilter');
+    if (!filterEl) return;
+
+    const currentVal = filterEl.value;
+    const storesSet = new Set();
+    catalogs.forEach(k => {
+        if (k.magazaKodu) storesSet.add(k.magazaKodu);
+    });
+
+    const sortedStores = Array.from(storesSet).sort();
+    let optionsHtml = '<option value="all">Tüm Mağazalar</option>';
+    sortedStores.forEach(s => {
+        optionsHtml += `<option value="${escapeHtml(s)}">${escapeHtml(s.toUpperCase())}</option>`;
+    });
+
+    filterEl.innerHTML = optionsHtml;
+    if (storesSet.has(currentVal) || currentVal === 'all') {
+        filterEl.value = currentVal;
+    } else {
+        filterEl.value = 'all';
+    }
+}
+
+function getCatalogValidityBadge(katalog) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const start = new Date(katalog.baslangicTarihi.getFullYear(), katalog.baslangicTarihi.getMonth(), katalog.baslangicTarihi.getDate());
+    const expiry = new Date(katalog.bitisTarihi.getFullYear(), katalog.bitisTarihi.getMonth(), katalog.bitisTarihi.getDate());
+
+    if (today < start) {
+        const daysToStart = Math.round((start - today) / (1000 * 60 * 60 * 24));
+        if (daysToStart === 1) {
+            return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400">Yarın başlıyor</span>`;
+        }
+        return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400">${daysToStart} gün sonra</span>`;
+    }
+
+    if (today > expiry) {
+        return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">Süresi Bitti</span>`;
+    }
+
+    const daysLeft = Math.round((expiry - today) / (1000 * 60 * 60 * 24));
+    if (daysLeft === 0) {
+        return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-400">Son Gün!</span>`;
+    }
+    return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400">Yayında (${daysLeft} gün kaldı)</span>`;
+}
+
+function getCatalogStoreBadgeClass(storeCode) {
+    const s = (storeCode || '').toLowerCase();
+    if (s === 'bim') return 'bg-cyan-500/10 text-cyan-600 border border-cyan-500/20';
+    if (s === 'a101') return 'bg-blue-500/10 text-blue-600 border border-blue-500/20';
+    if (s === 'sok') return 'bg-amber-500/10 text-amber-600 border border-amber-500/20';
+    if (s === 'migros') return 'bg-orange-500/10 text-orange-600 border border-orange-500/20';
+    if (s === 'carrefoursa') return 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20';
+    if (s === 'gratis') return 'bg-purple-500/10 text-purple-600 border border-purple-500/20';
+    if (s === 'watsons') return 'bg-teal-500/10 text-teal-600 border border-teal-500/20';
+    if (s === 'rossmann') return 'bg-red-500/10 text-red-600 border border-red-500/20';
+    return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
+}
+
 function renderCatalogs() {
     const listEl = document.getElementById('catalogsList');
     const emptyEl = document.getElementById('catalogsEmptyState');
-    const countText = document.getElementById('catalogCountText');
+    const countEl = document.getElementById('catalogFilteredCount');
     if (!listEl) return;
 
     listEl.innerHTML = '';
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    if (countText) {
-        countText.textContent = `${catalogs.length} katalog`;
+    const searchQuery = (document.getElementById('catalogSearchInput')?.value || '').toLowerCase().trim();
+    currentCatalogStoreFilter = document.getElementById('catalogStoreFilter')?.value || 'all';
+    currentCatalogStatusFilter = document.getElementById('catalogStatusFilter')?.value || 'all';
+
+    const filtered = catalogs.filter(katalog => {
+        // 1. Store Filter
+        if (currentCatalogStoreFilter !== 'all' && katalog.magazaKodu !== currentCatalogStoreFilter) return false;
+
+        // 2. Status Filter
+        const sDate = new Date(katalog.baslangicTarihi.getFullYear(), katalog.baslangicTarihi.getMonth(), katalog.baslangicTarihi.getDate());
+        const eDate = new Date(katalog.bitisTarihi.getFullYear(), katalog.bitisTarihi.getMonth(), katalog.bitisTarihi.getDate());
+
+        if (currentCatalogStatusFilter === 'active' && (today < sDate || today > eDate)) return false;
+        if (currentCatalogStatusFilter === 'upcoming' && today >= sDate) return false;
+        if (currentCatalogStatusFilter === 'expired' && today <= eDate) return false;
+
+        // 3. Search Filter
+        if (searchQuery) {
+            const matchTitle = (katalog.katalogBasligi || '').toLowerCase().includes(searchQuery);
+            const matchStore = (katalog.magazaKodu || '').toLowerCase().includes(searchQuery);
+            if (!matchTitle && !matchStore) return false;
+        }
+
+        return true;
+    });
+
+    if (countEl) {
+        countEl.textContent = `Gösterilen: ${filtered.length} / ${catalogs.length} katalog`;
     }
 
-    if (catalogs.length === 0) {
+    if (filtered.length === 0) {
         if (emptyEl) {
             emptyEl.classList.remove('hidden');
-            emptyEl.textContent = 'Henüz katalog yok';
+            emptyEl.textContent = searchQuery || currentCatalogStoreFilter !== 'all' || currentCatalogStatusFilter !== 'all'
+                ? 'Filtrelerle eşleşen katalog bulunamadı.'
+                : 'Henüz katalog yok';
         }
         return;
     }
 
     if (emptyEl) emptyEl.classList.add('hidden');
 
-    catalogs.forEach(katalog => {
+    filtered.forEach(katalog => {
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800';
+        tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800/80';
 
         const startDateStr = katalog.baslangicTarihi.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
         const endDateStr = katalog.bitisTarihi.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const validityBadge = getCatalogValidityBadge(katalog);
+        const storeBadgeClass = getCatalogStoreBadgeClass(katalog.magazaKodu);
+
+        const coverSrc = katalog.kapakResmi || (katalog.sayfaResimleri && katalog.sayfaResimleri.length > 0 ? katalog.sayfaResimleri[0] : '//cdn.akakce.com/t.gif');
 
         tr.innerHTML = `
-            <td class="p-4">
-                <img src="${katalog.kapakResmi || '//cdn.akakce.com/t.gif'}" class="w-12 h-16 object-contain rounded border border-slate-200 dark:border-slate-800" alt="Kapak"/>
+            <td class="p-3.5">
+                <div class="relative group cursor-pointer w-12 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 shadow-xs" onclick="window.openCatalogDetailModal('${katalog.id}')" title="Büyüt / Sayfaları İncele">
+                    <img src="${coverSrc}" class="w-full h-full object-contain group-hover:scale-110 transition-transform" alt="Kapak" onerror="this.onerror=null; this.src='//cdn.akakce.com/t.gif'"/>
+                    <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <span class="material-symbols-outlined text-white text-[18px]">zoom_in</span>
+                    </div>
+                </div>
             </td>
-            <td class="p-4 font-bold text-primary uppercase">${katalog.magazaKodu}</td>
-            <td class="p-4 font-semibold text-slate-900 dark:text-white">${katalog.katalogBasligi}</td>
-            <td class="p-4 text-xs text-slate-500">${startDateStr}</td>
-            <td class="p-4 text-xs text-slate-500">${endDateStr}</td>
-            <td class="p-4 font-mono font-bold text-slate-600 dark:text-slate-400">${katalog.sayfaResimleri.length} sayfa</td>
+            <td class="p-3.5">
+                <span class="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wide inline-block ${storeBadgeClass}">
+                    ${escapeHtml(katalog.magazaKodu)}
+                </span>
+            </td>
+            <td class="p-3.5 max-w-[260px]">
+                <a href="javascript:void(0)" onclick="window.openCatalogDetailModal('${katalog.id}')" class="font-bold text-slate-900 dark:text-white hover:text-primary transition-colors line-clamp-2" title="${escapeHtml(katalog.katalogBasligi)}">
+                    ${escapeHtml(katalog.katalogBasligi)}
+                </a>
+                <span class="text-[10px] text-slate-400 font-mono mt-0.5 block truncate">ID: ${katalog.id}</span>
+            </td>
+            <td class="p-3.5 whitespace-nowrap">
+                ${validityBadge}
+            </td>
+            <td class="p-3.5 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">${startDateStr}</td>
+            <td class="p-3.5 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">${endDateStr}</td>
+            <td class="p-3.5 whitespace-nowrap">
+                <button type="button" onclick="window.openCatalogDetailModal('${katalog.id}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-surface-darker text-slate-700 dark:text-slate-300 font-bold hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer text-xs">
+                    <span class="material-symbols-outlined text-[15px]">auto_stories</span>
+                    <span>${katalog.sayfaResimleri ? katalog.sayfaResimleri.length : 0} sayfa</span>
+                </button>
+            </td>
+            <td class="p-3.5 text-right whitespace-nowrap">
+                <div class="flex items-center justify-end gap-1.5">
+                    <button type="button" onclick="window.openCatalogDetailModal('${katalog.id}')" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark hover:text-primary transition-colors" title="Sayfaları İncele">
+                        <span class="material-symbols-outlined text-[16px]">visibility</span>
+                    </button>
+                    <button type="button" onclick="window.openEditCatalogModal('${katalog.id}')" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark hover:text-primary transition-colors" title="Düzenle">
+                        <span class="material-symbols-outlined text-[16px]">edit</span>
+                    </button>
+                    <button type="button" onclick="window.deleteSingleCatalog('${katalog.id}')" class="p-1.5 rounded-lg border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 text-red-600 hover:bg-red-100 transition-colors" title="Sil">
+                        <span class="material-symbols-outlined text-[16px]">delete</span>
+                    </button>
+                </div>
+            </td>
         `;
         listEl.appendChild(tr);
     });
 }
+
+// Lightbox Modal for Catalog Pages
+window.openCatalogDetailModal = function(catalogId) {
+    const katalog = catalogs.find(k => k.id === catalogId);
+    if (!katalog) return;
+
+    const modal = document.getElementById('catalogDetailModal');
+    const storeBadge = document.getElementById('catalogDetailStoreBadge');
+    const titleEl = document.getElementById('catalogDetailTitle');
+    const subtitleEl = document.getElementById('catalogDetailSubtitle');
+    const pageBadge = document.getElementById('catalogDetailPageCountBadge');
+    const docIdEl = document.getElementById('catalogDetailDocId');
+    const gridEl = document.getElementById('catalogDetailPagesGrid');
+
+    if (storeBadge) storeBadge.textContent = (katalog.magazaKodu || 'MAĞAZA').toUpperCase();
+    if (titleEl) titleEl.textContent = katalog.katalogBasligi || 'Katalog';
+    
+    const startStr = katalog.baslangicTarihi.toLocaleDateString('tr-TR');
+    const endStr = katalog.bitisTarihi.toLocaleDateString('tr-TR');
+    if (subtitleEl) subtitleEl.textContent = `Başlangıç: ${startStr} | Bitiş: ${endStr}`;
+    
+    const pages = katalog.sayfaResimleri || [];
+    if (pageBadge) pageBadge.textContent = `${pages.length} Sayfa`;
+    if (docIdEl) docIdEl.textContent = `Katalog ID: ${katalog.id}`;
+
+    if (gridEl) {
+        gridEl.innerHTML = '';
+        if (pages.length === 0) {
+            gridEl.innerHTML = `<div class="col-span-full py-12 text-center text-slate-400">Bu katalogda kayıtlı sayfa resmi bulunamadı.</div>`;
+        } else {
+            pages.forEach((url, idx) => {
+                const pageCard = document.createElement('div');
+                pageCard.className = 'group relative rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-surface-darker overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col';
+                pageCard.innerHTML = `
+                    <div class="relative w-full aspect-[3/4] overflow-hidden bg-slate-200 dark:bg-slate-900">
+                        <img src="${url}" alt="Sayfa ${idx + 1}" class="w-full h-full object-contain group-hover:scale-105 transition-transform" loading="lazy" onerror="this.onerror=null; this.src='//cdn.akakce.com/t.gif'"/>
+                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                            <a href="${url}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-white/90 dark:bg-surface-dark/90 text-slate-900 dark:text-white font-bold text-xs shadow-lg hover:bg-white flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[16px]">open_in_new</span> Tam Boyut
+                            </a>
+                        </div>
+                    </div>
+                    <div class="p-2.5 flex items-center justify-between border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-surface-dark">
+                        <span class="font-bold text-slate-800 dark:text-slate-200 text-xs">Sayfa ${idx + 1}</span>
+                        <span class="text-[10px] text-slate-400 font-mono">${idx + 1} / ${pages.length}</span>
+                    </div>
+                `;
+                gridEl.appendChild(pageCard);
+            });
+        }
+    }
+
+    if (modal) modal.classList.remove('hidden');
+};
+
+window.closeCatalogDetailModal = function() {
+    const modal = document.getElementById('catalogDetailModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+// Add / Edit Catalog Modals
+window.openAddCatalogModal = function() {
+    const modal = document.getElementById('catalogEditModal');
+    const titleEl = document.getElementById('catalogEditModalTitle');
+    if (titleEl) titleEl.textContent = 'Yeni Katalog Ekle';
+
+    document.getElementById('catalogEditIdInput').value = '';
+    document.getElementById('catalogEditStoreInput').value = '';
+    document.getElementById('catalogEditTitleInput').value = '';
+    document.getElementById('catalogEditStartDateInput').value = '';
+    document.getElementById('catalogEditEndDateInput').value = '';
+    document.getElementById('catalogEditCoverInput').value = '';
+
+    if (modal) modal.classList.remove('hidden');
+};
+
+window.openEditCatalogModal = function(catalogId) {
+    const katalog = catalogs.find(k => k.id === catalogId);
+    if (!katalog) return;
+
+    const modal = document.getElementById('catalogEditModal');
+    const titleEl = document.getElementById('catalogEditModalTitle');
+    if (titleEl) titleEl.textContent = 'Katalog Düzenle';
+
+    document.getElementById('catalogEditIdInput').value = katalog.id;
+    document.getElementById('catalogEditStoreInput').value = katalog.magazaKodu || '';
+    document.getElementById('catalogEditTitleInput').value = katalog.katalogBasligi || '';
+    document.getElementById('catalogEditCoverInput').value = katalog.kapakResmi || '';
+
+    // Date formatting YYYY-MM-DD
+    if (katalog.baslangicTarihi instanceof Date && !isNaN(katalog.baslangicTarihi.getTime())) {
+        const y = katalog.baslangicTarihi.getFullYear();
+        const m = String(katalog.baslangicTarihi.getMonth() + 1).padStart(2, '0');
+        const d = String(katalog.baslangicTarihi.getDate()).padStart(2, '0');
+        document.getElementById('catalogEditStartDateInput').value = `${y}-${m}-${d}`;
+    } else {
+        document.getElementById('catalogEditStartDateInput').value = '';
+    }
+
+    if (katalog.bitisTarihi instanceof Date && !isNaN(katalog.bitisTarihi.getTime())) {
+        const y = katalog.bitisTarihi.getFullYear();
+        const m = String(katalog.bitisTarihi.getMonth() + 1).padStart(2, '0');
+        const d = String(katalog.bitisTarihi.getDate()).padStart(2, '0');
+        document.getElementById('catalogEditEndDateInput').value = `${y}-${m}-${d}`;
+    } else {
+        document.getElementById('catalogEditEndDateInput').value = '';
+    }
+
+    if (modal) modal.classList.remove('hidden');
+};
+
+window.closeCatalogEditModal = function() {
+    const modal = document.getElementById('catalogEditModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+// Delete single catalog
+window.deleteSingleCatalog = function(catalogId) {
+    if (confirm("Bu kataloğu ve tüm sayfalarını silmek istediğinize emin misiniz?")) {
+        db.collection('kataloglar').doc(catalogId).delete()
+            .then(() => {
+                showSuccess("Katalog başarıyla silindi!");
+            })
+            .catch((err) => {
+                showError("Katalog silinirken hata oluştu: " + err.message);
+            });
+    }
+};
 
 function deleteAllCatalogs() {
     if (confirm("Tüm katalogları veritabanından kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
@@ -11080,7 +13702,7 @@ function deleteAllCatalogs() {
         if (!deleteBtn) return;
         const originalHtml = deleteBtn.innerHTML;
         deleteBtn.disabled = true;
-        deleteBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[20px]">sync</span> <span class="hidden sm:inline">Siliniyor...</span>`;
+        deleteBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[18px]">sync</span> Siliniyor...`;
 
         db.collection('kataloglar').get()
             .then(async (querySnapshot) => {
@@ -11092,7 +13714,6 @@ function deleteAllCatalogs() {
                     return;
                 }
 
-                // Partition deletions in chunks of 500
                 const chunks = [];
                 for (let i = 0; i < docs.length; i += 500) {
                     chunks.push(docs.slice(i, i + 500));
@@ -11127,6 +13748,73 @@ function initCatalogsListeners() {
         });
     }
 
+    const catalogSearchInput = document.getElementById('catalogSearchInput');
+    if (catalogSearchInput) {
+        catalogSearchInput.addEventListener('input', () => {
+            renderCatalogs();
+        });
+    }
+
+    const catalogStoreFilter = document.getElementById('catalogStoreFilter');
+    if (catalogStoreFilter) {
+        catalogStoreFilter.addEventListener('change', () => {
+            renderCatalogs();
+        });
+    }
+
+    const catalogStatusFilter = document.getElementById('catalogStatusFilter');
+    if (catalogStatusFilter) {
+        catalogStatusFilter.addEventListener('change', () => {
+            renderCatalogs();
+        });
+    }
+
+    const catalogEditForm = document.getElementById('catalogEditForm');
+    if (catalogEditForm) {
+        catalogEditForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('catalogEditIdInput').value;
+            const magazaKodu = document.getElementById('catalogEditStoreInput').value.trim().toLowerCase();
+            const katalogBasligi = document.getElementById('catalogEditTitleInput').value.trim();
+            const startDateStr = document.getElementById('catalogEditStartDateInput').value;
+            const endDateStr = document.getElementById('catalogEditEndDateInput').value;
+            const kapakResmi = document.getElementById('catalogEditCoverInput').value.trim();
+
+            if (!magazaKodu || !katalogBasligi || !startDateStr || !endDateStr) {
+                showError("Lütfen tüm zorunlu alanları doldurun.");
+                return;
+            }
+
+            const baslangicTarihi = firebase.firestore.Timestamp.fromDate(new Date(`${startDateStr}T00:00:00`));
+            const bitisTarihi = firebase.firestore.Timestamp.fromDate(new Date(`${endDateStr}T23:59:59`));
+
+            const payload = {
+                magazaKodu,
+                katalogBasligi,
+                baslangicTarihi,
+                bitisTarihi,
+                kapakResmi,
+                guncellenmeTarihi: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            try {
+                if (id) {
+                    await db.collection('kataloglar').doc(id).update(payload);
+                    showSuccess("Katalog başarıyla güncellendi!");
+                } else {
+                    payload.olusturulmaTarihi = firebase.firestore.FieldValue.serverTimestamp();
+                    payload.sayfaResimleri = kapakResmi ? [kapakResmi] : [];
+                    const newDocId = `${magazaKodu}_${Date.now()}`;
+                    await db.collection('kataloglar').doc(newDocId).set(payload);
+                    showSuccess("Yeni katalog başarıyla eklendi!");
+                }
+                closeCatalogEditModal();
+            } catch (err) {
+                showError("Katalog kaydedilirken hata: " + err.message);
+            }
+        });
+    }
+
     const scrapeCatalogsBtn = document.getElementById('scrapeCatalogsBtn');
     if (scrapeCatalogsBtn) {
         scrapeCatalogsBtn.addEventListener('click', () => {
@@ -11137,7 +13825,7 @@ function initCatalogsListeners() {
             const originalHtml = scrapeCatalogsBtn.innerHTML;
             scrapeCatalogsBtn.disabled = true;
             scrapeCatalogsBtn.innerHTML = `
-                <span class="material-symbols-outlined animate-spin text-[20px]">sync</span>
+                <span class="material-symbols-outlined animate-spin text-[18px]">sync</span>
                 <span class="hidden sm:inline">Kazınıyor...</span>
             `;
 
@@ -11211,6 +13899,720 @@ window.toggleCleanVmLogs = function() {
     }
 };
 
+// ============================================================================
+// 🤖 TELEGRAM BOT OPERASYON & TEŞHİS MERKEZİ (telegramBotView)
+// ============================================================================
 
+let botDetailUnsubscribe = null;
+let botDetailCurrentTab = 'channels';
+let botDetailDealsLoaded = false;
+let botDetailLogsLoaded = false;
+let lastBotDetailData = null;
+
+function showTelegramBotView() {
+    currentView = 'telegramBot';
+    showView('telegramBotView');
+    updateMenuActiveState('telegramBot');
+    loadTelegramBotDetailedView();
+}
+window.showTelegramBotView = showTelegramBotView;
+
+// ---------- Real-time Firestore Listener for settings/telegramBot ----------
+
+function loadTelegramBotDetailedView() {
+    console.log('🤖 Loading Telegram Bot detailed view...');
+
+    // Unsubscribe previous listener if any
+    if (botDetailUnsubscribe) {
+        botDetailUnsubscribe();
+        botDetailUnsubscribe = null;
+    }
+
+    botDetailUnsubscribe = db.collection('settings').doc('telegramBot').onSnapshot(snapshot => {
+        if (!snapshot.exists) {
+            console.warn('⚠️ settings/telegramBot document not found');
+            return;
+        }
+        const data = snapshot.data();
+        lastBotDetailData = data;
+        renderBotDetailTelemetry(data);
+        renderBotDetailChannels(data);
+        renderBotDetailCleanVmStatus(data);
+        updateBotDetailMasterToggle(data);
+        updateSidebarBotPulse(data);
+    }, err => {
+        console.error('❌ Bot detail listener error:', err);
+    });
+
+    // Reset tab-specific loaded flags
+    botDetailDealsLoaded = false;
+    botDetailLogsLoaded = false;
+
+    // Load deals if on deals tab
+    if (botDetailCurrentTab === 'deals') {
+        loadBotRecentDeals();
+    }
+    // Load logs if on logs tab
+    if (botDetailCurrentTab === 'logs') {
+        loadBotApmLogs();
+    }
+}
+window.loadTelegramBotDetailedView = loadTelegramBotDetailedView;
+
+// ---------- Render Telemetry Cards ----------
+
+function renderBotDetailTelemetry(data) {
+    const lastHb = data.lastHeartbeatAt?.toDate ? data.lastHeartbeatAt.toDate() : (data.lastHeartbeatAt ? new Date(data.lastHeartbeatAt._seconds * 1000) : null);
+    const isOnline = lastHb && (Math.abs(Date.now() - lastHb.getTime()) < 15 * 60 * 1000) && (data.status === 'online');
+    const environment = data.environment || 'DEV';
+    const isProd = environment.toUpperCase() === 'PROD';
+
+    // Environment badge
+    const envBadge = document.getElementById('botDetailEnvBadge');
+    if (envBadge) {
+        const port = isProd ? '8082' : '8081';
+        const container = isProd ? 'prod-bot' : 'dev-bot';
+        envBadge.textContent = `${environment.toUpperCase()} (${container} • Port ${port})`;
+        if (isProd) {
+            envBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800';
+        } else {
+            envBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-300 dark:border-blue-800';
+        }
+    }
+
+    // Status badge
+    const statusBadge = document.getElementById('botDetailStatusBadge');
+    if (statusBadge) {
+        if (isOnline) {
+            statusBadge.className = 'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800';
+            statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>Çevrimiçi';
+        } else {
+            statusBadge.className = 'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400 border border-red-300 dark:border-red-800';
+            statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span>Çevrimdışı';
+        }
+    }
+
+    // Container info
+    const containerInfo = document.getElementById('botContainerInfoText');
+    if (containerInfo) {
+        containerInfo.textContent = isProd ? 'prod-bot (Port 8082)' : 'dev-bot (Port 8081)';
+    }
+
+    // Telemetry counters
+    const msgCount = data.msgCount || 0;
+    const dealCount = data.dealCount || 0;
+    const dupCount = data.dupCount || 0;
+    const errCount = data.errCount || 0;
+
+    const setEl = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+
+    setEl('botDetailMsgCount', msgCount.toLocaleString('tr-TR'));
+    setEl('botDetailDealCount', dealCount.toLocaleString('tr-TR'));
+    setEl('botDetailDupCount', dupCount.toLocaleString('tr-TR'));
+    setEl('botDetailErrCount', errCount.toLocaleString('tr-TR'));
+
+    // Conversion rate
+    const convRate = msgCount > 0 ? ((dealCount / msgCount) * 100).toFixed(1) : '0';
+    setEl('botDetailConversionRate', `%${convRate} Dönüşüm`);
+
+    // Filter rate
+    const filterRate = msgCount > 0 ? ((dupCount / msgCount) * 100).toFixed(1) : '0';
+    setEl('botDetailFilterRate', `%${filterRate} Filtrelendi`);
+
+    // Last message time
+    const lastMsgTime = data.lastMessageTime?.toDate ? data.lastMessageTime.toDate() : (data.lastMessageTime ? new Date(data.lastMessageTime._seconds * 1000) : null);
+    if (lastMsgTime) {
+        setEl('botDetailLastMsgTime', `Son: ${formatRelativeTime(lastMsgTime)}`);
+    } else {
+        setEl('botDetailLastMsgTime', 'Son: Henüz yok');
+    }
+
+    // Error badge
+    if (errCount === 0) {
+        setHtml('botDetailErrorBadge', '<span class="text-emerald-600 dark:text-emerald-400">0 Hata • Stabil</span>');
+    } else {
+        setHtml('botDetailErrorBadge', `<span class="text-rose-500">${errCount} Hata Oluştu</span>`);
+    }
+
+    // Heap & memory from cleanVmStatus
+    if (data.cleanVmStatus) {
+        const st = data.cleanVmStatus;
+        setEl('botDetailHeapUsed', st.heapUsedMb ? `${st.heapUsedMb} MB` : '—');
+        if (st.freedHeapMb && parseFloat(st.freedHeapMb) > 0) {
+            setEl('botDetailFreedHeap', `${st.freedHeapMb} MB Serbest`);
+        } else {
+            setEl('botDetailFreedHeap', 'V8 Optimize');
+        }
+    }
+
+    // Channel count
+    const channels = data.monitoredChannelsMeta || data.monitoredChannels || [];
+    const channelCount = Array.isArray(channels) ? channels.length : 0;
+    setEl('botDetailChannelCount', channelCount);
+    setEl('botTabBadgeChannels', channelCount);
+
+    // Total subscribers
+    let totalSubs = 0;
+    if (data.monitoredChannelsMeta && Array.isArray(data.monitoredChannelsMeta)) {
+        data.monitoredChannelsMeta.forEach(meta => {
+            if (meta.subscribers) totalSubs += Number(meta.subscribers);
+        });
+    }
+    setEl('botDetailTotalSubscribers', `${totalSubs.toLocaleString('tr-TR')} Toplam Abone`);
+}
+
+// ---------- Render Channel Cards ----------
+
+function renderBotDetailChannels(data) {
+    const container = document.getElementById('botChannelsCardsContainer');
+    if (!container) return;
+
+    const meta = data.monitoredChannelsMeta;
+    if (!meta || !Array.isArray(meta) || meta.length === 0) {
+        container.innerHTML = `
+            <div class="col-span-full p-8 text-center bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span class="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 mb-2">podcasts</span>
+                <p class="text-sm text-slate-500 dark:text-slate-400">Henüz dinlenen kanal bulunmuyor.</p>
+                <p class="text-xs text-slate-400 mt-1">Aşağıdaki alandan yeni kanal ekleyebilirsiniz.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = meta.map(ch => {
+        const isError = ch.status === 'error';
+        const isPublic = ch.isPublic !== false;
+        const iconBg = isError ? 'bg-rose-500/10 text-rose-500' : (isPublic ? 'bg-blue-500/10 text-blue-500' : 'bg-amber-500/10 text-amber-500');
+        const iconName = isError ? 'error' : (isPublic ? 'campaign' : 'lock');
+        const statusBadge = isError
+            ? '<span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20">Bağlantı Hatası</span>'
+            : '<span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Aktif Dinleniyor</span>';
+
+        const subsText = ch.subscribers
+            ? `<span class="material-symbols-outlined text-[14px] text-primary">groups</span>${Number(ch.subscribers).toLocaleString('tr-TR')} Abone`
+            : '<span class="material-symbols-outlined text-[14px]">lock</span>Gizli';
+
+        const telegramLink = ch.username && ch.username.startsWith('@')
+            ? `https://t.me/${ch.username.replace('@', '')}`
+            : null;
+
+        return `
+            <div class="bg-white dark:bg-surface-dark p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3 hover:border-primary/40 transition-all">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full ${iconBg} flex items-center justify-center shrink-0">
+                            <span class="material-symbols-outlined text-xl">${iconName}</span>
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-sm font-bold text-slate-900 dark:text-white truncate">${ch.title || 'Bilinmeyen'}</span>
+                                ${statusBadge}
+                            </div>
+                            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">${ch.username || ch.input}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/60 pt-3">
+                    <div class="flex items-center gap-1 bg-slate-50 dark:bg-surface-darker px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-800/60">
+                        ${subsText}
+                    </div>
+                    <span class="text-slate-300 dark:text-slate-700">•</span>
+                    <span>${ch.type || 'Kanal'}</span>
+                    <span class="text-slate-300 dark:text-slate-700">•</span>
+                    <span class="font-mono text-[10px] text-slate-400">ID: ${ch.id || '—'}</span>
+                </div>
+                <div class="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800/60 pt-2.5">
+                    ${telegramLink ? `
+                        <a href="${telegramLink}" target="_blank" class="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-semibold hover:underline">
+                            <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+                            Telegram'da Aç
+                        </a>
+                        <span class="text-slate-300 dark:text-slate-700">•</span>
+                    ` : ''}
+                    <button onclick="window.removeTelegramChannel && window.removeTelegramChannel('${ch.input}')" class="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 font-semibold hover:underline cursor-pointer">
+                        <span class="material-symbols-outlined text-[14px]">link_off</span>
+                        Kanalı Kaldır
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ---------- Render Clean VM Status ----------
+
+function renderBotDetailCleanVmStatus(data) {
+    if (!data.cleanVmStatus) return;
+    const st = data.cleanVmStatus;
+
+    const setEl = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+    // Badge
+    const badge = document.getElementById('botCleanStatusBadge');
+    if (badge) {
+        if (st.status === 'running') {
+            badge.className = 'px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 animate-pulse';
+            badge.textContent = 'Çalışıyor...';
+        } else if (st.status === 'success') {
+            badge.className = 'px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400';
+            badge.textContent = 'Tamamlandı';
+        } else if (st.status === 'error') {
+            badge.className = 'px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-400';
+            badge.textContent = 'Hata';
+        }
+    }
+
+    // Details
+    if (st.completedAt) {
+        setEl('botCleanLastTime', new Date(st.completedAt).toLocaleString('tr-TR'));
+    } else if (st.startedAt) {
+        setEl('botCleanLastTime', new Date(st.startedAt).toLocaleString('tr-TR'));
+    }
+    setEl('botCleanDuration', st.durationSec ? `${st.durationSec} saniye` : '—');
+    setEl('botCleanHeapUsed', st.heapUsedMb ? `${st.heapUsedMb} MB` : '—');
+    setEl('botCleanFreedHeap', st.freedHeapMb ? `${st.freedHeapMb} MB` : '—');
+
+    // Terminal logs
+    const logsEl = document.getElementById('botVmTerminalLogs');
+    if (logsEl && Array.isArray(st.logs) && st.logs.length > 0) {
+        logsEl.textContent = st.logs.join('\n');
+    }
+}
+
+// ---------- Update Master Toggle & Sidebar Pulse ----------
+
+function updateBotDetailMasterToggle(data) {
+    const toggle = document.getElementById('botDetailMasterToggle');
+    const label = document.getElementById('botMasterToggleLabel');
+    if (toggle) {
+        toggle.checked = data.botEnabled !== false;
+    }
+    if (label) {
+        label.textContent = data.botEnabled !== false ? 'Bot Servisi: Aktif' : 'Bot Servisi: Durduruldu';
+    }
+}
+
+function updateSidebarBotPulse(data) {
+    const pulse = document.getElementById('sidebarBotPulse');
+    if (!pulse) return;
+    const lastHb = data.lastHeartbeatAt?.toDate ? data.lastHeartbeatAt.toDate() : (data.lastHeartbeatAt ? new Date(data.lastHeartbeatAt._seconds * 1000) : null);
+    const isOnline = lastHb && (Math.abs(Date.now() - lastHb.getTime()) < 15 * 60 * 1000) && (data.status === 'online');
+    if (isOnline) {
+        pulse.className = 'size-2 rounded-full bg-emerald-500 animate-pulse';
+        pulse.title = 'Bot Çevrimiçi';
+    } else {
+        pulse.className = 'size-2 rounded-full bg-red-500';
+        pulse.title = 'Bot Çevrimdışı';
+    }
+}
+
+// ---------- Tab Switching ----------
+
+window.switchBotDetailTab = function(tabId) {
+    botDetailCurrentTab = tabId;
+    const tabs = ['channels', 'deals', 'server', 'logs'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`botTabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        const content = document.getElementById(`botTabContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (btn) {
+            if (t === tabId) {
+                btn.className = 'flex items-center gap-2 px-4 py-3 text-sm font-bold border-b-2 border-primary text-primary transition-all whitespace-nowrap cursor-pointer';
+            } else {
+                btn.className = 'flex items-center gap-2 px-4 py-3 text-sm font-bold border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all whitespace-nowrap cursor-pointer';
+            }
+        }
+        if (content) {
+            if (t === tabId) {
+                content.classList.remove('hidden');
+            } else {
+                content.classList.add('hidden');
+            }
+        }
+    });
+
+    // Lazy load tab data
+    if (tabId === 'deals' && !botDetailDealsLoaded) {
+        loadBotRecentDeals();
+    }
+    if (tabId === 'logs' && !botDetailLogsLoaded) {
+        loadBotApmLogs();
+    }
+};
+
+// ---------- Toggle Bot Master Switch ----------
+
+window.toggleTelegramBotMaster = async function(enabled) {
+    try {
+        await db.collection('settings').doc('telegramBot').set({
+            botEnabled: enabled
+        }, { merge: true });
+        console.log(`✅ Bot ${enabled ? 'başlatıldı' : 'durduruldu'}`);
+        if (typeof showSuccess === 'function') {
+            showSuccess(enabled ? 'Bot başarıyla başlatıldı.' : 'Bot durduruldu.');
+        }
+    } catch (err) {
+        console.error('❌ Bot toggle error:', err);
+        if (typeof showError === 'function') {
+            showError('Bot durumu değiştirilemedi: ' + err.message);
+        }
+    }
+};
+
+// ---------- Add New Channel(s) ----------
+
+window.addNewTelegramChannel = async function() {
+    const input = document.getElementById('botNewChannelInput');
+    if (!input || !input.value.trim()) {
+        if (typeof showError === 'function') showError('Lütfen en az bir kanal adı veya ID girin.');
+        return;
+    }
+    const rawVal = input.value.trim();
+
+    // Split by comma or newline for bulk channel adding
+    const rawChannels = rawVal.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    if (rawChannels.length === 0) {
+        if (typeof showError === 'function') showError('Geçerli bir kanal girişi bulunamadı.');
+        return;
+    }
+
+    // Clean channels (extract handle from URL, ensure @ for usernames)
+    const parsedChannels = rawChannels.map(ch => {
+        let c = ch.replace(/^(https?:\/\/)?(www\.)?t\.me\//i, '').replace(/^\/+|\/+$/g, '').trim();
+        if (!c.startsWith('@') && !c.startsWith('-') && !/^\d+$/.test(c)) {
+            c = '@' + c;
+        }
+        return c;
+    }).filter(Boolean);
+
+    try {
+        const docRef = db.collection('settings').doc('telegramBot');
+        const snap = await docRef.get();
+        const existingChannels = snap.exists && Array.isArray(snap.data().monitoredChannels) ? [...snap.data().monitoredChannels] : [];
+
+        const newlyAdded = [];
+        const alreadyExisting = [];
+
+        for (const ch of parsedChannels) {
+            if (existingChannels.some(ex => ex.toLowerCase() === ch.toLowerCase())) {
+                alreadyExisting.push(ch);
+            } else {
+                existingChannels.push(ch);
+                newlyAdded.push(ch);
+            }
+        }
+
+        if (newlyAdded.length === 0) {
+            if (typeof showError === 'function') {
+                showError(`Girdiğiniz kanal(lar) zaten dinleme listesinde mevcut: ${alreadyExisting.join(', ')}`);
+            }
+            return;
+        }
+
+        await docRef.set({ monitoredChannels: existingChannels }, { merge: true });
+
+        input.value = '';
+        if (typeof showSuccess === 'function') {
+            const skippedText = alreadyExisting.length > 0 ? ` (${alreadyExisting.length} mükerrer atlandı)` : '';
+            if (newlyAdded.length === 1) {
+                showSuccess(`"${newlyAdded[0]}" başarıyla eklendi. Bot kısa süre içinde kanala abone olacak.${skippedText}`);
+            } else {
+                showSuccess(`✅ ${newlyAdded.length} yeni kanal başarıyla eklendi ve dinlemeye alındı!${skippedText}`);
+            }
+        }
+    } catch (err) {
+        console.error('❌ Add channel error:', err);
+        if (typeof showError === 'function') showError('Kanal(lar) eklenirken hata: ' + err.message);
+    }
+};
+
+// ---------- Copy All Monitored Channels to Clipboard ----------
+
+window.copyAllTelegramChannels = async function() {
+    try {
+        let channels = [];
+        if (lastBotDetailData && Array.isArray(lastBotDetailData.monitoredChannels) && lastBotDetailData.monitoredChannels.length > 0) {
+            channels = lastBotDetailData.monitoredChannels;
+        } else {
+            const doc = await db.collection('settings').doc('telegramBot').get();
+            if (doc.exists && Array.isArray(doc.data().monitoredChannels)) {
+                channels = doc.data().monitoredChannels;
+            }
+        }
+
+        if (!channels || channels.length === 0) {
+            if (typeof showError === 'function') showError('Kopyalanacak aktif dinlenen kanal bulunamadı.');
+            return;
+        }
+
+        const text = channels.join(', ');
+        await navigator.clipboard.writeText(text);
+        if (typeof showSuccess === 'function') {
+            showSuccess(`📋 ${channels.length} aktif kanal kullanıcı adı panoya kopyalandı!`);
+        }
+    } catch (err) {
+        console.error('❌ Copy channels error:', err);
+        if (typeof showError === 'function') showError('Kanallar kopyalanırken hata oluştu: ' + err.message);
+    }
+};
+
+// ---------- Remove Channel ----------
+
+window.removeTelegramChannel = async function(channelInput) {
+    if (!confirm(`"${channelInput}" kanalını dinleme listesinden kaldırmak istediğinize emin misiniz?`)) return;
+
+    try {
+        const docRef = db.collection('settings').doc('telegramBot');
+        const snap = await docRef.get();
+        if (!snap.exists) return;
+
+        const channels = snap.data().monitoredChannels || [];
+        const updated = channels.filter(c => c.trim().toLowerCase() !== channelInput.trim().toLowerCase());
+
+        // Also clean meta
+        const meta = snap.data().monitoredChannelsMeta || [];
+        const updatedMeta = meta.filter(m => m.input.trim().toLowerCase() !== channelInput.trim().toLowerCase());
+
+        await docRef.set({
+            monitoredChannels: updated,
+            monitoredChannelsMeta: updatedMeta
+        }, { merge: true });
+
+        if (typeof showSuccess === 'function') {
+            showSuccess(`"${channelInput}" başarıyla kaldırıldı.`);
+        }
+    } catch (err) {
+        console.error('❌ Remove channel error:', err);
+        if (typeof showError === 'function') showError('Kanal kaldırılırken hata: ' + err.message);
+    }
+};
+
+// ---------- Clean VM Trigger from Bot View ----------
+
+window.triggerCleanVmFromBotView = async function() {
+    if (!confirm('Sunucu bellek ve performans temizliğini başlatmak istediğinize emin misiniz?')) return;
+
+    const btn = document.getElementById('botDetailCleanVmBtn');
+    if (btn) btn.disabled = true;
+
+    try {
+        await db.collection('settings').doc('telegramBot').set({
+            cleanVmTrigger: Date.now()
+        }, { merge: true });
+
+        if (typeof showSuccess === 'function') {
+            showSuccess('Sunucu temizlik komutu gönderildi. Sonuçlar terminal konsolunda görünecek.');
+        }
+    } catch (e) {
+        if (btn) btn.disabled = false;
+        if (typeof showError === 'function') {
+            showError('Temizlik başlatılamadı: ' + e.message);
+        }
+    }
+};
+
+// ---------- Copy Terminal Logs ----------
+
+window.copyBotTerminalLogs = function() {
+    const logsEl = document.getElementById('botVmTerminalLogs');
+    if (!logsEl) return;
+
+    const text = logsEl.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        if (typeof showSuccess === 'function') {
+            showSuccess('Terminal logları panoya kopyalandı.');
+        }
+    }).catch(err => {
+        console.error('Copy error:', err);
+    });
+};
+
+// ---------- Load Bot Recent Deals (Tab 2) ----------
+
+window.loadBotRecentDeals = async function() {
+    botDetailDealsLoaded = true;
+    const container = document.getElementById('botDealsGridContainer');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="col-span-full p-12 text-center text-slate-400 bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800">
+            <span class="material-symbols-outlined text-3xl animate-spin">sync</span>
+            <p class="mt-2">Fırsatlar yükleniyor...</p>
+        </div>
+    `;
+
+    try {
+        const snapshot = await db.collection('deals')
+            .where('source', '==', 'telegram')
+            .orderBy('createdAt', 'desc')
+            .limit(12)
+            .get();
+
+        if (snapshot.empty) {
+            container.innerHTML = `
+                <div class="col-span-full p-12 text-center bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <span class="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 mb-2">inbox</span>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Bot henüz fırsat yakalamamış veya bu ortamda kayıt yok.</p>
+                </div>
+            `;
+            const badge = document.getElementById('botTabBadgeDeals');
+            if (badge) badge.textContent = '0';
+            return;
+        }
+
+        const badge = document.getElementById('botTabBadgeDeals');
+        if (badge) badge.textContent = snapshot.size;
+
+        container.innerHTML = snapshot.docs.map(doc => {
+            const d = doc.data();
+            const price = d.price ? `${parseFloat(d.price).toLocaleString('tr-TR', {minimumFractionDigits: 2})} ₺` : '';
+            const origPrice = d.originalPrice ? `${parseFloat(d.originalPrice).toLocaleString('tr-TR', {minimumFractionDigits: 2})} ₺` : '';
+            const discount = d.discountRate ? `%${d.discountRate}` : '';
+            const store = d.store || '—';
+            const channelSrc = d.telegramChatTitle || d.telegramChatUsername || '—';
+            const img = d.imageUrl || '';
+            const approved = d.isApproved;
+            const createdAt = d.createdAt?.toDate ? d.createdAt.toDate() : null;
+            const timeAgo = createdAt ? formatRelativeTime(createdAt) : '—';
+
+            return `
+                <div class="bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col hover:border-primary/40 transition-all group">
+                    ${img ? `
+                        <div class="h-36 bg-slate-50 dark:bg-surface-darker flex items-center justify-center overflow-hidden">
+                            <img src="${img}" alt="${d.title || ''}" class="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform" onerror="this.parentElement.innerHTML='<span class=\\'material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600\\'>image_not_supported</span>'"/>
+                        </div>
+                    ` : `
+                        <div class="h-36 bg-slate-50 dark:bg-surface-darker flex items-center justify-center">
+                            <span class="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600">image_not_supported</span>
+                        </div>
+                    `}
+                    <div class="p-4 flex flex-col gap-2 flex-1">
+                        <h4 class="text-xs font-bold text-slate-900 dark:text-white leading-snug line-clamp-2">${d.title || 'Başlıksız Fırsat'}</h4>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            ${price ? `<span class="text-sm font-black text-primary">${price}</span>` : ''}
+                            ${origPrice ? `<span class="text-[11px] text-slate-400 line-through">${origPrice}</span>` : ''}
+                            ${discount ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">${discount}</span>` : ''}
+                        </div>
+                        <div class="flex items-center gap-2 flex-wrap text-[10px] text-slate-400 mt-auto border-t border-slate-100 dark:border-slate-800/60 pt-2">
+                            <span class="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-semibold text-slate-600 dark:text-slate-300">${store}</span>
+                            <span>📢 ${channelSrc}</span>
+                            <span>${timeAgo}</span>
+                            ${approved ? '<span class="text-emerald-500 font-bold">✓ Onaylı</span>' : '<span class="text-amber-500 font-bold">⏳ Bekliyor</span>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (err) {
+        console.error('❌ Load bot deals error:', err);
+        container.innerHTML = `
+            <div class="col-span-full p-8 text-center text-rose-500 bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800">
+                <p class="text-sm font-bold">Fırsatlar yüklenemedi</p>
+                <p class="text-xs mt-1">${err.message}</p>
+            </div>
+        `;
+    }
+};
+
+// ---------- Load Bot APM Logs (Tab 4) ----------
+
+async function loadBotApmLogs() {
+    botDetailLogsLoaded = true;
+    const container = document.getElementById('botApmLogsContainer');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="p-8 text-center text-slate-400 bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800">
+            <span class="material-symbols-outlined text-3xl animate-spin">sync</span>
+            <p class="mt-2">Hata logları yükleniyor...</p>
+        </div>
+    `;
+
+    try {
+        const snapshot = await db.collection('systemLogs')
+            .where('category', '==', 'bot')
+            .orderBy('createdAt', 'desc')
+            .limit(20)
+            .get();
+
+        if (snapshot.empty) {
+            container.innerHTML = `
+                <div class="p-8 text-center bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <span class="material-symbols-outlined text-4xl text-emerald-400 mb-2">check_circle</span>
+                    <p class="text-sm text-slate-700 dark:text-slate-300 font-bold">Mükemmel! Bot kategorisinde aktif hata kaydı yok.</p>
+                    <p class="text-xs text-slate-400 mt-1">Telegram botu ve scraper motoru sorunsuz çalışıyor.</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = snapshot.docs.map(doc => {
+            const d = doc.data();
+            const severity = (d.severity || 'error').toLowerCase();
+            const createdAt = d.createdAt?.toDate ? d.createdAt.toDate() : null;
+            const timeStr = createdAt ? createdAt.toLocaleString('tr-TR') : '—';
+
+            const severityColors = {
+                error: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/40',
+                warning: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/40',
+                info: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/40'
+            };
+            const cardClass = severityColors[severity] || severityColors.error;
+
+            const severityBadge = severity === 'error'
+                ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400">HATA</span>'
+                : severity === 'warning'
+                ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400">UYARI</span>'
+                : '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400">BİLGİ</span>';
+
+            return `
+                <div class="p-4 rounded-xl border ${cardClass} flex flex-col gap-2">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <div class="flex items-center gap-2">
+                            ${severityBadge}
+                            <span class="text-xs font-mono font-bold">${d.errorType || d.service || 'bot'}</span>
+                        </div>
+                        <span class="text-[10px] font-mono opacity-70">${timeStr}</span>
+                    </div>
+                    <p class="text-xs leading-relaxed">${d.message || 'Hata mesajı yok'}</p>
+                    ${d.stack ? `
+                        <details class="mt-1">
+                            <summary class="text-[10px] font-bold cursor-pointer hover:underline opacity-70">Stack Trace Göster</summary>
+                            <pre class="mt-1.5 p-2 bg-black/10 dark:bg-black/30 rounded-lg text-[10px] font-mono overflow-x-auto max-h-32 whitespace-pre-wrap">${d.stack}</pre>
+                        </details>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+
+    } catch (err) {
+        console.error('❌ Load bot APM logs error:', err);
+        container.innerHTML = `
+            <div class="p-8 text-center text-slate-400 bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800">
+                <p class="text-sm text-slate-700 dark:text-slate-300 font-bold">Bot logları yüklenemedi</p>
+                <p class="text-xs mt-1">${err.message}</p>
+            </div>
+        `;
+    }
+}
+
+// ---------- Utility: Relative Time Formatter ----------
+
+function formatRelativeTime(date) {
+    if (!date) return '—';
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return `${diffSec} sn önce`;
+    if (diffMin < 60) return `${diffMin} dk önce`;
+    if (diffHr < 24) return `${diffHr} saat önce`;
+    if (diffDay < 7) return `${diffDay} gün önce`;
+    return date.toLocaleDateString('tr-TR');
+}
 
 

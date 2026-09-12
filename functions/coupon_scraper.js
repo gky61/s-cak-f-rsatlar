@@ -1,6 +1,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const cheerio = require('cheerio');
+const { logErrorToFirestore } = require('./error_logger');
 
 // ─── Ortak Sabitler ──────────────────────────────────────────────────────────
 
@@ -437,6 +438,10 @@ async function scrapeAndSaveCoupons() {
     functions.logger.info(`[Kuponla] Added ${kuponlaAdded} new unique coupons.`);
   } catch (err) {
     functions.logger.error(`❌ [Kuponla] Entire source failed, skipping:`, err.message);
+    await logErrorToFirestore('catalogs_coupons', 'Kuponla Scrape Failed', err.message, err.stack, 'warning', {
+      category: 'catalogs_coupons',
+      subCategory: 'kuponla'
+    });
   }
 
   try {
@@ -453,12 +458,19 @@ async function scrapeAndSaveCoupons() {
     functions.logger.info(`[Kuponburada] Added ${kuponburadaAdded} new unique coupons.`);
   } catch (err) {
     functions.logger.error(`❌ [Kuponburada] Entire source failed, skipping:`, err.message);
+    await logErrorToFirestore('catalogs_coupons', 'Kuponburada Scrape Failed', err.message, err.stack, 'warning', {
+      category: 'catalogs_coupons',
+      subCategory: 'kuponburada'
+    });
   }
 
   functions.logger.info(`✨ All sources scraped. Total unique coupons: ${allScrapedCoupons.length}`);
 
   if (allScrapedCoupons.length === 0) {
     functions.logger.warn('⚠️ No coupons scraped from any source. Keeping existing coupons.');
+    await logErrorToFirestore('catalogs_coupons', 'Coupon Scrape Zero Result', 'Tüm kupon kaynaklarından (DH, Kuponla, Kuponburada) 0 kupon çekildi. Kaynakların DOM yapısı değişmiş olabilir.', null, 'error', {
+      category: 'catalogs_coupons'
+    });
     return { success: false, count: 0, message: 'Hiç kupon çekilemedi. Mevcut kuponlar korunuyor.' };
   }
 
