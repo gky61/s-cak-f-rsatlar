@@ -41,12 +41,17 @@ if [ ! -f "$CERTIFICATE_PATH" ] || [ ! -s "$CERTIFICATE_PATH" ]; then
   exit 1
 fi
 
-security import "$CERTIFICATE_PATH" \
-  -P "$P12_PASSWORD" \
-  -A \
-  -t cert \
-  -f pkcs12 \
-  -k "$KEYCHAIN_PATH"
+# macOS Keychain'e içe aktarma (Failsafe: OpenSSL 3 PBKDF2 ise legacy 3DES formatına otomatik dönüştür)
+if ! security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH" 2>/dev/null; then
+  echo "   ⚠️ Standart import başarısız oldu (OpenSSL 3 PBKDF2 formatı tespit edildi). Legacy 3DES formatına dönüştürülüyor..."
+  openssl pkcs12 -in "$CERTIFICATE_PATH" -nodes -passin "pass:$P12_PASSWORD" -out "$RUNNER_TEMP/temp_cert_key.pem" 2>/dev/null || true
+  if [ -f "$RUNNER_TEMP/temp_cert_key.pem" ]; then
+    openssl pkcs12 -export -in "$RUNNER_TEMP/temp_cert_key.pem" -out "$CERTIFICATE_PATH" -passout "pass:$P12_PASSWORD" -legacy 2>/dev/null || \
+    openssl pkcs12 -export -in "$RUNNER_TEMP/temp_cert_key.pem" -out "$CERTIFICATE_PATH" -passout "pass:$P12_PASSWORD" 2>/dev/null || true
+    rm -f "$RUNNER_TEMP/temp_cert_key.pem"
+    security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+  fi
+fi
 
 security set-key-partition-list \
   -S apple-tool:,apple:,codesign: \
