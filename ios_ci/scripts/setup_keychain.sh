@@ -59,7 +59,12 @@ security set-key-partition-list \
   -k "$KEYCHAIN_PASSWORD" \
   "$KEYCHAIN_PATH" || true
 
+security default-keychain -s "$KEYCHAIN_PATH"
 security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+echo "   Sertifika kimliği doğrulanıyor (codesign identity):"
+security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
 echo "📋 [3/4] Apple Provisioning Profile (.mobileprovision) yükleniyor..."
 mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
@@ -90,6 +95,22 @@ for plist in ios_ci/ExportOptions_*.plist; do
   if [ -f "$plist" ]; then
     /usr/libexec/PlistBuddy -c "Set :provisioningProfiles:com.firsatkolik.app '$PROFILE_NAME'" "$plist" 2>/dev/null || \
     /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:com.firsatkolik.app string '$PROFILE_NAME'" "$plist" 2>/dev/null || true
+  fi
+done
+
+# Release ve Debug xcconfig dosyalarına dinamik manuel imzalama ayarlarını enjekte et
+for xcconfig in ios/Flutter/Release.xcconfig ios/Flutter/Debug.xcconfig; do
+  if [ -f "$xcconfig" ]; then
+    cat <<EOF >> "$xcconfig"
+
+// CI/CD Manual Code Signing Configuration
+CODE_SIGN_STYLE = Manual
+DEVELOPMENT_TEAM = 973W9DTDY9
+PROVISIONING_PROFILE_SPECIFIER = $PROFILE_NAME
+PROVISIONING_PROFILE = $PROFILE_UUID
+CODE_SIGN_IDENTITY = Apple Distribution
+CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution
+EOF
   fi
 done
 
