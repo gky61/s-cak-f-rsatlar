@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'home_screen.dart';
 import 'admin_screen.dart';
+import 'privacy_policy_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -432,14 +433,47 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ],
                   
-                  const SizedBox(height: 32),
-                  Text(
-                    'Giriş yaparak fırsat paylaşabilir ve\noy verebilirsiniz',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[500],
+                  const SizedBox(height: 24),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Giriş yaparak fırsat paylaşabilir ve oy verebilirsiniz.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[500],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                            );
+                          },
+                          child: RichText(
+                            textAlign: TextAlign.center,
+                            text: TextSpan(
+                              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                              children: const [
+                                TextSpan(text: 'Devam ederek '),
+                                TextSpan(
+                                  text: 'Kullanım Koşulları & Gizlilik Politikası',
+                                  style: TextStyle(
+                                    color: Color(0xFFFF6B35),
+                                    fontWeight: FontWeight.w600,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                                TextSpan(text: '\'nı kabul etmiş sayılırsınız.'),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    textAlign: TextAlign.center,
                   ),
                     ],
                   ),

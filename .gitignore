@@ -57,6 +57,11 @@ functions/.runtimeconfig.json
 android/key.properties
 **/*.jks
 **/*.keystore
+ios_ci/ios_certs/
+**/*.p12
+**/*.mobileprovision
+**/*.certSigningRequest
+**/*.p8
 
 # Bot configuration secrets
 cloud-run-bot/env.yaml

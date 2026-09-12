@@ -1,0 +1,42 @@
+# ==============================================================================
+# FırsatKolik iOS CI/CD — Fastlane TestFlight Dağıtım Yapılandırması
+# ==============================================================================
+# Apple'ın xcrun altool aracını aşamalı kaldırması ve App Store Connect API'ye
+# geçişi nedeniyle en modern, resmi ve kararlı TestFlight yükleme motorudur.
+# ==============================================================================
+
+default_platform(:ios)
+
+platform :ios do
+  desc "FırsatKolik IPA paketini App Store Connect API v1 ile TestFlight'a yükler"
+  lane :beta do |options|
+    ipa_path = options[:ipa] || ENV["IPA_FILE"]
+
+    if ipa_path.nil? || !File.exist?(ipa_path)
+      UI.user_error!("❌ Hata: Yüklenecek IPA dosyası bulunamadı: #{ipa_path}")
+    end
+
+    UI.message("🚀 App Store Connect API anahtarı yapılandırılıyor...")
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key_content: ENV["APP_STORE_CONNECT_PRIVATE_KEY"],
+      is_key_content_base64: false,
+      in_house: false
+    )
+
+    UI.message("📦 IPA TestFlight'a aktarılıyor: #{ipa_path}")
+    # skip_waiting_for_build_processing: true -> Apple'ın 10-15 dakikalık işleme
+    # sürecini beklemeden derlemeyi bitirir. Bu sayede GitHub Actions'ın 10x
+    # macOS dakika kotası (aylık 200 dk) gereksiz yere tüketilmez!
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ipa_path,
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+      distribute_external: false
+    )
+
+    UI.success("🎉 FırsatKolik IPA paketi başarıyla Apple TestFlight'a yüklendi!")
+  end
+end

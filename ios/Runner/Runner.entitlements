@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Apple ile Giriş (Sign in with Apple) Yetkisi -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+
+	<!-- Apple Push Notification Service (APNs) Yetkisi -->
+	<key>aps-environment</key>
+	<string>development</string>
+
+	<!-- Universal Links (Associated Domains) -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:firsatkolik.app</string>
+		<string>applinks:sicak-firsatlar-e6eae.web.app</string>
+		<string>applinks:firsatkolik.web.app</string>
+	</array>
+</dict>
+</plist>

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/services.dart';
 import 'dart:async';
 import '../services/firestore_service.dart';
@@ -240,25 +240,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _initShareIntentListener() {
-    // 1. Uygulama açık veya arka plandayken gelen paylaşımları dinle
-    _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
-      if (value.isNotEmpty) {
-        _handleSharedMedia(value);
-        ReceiveSharingIntent.instance.reset();
-      }
-    }, onError: (err) {
-      _log("getIntentSharingTextList Error: $err");
-    });
+    if (kIsWeb) return;
+    try {
+      // 1. Uygulama açık veya arka plandayken gelen paylaşımları dinle
+      _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
+        if (value.isNotEmpty) {
+          _handleSharedMedia(value);
+          ReceiveSharingIntent.instance.reset();
+        }
+      }, onError: (err) {
+        _log("getIntentSharingTextList Error: $err");
+      });
 
-    // 2. Uygulama tamamen kapalıyken paylaşımla açılırsa ilk paylaşımı al
-    ReceiveSharingIntent.instance.getInitialMedia().then((value) {
-      if (value.isNotEmpty) {
-        _handleSharedMedia(value);
-        ReceiveSharingIntent.instance.reset();
-      }
-    }).catchError((err) {
-      _log("getInitialMedia Error: $err");
-    });
+      // 2. Uygulama tamamen kapalıyken paylaşımla açılırsa ilk paylaşımı al
+      ReceiveSharingIntent.instance.getInitialMedia().then((value) {
+        if (value.isNotEmpty) {
+          _handleSharedMedia(value);
+          ReceiveSharingIntent.instance.reset();
+        }
+      }).catchError((err) {
+        _log("getInitialMedia Error: $err");
+      });
+    } catch (e) {
+      _log("ReceiveSharingIntent init error: $e");
+    }
   }
 
   void _handleSharedMedia(List<SharedMediaFile> files) {

@@ -85,7 +85,15 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   
   // Plugin'i initialize et (Arka planda çalışması için gerekli olabilir)
   const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const initSettings = InitializationSettings(android: androidSettings);
+  const iosSettings = DarwinInitializationSettings(
+    requestAlertPermission: false,
+    requestBadgePermission: false,
+    requestSoundPermission: false,
+  );
+  const initSettings = InitializationSettings(
+    android: androidSettings,
+    iOS: iosSettings,
+  );
   await flutterLocalNotificationsPlugin.initialize(initSettings);
 
   const androidChannel = AndroidNotificationChannel(
@@ -152,6 +160,11 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           onlyAlertOnce: isMessage,
           groupKey: isMessage ? 'group_messages' : null,
         ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
       ),
       payload: payload,
     );
@@ -193,7 +206,7 @@ void main() async {
     try {
       await FirebaseAppCheck.instance.activate(
         androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-        appleProvider: AppleProvider.deviceCheck,
+        appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
       );
       _log('🛡️ Firebase App Check başarıyla başlatıldı');
     } catch (e) {

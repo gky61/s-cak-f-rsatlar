@@ -1,0 +1,112 @@
+name: iOS TestFlight Deployment
+
+# ==============================================================================
+# FırsatKolik — iOS TestFlight Otomatik Derleme ve Dağıtım İş Akışı
+# ==============================================================================
+# ⚠️ DİKKAT: GitHub Actions private repolarda macOS runner'lar için 10x dakika
+# çarpanı uygular (Aylık 2000 Linux dk = 200 macOS dk).
+# Bu nedenle iş akışı:
+# 1. Yalnızca manuel (workflow_dispatch) tetiklenir (her push'ta kota yemez).
+# 2. CocoaPods önbellekleme ile derleme süresini 15 dk'dan ~8 dk'ya indirir.
+# 3. Fastlane skip_waiting_for_build_processing ile Apple işleme süresini beklemez.
+# ==============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: 'Derleme Ortamı (Flavor)'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - 'prod'
+          - 'dev'
+      upload_to_testflight:
+        description: 'TestFlight’a Otomatik Yüklensin mi?'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  build-and-deploy-ios:
+    name: Build & Deploy iOS (${{ inputs.flavor }})
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      # 1. Depoyu Klonla
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      # 2. Flutter Ortamını Kur (Önbellekli)
+      - name: 🐦 Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 3. Bağımlılıkları Yükle
+      - name: 📦 Install Flutter Dependencies
+        run: flutter pub get
+
+      # 4. iOS Uyumluluk Birim Testlerini Koş
+      - name: 🧪 Run iOS Compatibility Tests
+        run: flutter test test/ios_compatibility_test.dart
+
+      # 5. CocoaPods Önbelleği (Build süresini yarı yarıya düşürür, kotayı korur)
+      - name: ⚡ Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      # 6. CocoaPods Bağımlılıklarını Kur
+      - name: 🍎 Install CocoaPods
+        run: |
+          cd ios
+          pod install
+          cd ..
+
+      # 7. Apple Dağıtım Sertifikası ve Keychain Kurulumu
+      - name: 🔐 Setup Apple Keychain & Certificates
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        run: |
+          chmod +x ios_ci/scripts/setup_keychain.sh
+          ./ios_ci/scripts/setup_keychain.sh
+
+      # 8. iOS IPA Paketini Derle
+      - name: 🔨 Build iOS IPA (${{ inputs.flavor }})
+        run: |
+          flutter build ipa \
+            --flavor ${{ inputs.flavor }} \
+            --dart-define=FLAVOR=${{ inputs.flavor }} \
+            --release \
+            --export-options-plist=ios_ci/ExportOptions_${{ inputs.flavor }}.plist
+
+      # 9. Derlenen IPA Dosyasını GitHub Artifact Olarak Sakla
+      - name: 💾 Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firsatkolik-${{ inputs.flavor }}-ipa
+          path: build/ios/ipa/*.ipa
+          retention-days: 14
+
+      # 10. Apple TestFlight'a Yükle (Fastlane + App Store Connect API)
+      - name: 🚀 Upload to Apple TestFlight
+        if: ${{ inputs.upload_to_testflight }}
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          chmod +x ios_ci/scripts/upload_testflight.sh
+          IPA_FILE=$(find build/ios/ipa -name "*.ipa" | head -n 1)
+          ./ios_ci/scripts/upload_testflight.sh "$IPA_FILE"

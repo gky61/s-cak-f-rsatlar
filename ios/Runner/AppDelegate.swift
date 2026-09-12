@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -8,6 +9,12 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+    
+    // iOS 10+ Ön plan bildirimleri için delegate kaydı
+    if #available(iOS 10.0, *) {
+      UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
+    }
+    application.registerForRemoteNotifications()
     
     let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
     let nativeHttpChannel = FlutterMethodChannel(name: "com.sicakfirsatlar.app/native_http",
@@ -23,6 +30,7 @@ import UIKit
         }
         
         let userAgent = args["userAgent"] as? String ?? "WhatsApp/2.23.4.15 A"
+        let cookie = args["cookie"] as? String
         
         guard let url = URL(string: urlString) else {
           result(FlutterError(code: "BAD_ARGS", message: "Invalid URL", details: nil))
@@ -34,6 +42,9 @@ import UIKit
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue("tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7", forHTTPHeaderField: "Accept-Language")
+        if let cookie = cookie, !cookie.isEmpty {
+          request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        }
         request.timeoutInterval = 10.0
         
         let task = URLSession.shared.dataTask(with: request) { data, response, error in

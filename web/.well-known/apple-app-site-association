@@ -1,0 +1,28 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.com.firsatkolik.app",
+        "paths": [
+          "/deal/*",
+          "/katalog/*",
+          "/kupon/*"
+        ]
+      },
+      {
+        "appID": "TEAMID.com.sicakfirsatlar.sicakFirsatlar",
+        "paths": [
+          "/deal/*",
+          "/katalog/*",
+          "/kupon/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAMID.com.firsatkolik.app"
+    ]
+  }
+}

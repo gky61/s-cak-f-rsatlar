@@ -47,16 +47,179 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
-		<!-- Arka planda FCM bildirimleri almak için -->
+		<key>UIViewControllerBasedStatusBarAppearance</key>
+		<false/>
+		<!-- App Store İhracat Uyumluluğu (Şifreleme Muafiyeti) -->
+		<key>ITSAppUsesNonExemptEncryption</key>
+		<false/>
+
+		<!-- iOS Universal Links / Deep Linking -->
+		<key>FlutterDeepLinkingEnabled</key>
+		<true/>
+
+		<!-- Arka planda FCM bildirimleri ve veri eşitleme -->
 		<key>UIBackgroundModes</key>
 		<array>
+			<string>fetch</string>
 			<string>remote-notification</string>
 		</array>
-		<!-- Kamera Erişimi (Profil fotoğrafı çekmek için) -->
-		<key>NSCameraUsageDescription</key>
-		<string>Profil fotoğrafınızı çekmek için kamera erişimine ihtiyacımız var.</string>
-		<!-- Fotoğraf Galerisi Erişimi (Profil fotoğrafı seçmek için) -->
+
+		<!-- Dış Uygulama ve Mağaza URL Şemaları (iOS 9+ canLaunchUrl Whitelist) -->
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>https</string>
+			<string>http</string>
+			<string>tg</string>
+			<string>telegram</string>
+			<string>whatsapp</string>
+			<string>hbapp</string>
+			<string>trendyol</string>
+			<string>teknosa</string>
+			<string>n11</string>
+			<string>amazon</string>
+			<string>mailto</string>
+			<string>tel</string>
+			<string>itms-apps</string>
+		</array>
+
+		<!-- URL Schemes & Google Sign-In Redirect -->
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.googleusercontent.apps.560592268193-ios</string>
+					<string>com.googleusercontent.apps.228657473310-ios</string>
+					<string>firsatkolik</string>
+				</array>
+			</dict>
+		</array>
+
+		<!-- Google Mobile Ads (AdMob) iOS Application ID -->
+		<key>GADApplicationIdentifier</key>
+		<string>ca-app-pub-3940256099942544~1458002511</string>
+
+		<!-- AdMob SKAdNetwork Identifier Listesi -->
+		<key>SKAdNetworkItems</key>
+		<array>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>cstr6suwn9.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>4fzdc2evr5.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>2fnua5tdw4.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>ydx93a7ass.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>p78axxw29g.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>v72qych5uu.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>ludvb6z3bs.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>cp8zw746q7.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>3sh42y64q3.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>c6k4g5qg8m.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>s39g8k73mm.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>3qy4746246.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>f38h382jlk.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>hs6bdukanm.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>v4nxqhlyqp.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>wzmmz9fp6w.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>yclnxrl5pm.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>t38b2kh725.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>7ug5zh24hu.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>gta9lk7p23.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>vutu7akeur.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>y5ghdn5j9k.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>n6fk4nfna4.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>v9wttpbfk9.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>n38lu8286q.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>47vh23rqq4.skadnetwork</string>
+			</dict>
+			<dict>
+				<key>SKAdNetworkIdentifier</key>
+				<string>488r3q3dtq.skadnetwork</string>
+			</dict>
+		</array>
+
+		<!-- App Tracking Transparency (ATT) İzni -->
+		<key>NSUserTrackingUsageDescription</key>
+		<string>Size özel indirim ve fırsat bildirimleri ile kişiselleştirilmiş reklam deneyimi sunabilmemiz için izin vermenizi rica ederiz.</string>
+
+		<!-- Fotoğraf Galerisi Erişimi (Profil fotoğrafı seçimi) -->
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Profil fotoğrafınızı seçmek için fotoğraf galerinize erişmemiz gerekiyor.</string>
+		<string>Profil fotoğrafınızı seçmek ve profilinizi özelleştirmek için fotoğraf galerinize erişim izni gereklidir.</string>
 	</dict>
 </plist>

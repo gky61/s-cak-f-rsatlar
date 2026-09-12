@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:url_launcher/url_launcher.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
@@ -537,6 +538,18 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
                             textMain: textMain,
                             textSub: textSub,
                             onTap: () async {
+                              if (defaultTargetPlatform == TargetPlatform.iOS) {
+                                final appStoreUrl = Uri.parse('https://apps.apple.com/app/firsatkolik/id6470000000');
+                                final itmsUrl = Uri.parse('itms-apps://apps.apple.com/app/firsatkolik/id6470000000');
+                                try {
+                                  if (await canLaunchUrl(itmsUrl)) {
+                                    await launchUrl(itmsUrl, mode: LaunchMode.externalApplication);
+                                  } else if (await canLaunchUrl(appStoreUrl)) {
+                                    await launchUrl(appStoreUrl, mode: LaunchMode.externalApplication);
+                                  }
+                                } catch (_) {}
+                                return;
+                              }
                               const packageName = 'com.sicakfirsatlar.sicak_firsatlar';
                               final playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=$packageName');
                               final marketUrl = Uri.parse('market://details?id=$packageName');

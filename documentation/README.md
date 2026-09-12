@@ -306,6 +306,8 @@ pm2 logs prod-bot
 ```
 
 ### 📚 İlgili Yayın ve Süreç Dokümanları:
+* 🔗 [iOS TestFlight ve CI/CD Dağıtım Rehberi](file:///d:/firsatkolik/documentation/yayin-ve-surec/ios_testflight_ve_ci_cd_kurulum_rehberi.md) — Sıfır Mac ile GitHub Actions (macOS M2) üzerinden TestFlight dağıtım el kitabı.
+* 🔗 [iOS Production ve Mimari Kontrol Rehberi](file:///d:/firsatkolik/documentation/yayin-ve-surec/ios_production_ve_mimari_kontrol_rehberi.md) — Uçtan uca iOS uyumluluk denetimi, APNs mimarisi ve App Store onay checklist'i.
 * 🔗 [Android Production Çıkış ve Büyüme Yol Haritası](file:///d:/firsatkolik/documentation/yayin-ve-surec/firsatkolik_production_roadmap.md) — 7 fazlık kapsamlı Google Play yayın el kitabı.
 * 🔗 [Production Süreç Takip Dokümanı (Progress Report)](file:///d:/firsatkolik/documentation/yayin-ve-surec/production_progress.md) — Tamamlanan fazlar, Keystore ve kalan Play Console adımları.
 
@@ -393,8 +395,10 @@ documentation/
 ├── 📁 web-ve-domain/                                         # Resmi Web Vitrini, Domain & Hosting Altyapısı
 │   └── 📄 domain_ve_web_showcase_rehberi.md                  # [MASTER KONTRAT] firsatkolik.app, Cloudflare DNS, SSL & Amazon Yasal Uyum Rehberi
 │
-└── 📁 yayin-ve-surec/                                        # Google Play Store Yayın & İlerleme
-    ├── 📄 firsatkolik_production_roadmap.md                  # 7 Fazlık Google Play Production Çıkış ve Büyüme Rehberi
+└── 📁 yayin-ve-surec/                                        # Store Yayın, iOS Uyumluluk & İlerleme
+    ├── 📄 ios_testflight_ve_ci_cd_kurulum_rehberi.md         # [YENİ] Sıfır Mac ile GitHub Actions & TestFlight Dağıtım El Kitabı
+    ├── 📄 ios_production_ve_mimari_kontrol_rehberi.md        # [YENİ] Uçtan Uca iOS Uyumluluk, Checklist ve App Store Yayın Rehberi
+    ├── 📄 firsatkolik_production_roadmap.md                  # 7 Fazlık Production Çıkış ve Büyüme Rehberi
     └── 📄 production_progress.md                             # Canlıya Geçiş Süreç Takip ve Tamamlanan Fazlar Raporu
 ```
 

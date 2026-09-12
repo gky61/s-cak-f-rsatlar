@@ -93,9 +93,9 @@ class NotificationService {
     
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
     const initSettings = InitializationSettings(
       android: androidSettings,
@@ -488,7 +488,33 @@ class NotificationService {
         } catch (_) {}
       }
 
-      String? token = await _messaging.getToken(vapidKey: kIsWeb ? null : null);
+      // iOS: APNs token hazır olmadan getToken çağrılırsa 'apns-token-not-set' fırlatır
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+        try {
+          String? apnsToken = await _messaging.getAPNSToken();
+          int retry = 0;
+          while (apnsToken == null && retry < 5) {
+            _log('⏳ iOS: APNs token bekleniyor... (${retry + 1}/5)');
+            await Future.delayed(const Duration(milliseconds: 1000));
+            apnsToken = await _messaging.getAPNSToken();
+            retry++;
+          }
+          if (apnsToken != null) {
+            _log('✅ iOS: APNs token hazır: ${apnsToken.substring(0, min(10, apnsToken.length))}...');
+          } else {
+            _log('⚠️ iOS: APNs token henüz hazır değil (simülatör veya izin bekleniyor), devam ediliyor');
+          }
+        } catch (apnsErr) {
+          _log('⚠️ iOS APNs token alma hatası: $apnsErr');
+        }
+      }
+
+      String? token;
+      try {
+        token = await _messaging.getToken(vapidKey: kIsWeb ? null : null);
+      } catch (tokenErr) {
+        _log('⚠️ FCM getToken hatası: $tokenErr');
+      }
 
       // Token boş geldiyse önbelleği silip tekrar almayı dene
       if (token == null && !kIsWeb) {
@@ -557,6 +583,18 @@ class NotificationService {
     } catch (e) {
       _log('❌ FCM Token kaydetme hatası: $e');
       if (!kIsWeb) rethrow;
+    }
+  }
+
+  /// iOS ve Android bildirim merkezini ve rozet sayısını temizle
+  Future<void> clearBadgeAndNotifications() async {
+    try {
+      if (!kIsWeb) {
+        await _localNotifications.cancelAll();
+        _log('🧹 Bildirim merkezi ve rozetler temizlendi.');
+      }
+    } catch (e) {
+      _log('⚠️ clearBadgeAndNotifications hatası: $e');
     }
   }
   
@@ -802,7 +840,14 @@ class NotificationService {
         id,
         '👮‍♂️ $title',
         body,
-        const NotificationDetails(android: androidDetails),
+        const NotificationDetails(
+          android: androidDetails,
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
         payload: 'admin_deal:$dealId',
       );
       _log('✅ Admin bildirimi gösterildi: $dealId');
@@ -1642,7 +1687,14 @@ class NotificationService {
         notifId,
         title,
         body,
-        NotificationDetails(android: androidDetails),
+        NotificationDetails(
+          android: androidDetails,
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
         payload: payload,
       );
     } catch (e) {
