@@ -64,6 +64,9 @@ dev_dependencies:
   flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.3.10
 
+dependency_overrides:
+  google_sign_in_ios: 5.7.8
+
 flutter:
   uses-material-design: true
   
