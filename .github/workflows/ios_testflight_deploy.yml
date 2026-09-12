@@ -58,6 +58,8 @@ jobs:
           flutter config --no-enable-swift-package-manager
           flutter pub get
           flutter precache --ios
+          python3 ios_ci/scripts/patch_modular_headers.py
+
 
       # 5. iOS Uyumluluk Birim Testlerini Koş
       - name: 🧪 Run iOS Compatibility Tests
@@ -97,6 +99,9 @@ jobs:
 
           # TestFlight için daima kayıtlı com.firsatkolik.app kimliğini kullan
           sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com\.sicakfirsatlar\.sicakFirsatlar;/PRODUCT_BUNDLE_IDENTIFIER = com.firsatkolik.app;/g" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+
+          # Xcode 16 modüler header uyumluluğunu derleme öncesi garanti et
+          python3 ios_ci/scripts/patch_modular_headers.py
 
           flutter build ipa \
             --dart-define=FLAVOR=${{ inputs.flavor }} \
