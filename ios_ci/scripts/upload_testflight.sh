@@ -4,17 +4,25 @@ set -e
 # ==============================================================================
 # FırsatKolik iOS CI/CD — App Store Connect / TestFlight IPA Yükleme Betiği
 # ==============================================================================
-# 1. Öncelikli Yöntem: Fastlane pilot / upload_to_testflight (App Store Connect API v1)
-#    - Apple'ın modern REST API standardını kullanır.
-#    - xcrun altool deprecation uyarılarından ve ağ kopmalarından etkilenmez.
-#    - skip_waiting_for_build_processing ile 10x macOS kotasını korur.
-# 2. İkincil / Yedek Yöntem: xcrun altool (Legacy Fallback)
-# ==============================================================================
 
 IPA_PATH="$1"
 
 if [ -z "$IPA_PATH" ] || [ ! -f "$IPA_PATH" ]; then
-  echo "❌ Hata: Yüklenecek .ipa dosyası bulunamadı: $IPA_PATH"
+  echo "❌ HATA: Yüklenecek .ipa dosyası bulunamadı: $IPA_PATH"
+  exit 1
+fi
+
+echo "🔍 [0/3] App Store Connect kimlik bilgileri kontrol ediliyor..."
+if [ -z "$APP_STORE_CONNECT_KEY_ID" ]; then
+  echo "❌ HATA: APP_STORE_CONNECT_KEY_ID secret'ı boş veya tanımlanmamış!"
+  exit 1
+fi
+if [ -z "$APP_STORE_CONNECT_ISSUER_ID" ]; then
+  echo "❌ HATA: APP_STORE_CONNECT_ISSUER_ID secret'ı boş veya tanımlanmamış!"
+  exit 1
+fi
+if [ -z "$APP_STORE_CONNECT_PRIVATE_KEY" ]; then
+  echo "❌ HATA: APP_STORE_CONNECT_PRIVATE_KEY secret'ı boş veya tanımlanmamış!"
   exit 1
 fi
 
@@ -32,8 +40,7 @@ if command -v fastlane &> /dev/null; then
   echo "✅ Fastlane tespit edildi. App Store Connect API üzerinden TestFlight'a yükleniyor..."
   export IPA_FILE="$IPA_PATH"
   
-  if fastlane --version > /dev/null 2>&1; then
-    fastlane beta --fastfile ios_ci/Fastfile
+  if fastlane beta --fastfile ios_ci/Fastfile; then
     echo "🎉 Tebrikler! Fastlane ile FırsatKolik TestFlight'a başarıyla yüklendi!"
     exit 0
   else

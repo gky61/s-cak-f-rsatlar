@@ -1,0 +1,7 @@
+# Ensure shell scripts and config files always use Unix (LF) line endings
+*.sh text eol=lf
+*.plist text eol=lf
+*.rb text eol=lf
+Fastfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
