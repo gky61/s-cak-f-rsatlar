@@ -48,7 +48,9 @@ jobs:
 
       # 3. Bağımlılıkları Yükle
       - name: 📦 Install Flutter Dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          flutter precache --ios
 
       # 4. iOS Uyumluluk Birim Testlerini Koş
       - name: 🧪 Run iOS Compatibility Tests
@@ -61,18 +63,11 @@ jobs:
           path: |
             ios/Pods
             ~/Library/Caches/CocoaPods
-          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile') }}
           restore-keys: |
             ${{ runner.os }}-pods-
 
-      # 6. CocoaPods Bağımlılıklarını Kur
-      - name: 🍎 Install CocoaPods
-        run: |
-          cd ios
-          pod install
-          cd ..
-
-      # 7. Apple Dağıtım Sertifikası ve Keychain Kurulumu
+      # 6. Apple Dağıtım Sertifikası ve Keychain Kurulumu
       - name: 🔐 Setup Apple Keychain & Certificates
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -82,7 +77,7 @@ jobs:
           chmod +x ios_ci/scripts/setup_keychain.sh
           ./ios_ci/scripts/setup_keychain.sh
 
-      # 8. iOS IPA Paketini Derle
+      # 7. iOS IPA Paketini Derle (Flutter otomatik olarak Generated.xcconfig üretir ve pod install'ı yönetir)
       - name: 🔨 Build iOS IPA (${{ inputs.flavor }})
         run: |
           flutter build ipa \
@@ -91,7 +86,7 @@ jobs:
             --release \
             --export-options-plist=ios_ci/ExportOptions_${{ inputs.flavor }}.plist
 
-      # 9. Derlenen IPA Dosyasını GitHub Artifact Olarak Sakla
+      # 8. Derlenen IPA Dosyasını GitHub Artifact Olarak Sakla
       - name: 💾 Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -99,7 +94,7 @@ jobs:
           path: build/ios/ipa/*.ipa
           retention-days: 14
 
-      # 10. Apple TestFlight'a Yükle (Fastlane + App Store Connect API)
+      # 9. Apple TestFlight'a Yükle (Fastlane + App Store Connect API)
       - name: 🚀 Upload to Apple TestFlight
         if: ${{ inputs.upload_to_testflight }}
         env:
