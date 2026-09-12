@@ -48,7 +48,6 @@ app.*.map.json
 # Firebase
 **/google-services.json
 **/GoogleService-Info.plist
-**/firebase_options.dart
 firebase_key.json
 .env
 functions/.runtimeconfig.json
