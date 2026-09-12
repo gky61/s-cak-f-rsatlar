@@ -77,19 +77,16 @@ jobs:
           chmod +x ios_ci/scripts/setup_keychain.sh
           bash ios_ci/scripts/setup_keychain.sh
 
-      # 7. iOS IPA Paketini Derle (Flutter varsayılan Runner şemasını kullanır, flavor Dart define ile yönetilir)
+      # 7. iOS IPA Paketini Derle (Flutter varsayılan Runner şemasını kullanır, ortam FLAVOR dart-define ile seçilir)
       - name: 🔨 Build iOS IPA (${{ inputs.flavor }})
         run: |
-          if [ "${{ inputs.flavor }}" = "prod" ]; then
-            BUNDLE_ID="com.firsatkolik.app"
-          else
-            BUNDLE_ID="com.sicakfirsatlar.sicakFirsatlar"
-          fi
-          echo "Building iOS for flavor: ${{ inputs.flavor }} (Bundle ID: $BUNDLE_ID)"
+          echo "=================================================================="
+          echo "Building iOS IPA for flavor: ${{ inputs.flavor }}"
+          echo "Apple Bundle Identifier: com.firsatkolik.app (TestFlight Resmi Kimliği)"
+          echo "=================================================================="
 
-          # Xcode projesinde Bundle Identifier'ı hedeflenen ortama göre dinamik doğrula
-          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com\.sicakfirsatlar\.sicakFirsatlar;/PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID};/g" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
-          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com\.firsatkolik\.app;/PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID};/g" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+          # TestFlight için daima kayıtlı com.firsatkolik.app kimliğini kullan
+          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com\.sicakfirsatlar\.sicakFirsatlar;/PRODUCT_BUNDLE_IDENTIFIER = com.firsatkolik.app;/g" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
 
           flutter build ipa \
             --dart-define=FLAVOR=${{ inputs.flavor }} \

@@ -4,6 +4,8 @@
 <dict>
 	<key>method</key>
 	<string>app-store</string>
+	<key>teamID</key>
+	<string>973W9DTDY9</string>
 	<key>signingStyle</key>
 	<string>manual</string>
 	<key>stripSwiftSymbols</key>
@@ -16,8 +18,8 @@
 	<string>export</string>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.sicakfirsatlar.sicakFirsatlar</key>
-		<string>SicakFirsatlar_AppStore_Profile</string>
+		<key>com.firsatkolik.app</key>
+		<string>FirsatKolik AppStore Profile</string>
 	</dict>
 </dict>
 </plist>
