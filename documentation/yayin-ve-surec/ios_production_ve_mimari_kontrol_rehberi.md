@@ -211,6 +211,15 @@ import UserNotifications
 }
 ```
 
+### 3.4.1 🛡️ iOS Yaşam Döngüsü (Lifecycle) & Swipe-to-Kill Stabilizasyonu
+- **Deneysel UIScene Uyarısı:** Xcode derleme çıktısında görülen `UIScene lifecycle support will soon be required` uyarısı yalnızca gelecekteki çok pencereli iPadOS uygulamalarına yönelik bir bilgilendirmedir. Tek pencereli iPhone uygulamalarında `UIScene` zorunlu değildir.
+- **Çökme Önleme:** `Info.plist` içine `UIApplicationSceneManifest` ve `AppDelegate.swift` içine `FlutterImplicitEngineDelegate` eklendiğinde; kullanıcı uygulamayı çoklu görev yöneticisinden (App Switcher) yukarı kaydırıp kapattığında (swipe-to-kill), UIKit süreci temizce sonlandırmak yerine önce `sceneDidDisconnect` tetikleyip pencereyi siler. Bu sırada arka plandaki eklentiler (Google Mobile Ads, Firebase Messaging vb.) deallocated belleğe eriştiği için `EXC_BAD_ACCESS` / `SIGSEGV` yerel çökmesi meydana gelir ve TestFlight "Fırsatkolik Çöktü" modalı gösterir.
+- **Kalıcı Çözüm:** `UIApplicationSceneManifest` kaldırılmış, `AppDelegate` standart ve stabil `FlutterAppDelegate` yapısında tutulmuştur. Swipe-to-kill anında işletim sistemi süreci doğrudan `SIGKILL` ile temizler, çökme oluşmaz.
+
+### 3.4.2 📤 iOS / iPadOS Natif Paylaşım Mimarisi (`ShareHelper` & `sharePositionOrigin`)
+- **Popover Zorunluluğu:** iOS ve iPadOS üzerinde Apple `UIActivityViewController`'ı popover olarak sunarken pencerenin açılacağı kaynak koordinatını (`sharePositionOrigin`) zorunlu tutar. Bu parametre verilmezse veya sıfır (`{{0,0}, {0,0}}`) kalırsa `CGRectIsEmpty` denetimi nedeniyle `PlatformException` fırlatılır.
+- **Çözüm:** `lib/utils/share_helper.dart` içindeki `ShareHelper.calculateOrigin(context)` metodu, tıklanan butonun RenderBox koordinatlarını (`localToGlobal`) dinamik olarak hesaplar. Buton henüz render olmamışsa veya sheet kapatılmışsa ekran boyutunu baz alan güvenli ve sıfır olmayan bir Rect üreterek `ShareHelper.shareText` ve `ShareHelper.shareFiles` ile paylaşımı iOS'ta hatasız çalıştırır.
+
 ---
 
 ## 4. 🔔 APNs & Firebase Cloud Messaging (FCM HTTP v1) iOS Mimarisi

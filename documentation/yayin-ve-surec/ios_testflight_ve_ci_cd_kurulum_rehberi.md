@@ -344,6 +344,14 @@ Uygulama açıldıktan sonra aşağıdaki 11 testi sırayla gerçekleştirin:
 * **Neden:** iOS'ta Google Sign-In SDK'sının dönüş adresi olan `REVERSED_CLIENT_ID` şeması `Info.plist` içinde `CFBundleURLSchemes` altında tanımlı değildir veya sahte bir değer içeriyordur.
 * **Çözüm:** Firebase Console'da gerçek iOS uygulaması (`com.firsatkolik.app`) oluşturulup `REVERSED_CLIENT_ID` değeri `Info.plist` içerisine işlenmiştir. (Not: Android'in aksine iOS'ta Keystore SHA-1 parmak izi gerekmez; iOS güvenliği URL şeması ve Bundle ID üzerinden doğrular).
 
+### 6. Hata: `Çoklu Görevden (App Switcher) Kaydırıp Kapatınca (Swipe-to-Kill) "Fırsatkolik Çöktü" Uyarısı`
+* **Neden:** Xcode derleme uyarısını (`UIScene lifecycle support will soon be required`) bastırmak için eklenen deneysel `UIApplicationSceneManifest` (`FlutterSceneDelegate`) ve `FlutterImplicitEngineDelegate`, uygulama çoklu görevden kapatılırken UIKit tarafından `sceneDidDisconnect` tetiklenmesine ve Flutter motoru ile pencerenin (`UIWindow`) eklentilerden önce bellekten silinmesine neden olur. Arka planda dinlemede olan yerel eklentiler serbest bırakılmış belleğe (`EXC_BAD_ACCESS` / `SIGSEGV`) eriştiğinde sistem çökmesi oluşur ve TestFlight bu kilitlenmeyi yakalayıp ekrana uyarı basar. (Dart seviyesinde hata oluşmadığı için Admin paneline log düşmez).
+* **Çözüm:** `ios/Runner/Info.plist` içerisinden `UIApplicationSceneManifest` kaldırılmış, `ios/Runner/AppDelegate.swift` stabil `FlutterAppDelegate` mimarisine döndürülmüştür. Bu sayede kullanıcı uygulamayı yukarı kaydırarak kapattığında iOS çekirdeği süreci doğrudan temiz `SIGKILL` ile sonlandırır ve çökme uyarısı tamamen engellenir.
+
+### 7. Hata: `Fırsat veya Katalog Paylaş Butonuna Basınca PlatformException (sharePositionOrigin: argument must be set...) Hatası`
+* **Neden:** Android'in aksine iOS ve iPadOS üzerinde `UIActivityViewController` (popover menüsü), paylaşım penceresinin ekrandaki hangi koordinattan/butondan tetiklendiğini bilmek zorundadır. Flutter `share_plus` paketinde `sharePositionOrigin` parametresi boş veya sıfır (`{{0,0}, {0,0}}`) kaldığında iOS `CGRectIsEmpty` denetimine takılarak `PlatformException` fırlatır.
+* **Çözüm:** `lib/utils/share_helper.dart` içerisinde evrensel `ShareHelper` sınıfı oluşturulmuştur. Tıklanan butonun mutlak koordinatlarını (`RenderBox.localToGlobal`) dinamik olarak hesaplar; buton bulunamazsa ekran boyutuna göre güvenli ve sıfır olmayan bir Rect üreterek `ShareHelper.shareText` ve `ShareHelper.shareFiles` ile paylaşımı iOS'ta hatasız açar.
+
 ---
 
 ## 🏁 Özet ve Sonuç
