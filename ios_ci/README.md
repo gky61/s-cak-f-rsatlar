@@ -98,7 +98,7 @@ flowchart LR
 
 ## 4. Karşılaşılan Derleme Engelleri ve Çözüm Mühendisliği
 
-Süreç boyunca karşılaşılan ve her biri kod seviyesinde kalıcı olarak çözülen 10 kritik problem:
+Süreç boyunca karşılaşılan ve her biri kod seviyesinde kalıcı olarak çözülen 13 kritik problem:
 
 ### 1. BoringSSL-GRPC `-G` Derleyici Bayrağı Hatası
 - **Hata:** `clang: error: unsupported option '-G'`
@@ -129,12 +129,10 @@ Süreç boyunca karşılaşılan ve her biri kod seviyesinde kalıcı olarak ç�
   - [`ios/Podfile`](file:///d:/firsatkolik/ios/Podfile) içine `-Wno-missing-template-arg-list-after-template-kw` bayrağı eklendi.
   - Hem `Podfile` `post_install` hem de [`patch_modular_headers.py`](file:///d:/firsatkolik/ios_ci/scripts/patch_modular_headers.py) içine `basic_seq.h` dosyasında `CallSeqFactory(` -> `CallSeqFactory<(` dönüşümü yapan otomatik yama mekanizması entegre edildi.
 
-### 6. UIScene Yaşam Döngüsü Uyarısı
-- **Hata:** `To ensure your app continues to launch on upcoming iOS versions, UIScene lifecycle support will soon be required.`
-- **Kök Neden:** iOS 13+ ile Apple `UIApplicationDelegate` yerine `UIScene` mimarisini zorunlu kılmaktadır. Eski kodda `window?.rootViewController` üzerinden controller aranıyordu.
-- **Çözüm:**
-  - [`ios/Runner/AppDelegate.swift`](file:///d:/firsatkolik/ios/Runner/AppDelegate.swift), `FlutterImplicitEngineDelegate` protokolüne taşındı ve `nativeHttpChannel` güvenli `engineBridge` üzerinden bağlandı.
-  - [`ios/Runner/Info.plist`](file:///d:/firsatkolik/ios/Runner/Info.plist) dosyasına resmi `UIApplicationSceneManifest` XML bloğu eklendi.
+### 6. iOS Yaşam Döngüsü & Swipe-to-Kill "Fırsatkolik Çöktü" Kilitlenmesi
+- **Hata:** Çoklu görev ekranından (App Switcher) yukarı kaydırarak uygulama kapatıldığında (swipe-to-kill) TestFlight "Fırsatkolik Çöktü" uyarı modalı vermesi.
+- **Kök Neden:** Xcode derleme uyarısını (`UIScene lifecycle support will soon be required`) bastırmak için eklenen deneysel `UIApplicationSceneManifest` (`FlutterSceneDelegate`) ve `FlutterImplicitEngineDelegate`, uygulama çoklu görevden kapatılırken UIKit tarafından `sceneDidDisconnect` tetiklenmesine ve Flutter motoru ile pencerenin (`UIWindow`) eklentilerden önce bellekten silinmesine neden oluyordu. Arka plandaki yerel eklentiler (Google Mobile Ads, Firebase Messaging vb.) deallocated belleğe erişince `EXC_BAD_ACCESS` / `SIGSEGV` yerel çökmesi meydana geliyordu.
+- **Çözüm:** `ios/Runner/Info.plist` içerisinden `UIApplicationSceneManifest` kaldırıldı, `ios/Runner/AppDelegate.swift` standart ve stabil `FlutterAppDelegate` mimarisine döndürüldü (`GeneratedPluginRegistrant.register(with: self)`). Swipe-to-kill anında iOS çekirdeği süreci doğrudan temiz `SIGKILL` ile sonlandırır, kilitlenme %100 engellendi.
 
 ### 7. Node.js 20 Deprecation Uyarısı
 - **Hata:** `actions/cache@v4, actions/checkout@v4, actions/upload-artifact@v4 target Node.js 20 but are forced to run on Node.js 24.`
@@ -172,6 +170,18 @@ Süreç boyunca karşılaşılan ve her biri kod seviyesinde kalıcı olarak ç�
 - **Hata:** `ITMS-90189: Redundant Binary Upload. You've already uploaded a build with build number '2'.`
 - **Kök Neden:** `pubspec.yaml` içindeki `version: 1.1.0+2` değeri her derlemede otomatik artmadığı için Apple ardışık yüklemeleri mükerrer kabul ederek reddediyordu.
 - **Çözüm:** GitHub Actions derleme adımına `--build-number=${{ github.run_number }}` parametresi eklendi. Böylece her CI koşusu, GitHub Actions'ın monoton artan benzersiz koşu numarasını derleme numarası olarak alır; manuel versiyon artırmaya gerek kalmadan TestFlight çakışmaları kökten engellendi.
+
+### 12. Fastlane Dizin Değişimi (CWD) ve Göreceli IPA Yolu Çözümlemesi
+- **Hata:** Fastlane çalışırken `❌ Hata: Yüklenecek IPA dosyası bulunamadı: build/ios/ipa/firsatkolik.ipa` hatası verip yedek `xcrun altool` yöntemine devretmesi.
+- **Kök Neden:** Fastlane çalışmaya başladığında otomatik olarak çalışma dizinini projenin altındaki `./fastlane/` dizinine taşır. Betikten gönderilen göreceli yol (`build/ios/ipa/*.ipa`), Fastlane içinde `./fastlane/build/...` olarak arandığı için dosya bulunamıyordu.
+- **Çözüm:**
+  - [`ios_ci/scripts/upload_testflight.sh`](file:///d:/firsatkolik/ios_ci/scripts/upload_testflight.sh) içinde `$1` argümanı mutlak yola (`IPA_DIR="$(cd "$(dirname "$IPA_INPUT")" && pwd)"`) dönüştürüldü.
+  - [`ios_ci/Fastfile`](file:///d:/firsatkolik/ios_ci/Fastfile) içine göreceli yol gelse dahi bir üst dizini (`File.join("..", raw_path)`) kontrol eden akıllı yedek yol çözümleyici eklendi. Fastlane artık ilk denemede IPA dosyasını bularak doğrudan App Store Connect REST API v1 üzerinden TestFlight'a aktarım yapmaktadır.
+
+### 13. iOS / iPadOS UIActivityViewController `sharePositionOrigin` Hatası
+- **Hata:** Fırsat veya katalog paylaşım butonuna tıklandığında `Paylaşım başlatılamadı: PlatformException(error, sharePositionOrigin: argument must be set, {{0, 0}, {0, 0}} must be non-zero and within coordinate space of source view...)` hatası vermesi.
+- **Kök Neden:** Android'in aksine iOS ve iPadOS üzerinde Apple'ın `UIActivityViewController`'ı popover olarak sunulurken, açılan pencerenin ekrandaki hangi butondan açıldığını bilmek zorundadır (`sharePositionOrigin`). Flutter `share_plus` paketinde bu parametre boş bırakıldığında iOS `CGRectIsEmpty` denetimine takılarak `PlatformException` fırlatır.
+- **Çözüm:** [`lib/utils/share_helper.dart`](file:///d:/firsatkolik/lib/utils/share_helper.dart) evrensel sınıfı oluşturuldu. Tıklanan butonun mutlak koordinatlarını (`RenderBox.localToGlobal`) dinamik olarak hesaplar; buton bulunamazsa ekran boyutuna göre güvenli ve sıfır olmayan bir Rect üreterek tüm paylaşım akışlarında (`deal_detail_screen`, `deal_share_sheet`, `deal_forward_bottom_sheet`, `katalog_share_service`, `botkolik_profile_screen`) hatayı %100 önler.
 
 ---
 

@@ -352,6 +352,10 @@ Uygulama açıldıktan sonra aşağıdaki 11 testi sırayla gerçekleştirin:
 * **Neden:** Android'in aksine iOS ve iPadOS üzerinde `UIActivityViewController` (popover menüsü), paylaşım penceresinin ekrandaki hangi koordinattan/butondan tetiklendiğini bilmek zorundadır. Flutter `share_plus` paketinde `sharePositionOrigin` parametresi boş veya sıfır (`{{0,0}, {0,0}}`) kaldığında iOS `CGRectIsEmpty` denetimine takılarak `PlatformException` fırlatır.
 * **Çözüm:** `lib/utils/share_helper.dart` içerisinde evrensel `ShareHelper` sınıfı oluşturulmuştur. Tıklanan butonun mutlak koordinatlarını (`RenderBox.localToGlobal`) dinamik olarak hesaplar; buton bulunamazsa ekran boyutuna göre güvenli ve sıfır olmayan bir Rect üreterek `ShareHelper.shareText` ve `ShareHelper.shareFiles` ile paylaşımı iOS'ta hatasız açar.
 
+### 8. Hata: `Fastlane: Yüklenecek IPA dosyası bulunamadı (build/ios/ipa/*.ipa) Hatası & altool Fallback`
+* **Neden:** Fastlane çalışmaya başladığında mevcut çalışma dizinini (CWD) otomatik olarak `./fastlane/` dizinine taşır. CI betiğinden lane parametresi olarak göreceli yol (`build/ios/ipa/*.ipa`) aktarıldığında Fastlane dosyayı `./fastlane/build/...` olarak arar ve bulamaz. Bu durum derlemenin Apple tarafından 1 Kasım 2023'te kullanımdan kaldırılmış (deprecated) `xcrun altool` yedek mekanizmasına devretmesine yol açar.
+* **Çözüm:** `ios_ci/scripts/upload_testflight.sh` içinde `$1` argümanı Fastlane'e iletilmeden önce mutlak yola (`IPA_DIR="$(cd "$(dirname "$IPA_INPUT")" && pwd)"`) dönüştürülmüştür. Ayrıca `ios_ci/Fastfile` içine göreceli yolları bir üst proje kök diziniyle (`File.join("..", raw_path)`) harmanlayan çift katmanlı yol çözümleme mimarisi eklenmiştir. Fastlane artık ilk denemede doğrudan App Store Connect REST API v1 üzerinden TestFlight'a yükleme yapmaktadır.
+
 ---
 
 ## 🏁 Özet ve Sonuç
