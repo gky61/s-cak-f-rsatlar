@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../utils/asset_path_migration.dart';
 import '../screens/message_screen.dart';
 import '../screens/deal_detail/deal_share_sheet.dart';
+import '../utils/share_helper.dart';
 import 'guest_login_bottom_sheet.dart';
 import 'skeletons/chat_list_skeleton.dart';
 
@@ -896,8 +897,9 @@ class _DealForwardBottomSheetState extends State<DealForwardBottomSheet> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
+                        final origin = ShareHelper.calculateOrigin(context);
                         Navigator.pop(context);
-                        DealShareSheet.shareToNativeApps(context, widget.deal);
+                        DealShareSheet.shareToNativeApps(context, widget.deal, sharePositionOrigin: origin);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryColor,

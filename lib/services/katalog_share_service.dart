@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/katalog.dart';
+import '../utils/share_helper.dart';
 
 /// Minimalist ve doğrudan telefonun natif paylaşım ekranını açan Aktüel Katalog Paylaşım Servisi.
 class KatalogShareService {
@@ -137,9 +138,10 @@ class KatalogShareService {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
         }
 
-        await Share.shareXFiles(
+        await ShareHelper.shareFiles(
           [XFile(file.path, mimeType: 'image/jpeg')],
           text: shareCaptionText,
+          context: context,
         );
         return;
       }
@@ -151,6 +153,9 @@ class KatalogShareService {
     if (context.mounted) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
     }
-    await Share.share('$shareCaptionText\n🖼️ Görsel: $currentImageUrl');
+    await ShareHelper.shareText(
+      '$shareCaptionText\n🖼️ Görsel: $currentImageUrl',
+      context: context,
+    );
   }
 }

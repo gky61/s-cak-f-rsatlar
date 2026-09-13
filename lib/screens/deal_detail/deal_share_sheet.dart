@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../models/deal.dart';
+import '../../utils/share_helper.dart';
 import '../../widgets/deal_forward_bottom_sheet.dart';
 
 /// Fırsat Detay ekranı için hem uygulama içi mesajlaşma hem de yerel (natif) paylaşım seçeneklerini sunan servis.
@@ -9,8 +9,12 @@ class DealShareSheet {
   DealShareSheet._();
 
   /// Fırsat Paylaşımını doğrudan telefonun kendi natif paylaşım ekranında (WhatsApp, Telegram vb.) açar.
-  static Future<void> showShareOptions(BuildContext context, Deal deal) async {
-    await shareToNativeApps(context, deal);
+  static Future<void> showShareOptions(
+    BuildContext context,
+    Deal deal, {
+    Rect? sharePositionOrigin,
+  }) async {
+    await shareToNativeApps(context, deal, sharePositionOrigin: sharePositionOrigin);
   }
 
   /// Doğrudan uygulama içi mesajlaşma iletme ekranını açar.
@@ -112,7 +116,11 @@ class DealShareSheet {
   }
 
   /// Fırsatı tek tıkla doğrudan telefonun kendi natif paylaşım ekranında paylaşır (WhatsApp, Telegram vb.).
-  static Future<void> shareToNativeApps(BuildContext context, Deal deal) async {
+  static Future<void> shareToNativeApps(
+    BuildContext context,
+    Deal deal, {
+    Rect? sharePositionOrigin,
+  }) async {
     final link = deal.displayUrl.trim().isNotEmpty 
         ? deal.displayUrl.trim() 
         : 'https://firsatkolik.app/deal/${deal.id}';
@@ -134,9 +142,11 @@ $link
 📱 FIRSATKOLİK ile incele: https://firsatkolik.app/deal/${deal.id}''';
 
     try {
-      await Share.share(
+      await ShareHelper.shareText(
         shareText,
         subject: deal.title,
+        context: context,
+        sharePositionOrigin: sharePositionOrigin,
       );
     } catch (e) {
       debugPrint('Fırsat paylaşım hatası: $e');

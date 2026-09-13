@@ -61,11 +61,11 @@ jobs:
           python3 ios_ci/scripts/patch_modular_headers.py
 
 
-      # 5. iOS Uyumluluk ve Kimlik Doğrulama Birim Testlerini Koş
+      # 5. iOS Uyumluluk, Paylaşım ve Kimlik Doğrulama Birim Testlerini Koş
       - name: 🧪 Run iOS Compatibility & Auth Tests
         run: |
           cp ios/Runner/GoogleService-Info-prod.plist ios/Runner/GoogleService-Info.plist
-          flutter test test/ios_compatibility_test.dart test/ios_auth_test.dart
+          flutter test test/ios_compatibility_test.dart test/ios_auth_test.dart test/share_helper_test.dart
 
       # 6. CocoaPods Önbelleği (Build süresini yarı yarıya düşürür, kotayı korur - Node 24)
       - name: ⚡ Cache CocoaPods

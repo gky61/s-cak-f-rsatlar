@@ -1,7 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
+import '../utils/share_helper.dart';
 
 import '../models/deal.dart';
 import '../services/auth_service.dart';
@@ -195,9 +195,10 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
 
   void _shareBotkolik() {
     HapticFeedback.lightImpact();
-    Share.share(
+    ShareHelper.shareText(
       '⚡ Botkolik ile tanış! FırsatKolik\'in yorulmaz yapay zeka veri avcısı, internetteki en sıcak indirimleri anında yakalıyor. Sen de fırsatları kaçırma! 🚀\nhttps://firsatkolik.app',
       subject: 'Botkolik - Veri Avcısı, Fırsat Mimarı',
+      context: context,
     );
   }
 

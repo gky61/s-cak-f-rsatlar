@@ -1644,10 +1644,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildGlassCircleButton(
-                        icon: Icons.share_rounded,
-                        isDark: isDark,
-                        onTap: () => DealShareSheet.shareToNativeApps(context, deal),
+                      Builder(
+                        builder: (btnContext) => _buildGlassCircleButton(
+                          icon: Icons.share_rounded,
+                          isDark: isDark,
+                          onTap: () => DealShareSheet.shareToNativeApps(btnContext, deal),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       // Popup Menu
