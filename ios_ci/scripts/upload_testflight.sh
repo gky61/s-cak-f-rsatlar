@@ -33,6 +33,10 @@ KEY_FILE="$API_KEY_DIR/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
 echo "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 chmod 600 "$KEY_FILE"
 
+# xcrun altool için yedek standart dizine de kopyala
+mkdir -p ~/.private_keys
+cp -f "$KEY_FILE" ~/.private_keys/
+
 echo "🏎️ [2/3] TestFlight Yükleme Motoru Başlatılıyor..."
 
 # FASTLANE KULLANIMI (Öncelikli Modern Yöntem)
@@ -40,7 +44,10 @@ if command -v fastlane &> /dev/null; then
   echo "✅ Fastlane tespit edildi. App Store Connect API üzerinden TestFlight'a yükleniyor..."
   export IPA_FILE="$IPA_PATH"
   
-  if fastlane beta --fastfile ios_ci/Fastfile; then
+  mkdir -p fastlane
+  cp -f ios_ci/Fastfile fastlane/Fastfile
+
+  if fastlane ios beta ipa:"$IPA_PATH"; then
     echo "🎉 Tebrikler! Fastlane ile FırsatKolik TestFlight'a başarıyla yüklendi!"
     exit 0
   else
@@ -49,16 +56,7 @@ if command -v fastlane &> /dev/null; then
 fi
 
 # YEDEK YÖNTEM: XCRUN ALTOOL (Fallback)
-echo "📦 [3/3] Yedek Yöntem: xcrun altool ile yükleme deneniyor..."
-
-echo "   -> .ipa doğrulanıyor (altool validation)..."
-xcrun altool --validate-app \
-  -f "$IPA_PATH" \
-  -t ios \
-  --apiKey "$APP_STORE_CONNECT_KEY_ID" \
-  --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
-
-echo "   -> .ipa yükleniyor (altool upload)..."
+echo "📦 [3/3] Yedek Yöntem: xcrun altool ile doğrudan yükleme deneniyor..."
 xcrun altool --upload-app \
   -f "$IPA_PATH" \
   -t ios \
