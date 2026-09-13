@@ -69,9 +69,17 @@ void main() {
       expect(infoPlist.contains('NSUserTrackingUsageDescription'), isTrue);
       expect(infoPlist.contains('NSPhotoLibraryUsageDescription'), isTrue);
       expect(infoPlist.contains('ITSAppUsesNonExemptEncryption'), isTrue);
-      expect(infoPlist.contains('UIApplicationSceneManifest'), isTrue);
+      expect(infoPlist.contains('UIApplicationSceneManifest'), isFalse,
+          reason: 'UIApplicationSceneManifest must NOT be present as experimental UIScene causes swipe-to-kill crash on iOS');
       expect(infoPlist.contains('com.googleusercontent.apps.228657473310-7dlhjuj25p2ov8o5274n3o3759h6gubs'), isTrue);
       expect(infoPlist.contains('com.googleusercontent.apps.560592268193-a70ituj4997v31non78gvno3f5tsked7'), isTrue);
+    });
+
+    test('AppDelegate.swift uses stable FlutterAppDelegate without experimental FlutterImplicitEngineDelegate', () {
+      final appDelegate = File('ios/Runner/AppDelegate.swift').readAsStringSync();
+      expect(appDelegate.contains('class AppDelegate: FlutterAppDelegate'), isTrue);
+      expect(appDelegate.contains('FlutterImplicitEngineDelegate'), isFalse);
+      expect(appDelegate.contains('GeneratedPluginRegistrant.register(with: self)'), isTrue);
     });
 
     test('GoogleService-Info.plist exists and contains valid iOS Google configuration', () {
