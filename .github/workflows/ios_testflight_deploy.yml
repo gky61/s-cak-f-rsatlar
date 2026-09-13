@@ -112,6 +112,7 @@ jobs:
           fi
 
           flutter build ipa \
+            --build-number=${{ github.run_number }} \
             --dart-define=FLAVOR=${{ inputs.flavor }} \
             --release \
             --export-options-plist=ios_ci/ExportOptions_${{ inputs.flavor }}.plist
