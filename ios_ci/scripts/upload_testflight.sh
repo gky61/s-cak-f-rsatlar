@@ -5,12 +5,19 @@ set -e
 # FırsatKolik iOS CI/CD — App Store Connect / TestFlight IPA Yükleme Betiği
 # ==============================================================================
 
-IPA_PATH="$1"
+IPA_INPUT="$1"
 
-if [ -z "$IPA_PATH" ] || [ ! -f "$IPA_PATH" ]; then
-  echo "❌ HATA: Yüklenecek .ipa dosyası bulunamadı: $IPA_PATH"
+if [ -z "$IPA_INPUT" ] || [ ! -f "$IPA_INPUT" ]; then
+  echo "❌ HATA: Yüklenecek .ipa dosyası bulunamadı: $IPA_INPUT"
   exit 1
 fi
+
+# Göreceli yolu mutlak yola (Absolute Path) dönüştür.
+# Fastlane çalışırken çalışma dizinini otomatik './fastlane' olarak değiştirir.
+# Mutlak yol verilmezse Fastlane './fastlane/build/...' arar ve dosyayı bulamaz!
+IPA_DIR="$(cd "$(dirname "$IPA_INPUT")" && pwd)"
+IPA_FILENAME="$(basename "$IPA_INPUT")"
+IPA_PATH="$IPA_DIR/$IPA_FILENAME"
 
 echo "🔍 [0/3] App Store Connect kimlik bilgileri kontrol ediliyor..."
 if [ -z "$APP_STORE_CONNECT_KEY_ID" ]; then

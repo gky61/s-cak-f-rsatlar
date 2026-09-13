@@ -10,10 +10,21 @@ default_platform(:ios)
 platform :ios do
   desc "FırsatKolik IPA paketini App Store Connect API v1 ile TestFlight'a yükler"
   lane :beta do |options|
-    ipa_path = options[:ipa] || ENV["IPA_FILE"]
+    raw_path = options[:ipa] || ENV["IPA_FILE"]
+
+    # Göreceli yol verilmişse hem mevcut dizini hem de bir üst proje kök dizinini kontrol et
+    ipa_path = if raw_path.nil?
+      nil
+    elsif File.exist?(File.expand_path(raw_path))
+      File.expand_path(raw_path)
+    elsif File.exist?(File.expand_path(File.join("..", raw_path)))
+      File.expand_path(File.join("..", raw_path))
+    else
+      raw_path
+    end
 
     if ipa_path.nil? || !File.exist?(ipa_path)
-      UI.user_error!("❌ Hata: Yüklenecek IPA dosyası bulunamadı: #{ipa_path}")
+      UI.user_error!("❌ Hata: Yüklenecek IPA dosyası bulunamadı: #{raw_path}")
     end
 
     UI.message("🚀 App Store Connect API anahtarı yapılandırılıyor...")
