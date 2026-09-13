@@ -20,6 +20,8 @@
 	<dict>
 		<key>com.firsatkolik.app</key>
 		<string>FirsatKolik AppStore Profile</string>
+		<key>com.firsatkolik.app.ShareExtension</key>
+		<string>FirsatKolik ShareExtension Profile</string>
 	</dict>
 </dict>
 </plist>

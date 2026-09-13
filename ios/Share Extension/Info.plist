@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AppGroupId</key>
+	<string>group.com.firsatkolik.app</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -22,22 +24,29 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSExtension</key>
 	<dict>
-		<key>NSExtensionPrincipalClass</key>
-		<string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>PHSupportedMediaTypes</key>
+			<array>
+				<string>Image</string>
+			</array>
+			<key>NSExtensionActivationRule</key>
+			<dict>
+				<!-- Web URL ve metin paylaşımlarını kabul et (Trendyol, Hepsiburada, Amazon vb.) -->
+				<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
+				<integer>1</integer>
+				<key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
+				<integer>1</integer>
+				<key>NSExtensionActivationSupportsText</key>
+				<true/>
+				<key>NSExtensionActivationSupportsImageWithMaxCount</key>
+				<integer>10</integer>
+			</dict>
+		</dict>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.share-services</string>
-		<key>NSExtensionActivationRule</key>
-		<dict>
-			<!-- Web URL ve metin paylaşımlarını kabul et (Trendyol, Hepsiburada, Amazon vb.) -->
-			<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
-			<integer>1</integer>
-			<key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
-			<integer>1</integer>
-			<key>NSExtensionActivationSupportsText</key>
-			<true/>
-			<key>NSExtensionActivationSupportsImageWithMaxCount</key>
-			<integer>1</integer>
-		</dict>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
 	</dict>
 </dict>
 </plist>

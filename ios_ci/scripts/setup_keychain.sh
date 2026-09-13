@@ -98,6 +98,45 @@ for plist in ios_ci/ExportOptions_*.plist; do
   fi
 done
 
+# ==================== Share Extension Provisioning Profile ====================
+if [ -n "$SHARE_EXT_PROVISION_PROFILE_BASE64" ]; then
+  echo "📋 [3b/4] Share Extension Provisioning Profile (.mobileprovision) yükleniyor..."
+  
+  SHARE_EXT_PROFILE_PATH="$RUNNER_TEMP/share_ext_profile.mobileprovision"
+  echo "$SHARE_EXT_PROVISION_PROFILE_BASE64" | openssl base64 -d -A -out "$SHARE_EXT_PROFILE_PATH" 2>/dev/null || \
+  echo "$SHARE_EXT_PROVISION_PROFILE_BASE64" | base64 -D -o "$SHARE_EXT_PROFILE_PATH" 2>/dev/null || \
+  echo "$SHARE_EXT_PROVISION_PROFILE_BASE64" | base64 -d > "$SHARE_EXT_PROFILE_PATH" 2>/dev/null || \
+  echo "$SHARE_EXT_PROVISION_PROFILE_BASE64" | base64 --decode > "$SHARE_EXT_PROFILE_PATH"
+
+  if [ -f "$SHARE_EXT_PROFILE_PATH" ] && [ -s "$SHARE_EXT_PROFILE_PATH" ]; then
+    security cms -D -i "$SHARE_EXT_PROFILE_PATH" > "$RUNNER_TEMP/share_ext_profile.plist"
+    
+    SHARE_EXT_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" "$RUNNER_TEMP/share_ext_profile.plist")
+    SHARE_EXT_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" "$RUNNER_TEMP/share_ext_profile.plist")
+    echo "   Share Extension Profile UUID: $SHARE_EXT_UUID"
+    echo "   Share Extension Profile Name: $SHARE_EXT_NAME"
+    
+    cp "$SHARE_EXT_PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/$SHARE_EXT_UUID.mobileprovision
+    
+    # ExportOptions plist dosyalarına Share Extension profil adını enjekte et
+    for plist in ios_ci/ExportOptions_*.plist; do
+      if [ -f "$plist" ]; then
+        /usr/libexec/PlistBuddy -c "Set :provisioningProfiles:com.firsatkolik.app.ShareExtension '$SHARE_EXT_NAME'" "$plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:com.firsatkolik.app.ShareExtension string '$SHARE_EXT_NAME'" "$plist" 2>/dev/null || true
+      fi
+    done
+
+    # project.pbxproj içindeki ShareExtension PROVISIONING_PROFILE_SPECIFIER değerini gerçek profil adıyla güncelle
+    if [ -n "$SHARE_EXT_NAME" ]; then
+      sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = \"FirsatKolik ShareExtension Profile\";/PROVISIONING_PROFILE_SPECIFIER = \"$SHARE_EXT_NAME\";/g" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+    fi
+  else
+    echo "   ⚠️ Share Extension profili boş veya çözümlenemedi. Extension imzalanmadan devam edilecek."
+  fi
+else
+  echo "   ℹ️ SHARE_EXT_PROVISION_PROFILE_BASE64 tanımlanmamış. Share Extension profili atlanıyor."
+fi
+
 # Release ve Debug xcconfig dosyalarına dinamik manuel imzalama ayarlarını enjekte et
 for xcconfig in ios/Flutter/Release.xcconfig ios/Flutter/Debug.xcconfig; do
   if [ -f "$xcconfig" ]; then

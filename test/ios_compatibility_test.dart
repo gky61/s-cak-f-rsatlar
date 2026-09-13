@@ -107,5 +107,48 @@ void main() {
       final applinks = jsonContent['applinks'] as Map<String, dynamic>;
       expect(applinks.containsKey('details'), isTrue);
     });
+
+    test('iOS Share Extension and App Group configuration is valid and synchronized', () {
+      // 1. Runner Entitlements App Group
+      final runnerEntitlements = File('ios/Runner/Runner.entitlements').readAsStringSync();
+      expect(runnerEntitlements.contains('com.apple.security.application-groups'), isTrue);
+      expect(runnerEntitlements.contains('group.com.firsatkolik.app'), isTrue);
+
+      // 2. Runner Info.plist AppGroupId and ShareMedia scheme
+      final runnerInfoPlist = File('ios/Runner/Info.plist').readAsStringSync();
+      expect(runnerInfoPlist.contains('<key>AppGroupId</key>'), isTrue);
+      expect(runnerInfoPlist.contains('<string>group.com.firsatkolik.app</string>'), isTrue);
+      expect(runnerInfoPlist.contains('ShareMedia-com.firsatkolik.app'), isTrue);
+
+      // 3. Share Extension Entitlements
+      final extEntitlementsFile = File('ios/Share Extension/ShareExtension.entitlements');
+      expect(extEntitlementsFile.existsSync(), isTrue);
+      final extEntitlements = extEntitlementsFile.readAsStringSync();
+      expect(extEntitlements.contains('group.com.firsatkolik.app'), isTrue);
+
+      // 4. Share Extension Info.plist
+      final extInfoPlistFile = File('ios/Share Extension/Info.plist');
+      expect(extInfoPlistFile.existsSync(), isTrue);
+      final extInfoPlist = extInfoPlistFile.readAsStringSync();
+      expect(extInfoPlist.contains('com.apple.share-services'), isTrue);
+      expect(extInfoPlist.contains('NSExtensionActivationSupportsWebURLWithMaxCount'), isTrue);
+      expect(extInfoPlist.contains('NSExtensionActivationSupportsText'), isTrue);
+      expect(extInfoPlist.contains('group.com.firsatkolik.app'), isTrue);
+
+      // 5. ShareViewController.swift
+      final swiftFile = File('ios/Share Extension/ShareViewController.swift');
+      expect(swiftFile.existsSync(), isTrue);
+      final swiftCode = swiftFile.readAsStringSync();
+      expect(swiftCode.contains('com.firsatkolik.app'), isTrue);
+      expect(swiftCode.contains('group.com.firsatkolik.app'), isTrue);
+      expect(swiftCode.contains('RSIShareViewController'), isTrue);
+
+      // 6. project.pbxproj target registration
+      final pbxproj = File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+      expect(pbxproj.contains('name = ShareExtension;'), isTrue);
+      expect(pbxproj.contains('Embed App Extensions'), isTrue);
+      expect(pbxproj.contains('ShareExtension.appex'), isTrue);
+      expect(pbxproj.contains('com.firsatkolik.app.ShareExtension'), isTrue);
+    });
   });
 }
