@@ -162,6 +162,20 @@ def main():
             ]):
                 total_patched += 1
 
+    # 9. gRPC-Core basic_seq.h Xcode 16.3+ Clang 19 template syntax fix
+    grpc_search_patterns = [
+        os.path.join("ios", "Pods", "**", "basic_seq.h"),
+        os.path.join("Pods", "**", "basic_seq.h"),
+        os.path.join("..", "ios", "Pods", "**", "basic_seq.h"),
+        os.path.join(os.path.expanduser("~"), ".cocoapods", "**", "basic_seq.h"),
+    ]
+    for pattern in grpc_search_patterns:
+        for p in glob.glob(pattern, recursive=True):
+            if patch_file(p, [
+                ("Traits::template CallSeqFactory(", "Traits::template CallSeqFactory<(")
+            ]):
+                total_patched += 1
+
     print(f"[Patch] Finished. Total files patched: {total_patched}")
     return 0
 

@@ -27,15 +27,15 @@ if [ -z "$APP_STORE_CONNECT_PRIVATE_KEY" ]; then
 fi
 
 echo "🚀 [1/3] App Store Connect API Anahtarı hazırlanıyor..."
-API_KEY_DIR=~/.appstoreconnect/private_keys
+API_KEY_DIR="$HOME/.appstoreconnect/private_keys"
 mkdir -p "$API_KEY_DIR"
 KEY_FILE="$API_KEY_DIR/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
-echo "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
+printf "%s\n" "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_FILE"
 chmod 600 "$KEY_FILE"
 
-# xcrun altool için yedek standart dizine de kopyala
-mkdir -p ~/.private_keys
-cp -f "$KEY_FILE" ~/.private_keys/
+# Yedek standart dizine de kopyala
+mkdir -p "$HOME/.private_keys"
+cp -f "$KEY_FILE" "$HOME/.private_keys/"
 
 echo "🏎️ [2/3] TestFlight Yükleme Motoru Başlatılıyor..."
 

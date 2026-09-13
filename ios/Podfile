@@ -120,7 +120,48 @@ post_install do |installer|
           config.build_settings[setting] << flag unless current.include?(flag)
         end
       end
+
+      # 3. Xcode 16.3+ / Clang 19 C++ Template Argument Issue Cozumu:
+      # gRPC-Core basic_seq.h icindeki template kw uyarisi/hatasini bastir
+      ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS'].each do |setting|
+        current = config.build_settings[setting] || '$(inherited)'
+        flag = '-Wno-missing-template-arg-list-after-template-kw'
+        if current.is_a?(String)
+          config.build_settings[setting] = "#{current} #{flag}" unless current.include?(flag)
+        elsif current.is_a?(Array)
+          config.build_settings[setting] << flag unless current.include?(flag)
+        end
+      end
     end
+  end
+
+  # 4. gRPC-Core basic_seq.h Dosya Duzeyi Duzeltmesi (Xcode 16.3+ Clang 19):
+  # Traits::template CallSeqFactory(...) cagrilarina eksik olan <> sablon argumanini ekle
+  pods_roots = []
+  pods_roots << installer.sandbox.root if installer.respond_to?(:sandbox) && installer.sandbox.respond_to?(:root)
+  pods_roots << File.join(__dir__, 'Pods')
+  pods_roots << File.join(Dir.pwd, 'Pods')
+  pods_roots << File.join(Dir.pwd, 'ios', 'Pods')
+
+  patched_grpc_count = 0
+  pods_roots.compact.uniq.each do |proot|
+    next unless Dir.exist?(proot.to_s)
+    Dir.glob(File.join(proot.to_s, '**', 'basic_seq.h')).each do |hpath|
+      begin
+        hcontent = File.read(hpath)
+        if hcontent.include?('Traits::template CallSeqFactory(')
+          hnew = hcontent.gsub('Traits::template CallSeqFactory(', 'Traits::template CallSeqFactory<>(')
+          File.write(hpath, hnew)
+          patched_grpc_count += 1
+          puts "[Podfile] Patched gRPC-Core header: #{hpath}"
+        end
+      rescue => e
+        puts "[Podfile] Warning: Could not patch #{hpath}: #{e}"
+      end
+    end
+  end
+  if patched_grpc_count > 0
+    puts "[Podfile] Successfully patched #{patched_grpc_count} gRPC-Core basic_seq.h file(s) for Xcode 16.3+ Clang 19 compliance."
   end
 end
 
