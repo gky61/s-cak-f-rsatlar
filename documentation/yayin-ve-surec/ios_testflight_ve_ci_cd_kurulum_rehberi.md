@@ -277,14 +277,15 @@ GitHub deponuza gidin: **Settings** > **Secrets and variables** > **Actions** > 
 
 ```
 [Otomatik Pipeline Süreci]:
-1. 📥 Depo klonlanır ve Flutter 3.x kurulur.
-2. 🧪 iOS platform uyumluluk testleri (ios_compatibility_test.dart) koşulur.
-3. ⚡ CocoaPods önbelleği taranır ve yüklenir (Süreyi ~8 dakikaya indirir).
+1. 📥 Depo klonlanır ve Flutter stable kurulur.
+2. 🧪 iOS platform uyumluluk ve auth testleri (ios_compatibility_test.dart, ios_auth_test.dart) koşulur.
+3. ⚡ CocoaPods önbelleği taranır ve yüklenir (Süreyi ~6-8 dakikaya indirir).
 4. 🔐 setup_keychain.sh çalışarak Apple sertifikasını geçici macOS keychain'ine enjekte eder.
-5. 🔨 flutter build ipa --flavor prod çalıştırılarak signed .ipa üretilir.
-6. 💾 .ipa dosyası GitHub Artifacts olarak depolanır (Bilgisayarınıza indirebilirsiniz).
-7. 🏎️ Fastlane devreye girer; App Store Connect REST API üzerinden paketi TestFlight'a yükler.
-8. 🏁 skip_waiting_for_build_processing sayesinde Apple işleme kuyruğunu beklemeden makine kapanır (10x kota korunur!).
+5. 📋 Hedef flavor'a ait GoogleService-Info-$FLAVOR.plist dosyası GoogleService-Info.plist olarak kopyalanır.
+6. 🔨 flutter build ipa --build-number=${{ github.run_number }} çalıştırılarak benzersiz numaralı signed .ipa üretilir.
+7. 💾 .ipa dosyası GitHub Artifacts olarak depolanır (Bilgisayarınıza indirebilirsiniz).
+8. 🏎️ Fastlane devreye girer; App Store Connect REST API üzerinden paketi TestFlight'a yükler.
+9. 🏁 skip_waiting_for_build_processing sayesinde Apple işleme kuyruğunu beklemeden makine kapanır (10x kota korunur!).
 ```
 *Süreç ortalama 7 ila 10 dakika içinde tamamlanır ve yeşil onay işareti (✅) yanar.*
 
@@ -294,29 +295,30 @@ GitHub deponuza gidin: **Settings** > **Secrets and variables** > **Actions** > 
 
 Build başarıyla yüklendikten yaklaşık 5-10 dakika sonra Apple paketi işler (processing) ve arkadaşınızın iPhone'una TestFlight bildirimi düşer.
 
-### 11.1. Cihaza Kurulum
-1. Arkadaşınızın iPhone'undan **App Store**'a girin ve Apple'ın resmi **TestFlight** uygulamasını indirin.
-2. TestFlight uygulamasını açın ve Apple ID ile oturum açın (Davet e-postası gitmişse maildeki linke tıklayarak da otomatik açılır).
-3. TestFlight ekranında **FırsatKolik** uygulamasını göreceksiniz. **"YÜKLE (INSTALL)"** butonuna dokunun.
+### 11.1. Cihaza Kurulum ve Temiz Kurulum Tavsiyesi
+1. **Temiz Kurulum Tavsiyesi (Önemli):** Eğer iPhone'da daha önceden yüklenmiş bir FırsatKolik sürümü varsa, iOS'un yerel URL Scheme (`CFBundleURLSchemes`) ve yetki önbelleğini sıfırlamak için ana ekrandan uygulamaya uzun basıp **"Uygulamayı Sil"** diyerek tamamen kaldırın.
+2. Arkadaşınızın iPhone'undan Apple'ın resmi **TestFlight** uygulamasını açın.
+3. TestFlight ekranında yeni **FırsatKolik** derlemesini göreceksiniz. Sıfırdan **"YÜKLE (INSTALL)"** butonuna dokunun.
 
 ---
 
-### 11.2. Uçtan Uca Canlı Test Protokolü (10 Kritik Kontrol)
+### 11.2. Uçtan Uca Canlı Test Protokolü (11 Kritik Kontrol)
 
-Uygulama açıldıktan sonra aşağıdaki 10 testi sırayla gerçekleştirin:
+Uygulama açıldıktan sonra aşağıdaki 11 testi sırayla gerçekleştirin:
 
 | # | Test Başlığı | Nasıl Test Edilir? | Beklenen Başarı Kriteri |
 | :---: | :--- | :--- | :--- |
-| **1** | **Apple ile Giriş Yap (Sign in with Apple)** | Giriş ekranında siyah Apple butonuna basın, FaceID/TouchID ile onaylayın. | Firestore `users` koleksiyonunda yeni kullanıcı belirmeli, profil ekranı açılmalı. |
-| **2** | **APNs Push Bildirimi** | Uygulama açılışında gelen bildirim izni popup'ına "İzin Ver" deyin. Web Admin'den test bildirimi atın. | Cihaza bildirim anında düşmeli; tıklandığında ilgili fırsat detayına yönlendirmeli. |
-| **3** | **Kamera ve Galeri İzni** | Fırsat paylaşma ekranına gidin veya profil resmi değiştirmeyi deneyin. | iOS sistem izin popup'ı Türkçe açıklamasıyla çıkmalı (`Info.plist`), fotoğraf seçilebilmeli. |
-| **4** | **Universal Links (Deeplink)** | Safari tarayıcısını açıp `https://firsatkolik.app/firsat/<id>` linkine tıklayın. | Safari sayfada kalmamalı, doğrudan FırsatKolik uygulamasına geçip fırsatı açmalı. |
-| **5** | **Safe Area & Dynamic Island** | Ekranın üst çentiğine, Dynamic Island alanına ve alttaki Home Indicator çizgisine bakın. | Butonlar veya metinler çentiklerin altına taşmamalı, güvenli alan sınırlarına tam uymalı. |
-| **6** | **Haptic Feedback (Titreşim)** | Bir fırsata "Sıcak" veya "Soğuk" oy verin, kupon kodunu kopyalayın. | iPhone'un Taptic Engine motorundan hafif, zarif bir dokunsal titreşim hissedilmeli. |
-| **7** | **In-App WebView & Mağazaya Git** | Bir fırsat detayında "Fırsata Git" butonuna dokunun. | Harici e-ticaret sayfası (Amazon, Trendyol vb.) Safari View Controller içinde sorunsuz açılmalı. |
-| **8** | **Native Paylaşım Menüsü (Share Sheet)**| Fırsat detayındaki "Paylaş" ikonuna dokunun. | Standart iOS paylaşım menüsü açılmalı; WhatsApp, Telegram veya AirDrop seçilebilmeli. |
-| **9** | **Ağ Kesintisi ve Offline Mod** | iPhone'u "Uçak Modu"na alın ve fırsat listesini yenilemeyi deneyin. | Uygulama çökmek yerine zarif "İnternet bağlantınızı kontrol edin" banner'ı göstermeli. |
-| **10**| **Hesap Silme (Apple Guideline 5.1.1)** | Profil > Ayarlar > "Hesabımı Sil" seçeneğini test edin. | Apple incelemesinde red yememek için hesabın ve verilerin silindiğini onaylayan diyalog çalışmalı. |
+| **1** | **Google ile Giriş Yap** | "Profilim" sekmesinde "Google ile Hızlı Giriş Yap" butonuna basın. | Uygulama kesinlikle çökmemeli; sistem Google oturum modalı açılmalı, hesap seçilince Firestore `users/{uid}` kaydı oluşmalı. |
+| **2** | **Apple ile Giriş Yap (Guideline 4.8)** | Giriş ekranında siyah Apple butonuna basın, FaceID/TouchID ile onaylayın. | İlk girişte ad-soyad yakalanmalı, Firestore'a yazılmalı ve APNs token senkronize edilmelidir. |
+| **3** | **APNs Push Bildirimi** | Uygulama açılışında gelen bildirim izni popup'ına "İzin Ver" deyin. Web Admin'den test bildirimi atın. | Cihaza bildirim anında düşmeli; tıklandığında ilgili fırsat detayına yönlendirmeli. |
+| **4** | **Kamera ve Galeri İzni** | Fırsat paylaşma ekranına gidin veya profil resmi değiştirmeyi deneyin. | iOS sistem izin popup'ı Türkçe açıklamasıyla çıkmalı (`Info.plist`), fotoğraf seçilebilmeli. |
+| **5** | **Universal Links (Deeplink)** | Safari tarayıcısını açıp `https://firsatkolik.app/firsat/<id>` linkine tıklayın. | Safari sayfada kalmamalı, doğrudan FırsatKolik uygulamasına geçip fırsatı açmalı. |
+| **6** | **Safe Area & Dynamic Island** | Ekranın üst çentiğine, Dynamic Island alanına ve alttaki Home Indicator çizgisine bakın. | Butonlar veya metinler çentiklerin altına taşmamalı, güvenli alan sınırlarına tam uymalı. |
+| **7** | **Haptic Feedback (Titreşim)** | Bir fırsata "Sıcak" veya "Soğuk" oy verin, kupon kodunu kopyalayın. | iPhone'un Taptic Engine motorundan hafif, zarif bir dokunsal titreşim hissedilmeli. |
+| **8** | **In-App WebView & Mağazaya Git** | Bir fırsat detayında "Fırsata Git" butonuna dokunun. | Harici e-ticaret sayfası (Amazon, Trendyol vb.) Safari View Controller içinde sorunsuz açılmalı. |
+| **9** | **Native Paylaşım Menüsü (Share Sheet)**| Fırsat detayındaki "Paylaş" ikonuna dokunun. | Standart iOS paylaşım menüsü açılmalı; WhatsApp, Telegram veya AirDrop seçilebilmeli. |
+| **10**| **Ağ Kesintisi ve Offline Mod** | iPhone'u "Uçak Modu"na alın ve fırsat listesini yenilemeyi deneyin. | Uygulama çökmek yerine zarif "İnternet bağlantınızı kontrol edin" banner'ı göstermeli. |
+| **11**| **Hesap Silme (Apple Guideline 5.1.1)** | Profil > Ayarlar > "Hesabımı Sil" seçeneğini test edin. | Apple incelemesinde red yememek için hesabın ve verilerin silindiğini onaylayan diyalog çalışmalı. |
 
 ---
 
@@ -330,13 +332,17 @@ Uygulama açıldıktan sonra aşağıdaki 10 testi sırayla gerçekleştirin:
 * **Neden:** Apple, TestFlight'a yüklenen uygulamaların şifreleme (HTTPS/TLS) kullanıp kullanmadığını sorar.
 * **Çözüm:** Projemizde `ios/Runner/Info.plist` dosyasına `<key>ITSAppUsesNonExemptEncryption</key><false/>` anahtarı eklenmiştir. Bu sayede Apple her build'de manuel soru sormaz, derleme doğrudan hazır duruma geçer.
 
-### 3. Hata: `Redundant Binary Upload (CFBundleVersion Conflict)`
+### 3. Hata: `Redundant Binary Upload (ITMS-90189 CFBundleVersion Conflict)`
 * **Neden:** Aynı derleme numarasıyla (build number) TestFlight'a ikinci kez yükleme yapmaya çalışmak.
-* **Çözüm:** Yeni bir build almadan önce `pubspec.yaml` dosyasındaki versiyon numarasını artırın (Örn: `version: 1.0.0+1` yerine `version: 1.0.0+2` yapın ve git push atın).
+* **Çözüm:** CI/CD iş akışımıza `--build-number=${{ github.run_number }}` parametresi entegre edilmiştir. Bu sayede her GitHub Actions koşusu otomatik olarak bir öncekinden büyük benzersiz bir build numarası alır ve manuel versiyon artırmaya gerek kalmaz.
 
 ### 4. Hata: `Fastlane / altool: Authentication Failed (401 Unauthorized)`
 * **Neden:** `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID` veya `.p8` anahtar içeriğinde boşluk/yazım hatası vardır.
 * **Çözüm:** GitHub Secrets'taki bu 3 anahtarı tekrar kontrol edin. `.p8` dosyasını kopyalarken başında ve sonundaki `-----BEGIN PRIVATE KEY-----` satırlarının eksiksiz kopyalandığından emin olun.
+
+### 5. Hata: `Google ile Giriş Yapınca Uygulama Çökmesi (Fatal NSException / Missing URL Scheme)`
+* **Neden:** iOS'ta Google Sign-In SDK'sının dönüş adresi olan `REVERSED_CLIENT_ID` şeması `Info.plist` içinde `CFBundleURLSchemes` altında tanımlı değildir veya sahte bir değer içeriyordur.
+* **Çözüm:** Firebase Console'da gerçek iOS uygulaması (`com.firsatkolik.app`) oluşturulup `REVERSED_CLIENT_ID` değeri `Info.plist` içerisine işlenmiştir. (Not: Android'in aksine iOS'ta Keystore SHA-1 parmak izi gerekmez; iOS güvenliği URL şeması ve Bundle ID üzerinden doğrular).
 
 ---
 

@@ -414,19 +414,33 @@ iOS bildirim akışı Android'den farklı olarak doğrudan Google FCM sunucular�
    - `AuthKey_XXXXXXXXXX.p8` dosyası indirilir. Key ID ve Team ID not edilir.
    - Firebase Console > `Project Settings` > `Cloud Messaging` > `Apple app configuration` sekmesine yüklenir.
 
-### 8.2 Firebase Console Yapılandırması
-1. DEV (`sicak-firsatlar-e6eae`) ve PROD (`firsatkolik-prod-e6eae`) projelerine iOS uygulaması eklenir.
-2. `GoogleService-Info.plist` dosyaları indirilip ilgili flavor ortamına bağlanır.
-3. `Authentication` > `Sign-in method` menüsünden **Apple** sağlayıcısı aktif edilir (Services ID ve Key bilgileri girilir).
+### 8.2 Firebase Console & iOS Kimlik Doğrulama Yapılandırması
+1. **Resmi iOS Uygulama Kayıtları:**
+   - **PROD Projesi (`firsatkolik-prod-e6eae`):** App ID `1:228657473310:ios:5f779f3647ed4dd2380b0f`, Bundle ID `com.firsatkolik.app`
+   - **DEV Projesi (`sicak-firsatlar-e6eae`):** App ID `1:560592268193:ios:be496ea2d9e55177d6f9e0`, Bundle ID `com.firsatkolik.app`
+2. **Plists ve Xcode Kaynak Yönetimi:**
+   - `ios/Runner/GoogleService-Info.plist`, `GoogleService-Info-prod.plist` ve `GoogleService-Info-dev.plist` oluşturulup `project.pbxproj` dosyasında `Resources` derleme fazına eklenmiştir. CI sırasında flavor'a göre otomatik kopyalanır.
+3. **Google Sign-In URL Şeması (RFC 8252):**
+   - `ios/Runner/Info.plist` içine `REVERSED_CLIENT_ID` şemaları işlenmiştir:
+     - Prod: `com.googleusercontent.apps.228657473310-7dlhjuj25p2ov8o5274n3o3759h6gubs`
+     - Dev: `com.googleusercontent.apps.560592268193-a70ituj4997v31non78gvno3f5tsked7`
+   - **Neden SHA-1 Gerekmez?:** Android'deki gibi Keystore SHA-1 parmak izi iOS ekosisteminde aranmaz. Apple sandbox mimarisi, güvenliği `Bundle ID` ve özel URL şeması ile sağlar.
+4. **Sign in with Apple (App Store Guideline 4.8):**
+   - Firebase Console > `Authentication` > `Sign-in method` menüsünden **Apple** sağlayıcısı "Etkin" (Enabled) yapılır. Yerel iOS uygulamaları Apple'ın yerel `AuthenticationServices` çerçevesini kullandığı için **Services ID veya Private Key girilmesine gerek yoktur**.
+   - `ios/Runner/Runner.entitlements` dosyasına `com.apple.developer.applesignin` eklenmiştir.
+   - `AuthService.signInWithApple()` metodu kriptografik SHA-256 nonce korumasıyla (`crypto: ^3.0.3`) kimlik doğrular ve Apple'ın yalnızca ilk girişte döndürdüğü ad-soyad bilgilerini Firestore profiline kalıcı kaydeder.
 
-### 8.3 Derleme Komutları
-- **DEV Flavor (TestFlight Geliştirici Testi):**
+### 8.3 Derleme ve Dağıtım Komutları
+- **CI/CD Otomasyonu (Önerilen - GitHub Actions):**
+  - Workflow: `.github/workflows/ios_testflight_deploy.yml`
+  - Derleme komutu otomatik olarak `--build-number=${{ github.run_number }}` parametresini ekler; bu sayede TestFlight mükerrer yükleme (`ITMS-90189`) hatası engellenir.
+- **DEV Flavor (Geliştirici Testi):**
   ```bash
-  flutter build ipa --flavor dev --dart-define=FLAVOR=dev --release
+  flutter build ipa --flavor dev --dart-define=FLAVOR=dev --build-number=<BUILD_NO> --release
   ```
-- **PROD Flavor (Resmi App Store Connect Yayını):**
+- **PROD Flavor (Resmi App Store Connect / TestFlight Yayını):**
   ```bash
-  flutter build ipa --flavor prod --dart-define=FLAVOR=prod --release
+  flutter build ipa --flavor prod --dart-define=FLAVOR=prod --build-number=<BUILD_NO> --release --export-options-plist=ios_ci/ExportOptions_prod.plist
   ```
 
 ### 8.4 App Store Connect İncelemeci Notları (Reviewer Notes) Şablonu
