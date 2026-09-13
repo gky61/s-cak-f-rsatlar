@@ -3,23 +3,28 @@ import UIKit
 import UserNotifications
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-    
     // iOS 10+ Ön plan bildirimleri için delegate kaydı
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
     }
     application.registerForRemoteNotifications()
     
-    let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
-    let nativeHttpChannel = FlutterMethodChannel(name: "com.sicakfirsatlar.app/native_http",
-                                              binaryMessenger: controller.binaryMessenger)
-    
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    let nativeHttpChannel = FlutterMethodChannel(
+      name: "com.sicakfirsatlar.app/native_http",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+
     nativeHttpChannel.setMethodCallHandler({
       (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
       if call.method == "fetchUrl" {
@@ -83,7 +88,5 @@ import UserNotifications
         result(FlutterMethodNotImplemented)
       }
     })
-    
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }

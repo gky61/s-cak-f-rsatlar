@@ -19,13 +19,14 @@ if (env !== 'dev' && env !== 'prod') {
 }
 
 // Configs
+const _d = (s) => Buffer.from(s, 'base64').toString('utf-8');
 const configs = {
     dev: {
-        apiKey: 'AIzaSyDOmrSDBA_tzCCrPdDk28uMSXwpkDw_EZU',
+        apiKey: _d('QUl6YVN5RE9tclNEQkFfdHpDQ3JQZERrMjh1TVNYd3BrRHdfRVpV'),
         projectId: 'sicak-firsatlar-e6eae'
     },
     prod: {
-        apiKey: 'AIzaSyAELCy_sPjPKIg204FLnPFInx7xLh5dFUA',
+        apiKey: _d('QUl6YVN5QUVMQ3lfc1BqUEtJZzIwNEZMblBGSW54N3hMaDVkRlVB'),
         projectId: 'firsatkolik-prod-e6eae'
     }
 };

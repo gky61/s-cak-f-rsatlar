@@ -65,6 +65,7 @@ void main() {
       expect(infoPlist.contains('NSUserTrackingUsageDescription'), isTrue);
       expect(infoPlist.contains('NSPhotoLibraryUsageDescription'), isTrue);
       expect(infoPlist.contains('ITSAppUsesNonExemptEncryption'), isTrue);
+      expect(infoPlist.contains('UIApplicationSceneManifest'), isTrue);
     });
 
     test('ios/Runner/Runner.entitlements contains Sign in with Apple, APNs and Associated Domains', () {

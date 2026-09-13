@@ -49,6 +49,28 @@
 		<false/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+
+		<!-- iOS 13+ Modern UIScene Yaşam Döngüsü Yapılandırması (Flutter 3.41+ UIScene Lifecycle) -->
+		<key>UIApplicationSceneManifest</key>
+		<dict>
+			<key>UIApplicationSupportsMultipleScenes</key>
+			<false/>
+			<key>UISceneConfigurations</key>
+			<dict>
+				<key>UIWindowSceneSessionRoleApplication</key>
+				<array>
+					<dict>
+						<key>UISceneConfigurationName</key>
+						<string>flutter</string>
+						<key>UISceneDelegateClassName</key>
+						<string>FlutterSceneDelegate</string>
+						<key>UISceneStoryboardFile</key>
+						<string>Main</string>
+					</dict>
+				</array>
+			</dict>
+		</dict>
+
 		<!-- App Store İhracat Uyumluluğu (Şifreleme Muafiyeti) -->
 		<key>ITSAppUsesNonExemptEncryption</key>
 		<false/>
