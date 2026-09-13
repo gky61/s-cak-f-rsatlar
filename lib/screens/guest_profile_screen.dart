@@ -32,6 +32,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
   final ThemeService _themeService = ThemeService();
   final GlobalKey _themeButtonKey = GlobalKey();
   bool _isSigningIn = false;
+  bool _isSigningInApple = false;
 
   @override
   void initState() {
@@ -51,8 +52,48 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _handleAppleSignIn() async {
+    if (_isSigningIn || _isSigningInApple) return;
+    setState(() => _isSigningInApple = true);
+    HapticFeedback.mediumImpact();
+
+    try {
+      final user = await _authService.signInWithApple();
+      if (user != null && mounted) {
+        final name = user.displayName.isNotEmpty ? user.displayName : user.username;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hoş geldiniz, $name! 🍎'),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        widget.onLoginSuccess?.call();
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMsg = 'Apple ile giriş yapılamadı. Lütfen tekrar deneyin.';
+        final errStr = e.toString();
+        if (!errStr.contains('iptal') && !errStr.contains('canceled') && !errStr.contains('cancelled')) {
+          errorMsg = errStr.replaceAll('AuthException: ', '');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: AppTheme.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSigningInApple = false);
+      }
+    }
+  }
+
   Future<void> _handleGoogleSignIn() async {
-    if (_isSigningIn) return;
+    if (_isSigningIn || _isSigningInApple) return;
     setState(() => _isSigningIn = true);
     HapticFeedback.mediumImpact();
 
@@ -305,42 +346,101 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
 
           const SizedBox(height: 20),
 
-          // Primary Action: Google Sign In Button (Koyu, sıcak, göz yormayan tonlar)
+          // ── Giriş Butonları (Apple & Google) ──
+          if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+            // 1. Apple ile Giriş Butonu (Apple HIG Standartlarında)
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: (_isSigningIn || _isSigningInApple) ? null : _handleAppleSignIn,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? Colors.white : Colors.black,
+                  foregroundColor: isDark ? Colors.black : Colors.white,
+                  elevation: isDark ? 2 : 1,
+                  shadowColor: Colors.black.withValues(alpha: isDark ? 0.4 : 0.2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+                child: _isSigningInApple
+                    ? SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: isDark ? Colors.black : Colors.white,
+                        ),
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.apple, size: 24),
+                          SizedBox(width: 8),
+                          Text(
+                            'Apple ile Giriş Yap',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // 2. Google ile Giriş Butonu
           SizedBox(
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _isSigningIn ? null : _handleGoogleSignIn,
+              onPressed: (_isSigningIn || _isSigningInApple) ? null : _handleGoogleSignIn,
               style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-                foregroundColor: Colors.white,
+                backgroundColor: (defaultTargetPlatform == TargetPlatform.iOS)
+                    ? (isDark ? const Color(0xFF1E293B) : Colors.white)
+                    : primaryColor,
+                foregroundColor: (defaultTargetPlatform == TargetPlatform.iOS)
+                    ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                    : Colors.white,
                 elevation: isDark ? 2 : 1,
                 shadowColor: Colors.black.withValues(alpha: isDark ? 0.4 : 0.2),
+                side: (defaultTargetPlatform == TargetPlatform.iOS)
+                    ? BorderSide(color: borderColor, width: 1.2)
+                    : BorderSide.none,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
               ),
               child: _isSigningIn
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.5,
-                        color: Colors.white,
+                        color: (defaultTargetPlatform == TargetPlatform.iOS)
+                            ? (isDark ? Colors.white : primaryColor)
+                            : Colors.white,
                       ),
                     )
-                  : const Row(
+                  : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.g_mobiledata_rounded, size: 30),
-                        SizedBox(width: 4),
+                        const Icon(Icons.g_mobiledata_rounded, size: 30),
+                        const SizedBox(width: 4),
                         Text(
                           'Google ile Hızlı Giriş Yap',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.2,
+                            color: (defaultTargetPlatform == TargetPlatform.iOS)
+                                ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                                : Colors.white,
                           ),
                         ),
                       ],
@@ -635,7 +735,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
                           content: Text('E-posta uygulaması başlatılamadı. Lütfen $email adresine yazın.'),
                           backgroundColor: Colors.orange[800],
                           behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
                           margin: const EdgeInsets.all(16),
                         ),
                       );

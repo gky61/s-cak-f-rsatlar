@@ -9,19 +9,23 @@ void main() {
     test('iosDev configuration has valid parameters', () {
       expect(DefaultFirebaseOptions.iosDev.projectId, 'sicak-firsatlar-e6eae');
       expect(DefaultFirebaseOptions.iosDev.apiKey, isNotEmpty);
-      expect(DefaultFirebaseOptions.iosDev.appId, contains(':ios:'));
+      expect(DefaultFirebaseOptions.iosDev.appId, '1:560592268193:ios:be496ea2d9e55177d6f9e0');
       expect(DefaultFirebaseOptions.iosDev.messagingSenderId, '560592268193');
       expect(DefaultFirebaseOptions.iosDev.storageBucket, contains('firebasestorage.app'));
-      expect(DefaultFirebaseOptions.iosDev.iosBundleId, 'com.sicakfirsatlar.sicakFirsatlar');
+      expect(DefaultFirebaseOptions.iosDev.iosBundleId, 'com.firsatkolik.app');
+      expect(DefaultFirebaseOptions.iosDev.iosClientId, isNotNull);
+      expect(DefaultFirebaseOptions.iosDev.iosClientId, contains('560592268193'));
     });
 
     test('iosProd configuration has valid parameters', () {
       expect(DefaultFirebaseOptions.iosProd.projectId, 'firsatkolik-prod-e6eae');
       expect(DefaultFirebaseOptions.iosProd.apiKey, isNotEmpty);
-      expect(DefaultFirebaseOptions.iosProd.appId, contains(':ios:'));
+      expect(DefaultFirebaseOptions.iosProd.appId, '1:228657473310:ios:5f779f3647ed4dd2380b0f');
       expect(DefaultFirebaseOptions.iosProd.messagingSenderId, '228657473310');
       expect(DefaultFirebaseOptions.iosProd.storageBucket, contains('firebasestorage.app'));
       expect(DefaultFirebaseOptions.iosProd.iosBundleId, 'com.firsatkolik.app');
+      expect(DefaultFirebaseOptions.iosProd.iosClientId, isNotNull);
+      expect(DefaultFirebaseOptions.iosProd.iosClientId, contains('228657473310'));
     });
 
     test('DefaultFirebaseOptions returns valid options without throwing UnsupportedError for iOS', () {
@@ -54,7 +58,7 @@ void main() {
       }
     });
 
-    test('ios/Runner/Info.plist contains all mandatory Apple Review and AdMob keys', () {
+    test('ios/Runner/Info.plist contains all mandatory Apple Review, AdMob keys and genuine Google reversed client IDs', () {
       final infoPlist = File('ios/Runner/Info.plist').readAsStringSync();
       expect(infoPlist.contains('GADApplicationIdentifier'), isTrue);
       expect(infoPlist.contains('SKAdNetworkItems'), isTrue);
@@ -66,6 +70,17 @@ void main() {
       expect(infoPlist.contains('NSPhotoLibraryUsageDescription'), isTrue);
       expect(infoPlist.contains('ITSAppUsesNonExemptEncryption'), isTrue);
       expect(infoPlist.contains('UIApplicationSceneManifest'), isTrue);
+      expect(infoPlist.contains('com.googleusercontent.apps.228657473310-7dlhjuj25p2ov8o5274n3o3759h6gubs'), isTrue);
+      expect(infoPlist.contains('com.googleusercontent.apps.560592268193-a70ituj4997v31non78gvno3f5tsked7'), isTrue);
+    });
+
+    test('GoogleService-Info.plist exists and contains valid iOS Google configuration', () {
+      final plistFile = File('ios/Runner/GoogleService-Info.plist');
+      expect(plistFile.existsSync(), isTrue);
+      final content = plistFile.readAsStringSync();
+      expect(content.contains('CLIENT_ID'), isTrue);
+      expect(content.contains('REVERSED_CLIENT_ID'), isTrue);
+      expect(content.contains('BUNDLE_ID'), isTrue);
     });
 
     test('ios/Runner/Runner.entitlements contains Sign in with Apple, APNs and Associated Domains', () {

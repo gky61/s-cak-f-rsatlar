@@ -1,10 +1,14 @@
+import 'dart:convert';
+import 'dart:math';
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, defaultTargetPlatform, TargetPlatform;
 import 'notification_service.dart';
 import '../models/user.dart' as app_user;
+import '../firebase_options.dart';
 
 /// Production-ready log fonksiyonu
 void _log(String message) {
@@ -29,7 +33,16 @@ class AuthService {
   
   // Lazy initialization - sadece gerektiğinde oluştur
   GoogleSignIn get _googleSignInInstance {
-    _googleSignIn ??= GoogleSignIn();
+    if (_googleSignIn == null) {
+      final iosClientId = defaultTargetPlatform == TargetPlatform.iOS
+          ? (DefaultFirebaseOptions.isProductionFlavor
+              ? DefaultFirebaseOptions.iosProd.iosClientId
+              : DefaultFirebaseOptions.iosDev.iosClientId)
+          : null;
+      _googleSignIn = GoogleSignIn(
+        clientId: iosClientId,
+      );
+    }
     return _googleSignIn!;
   }
 
@@ -315,24 +328,31 @@ class AuthService {
   }
 
   // Kullanıcı giriş sonrası işlemleri (ortak metod)
-  Future<app_user.AppUser> _handleUserAfterSignIn(User firebaseUser) async {
+  Future<app_user.AppUser> _handleUserAfterSignIn(User firebaseUser, {String? initialDisplayName}) async {
     try {
       final existingUserDoc = await _firestore.collection('users').doc(firebaseUser.uid).get();
       app_user.AppUser appUser;
       
+      final effectiveName = initialDisplayName ?? firebaseUser.displayName;
+
       if (existingUserDoc.exists) {
         try {
           final existingUser = app_user.AppUser.fromFirestore(existingUserDoc);
           _log('📋 Mevcut kullanıcı bulundu. Following listesi: ${existingUser.following.length} kişi');
           
           appUser = existingUser.copyWith(
-            username: firebaseUser.displayName ?? existingUser.username,
+            username: (effectiveName != null && effectiveName.isNotEmpty && (existingUser.username == 'Kullanıcı' || existingUser.username.isEmpty))
+                ? effectiveName
+                : (firebaseUser.displayName ?? existingUser.username),
             profileImageUrl: firebaseUser.photoURL ?? existingUser.profileImageUrl,
           );
           
           // Mevcut kullanıcı varsa, sadece değişen alanları güncelle (takip verileri korunur)
           final updateData = <String, dynamic>{};
-          if (firebaseUser.displayName != null && firebaseUser.displayName != existingUser.username) {
+          if (effectiveName != null && effectiveName.isNotEmpty && existingUser.username != effectiveName) {
+            updateData['username'] = effectiveName;
+            updateData['displayName'] = effectiveName;
+          } else if (firebaseUser.displayName != null && firebaseUser.displayName != existingUser.username) {
             updateData['username'] = firebaseUser.displayName;
             updateData['displayName'] = firebaseUser.displayName;
           }
@@ -342,7 +362,7 @@ class AuthService {
           }
           
           // E-posta ve üyelik tarihi eksikse ekle/güncelle
-          final existingData = existingUserDoc.data() as Map<String, dynamic>?;
+          final existingData = existingUserDoc.data();
           if (firebaseUser.email != null && (existingData == null || existingData['email'] != firebaseUser.email)) {
             updateData['email'] = firebaseUser.email;
           }
@@ -357,23 +377,12 @@ class AuthService {
                 .doc(firebaseUser.uid)
                 .update(updateData);
             _log('✅ Kullanıcı güncellendi. Following listesi korunuyor: ${appUser.following.length} kişi');
-            
-            // Following listesinin korunduğunu doğrula
-            final verifyDoc = await _firestore.collection('users').doc(firebaseUser.uid).get();
-            if (verifyDoc.exists) {
-              final verifyData = verifyDoc.data();
-              final verifyFollowing = List<String>.from(verifyData?['following'] ?? []);
-              _log('🔍 Doğrulama: Firestore\'da following listesi: ${verifyFollowing.length} kişi');
-              if (verifyFollowing.length != existingUser.following.length) {
-                _log('⚠️ UYARI: Following listesi kaybolmuş olabilir! Önce: ${existingUser.following.length}, Şimdi: ${verifyFollowing.length}');
-              }
-            }
           } else {
             _log('ℹ️ Güncellenecek alan yok. Following listesi korunuyor: ${appUser.following.length} kişi');
           }
         } catch (parseError) {
           _log('Kullanıcı parse hatası, yeni oluşturuluyor: $parseError');
-          appUser = _createDefaultUser(firebaseUser);
+          appUser = _createDefaultUser(firebaseUser, displayName: effectiveName);
           await _firestore
               .collection('users')
               .doc(firebaseUser.uid)
@@ -389,7 +398,7 @@ class AuthService {
         }
       } else {
         // Yeni kullanıcı ise tam veriyi oluştur
-        appUser = _createDefaultUser(firebaseUser);
+        appUser = _createDefaultUser(firebaseUser, displayName: effectiveName);
         await _firestore
             .collection('users')
             .doc(firebaseUser.uid)
@@ -404,11 +413,7 @@ class AuthService {
         }, SetOptions(merge: true));
       }
 
-      _log('✅ Giriş başarılı: ${firebaseUser.email}');
-      _log('📋 Final appUser following listesi: ${appUser.following.length} kişi');
-      if (appUser.following.isNotEmpty) {
-        _log('📋 Takip edilen kullanıcılar: ${appUser.following.join(", ")}');
-      }
+      _log('✅ Giriş başarılı: ${firebaseUser.email ?? firebaseUser.uid}');
       
       try {
         await NotificationService().saveFCMToken(userId: firebaseUser.uid);
@@ -419,15 +424,18 @@ class AuthService {
       return appUser;
     } catch (e) {
       _log('❌ Kullanıcı kaydetme hatası: $e');
-      return _createDefaultUser(firebaseUser);
+      return _createDefaultUser(firebaseUser, displayName: initialDisplayName);
     }
   }
 
   /// Varsayılan kullanıcı oluştur
-  app_user.AppUser _createDefaultUser(User firebaseUser) {
+  app_user.AppUser _createDefaultUser(User firebaseUser, {String? displayName}) {
+    final effectiveName = displayName ?? firebaseUser.displayName;
     return app_user.AppUser(
       uid: firebaseUser.uid,
-      username: firebaseUser.displayName ?? firebaseUser.email?.split('@')[0] ?? 'Kullanıcı',
+      username: (effectiveName != null && effectiveName.isNotEmpty)
+          ? effectiveName
+          : (firebaseUser.email?.split('@')[0] ?? 'Kullanıcı'),
       profileImageUrl: firebaseUser.photoURL ?? '',
       badges: [],
       points: 0,
@@ -436,86 +444,86 @@ class AuthService {
     );
   }
 
-  // Apple ile giriş (iOS için) - Production Ready
+  /// Apple Sign-In için kriptografik rastgele güvenli nonce üretimi
+  String _generateNonce([int length = 32]) {
+    const charset = '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(length, (_) => charset[random.nextInt(charset.length)]).join();
+  }
+
+  /// Nonce dizesini SHA-256 ile özetler (Apple Authorization istemine gönderilen form)
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  // Apple ile giriş (iOS ve Apple ekosistemi için) - Production Ready
   Future<app_user.AppUser?> signInWithApple() async {
     try {
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+
       final appleCredential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
           AppleIDAuthorizationScopes.fullName,
         ],
+        nonce: nonce,
       );
 
       final oauthCredential = OAuthProvider("apple.com").credential(
         idToken: appleCredential.identityToken,
-        accessToken: appleCredential.authorizationCode,
+        rawNonce: rawNonce,
       );
 
       final UserCredential userCredential = await _auth.signInWithCredential(oauthCredential);
 
       if (userCredential.user != null) {
-        // Apple Sign-In'de username oluştur
-        String username = 'Kullanıcı';
-        if (appleCredential.givenName != null && appleCredential.familyName != null) {
-          username = '${appleCredential.givenName} ${appleCredential.familyName}';
-        } else if (userCredential.user!.displayName != null) {
-          username = userCredential.user!.displayName!;
-        }
+        final user = userCredential.user!;
         
-        // Mevcut kullanıcıyı kontrol et
-        final existingUserDoc = await _firestore.collection('users').doc(userCredential.user!.uid).get();
-        app_user.AppUser appUser;
-        
-        if (existingUserDoc.exists) {
-          try {
-            final existingUser = app_user.AppUser.fromFirestore(existingUserDoc);
-            appUser = existingUser;
-            
-            // Sadece username değiştiyse güncelle (takip verileri korunur)
-            if (username != existingUser.username) {
-              await _firestore
-                  .collection('users')
-                  .doc(userCredential.user!.uid)
-                  .update({'username': username});
-              appUser = existingUser.copyWith(username: username);
-            }
-          } catch (parseError) {
-            _log('Kullanıcı parse hatası, yeni oluşturuluyor: $parseError');
-            appUser = _createDefaultUser(userCredential.user!);
-            await _firestore
-                .collection('users')
-                .doc(userCredential.user!.uid)
-                .set(appUser.toFirestore(), SetOptions(merge: true));
+        // Apple yalnızca ilk girişte ad-soyad iletir
+        String? appleFullName;
+        if (appleCredential.givenName != null || appleCredential.familyName != null) {
+          final given = appleCredential.givenName ?? '';
+          final family = appleCredential.familyName ?? '';
+          final combined = '$given $family'.trim();
+          if (combined.isNotEmpty) {
+            appleFullName = combined;
           }
-        } else {
-          // Yeni kullanıcı ise tam veriyi oluştur
-          appUser = app_user.AppUser(
-            uid: userCredential.user!.uid,
-            username: username,
-            profileImageUrl: userCredential.user!.photoURL ?? '',
-            badges: [],
-            points: 0,
-            dealCount: 0,
-            totalLikes: 0,
-          );
-          await _firestore
-              .collection('users')
-              .doc(userCredential.user!.uid)
-              .set(appUser.toFirestore(), SetOptions(merge: true));
         }
-        
-        _log('✅ Apple ile giriş başarılı');
+
+        if (appleFullName != null && (user.displayName == null || user.displayName!.isEmpty)) {
+          try {
+            await user.updateDisplayName(appleFullName);
+          } catch (nameErr) {
+            _log('Apple displayName güncelleme hatası: $nameErr');
+          }
+        }
+
+        // Ortak pipeline: Firestore kullanıcı dokümanı, takip listesi koruma, FCM token
+        final appUser = await _handleUserAfterSignIn(user, initialDisplayName: appleFullName);
+        _log('✅ Apple ile giriş başarılı: ${user.email ?? user.uid}');
         return appUser;
       }
       return null;
-    } catch (e) {
-      _log('Apple giriş hatası: $e');
+    } catch (e, stackTrace) {
+      _log('❌ Apple giriş hatası: $e');
+      _log('Stack trace: $stackTrace');
       
       final errorString = e.toString().toLowerCase();
       if (errorString.contains('canceled') || errorString.contains('cancelled')) {
-        throw AuthException('Giriş iptal edildi.');
+        // Kullanıcı yetkilendirme penceresini kapattı / iptal etti
+        return null;
       }
-      throw AuthException('Apple ile giriş yapılamadı. Lütfen tekrar deneyin.');
+      
+      if (_isDataTypeError(e.toString())) {
+        final recovered = await _tryRecoverUserData();
+        if (recovered != null) return recovered;
+        throw AuthException('Kullanıcı verileri okunurken bir hata oluştu. Lütfen tekrar deneyin.');
+      }
+      
+      throw _convertToUserFriendlyError(e);
     }
   }
 

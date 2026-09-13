@@ -61,9 +61,11 @@ jobs:
           python3 ios_ci/scripts/patch_modular_headers.py
 
 
-      # 5. iOS Uyumluluk Birim Testlerini Koş
-      - name: 🧪 Run iOS Compatibility Tests
-        run: flutter test test/ios_compatibility_test.dart
+      # 5. iOS Uyumluluk ve Kimlik Doğrulama Birim Testlerini Koş
+      - name: 🧪 Run iOS Compatibility & Auth Tests
+        run: |
+          cp ios/Runner/GoogleService-Info-prod.plist ios/Runner/GoogleService-Info.plist
+          flutter test test/ios_compatibility_test.dart test/ios_auth_test.dart
 
       # 6. CocoaPods Önbelleği (Build süresini yarı yarıya düşürür, kotayı korur - Node 24)
       - name: ⚡ Cache CocoaPods
@@ -100,8 +102,14 @@ jobs:
           # TestFlight için daima kayıtlı com.firsatkolik.app kimliğini kullan
           sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com\.sicakfirsatlar\.sicakFirsatlar;/PRODUCT_BUNDLE_IDENTIFIER = com.firsatkolik.app;/g" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
 
-          # Xcode 16 modüler header uyumluluğunu derleme öncesi garanti et
-          python3 ios_ci/scripts/patch_modular_headers.py
+          # İlgili ortama (flavor) ait GoogleService-Info.plist dosyasını bağla
+          if [ "${{ inputs.flavor }}" = "dev" ] && [ -f "ios/Runner/GoogleService-Info-dev.plist" ]; then
+            cp "ios/Runner/GoogleService-Info-dev.plist" "ios/Runner/GoogleService-Info.plist"
+            echo "Using GoogleService-Info-dev.plist for DEV build"
+          elif [ -f "ios/Runner/GoogleService-Info-prod.plist" ]; then
+            cp "ios/Runner/GoogleService-Info-prod.plist" "ios/Runner/GoogleService-Info.plist"
+            echo "Using GoogleService-Info-prod.plist for PROD build"
+          fi
 
           flutter build ipa \
             --dart-define=FLAVOR=${{ inputs.flavor }} \

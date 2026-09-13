@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>560592268193-a70ituj4997v31non78gvno3f5tsked7.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.560592268193-a70ituj4997v31non78gvno3f5tsked7</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>560592268193-107rs9q1jarq3m0she7g1tr93cokpu9s.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyCIX07mBffeH8PBHnzxDAqLo6saSffQ2CM</string>
+	<key>GCM_SENDER_ID</key>
+	<string>560592268193</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.firsatkolik.app</string>
+	<key>PROJECT_ID</key>
+	<string>sicak-firsatlar-e6eae</string>
+	<key>STORAGE_BUCKET</key>
+	<string>sicak-firsatlar-e6eae.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:560592268193:ios:be496ea2d9e55177d6f9e0</string>
+</dict>
+</plist>

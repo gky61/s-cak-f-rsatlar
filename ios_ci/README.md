@@ -148,6 +148,20 @@ Süreç boyunca karşılaşılan ve her biri kod seviyesinde kalıcı olarak ç�
 - **Hata:** `Google API Key public leak detected in web/admin/config.js`
 - **Çözüm:** Web Firebase istemci anahtarları [web/admin/config.js](file:///d:/firsatkolik/web/admin/config.js), [scripts/create_test_data.js](file:///d:/firsatkolik/scripts/create_test_data.js) ve [scripts/delete_test_user.js](file:///d:/firsatkolik/scripts/delete_test_user.js) içinde Base64 (`atob()`) ile maskelendi.
 
+### 10. iOS Google Sign-In "Uygulama Çöktü" Fatal Crash & Apple Sign-In (Guideline 4.8) Entegrasyonu
+- **Hata:** TestFlight sürümünde "Profilim" altından Google ile Giriş Yap tıklandığında uygulamanın anında çökmesi ("Uygulama Çöktü") ve Apple ile giriş seçeneğinin bulunmaması.
+- **Kök Neden:**
+  1. Firebase Console üzerinde `firsatkolik-prod-e6eae` ve `sicak-firsatlar-e6eae` projelerinde hiçbir iOS uygulaması kayıtlı değildi; bu nedenle geçerli bir iOS OAuth Client ID ve `GoogleService-Info.plist` mevcut değildi.
+  2. `ios/Runner/Info.plist` içerisindeki `CFBundleURLSchemes` değeri sahte placeholder'lar (`...-ios`) içeriyordu. GoogleSignIn iOS SDK, şema eşleşmediğinde ana iş parçacığında `NSException` fırlatarak uygulamayı anında öldürüyordu.
+  3. Apple App Store Guideline 4.8 gereğince üçüncü taraf sosyal giriş sunulan uygulamalarda "Sign in with Apple" zorunlu olmasına rağmen arayüzde Apple butonu yoktu ve nonce yönetimi eksikti.
+- **Çözüm:**
+  1. Firebase CLI (`gokayalemdar789@gmail.com`) ile her iki projede resmi iOS uygulamaları oluşturuldu (`com.firsatkolik.app`).
+  2. `ios/Runner/GoogleService-Info.plist`, `GoogleService-Info-prod.plist` ve `GoogleService-Info-dev.plist` oluşturuldu; `project.pbxproj`'a kaynak (resource) olarak bağlandı.
+  3. `Info.plist` içine resmi `REVERSED_CLIENT_ID` şemaları eklendi.
+  4. `lib/firebase_options.dart` gerçek `appId` ve `iosClientId` değerleriyle güncellendi.
+  5. `AuthService.signInWithApple()` içine kriptografik SHA-256 nonce üretimi, Apple ad-soyad yakalama ve ortak Firestore/FCM kullanıcı kaydı entegre edildi.
+  6. `GuestProfileScreen` ve `GuestLoginBottomSheet` bileşenlerine Apple HIG uyumlu şık "Apple ile Giriş Yap" butonları ve çift tıklama korumalı asenkron işleyiciler eklendi.
+
 ---
 
 ## 5. Uçtan Uca CI/CD İş Akışı Adımları

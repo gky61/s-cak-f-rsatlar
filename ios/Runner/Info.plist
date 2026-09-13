@@ -112,8 +112,11 @@
 				<string>Editor</string>
 				<key>CFBundleURLSchemes</key>
 				<array>
-					<string>com.googleusercontent.apps.560592268193-ios</string>
-					<string>com.googleusercontent.apps.228657473310-ios</string>
+					<!-- Prod Google Sign-In iOS Reversed Client ID -->
+					<string>com.googleusercontent.apps.228657473310-7dlhjuj25p2ov8o5274n3o3759h6gubs</string>
+					<!-- Dev Google Sign-In iOS Reversed Client ID -->
+					<string>com.googleusercontent.apps.560592268193-a70ituj4997v31non78gvno3f5tsked7</string>
+					<!-- Custom Scheme for Deep Linking -->
 					<string>firsatkolik</string>
 				</array>
 			</dict>

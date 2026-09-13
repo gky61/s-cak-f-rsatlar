@@ -28,6 +28,8 @@ bool get isProductionFlavor => _flavor == 'prod';
 /// );
 /// ```
 class DefaultFirebaseOptions {
+  static bool get isProductionFlavor => _flavor == 'prod';
+
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
       // Web her zaman DEV admin panelini gösterir; değiştirmeyin.
@@ -90,22 +92,24 @@ class DefaultFirebaseOptions {
 
   // ─── IOS — DEV projesi (sicak-firsatlar-e6eae) ─────────────────────────
   static const FirebaseOptions iosDev = FirebaseOptions(
-    apiKey: 'AIzaSyDOmrSDBA_tzCCrPdDk28uMSXwpkDw_EZU',
-    appId: '1:560592268193:ios:64b68da3637d1e10d6f9e0',
+    apiKey: 'AIzaSyCIX07mBffeH8PBHnzxDAqLo6saSffQ2CM',
+    appId: '1:560592268193:ios:be496ea2d9e55177d6f9e0',
     messagingSenderId: '560592268193',
     projectId: 'sicak-firsatlar-e6eae',
     storageBucket: 'sicak-firsatlar-e6eae.firebasestorage.app',
-    iosBundleId: 'com.sicakfirsatlar.sicakFirsatlar',
+    iosBundleId: 'com.firsatkolik.app',
+    iosClientId: '560592268193-a70ituj4997v31non78gvno3f5tsked7.apps.googleusercontent.com',
   );
 
   // ─── IOS — PROD projesi (firsatkolik-prod-e6eae) ───────────────────────
   static const FirebaseOptions iosProd = FirebaseOptions(
-    apiKey: 'AIzaSyC3lE2ktKnMO21KP1EMh2S173wjrSauiio',
-    appId: '1:228657473310:ios:dc7c29279871906a380b0f',
+    apiKey: 'AIzaSyDs2l88K4w-4GaMPrYcCfDbp5VX9EXoyBE',
+    appId: '1:228657473310:ios:5f779f3647ed4dd2380b0f',
     messagingSenderId: '228657473310',
     projectId: 'firsatkolik-prod-e6eae',
     storageBucket: 'firsatkolik-prod-e6eae.firebasestorage.app',
     iosBundleId: 'com.firsatkolik.app',
+    iosClientId: '228657473310-7dlhjuj25p2ov8o5274n3o3759h6gubs.apps.googleusercontent.com',
   );
 
   // ─── Kısayol: mevcut flavor'ın project ID'si ─────────────────────────────
