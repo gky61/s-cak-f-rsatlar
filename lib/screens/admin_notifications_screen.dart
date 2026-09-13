@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'dart:async';
 
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
@@ -29,18 +28,52 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     }
   }
 
+  /// Akıllı bildirim zaman damgası formatlayıcı (bugün, dün veya geçmiş tarih)
+  String _formatNotificationTime(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final itemDate = DateTime(dt.year, dt.month, dt.day);
+    final differenceInDays = today.difference(itemDate).inDays;
+
+    if (differenceInDays == 0) {
+      return DateFormat('HH:mm').format(dt);
+    } else if (differenceInDays == 1) {
+      return 'Dün ${DateFormat('HH:mm').format(dt)}';
+    } else if (now.year == dt.year) {
+      try {
+        return DateFormat('d MMM • HH:mm', 'tr_TR').format(dt);
+      } catch (_) {
+        return DateFormat('d MMM • HH:mm').format(dt);
+      }
+    } else {
+      try {
+        return DateFormat('d MMM yyyy', 'tr_TR').format(dt);
+      } catch (_) {
+        return DateFormat('d MMM yyyy').format(dt);
+      }
+    }
+  }
+
   Future<void> _openNotification(Map<String, dynamic> item) async {
     final currentUserId = _authService.currentUser?.uid;
     if (currentUserId == null) return;
 
     // Okundu işaretle
-    if (!(item['read'] as bool)) {
+    if (!(item['read'] as bool? ?? false)) {
       await _firestoreService.markNotificationAsRead(currentUserId, item['id'] as String);
     }
 
-    final type = item['type'] as String;
-    final dealId = item['dealId'] as String;
-    final commentId = item['commentId'] as String;
+    final type = (item['type'] ?? 'deal').toString();
+    final dealId = (item['dealId'] ?? '').toString().trim();
+    final commentId = (item['commentId'] ?? '').toString().trim();
+
+    // Akıllı durum tespiti (Dokümanda status eksik olsa dahi başlıktan çıkarım yapılır)
+    final rawStatus = (item['status'] as String? ?? '').toLowerCase();
+    final titleLower = (item['title'] as String? ?? '').toLowerCase();
+    final isApproved = rawStatus == 'approved' ||
+        titleLower.contains('onaylandı') ||
+        titleLower.contains('onaylandi');
+    final isRejected = rawStatus == 'rejected' || titleLower.contains('reddedildi');
 
     if (type == 'deal') {
       if (dealId.isNotEmpty && mounted) {
@@ -50,6 +83,8 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             builder: (_) => DealDetailScreen(dealId: dealId),
           ),
         );
+      } else if (mounted) {
+        _showModernNotificationDetailDialog(context, item);
       }
     } else if (type == 'comment_reply') {
       if (dealId.isNotEmpty && mounted) {
@@ -62,60 +97,24 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             ),
           ),
         );
+      } else if (mounted) {
+        _showModernNotificationDetailDialog(context, item);
       }
     } else if (type == 'submission_status') {
-      final status = item['status'] as String? ?? '';
-      if (status == 'approved' && dealId.isNotEmpty && mounted) {
+      if (isApproved && dealId.isNotEmpty && mounted) {
+        // Onaylanan fırsat tıklandığında doğrudan canlı fırsat detayına git!
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => DealDetailScreen(dealId: dealId),
           ),
         );
-      } else {
-        if (!mounted) return;
-        final isApproved = status == 'approved';
-        await showDialog<void>(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(
-                  isApproved ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                  color: isApproved ? Colors.green : Colors.red,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    item['title'] as String? ?? 'Fırsat Durumu',
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                ),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (item['createdAt'] != null)
-                    Text(
-                      _formatDateTime(item['createdAt'] as DateTime),
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  const SizedBox(height: 12),
-                  Text(item['body'] as String? ?? ''),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Tamam'),
-              ),
-            ],
-          ),
+      } else if (mounted) {
+        _showModernNotificationDetailDialog(
+          context,
+          item,
+          isApproved: isApproved,
+          isRejected: isRejected,
         );
       }
     } else if (type == 'admin_message') {
@@ -133,33 +132,314 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         );
       }
     } else {
-      // Genel duyuru / marketing / manual_notification için dialog göster
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: Text(item['title'] as String),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _formatDateTime(item['createdAt'] as DateTime),
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+      if (mounted) {
+        _showModernNotificationDetailDialog(context, item);
+      }
+    }
+  }
+
+  /// Modern ve içeriğe duyarlı bildirim detay modalı (İlkel AlertDialog yerine)
+  Future<void> _showModernNotificationDetailDialog(
+    BuildContext context,
+    Map<String, dynamic> item, {
+    bool isApproved = false,
+    bool isRejected = false,
+  }) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final dealId = (item['dealId'] ?? '').toString().trim();
+    final dealTitle = (item['dealTitle'] ?? '').toString().trim();
+    final title = (item['title'] ?? 'Bildirim Detayı').toString().trim();
+    final body = (item['body'] ?? '').toString().trim();
+    final type = (item['type'] ?? '').toString();
+    final createdAt = item['createdAt'] as DateTime?;
+
+    IconData headerIcon = Icons.notifications_active_rounded;
+    Color headerColor = primaryColor;
+    Color headerBg = isDark ? primaryColor.withValues(alpha: 0.18) : primaryColor.withValues(alpha: 0.1);
+    String headerBadgeText = 'BİLDİRİM';
+
+    if (isApproved) {
+      headerIcon = Icons.verified_rounded;
+      headerColor = const Color(0xFF10B981);
+      headerBg = isDark ? const Color(0xFF10B981).withValues(alpha: 0.2) : const Color(0xFFECFDF5);
+      headerBadgeText = 'ONAYLANDI';
+    } else if (isRejected) {
+      headerIcon = Icons.info_outline_rounded;
+      headerColor = const Color(0xFFF59E0B);
+      headerBg = isDark ? const Color(0xFFF59E0B).withValues(alpha: 0.2) : const Color(0xFFFFFBEB);
+      headerBadgeText = 'REDDEDİLDİ';
+    } else if (type == 'admin_message') {
+      headerIcon = Icons.campaign_rounded;
+      headerColor = const Color(0xFFFF5722);
+      headerBg = isDark ? const Color(0xFFFF5722).withValues(alpha: 0.2) : const Color(0xFFFBE9E7);
+      headerBadgeText = 'YÖNETİCİ DUYURUSU';
+    } else if (type == 'comment_reply' || type == 'comment') {
+      headerIcon = Icons.chat_bubble_outline_rounded;
+      headerColor = const Color(0xFF2196F3);
+      headerBg = isDark ? const Color(0xFF2196F3).withValues(alpha: 0.2) : const Color(0xFFEFF6FF);
+      headerBadgeText = 'TOPLULUK';
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 16,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Sürükleme çizgisi
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const SizedBox(height: 12),
-                Text(item['body'] as String),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: headerBg,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(headerIcon, color: headerColor, size: 26),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: headerBg,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          headerBadgeText,
+                          style: TextStyle(
+                            color: headerColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      if (createdAt != null)
+                        Text(
+                          _formatDateTime(createdAt),
+                          style: TextStyle(
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Kapat'),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : const Color(0xFF1F2937),
+              ),
+            ),
+            if (dealTitle.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  dealTitle,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: primaryColor,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Text(
+              body,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: isDark ? Colors.grey[300] : const Color(0xFF4B5563),
+              ),
+            ),
+            if (isRejected) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFFF59E0B).withValues(alpha: 0.1) : const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFFF59E0B).withValues(alpha: 0.3) : const Color(0xFFFDE68A),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.help_outline_rounded, color: Color(0xFFF59E0B), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Paylaşılan fırsat topluluk kurallarımıza, fiyat/stok kriterlerine veya mükerrer paylaşımlara göre incelenerek onaylanmamıştır.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                if (dealId.isNotEmpty && (isApproved || type == 'deal')) ...[
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DealDetailScreen(dealId: dealId),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.launch_rounded, size: 18),
+                      label: const Text('Fırsatı Görüntüle'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                if (type == 'admin_message') ...[
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const MessageScreen(
+                              otherUserId: 'admin',
+                              otherUserName: 'FırsatKolik Yönetim',
+                              otherUserImageUrl: 'assets/logo.webp',
+                              isAdminMessage: true,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                      label: const Text('Mesajlara Git'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Kapat',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
-      );
+      ),
+    );
+  }
+
+  Future<void> _markAllAsRead(BuildContext context, String currentUserId) async {
+    try {
+      await _firestoreService.markAllNotificationsAsRead(currentUserId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tüm bildirimler okundu olarak işaretlendi'),
+            backgroundColor: Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata oluştu: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -169,347 +449,535 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     final currentUserId = _authService.currentUser?.uid;
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
-      appBar: AppBar(
-        title: const Text('Bildirimler'),
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        elevation: 0,
-        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
-        actions: [
-          if (currentUserId != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: IconButton(
-                onPressed: () => _showDeleteAllDialog(context, currentUserId),
-                icon: Icon(
-                  Icons.delete_outline,
-                  size: 20,
-                  color: isDark ? Colors.grey[400] : Colors.grey[700],
+    if (currentUserId == null) {
+      return Scaffold(
+        backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
+        appBar: AppBar(
+          title: const Text('Bildirimler'),
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+          elevation: 0,
+        ),
+        body: const Center(child: Text('Bildirimleri görmek için giriş yapmalısınız')),
+      );
+    }
+
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _firestoreService.getUserNotificationsStream(currentUserId),
+      builder: (context, snapshot) {
+        final allItems = snapshot.data ?? [];
+
+        // Sekme bazlı okunmamış sayıları
+        final unreadAll = allItems.where((i) => !(i['read'] as bool? ?? false)).length;
+        final unreadAdmin = allItems.where((i) {
+          final isUnread = !(i['read'] as bool? ?? false);
+          final type = i['type'] as String? ?? '';
+          return isUnread &&
+              (type == 'admin_message' ||
+                  type == 'admin' ||
+                  type == 'marketing' ||
+                  type == 'manual_notification' ||
+                  type == 'submission_status');
+        }).length;
+        final unreadReplies = allItems.where((i) {
+          final isUnread = !(i['read'] as bool? ?? false);
+          final type = i['type'] as String? ?? '';
+          return isUnread && (type == 'comment_reply' || type == 'comment');
+        }).length;
+
+        return Scaffold(
+          backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
+          appBar: AppBar(
+            title: const Text('Bildirimler'),
+            backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+            elevation: 0,
+            iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
+            actions: [
+              // Tümünü okundu işaretle butonu
+              if (unreadAll > 0)
+                IconButton(
+                  onPressed: () => _markAllAsRead(context, currentUserId),
+                  icon: const Icon(
+                    Icons.done_all_rounded,
+                    size: 22,
+                    color: Color(0xFF10B981),
+                  ),
+                  tooltip: 'Tümünü Okundu İşaretle',
                 ),
-                tooltip: 'Tümünü Sil',
-                padding: const EdgeInsets.all(8),
-                constraints: const BoxConstraints(
-                  minWidth: 40,
-                  minHeight: 40,
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: isDark 
-                      ? Colors.white.withValues(alpha: 0.05) 
-                      : Colors.grey[100],
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(
-                      color: isDark 
-                          ? Colors.white.withValues(alpha: 0.1) 
-                          : Colors.grey[300]!,
-                      width: 1,
+              // Tümünü sil butonu
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: IconButton(
+                  onPressed: () => _showDeleteAllDialog(context, currentUserId),
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 20,
+                    color: isDark ? Colors.grey[400] : Colors.grey[700],
+                  ),
+                  tooltip: 'Tümünü Sil',
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.grey[100],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.1)
+                            : Colors.grey[300]!,
+                        width: 1,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
-      ),
-      body: currentUserId == null
-          ? const Center(child: Text('Bildirimleri görmek için giriş yapmalısınız'))
-          : Column(
-              children: [
-                // Tab bar
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkSurface : Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _buildTabButton('all', 'Tümü', isDark, primaryColor),
-                      ),
-                      Expanded(
-                        child: _buildTabButton('admin', 'Admin', isDark, primaryColor),
-                      ),
-                      Expanded(
-                        child: _buildTabButton('replies', 'Yorumlar', isDark, primaryColor),
-                      ),
-                    ],
-                  ),
+            ],
+          ),
+          body: Column(
+            children: [
+              // Tab bar
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.darkSurface : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                // Content
-                Expanded(
-                  child: _buildNotificationsContent(currentUserId, isDark, primaryColor),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildTabButton(
+                        'all',
+                        'Tümü',
+                        isDark,
+                        primaryColor,
+                        unreadCount: unreadAll,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildTabButton(
+                        'admin',
+                        'Admin',
+                        isDark,
+                        primaryColor,
+                        unreadCount: unreadAdmin,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildTabButton(
+                        'replies',
+                        'Yorumlar',
+                        isDark,
+                        primaryColor,
+                        unreadCount: unreadReplies,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              // Content
+              Expanded(
+                child: _buildNotificationsContent(
+                  allItems,
+                  snapshot.connectionState,
+                  snapshot.error,
+                  currentUserId,
+                  isDark,
+                  primaryColor,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildTabButton(String tab, String label, bool isDark, Color primaryColor) {
+  Widget _buildTabButton(
+    String tab,
+    String label,
+    bool isDark,
+    Color primaryColor, {
+    int unreadCount = 0,
+  }) {
     final isSelected = _selectedTab == tab;
     return InkWell(
       onTap: () => setState(() => _selectedTab = tab),
       borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? primaryColor : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: isSelected 
-                ? Colors.white 
-                : (isDark ? Colors.grey[400] : Colors.grey[700]),
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            fontSize: 13,
-          ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.grey[400] : Colors.grey[700]),
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+            if (unreadCount > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.white.withValues(alpha: 0.25)
+                      : (isDark ? Colors.red.withValues(alpha: 0.3) : const Color(0xFFFFEBEE)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  unreadCount > 99 ? '99+' : '$unreadCount',
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : Colors.red[700],
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildNotificationsContent(String currentUserId, bool isDark, Color primaryColor) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _firestoreService.getUserNotificationsStream(currentUserId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const NotificationListSkeleton();
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Hata: ${snapshot.error}'));
-        }
+  Widget _buildNotificationsContent(
+    List<Map<String, dynamic>> allItems,
+    ConnectionState connectionState,
+    Object? error,
+    String currentUserId,
+    bool isDark,
+    Color primaryColor,
+  ) {
+    if (connectionState == ConnectionState.waiting && allItems.isEmpty) {
+      return const NotificationListSkeleton();
+    }
+    if (error != null) {
+      return Center(child: Text('Hata: $error'));
+    }
 
-        final allItems = snapshot.data ?? [];
-        
-        // Tab filtrelemesi
-        final items = allItems.where((item) {
-          final type = item['type'] as String;
-          if (_selectedTab == 'admin') {
-            return type == 'admin_message' || type == 'admin' || type == 'marketing' || type == 'manual_notification' || type == 'submission_status';
-          } else if (_selectedTab == 'replies') {
-            return type == 'comment_reply' || type == 'comment';
-          }
-          return true;
-        }).toList();
+    // Tab filtrelemesi
+    final items = allItems.where((item) {
+      final type = item['type'] as String? ?? '';
+      if (_selectedTab == 'admin') {
+        return type == 'admin_message' ||
+            type == 'admin' ||
+            type == 'marketing' ||
+            type == 'manual_notification' ||
+            type == 'submission_status';
+      } else if (_selectedTab == 'replies') {
+        return type == 'comment_reply' || type == 'comment';
+      }
+      return true;
+    }).toList();
 
-        if (items.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  _selectedTab == 'admin' 
-                      ? Icons.campaign_outlined 
-                      : (_selectedTab == 'replies' ? Icons.comment_outlined : Icons.notifications_none),
-                  size: 64,
-                  color: Colors.grey[400],
+    if (items.isEmpty) {
+      IconData emptyIcon = Icons.notifications_none_rounded;
+      String emptyTitle = 'Henüz bildirim yok';
+      String emptySubtitle = 'İlginizi çeken fırsatları, indirimleri ve duyuruları buradan takip edebilirsiniz.';
+
+      if (_selectedTab == 'admin') {
+        emptyIcon = Icons.campaign_outlined;
+        emptyTitle = 'Yönetici bildirimi yok';
+        emptySubtitle = 'Paylaştığınız fırsatların onay durumları ve resmi sistem duyuruları burada listelenir.';
+      } else if (_selectedTab == 'replies') {
+        emptyIcon = Icons.chat_bubble_outline_rounded;
+        emptyTitle = 'Yorum cevabı yok';
+        emptySubtitle = 'Fırsatlara ve yorumlarınıza gelen yanıtlar burada listelenir.';
+      }
+
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[100],
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  _selectedTab == 'admin'
-                      ? 'Henüz admin bildirimi yok'
-                      : (_selectedTab == 'replies' ? 'Henüz yorum cevabı bildirimi yok' : 'Henüz bildirim yok'),
-                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                child: Icon(emptyIcon, size: 40, color: Colors.grey[400]),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                emptyTitle,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                emptySubtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey[500], height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final isUnread = !(item['read'] as bool? ?? false);
+        final type = (item['type'] ?? 'deal').toString();
+
+        // Akıllı durum tespiti
+        final rawStatus = (item['status'] as String? ?? '').toLowerCase();
+        final titleLower = (item['title'] as String? ?? '').toLowerCase();
+        final isAppr = rawStatus == 'approved' ||
+            titleLower.contains('onaylandı') ||
+            titleLower.contains('onaylandi');
+        final isRej = rawStatus == 'rejected' || titleLower.contains('reddedildi');
+
+        // İkon ve renk belirleme (Profesyonel, pozitif ve bağlamsal)
+        IconData icon = Icons.local_fire_department_rounded;
+        Color iconColor = const Color(0xFFFF6B35);
+        Color iconBg = isDark
+            ? const Color(0xFFFF6B35).withValues(alpha: 0.15)
+            : const Color(0xFFFFF3EE);
+
+        if (type == 'submission_status') {
+          if (isAppr) {
+            // Onaylanan fırsat için yeşil kutlama rozeti (Kırmızı çarpı KESİNLİKLE YOK)
+            icon = Icons.verified_rounded;
+            iconColor = const Color(0xFF10B981);
+            iconBg = isDark
+                ? const Color(0xFF10B981).withValues(alpha: 0.18)
+                : const Color(0xFFECFDF5);
+          } else if (isRej) {
+            // Reddedilen fırsat için yumuşak kehribar/amber bilgilendirme rozeti
+            icon = Icons.info_outline_rounded;
+            iconColor = const Color(0xFFF59E0B);
+            iconBg = isDark
+                ? const Color(0xFFF59E0B).withValues(alpha: 0.18)
+                : const Color(0xFFFFFBEB);
+          } else {
+            icon = Icons.assignment_outlined;
+            iconColor = Colors.blue;
+            iconBg = isDark ? Colors.blue.withValues(alpha: 0.15) : Colors.blue[50]!;
+          }
+        } else if (type == 'comment_reply' || type == 'comment') {
+          icon = Icons.chat_bubble_outline_rounded;
+          iconColor = const Color(0xFF2196F3);
+          iconBg = isDark
+              ? const Color(0xFF2196F3).withValues(alpha: 0.18)
+              : const Color(0xFFEFF6FF);
+        } else if (type == 'admin_message' ||
+            type == 'admin' ||
+            type == 'marketing' ||
+            type == 'manual_notification') {
+          icon = Icons.campaign_rounded;
+          iconColor = const Color(0xFFFF5722);
+          iconBg = isDark
+              ? const Color(0xFFFF5722).withValues(alpha: 0.18)
+              : const Color(0xFFFBE9E7);
+        } else {
+          // Fırsat bildirimleri: sebebe göre özelleştir
+          final reason = (item['reason'] as String? ?? '').toLowerCase();
+          if (reason == 'keyword') {
+            icon = Icons.saved_search_rounded;
+            iconColor = const Color(0xFFFF9800);
+            iconBg = isDark
+                ? const Color(0xFFFF9800).withValues(alpha: 0.18)
+                : const Color(0xFFFFF8E1);
+          } else if (reason == 'author') {
+            icon = Icons.person_pin_circle_rounded;
+            iconColor = const Color(0xFF10B981);
+            iconBg = isDark
+                ? const Color(0xFF10B981).withValues(alpha: 0.18)
+                : const Color(0xFFE8F5E9);
+          }
+        }
+
+        final notifId = item['id'] as String;
+
+        return Dismissible(
+          key: Key(notifId),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            margin: const EdgeInsets.symmetric(vertical: 2),
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFEF5350), Color(0xFFD32F2F)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withValues(alpha: 0.25),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
-          );
-        }
-
-        return ListView.separated(
-          padding: const EdgeInsets.all(12),
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final item = items[index];
-            final isUnread = !(item['read'] as bool);
-            final type = item['type'] as String;
-            
-            // İkon ve renk belirleme
-            IconData icon = Icons.notifications;
-            Color iconColor = Colors.orange;
-            Color iconBg = isDark ? Colors.orange.withValues(alpha: 0.15) : Colors.orange[50]!;
-
-            if (type == 'submission_status') {
-              final status = item['status'] as String? ?? '';
-              final isAppr = status == 'approved';
-              icon = isAppr ? Icons.check_circle_outline_rounded : Icons.cancel_outlined;
-              iconColor = isAppr ? Colors.green : Colors.red;
-              iconBg = isDark
-                  ? (isAppr ? Colors.green.withValues(alpha: 0.15) : Colors.red.withValues(alpha: 0.15))
-                  : (isAppr ? Colors.green[50]! : Colors.red[50]!);
-            } else if (type == 'comment_reply' || type == 'comment') {
-              icon = Icons.reply_rounded;
-              iconColor = Colors.green;
-              iconBg = isDark ? Colors.green.withValues(alpha: 0.15) : Colors.green[50]!;
-            } else if (type == 'admin_message' || type == 'admin' || type == 'marketing' || type == 'manual_notification') {
-              icon = Icons.campaign;
-              iconColor = Colors.blue;
-              iconBg = isDark ? Colors.blue.withValues(alpha: 0.15) : Colors.blue[50]!;
-            }
-
-            final notifId = item['id'] as String;
-
-            return Dismissible(
-              key: Key(notifId),
-              direction: DismissDirection.endToStart,
-              background: Container(
-                margin: const EdgeInsets.symmetric(vertical: 2),
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFEF5350), Color(0xFFD32F2F)],
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  'Sil',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    letterSpacing: 0.5,
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withValues(alpha: 0.25),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Sil',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    SizedBox(width: 6),
-                    Icon(
-                      Icons.delete_outline_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ],
+                SizedBox(width: 6),
+                Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+          onDismissed: (direction) async {
+            final notifTitle = item['title'] as String? ?? 'Bildirim';
+
+            // Firestore'dan tamamen sil
+            await _firestoreService.deleteNotification(currentUserId, notifId);
+
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('"$notifTitle" silindi'),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                  margin: const EdgeInsets.all(12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              );
+            }
+          },
+          child: InkWell(
+            onTap: () => _openNotification(item),
+            onLongPress: () => _showDeleteNotificationDialog(context, currentUserId, item),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isUnread
+                    ? (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF3F6FF))
+                    : (isDark ? AppTheme.darkSurface : Colors.white),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200]!,
                 ),
               ),
-              onDismissed: (direction) async {
-                final notifTitle = item['title'] as String? ?? 'Bildirim';
-
-                // Firestore'dan tamamen sil
-                await _firestoreService.deleteNotification(currentUserId, notifId);
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('"$notifTitle" silindi'),
-                      duration: const Duration(seconds: 2),
-                      behavior: SnackBarBehavior.floating,
-                      margin: const EdgeInsets.all(12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: iconBg,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                  );
-                }
-              },
-              child: InkWell(
-                onTap: () => _openNotification(item),
-                onLongPress: () => _showDeleteNotificationDialog(context, currentUserId, item),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isUnread
-                        ? (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF3F6FF))
-                        : (isDark ? AppTheme.darkSurface : Colors.white),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200]!,
-                    ),
+                    child: Icon(icon, color: iconColor, size: 22),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: iconBg,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(icon, color: iconColor),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    item['title'] as String,
-                                    style: TextStyle(
-                                      fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
-                                      fontSize: 15,
-                                      color: isDark ? Colors.white : Colors.black87,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                            Expanded(
+                              child: Text(
+                                item['title'] as String? ?? 'Bildirim',
+                                style: TextStyle(
+                                  fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
+                                  fontSize: 15,
+                                  color: isDark ? Colors.white : Colors.black87,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  DateFormat('HH:mm').format(item['createdAt'] as DateTime),
-                                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            if (item['dealTitle'].toString().isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 2.0),
-                                child: Text(
-                                  item['dealTitle'] as String,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: primaryColor,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            Text(
-                              item['body'] as String,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? Colors.grey[400] : Colors.grey[700],
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            if (item['createdAt'] != null)
+                              Text(
+                                _formatNotificationTime(item['createdAt'] as DateTime),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[500],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                           ],
                         ),
-                      ),
-                      if (isUnread) ...[
-                        const SizedBox(width: 10),
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
+                        const SizedBox(height: 4),
+                        if (item['dealTitle'] != null &&
+                            item['dealTitle'].toString().trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 2.0),
+                            child: Text(
+                              item['dealTitle'] as String,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: primaryColor,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        Text(
+                          item['body'] as String? ?? '',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.grey[400] : Colors.grey[700],
+                            height: 1.3,
                           ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
+                  if (isUnread) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      margin: const EdgeInsets.only(top: 4),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
@@ -527,6 +995,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         title: const Text('Bildirimi Sil'),
         content: const Text('Bu bildirimi silmek istediğinize emin misiniz?'),
         backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -548,7 +1017,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Bildirim silindi'),
-              backgroundColor: Colors.green,
+              backgroundColor: Color(0xFF10B981),
             ),
           );
         }
@@ -573,6 +1042,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         title: const Text('Tümünü Sil'),
         content: const Text('Tüm bildirimleri silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
         backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -606,13 +1076,13 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         );
 
         await _firestoreService.deleteAllNotifications(userId);
-        
+
         if (mounted) {
           Navigator.pop(context); // Close loading dialog
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Tüm bildirimler silindi'),
-              backgroundColor: Colors.green,
+              backgroundColor: Color(0xFF10B981),
               duration: Duration(seconds: 2),
             ),
           );
@@ -623,7 +1093,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Bildirim gönderilirken hata oluştu: $cleanMsg'),
+              content: Text('Bildirimler silinirken hata oluştu: $cleanMsg'),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 3),

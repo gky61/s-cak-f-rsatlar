@@ -14,6 +14,7 @@ import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
 import '../widgets/report_dialog.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
+import '../widgets/deal_restriction_bottom_sheet.dart';
 import '../widgets/skeletons/comments_skeleton.dart';
 import '../widgets/swipe_to_reply.dart';
 import '../widgets/reaction_picker_sheet.dart';
@@ -44,6 +45,8 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
   final AuthService _authService = AuthService();
   bool _isSubmitting = false;
   bool _isAdmin = false;
+  bool _isCommentSharingEnabled = true;
+  bool _isUserCommentBanned = false;
   Comment? _replyingTo; // Cevap verilen yorum
   ScrollController? _scrollController; // Yorum listesi scroll controller'ı
   final Map<String, GlobalKey> _commentKeys = {}; // Yorum ID'leri için GlobalKey'ler
@@ -54,20 +57,26 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
   @override
   void initState() {
     super.initState();
-    _checkAdminStatus();
+    _checkPermissions();
     _authSub = _authService.authStateChanges.listen((user) {
       if (mounted) {
-        _checkAdminStatus();
-        setState(() {});
+        _checkPermissions();
       }
     });
   }
 
-  Future<void> _checkAdminStatus() async {
-    final isAdmin = await _authService.isAdmin();
+  Future<void> _checkPermissions() async {
+    final user = _authService.currentUser;
+    final results = await Future.wait([
+      _authService.isAdmin(),
+      _firestoreService.isCommentSharingEnabled(),
+      if (user != null) _firestoreService.isUserCommentBanned(user.uid) else Future.value(false),
+    ]);
     if (mounted) {
       setState(() {
-        _isAdmin = isAdmin;
+        _isAdmin = results[0];
+        _isCommentSharingEnabled = results[1];
+        _isUserCommentBanned = results[2];
       });
     }
   }
@@ -97,7 +106,7 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
         primaryButtonText: '🚀 Google ile Giriş Yap',
       );
       if (loggedIn == true && mounted) {
-        _checkAdminStatus();
+        _checkPermissions();
         setState(() {});
         if (_commentController.text.trim().isNotEmpty) {
           _submitComment();
@@ -106,8 +115,32 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
       return;
     }
 
-    // Engellenen kullanıcı kontrolü
-    final isBlocked = await _firestoreService.isUserBlocked(user.uid);
+    // Yorum izinleri ve engelleme kontrolleri (Paralel)
+    final results = await Future.wait([
+      _firestoreService.isCommentSharingEnabled(),
+      _firestoreService.isUserCommentBanned(user.uid),
+      _firestoreService.isUserBlocked(user.uid),
+    ]);
+
+    final isSharingEnabled = results[0];
+    final isCommentBanned = results[1];
+    final isBlocked = results[2];
+
+    if (!isSharingEnabled && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Yorum yapma özelliği geçici olarak kapalıdır.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (isCommentBanned && mounted) {
+      showCommentBannedBottomSheet(context);
+      return;
+    }
+
     if (isBlocked && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -205,13 +238,26 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
         _replyingTo = null;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        final errorMsg = e.toString();
+        if (errorMsg.contains('permission-denied') ||
+            errorMsg.contains('yetkiniz kaldırılmış') ||
+            errorMsg.contains('yorum yapma izniniz kısıtlanmış') ||
+            errorMsg.contains('yetkiniz bulunmamaktadır')) {
+          showCommentBannedBottomSheet(context);
+        } else {
+          final cleanMsg = errorMsg
+              .replaceAll('Exception: ', '')
+              .replaceAll(RegExp(r'\[cloud_firestore\/.*?\]'), '')
+              .replaceAll(RegExp(r'\[.*?\/.*?\]'), '')
+              .trim();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(cleanMsg.isNotEmpty ? cleanMsg : 'Yorum eklenirken bir hata oluştu'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
     }
   }
@@ -455,80 +501,121 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                             ),
                           ),
                         ],
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                focusNode: _commentFocusNode,
-                                controller: _commentController,
-                                style: TextStyle(
-                                  color: isDark ? AppTheme.darkTextPrimary : Colors.black,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: _replyingTo != null 
-                                      ? '@${_replyingTo!.userName} kullanıcısına cevap verin...' 
-                                      : 'Yorumunuzu yazın...',
-                                  hintStyle: TextStyle(
-                                    color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
-                                  ),
-                                  filled: true,
-                                  fillColor: isDark ? AppTheme.darkBackground : Colors.white,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                    borderSide: BorderSide(
-                                      color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                    borderSide: BorderSide(
-                                      color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                    borderSide: BorderSide(
-                                      color: primaryColor,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                ),
-                                maxLines: null,
-                                minLines: 1,
-                                textInputAction: TextInputAction.newline,
-                                keyboardType: TextInputType.multiline,
-                                onSubmitted: (_) => _submitComment(),
+                        if (!_isCommentSharingEnabled || _isUserCommentBanned)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isDark ? AppTheme.darkBorder : const Color(0xFFCBD5E1),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: primaryColor,
-                                borderRadius: BorderRadius.circular(20),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _isUserCommentBanned
+                                      ? Icons.comments_disabled_rounded
+                                      : Icons.pause_circle_filled_rounded,
+                                  color: _isUserCommentBanned
+                                      ? const Color(0xFFEF4444)
+                                      : const Color(0xFFF59E0B),
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _isUserCommentBanned
+                                        ? 'Yorum yapma izniniz kısıtlanmıştır.'
+                                        : 'Yorumlar şu anda bakım nedeniyle geçici olarak kapalıdır.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? AppTheme.darkTextSecondary
+                                          : AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  focusNode: _commentFocusNode,
+                                  controller: _commentController,
+                                  style: TextStyle(
+                                    color: isDark ? AppTheme.darkTextPrimary : Colors.black,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: _replyingTo != null 
+                                        ? '@${_replyingTo!.userName} kullanıcısına cevap verin...' 
+                                        : 'Yorumunuzu yazın...',
+                                    hintStyle: TextStyle(
+                                      color: isDark ? AppTheme.darkTextSecondary : Colors.grey[500],
+                                    ),
+                                    filled: true,
+                                    fillColor: isDark ? AppTheme.darkBackground : Colors.white,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      borderSide: BorderSide(
+                                        color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      borderSide: BorderSide(
+                                        color: isDark ? AppTheme.darkBorder : Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                      borderSide: BorderSide(
+                                        color: primaryColor,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  maxLines: null,
+                                  minLines: 1,
+                                  textInputAction: TextInputAction.newline,
+                                  keyboardType: TextInputType.multiline,
+                                  onSubmitted: (_) => _submitComment(),
+                                ),
                               ),
-                              child: IconButton(
-                                icon: _isSubmitting
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            Colors.white,
+                              const SizedBox(width: 12),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: primaryColor,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: IconButton(
+                                  icon: _isSubmitting
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
                                           ),
-                                        ),
-                                      )
-                                    : const Icon(Icons.send_rounded, color: Colors.white),
-                                onPressed: _isSubmitting ? null : _submitComment,
+                                        )
+                                      : const Icon(Icons.send_rounded, color: Colors.white),
+                                  onPressed: _isSubmitting ? null : _submitComment,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
                       ],
                     ),
                   ),

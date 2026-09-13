@@ -38,32 +38,46 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
     if (deal.hidePrice) return const SizedBox.shrink();
     final hasOriginalPrice = deal.originalPrice != null && deal.originalPrice! > deal.price;
 
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 4,
-      runSpacing: 2,
-      children: [
-        FormattedPriceText(
-          value: deal.price,
-          style: TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w900,
-            color: isExpired ? Colors.red[700] : AppTheme.primary,
-            letterSpacing: -0.3,
-          ),
-        ),
-        if (hasOriginalPrice)
-          FormattedPriceText(
-            value: deal.originalPrice,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-              color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-              decoration: TextDecoration.lineThrough,
-              decorationThickness: 1.5,
+    return Padding(
+      padding: const EdgeInsets.only(right: 48), // Sağ alttaki termometre hapına asla çarpmaz ve taşma yapmaz
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            // Güncel İndirimli Fiyat
+            FormattedPriceText(
+              value: deal.price,
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w900,
+                color: isExpired ? const Color(0xFFDC2626) : AppTheme.primary,
+                letterSpacing: -0.4,
+                height: 1.0,
+              ),
             ),
-          ),
-      ],
+            if (hasOriginalPrice) ...[
+              const SizedBox(width: 4.5),
+              // İndirimsiz / Liste Fiyatı (Zarif üstü çizili gri ton)
+              FormattedPriceText(
+                value: deal.originalPrice,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                  decoration: TextDecoration.lineThrough,
+                  decorationColor: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                  decorationThickness: 1.3,
+                  height: 1.0,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -140,14 +154,14 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                 children: [
                   // Görsel Container (Aspect Square yerine modern dikdörtgen)
                   SizedBox(
-                    height: 145,
+                    height: 142,
                     width: double.infinity,
                     child: Stack(
                       children: [
                         // Görsel
                         Container(
                           width: double.infinity,
-                          height: 145,
+                          height: 142,
                           decoration: const BoxDecoration(
                             color: Colors.white, // Beyaz zemin
                             borderRadius: BorderRadius.only(
@@ -273,7 +287,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                   // ─── ALT İÇERİK GÖVDESİ (SİMETRİK VE CETVEL HİZALI) ────────
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
+                      padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
                       child: Stack(
                         children: [
                           // 1. ÜST & ORTA İÇERİK (HİZALI AKIŞ)
@@ -294,7 +308,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                             style: TextStyle(
                                               fontSize: 9.5,
                                               fontWeight: FontWeight.w700,
-                                              color: isDark ? Colors.grey[200] : const Color(0xFF0F172A),
+                                              color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A),
                                             ),
                                           ),
                                           TextSpan(
@@ -316,7 +330,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   _buildAuthorAvatar(deal, primaryColor),
                                 ],
                               ),
-                              const SizedBox(height: 4.5),
+                              const SizedBox(height: 4.0),
 
                               // 1.2 Başlık (Sabit 30px Yükseklik - Cetvel Hizası)
                               SizedBox(
@@ -326,19 +340,21 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.25,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.22,
+                                    letterSpacing: -0.2,
                                     color: (isExpired || deal.expiredVotes >= 15)
-                                        ? Colors.red[700] 
-                                        : (isDark ? Colors.white : AppTheme.textPrimary),
+                                        ? const Color(0xFFDC2626) 
+                                        : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A)),
                                     decoration: (isExpired || deal.expiredVotes >= 15)
                                         ? TextDecoration.lineThrough
                                         : null,
+                                    decorationColor: const Color(0xFFDC2626),
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 3.5),
+                              const SizedBox(height: 3.0),
 
                               // 1.3 Puan, Sosyal Kanıt & Mağaza Rozetleri (Sabit 16px Yükseklik)
                               SizedBox(
@@ -352,26 +368,31 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                           if (deal.ratingValue != null) ...[
                                             const Icon(
                                               Icons.star_rounded,
-                                              size: 13,
-                                              color: Color(0xFFFFB800),
+                                              size: 13.5,
+                                              color: Color(0xFFF59E0B),
                                             ),
-                                            const SizedBox(width: 1.5),
+                                            const SizedBox(width: 2),
                                             Text(
                                               deal.ratingValue!.toStringAsFixed(1),
                                               style: TextStyle(
-                                                fontSize: 9.5,
+                                                fontSize: 10,
                                                 fontWeight: FontWeight.w800,
-                                                color: isDark ? Colors.grey[200] : AppTheme.textPrimary,
+                                                color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A),
+                                                letterSpacing: -0.1,
                                               ),
                                             ),
                                             if (deal.ratingCount != null) ...[
-                                              const SizedBox(width: 2),
-                                              Text(
-                                                '(${deal.ratingCount})',
-                                                style: TextStyle(
-                                                  fontSize: 8.5,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                                              const SizedBox(width: 2.5),
+                                              Flexible(
+                                                child: Text(
+                                                  '(${deal.ratingCount})',
+                                                  style: TextStyle(
+                                                    fontSize: 8.5,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
                                             ],
@@ -383,9 +404,9 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
-                                                  fontSize: 9,
+                                                  fontSize: 9.5,
                                                   fontWeight: FontWeight.w600,
-                                                  color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                                 ),
                                               ),
                                             ),
@@ -401,7 +422,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                         ],
                                       ),
                                     ),
-                                    // Yorum Sayısı Rozeti (Daima görünür: 0 ise soluk, >0 ise canlı ve içi dolu)
+                                    // Yorum Sayısı Rozeti (Daima görünür)
                                     buildDealCommentBadge(
                                       count: deal.commentCount,
                                       isDark: isDark,
@@ -409,7 +430,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 5.0),
 
                               // 1.4 FİYAT (Puanın hemen altında, göz önünde ve cetvel hizasında!)
                               _buildPriceAndBadgeSection(isDark, isExpired),

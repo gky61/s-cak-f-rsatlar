@@ -29,15 +29,16 @@ class CommentService {
     String? userPinnedBadge,
   }) async {
     try {
+      // Yorum engeli kontrolü: Admin dahil kimse yorum yasağındayken yorum yapamaz
+      final banDoc = await _firestore.collection('commentBannedUsers').doc(userId).get();
+      if (banDoc.exists) throw Exception('Yorum yapma izniniz kısıtlanmıştır. Topluluk kurallarına uyum nedeniyle yorum yazamazsınız.');
+
       final isAdmin = await _authService.isAdmin();
       
       if (!isAdmin) {
         final doc = await _firestore.collection('settings').doc('app').get();
         final isSharingEnabled = doc.data()?['commentSharingEnabled'] ?? true;
         if (!isSharingEnabled) throw Exception('Yorum yapma özelliği geçici olarak kapalı.');
-        
-        final banDoc = await _firestore.collection('commentBannedUsers').doc(userId).get();
-        if (banDoc.exists) throw Exception('Yorum yapma yetkiniz kaldırılmış.');
       }
 
       final moderationResult = ContentModerationService.moderateComment(text);
@@ -87,6 +88,11 @@ class CommentService {
       return true;
     } catch (e) {
       _log('Yorum ekleme hatası: $e');
+      if (e is FirebaseException && e.code == 'permission-denied') {
+        throw Exception('Yorum yapma izniniz kısıtlanmıştır veya bu işlem için yetkiniz bulunmamaktadır.');
+      } else if (e.toString().contains('permission-denied')) {
+        throw Exception('Yorum yapma izniniz kısıtlanmıştır veya bu işlem için yetkiniz bulunmamaktadır.');
+      }
       rethrow;
     }
   }

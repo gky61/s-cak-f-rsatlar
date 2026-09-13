@@ -374,6 +374,147 @@ class FirestoreService {
   Stream<List<AppUser>> getFollowingUsersStream(String userId) => _userService.getFollowingUsersStream(userId);
   Future<bool> isFollowNotificationEnabled(String followerId, String followingId) => _userService.isFollowNotificationEnabled(followerId, followingId);
   Future<void> toggleFollowNotification(String followerId, String followingId, bool enable) => _userService.toggleFollowNotification(followerId, followingId, enable);
+
+  /// Takip edilen kullanıcılar arasından bildirim aboneliği açık olanların UID set'ini dinler
+  Stream<Set<String>> getFollowedNotificationUserIdsStream(String currentUserId) {
+    return firestore
+        .collection('notificationSubscriptions')
+        .where('uid', isEqualTo: currentUserId)
+        .where('type', isEqualTo: 'author')
+        .snapshots()
+        .map((snapshot) {
+          final set = <String>{};
+          for (final doc in snapshot.docs) {
+            final data = doc.data();
+            if (data['enabled'] == true) {
+              final key = data['key'] as String? ?? '';
+              if (key.isNotEmpty) set.add(key);
+            }
+          }
+          return set;
+        });
+  }
+
+  /// Takip edilen kullanıcıların paylaştığı onaylı sıcak fırsatların akışı
+  Stream<List<Deal>> getFollowedUsersDealsStream(List<String> followedUserIds, {int limit = 50}) {
+    if (followedUserIds.isEmpty) {
+      return Stream.value([]);
+    }
+
+    final chunks = <List<String>>[];
+    for (var i = 0; i < followedUserIds.length; i += 30) {
+      chunks.add(followedUserIds.sublist(
+        i,
+        (i + 30 > followedUserIds.length) ? followedUserIds.length : i + 30,
+      ));
+    }
+
+    if (chunks.length == 1) {
+      return firestore
+          .collection('deals')
+          .where('isApproved', isEqualTo: true)
+          .where('postedBy', whereIn: chunks.first)
+          .snapshots()
+          .map((snapshot) {
+            final deals = snapshot.docs
+                .map((doc) {
+                  try {
+                    return Deal.fromFirestore(doc);
+                  } catch (_) {
+                    return null;
+                  }
+                })
+                .where((deal) => deal != null && deal.isTest != true)
+                .cast<Deal>()
+                .toList();
+            deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            return deals.take(limit).toList();
+          });
+    }
+
+    late StreamController<List<Deal>> controller;
+    final subscriptions = <StreamSubscription>[];
+    final Map<int, List<Deal>> chunkResults = {};
+
+    void emitMerged() {
+      final allDeals = <Deal>[];
+      for (final list in chunkResults.values) {
+        allDeals.addAll(list);
+      }
+      allDeals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!controller.isClosed) {
+        controller.add(allDeals.take(limit).toList());
+      }
+    }
+
+    controller = StreamController<List<Deal>>.broadcast(
+      onListen: () {
+        for (var i = 0; i < chunks.length; i++) {
+          final index = i;
+          final sub = firestore
+              .collection('deals')
+              .where('isApproved', isEqualTo: true)
+              .where('postedBy', whereIn: chunks[index])
+              .snapshots()
+              .listen((snapshot) {
+                final list = snapshot.docs
+                    .map((d) {
+                      try {
+                        return Deal.fromFirestore(d);
+                      } catch (_) {
+                        return null;
+                      }
+                    })
+                    .where((d) => d != null && d.isTest != true)
+                    .cast<Deal>()
+                    .toList();
+                chunkResults[index] = list;
+                emitMerged();
+              }, onError: (e) {
+                if (!controller.isClosed) controller.addError(e);
+              });
+          subscriptions.add(sub);
+        }
+      },
+      onCancel: () {
+        for (final sub in subscriptions) {
+          sub.cancel();
+        }
+        subscriptions.clear();
+        chunkResults.clear();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  /// Takip edilmeyen, topluluğun öne çıkan/popüler avcılarını önerir
+  Stream<List<AppUser>> getSuggestedHuntersStream({int limit = 10, List<String> excludeUserIds = const []}) {
+    return firestore
+        .collection('users')
+        .limit(30)
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((d) {
+                try {
+                  return AppUser.fromFirestore(d);
+                } catch (_) {
+                  return null;
+                }
+              })
+              .where((u) => u != null && !u.isBot && !excludeUserIds.contains(u.uid))
+              .cast<AppUser>()
+              .toList();
+          list.sort((a, b) {
+            if (b.dealCount != a.dealCount) {
+              return b.dealCount.compareTo(a.dealCount);
+            }
+            return b.points.compareTo(a.points);
+          });
+          return list.take(limit).toList();
+        });
+  }
   
   Future<List<String>> getUserWatchKeywords(String userId) => _userService.getUserWatchKeywords(userId);
   Future<void> addWatchKeyword(String userId, String keyword) => _userService.addWatchKeyword(userId, keyword);
@@ -381,6 +522,8 @@ class FirestoreService {
   
   Future<bool> isUserBlocked(String userId) => _userService.isUserBlocked(userId);
   Future<bool> blockUser(String userId) => _userService.blockUser(userId);
+  Future<bool> isUserDealBanned(String userId) => _userService.isUserDealBanned(userId);
+  Future<bool> isUserCommentBanned(String userId) => _userService.isUserCommentBanned(userId);
 
   // ===========================================================================
   // MESAJLAŞMA İŞLEMLERİ (MessageService üzerinden)
@@ -610,19 +753,37 @@ class FirestoreService {
         } else if (data['createdAt'] is String) {
           createdAt = DateTime.tryParse(data['createdAt'] as String) ?? DateTime.now();
         }
-        return {
-          'id': doc.id,
-          'type': data['type'] ?? 'deal',
-          'dealId': data['dealId'] ?? '',
-          'dealTitle': data['dealTitle'] ?? '',
-          'commentId': data['commentId'] ?? '',
-          'title': data['title'] ?? 'Yeni Fırsat',
-          'body': data['body'] ?? '',
-          'reason': data['reason'] ?? '',
-          'reasonDetail': data['reasonDetail'] ?? '',
-          'read': data['read'] ?? false,
-          'createdAt': createdAt,
-        };
+
+        // Tüm doküman alanlarını koruyarak map oluştur
+        final map = Map<String, dynamic>.from(data);
+        map['id'] = doc.id;
+        map['type'] = data['type'] ?? 'deal';
+        map['dealId'] = data['dealId'] ?? '';
+        map['dealTitle'] = data['dealTitle'] ?? '';
+        map['commentId'] = data['commentId'] ?? '';
+        map['title'] = data['title'] ?? 'Yeni Fırsat';
+        map['body'] = data['body'] ?? '';
+        map['reason'] = data['reason'] ?? '';
+        map['reasonDetail'] = data['reasonDetail'] ?? '';
+        map['read'] = data['read'] ?? false;
+        map['createdAt'] = createdAt;
+
+        // Akıllı Status tespiti (status alanı eksik/boş olsa dahi başlıktan otomatik kurtarma)
+        final rawStatus = data['status']?.toString().trim().toLowerCase() ?? '';
+        if (rawStatus.isNotEmpty) {
+          map['status'] = rawStatus;
+        } else {
+          final titleLower = (data['title'] ?? '').toString().toLowerCase();
+          if (titleLower.contains('onaylandı') || titleLower.contains('onaylandi')) {
+            map['status'] = 'approved';
+          } else if (titleLower.contains('reddedildi')) {
+            map['status'] = 'rejected';
+          } else {
+            map['status'] = '';
+          }
+        }
+
+        return map;
       }).toList();
     });
   }
@@ -634,6 +795,23 @@ class FirestoreService {
         .collection('notifications')
         .doc(notificationId)
         .update({'read': true});
+  }
+
+  Future<void> markAllNotificationsAsRead(String userId) async {
+    final snapshot = await firestore
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .where('read', isEqualTo: false)
+        .get();
+
+    if (snapshot.docs.isEmpty) return;
+
+    final batch = firestore.batch();
+    for (final doc in snapshot.docs) {
+      batch.update(doc.reference, {'read': true});
+    }
+    await batch.commit();
   }
 
   Future<void> deleteNotification(String userId, String notificationId) async {

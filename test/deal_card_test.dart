@@ -62,5 +62,24 @@ void main() {
       final daysAgo = now.subtract(const Duration(days: 4));
       expect(formatRelativeTime(daysAgo), '4 gün önce');
     });
+
+    test('formatRelativeTimeCompact should calculate compact time without once suffix', () {
+      final now = DateTime.now();
+
+      final justNow = now.subtract(const Duration(seconds: 30));
+      expect(formatRelativeTimeCompact(justNow), 'Şimdi');
+
+      final minutesAgo = now.subtract(const Duration(minutes: 15));
+      expect(formatRelativeTimeCompact(minutesAgo), '15dk');
+
+      final hoursAgo = now.subtract(const Duration(hours: 7));
+      expect(formatRelativeTimeCompact(hoursAgo), '7sa');
+
+      final yesterday = now.subtract(const Duration(days: 1));
+      expect(formatRelativeTimeCompact(yesterday), 'Dün');
+
+      final daysAgo = now.subtract(const Duration(days: 4));
+      expect(formatRelativeTimeCompact(daysAgo), '4g');
+    });
   });
 }

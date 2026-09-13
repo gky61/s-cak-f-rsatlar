@@ -19,5 +19,11 @@
 		<string>applinks:sicak-firsatlar-e6eae.web.app</string>
 		<string>applinks:firsatkolik.web.app</string>
 	</array>
+
+	<!-- App Groups Yetkisi (Share Extension ile Veri Paylaşımı) -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.firsatkolik.app</string>
+	</array>
 </dict>
 </plist>

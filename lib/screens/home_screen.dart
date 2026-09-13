@@ -33,6 +33,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/asset_path_migration.dart';
 import '../utils/badge_helper.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
+import '../widgets/deal_restriction_bottom_sheet.dart';
+import '../widgets/clipboard_deal_prompt_sheet.dart';
+import '../utils/deal_url_detector.dart';
 import '../services/in_app_tutorial_service.dart';
 import '../widgets/in_app_tutorial/tutorial_spotlight_overlay.dart';
 
@@ -60,12 +63,15 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
   final ThemeService _themeService = ThemeService();
   final InAppTutorialService _tutorialService = InAppTutorialService();
+
+  String? _lastCheckedClipboardUrl;
+  bool _isCheckingClipboard = false;
   
   late int _currentTabIndex;
   String _selectedCategory = 'tumu';
@@ -159,8 +165,20 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController.addListener(_onScroll);
     // Share Intent dinleyici
     _initShareIntentListener();
+    // App lifecycle dinleyicisi (Mağazadan link kopyalayıp dönüldüğünde otomatik yakalama)
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkClipboardForDealLink();
+    });
     // In-App Tutorial Kontrolü
     _checkAndTriggerTutorial();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkClipboardForDealLink();
+    }
   }
 
   @override
@@ -236,6 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _categoryScrollController.dispose();
     _searchController.dispose();
     _userSearchDebounceTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -266,36 +285,116 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _handleSharedMedia(List<SharedMediaFile> files) {
+  Future<void> _checkClipboardForDealLink() async {
+    if (kIsWeb || !mounted || _isCheckingClipboard) return;
+    _isCheckingClipboard = true;
+
+    try {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      final rawText = clipboardData?.text?.trim();
+      if (rawText == null || rawText.isEmpty) {
+        _isCheckingClipboard = false;
+        return;
+      }
+
+      final url = DealUrlDetector.extractUrl(rawText);
+      if (url == null) {
+        _isCheckingClipboard = false;
+        return;
+      }
+
+      // Aynı link için oturumda tekrar tekrar pop-up açılmasını engelle
+      if (_lastCheckedClipboardUrl == url) {
+        _isCheckingClipboard = false;
+        return;
+      }
+
+      final storeName = DealUrlDetector.detectStoreName(url);
+      if (storeName == null) {
+        _isCheckingClipboard = false;
+        return;
+      }
+
+      _lastCheckedClipboardUrl = url;
+
+      if (!mounted) {
+        _isCheckingClipboard = false;
+        return;
+      }
+
+      ClipboardDealPromptSheet.show(
+        context,
+        url: url,
+        storeName: storeName,
+        onProceed: () {
+          _navigateToSubmitDealWithUrl(url);
+        },
+      );
+    } catch (e) {
+      _log('Pano link kontrol hatası: $e');
+    } finally {
+      _isCheckingClipboard = false;
+    }
+  }
+
+  Future<void> _navigateToSubmitDealWithUrl(String url) async {
+    if (!mounted) return;
+    final user = _authService.currentUser;
+    if (user == null) {
+      showGuestLoginBottomSheet(
+        context,
+        title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
+        message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
+        primaryButtonText: '🚀 Google ile Giriş Yap',
+      );
+      return;
+    }
+
+    final results = await Future.wait([
+      _firestoreService.isDealSharingEnabled(),
+      _firestoreService.isUserDealBanned(user.uid),
+    ]);
+
+    if (!mounted) return;
+
+    final isSharingEnabled = results[0];
+    final isDealBanned = results[1];
+
+    if (!isSharingEnabled) {
+      showDealSharingDisabledBottomSheet(context);
+      return;
+    }
+
+    if (isDealBanned) {
+      showDealBannedBottomSheet(context);
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SubmitDealScreen(initialUrl: url),
+      ),
+    );
+  }
+
+  Future<void> _handleSharedMedia(List<SharedMediaFile> files) async {
     if (files.isEmpty) return;
     
     final sharedText = files.first.path;
     _log('📥 Paylaşılan veri alındı: $sharedText');
     
-    final url = _extractUrl(sharedText);
+    final url = DealUrlDetector.extractUrl(sharedText) ?? _extractUrl(sharedText);
     if (url != null) {
       _log('🎯 Ayıklanan URL: $url');
-      
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => SubmitDealScreen(initialUrl: url),
-          ),
-        );
-      }
+      _navigateToSubmitDealWithUrl(url);
     } else {
       _log('⚠️ Paylaşılan metinde geçerli bir link bulunamadı.');
     }
   }
 
   String? _extractUrl(String text) {
-    final RegExp urlRegex = RegExp(
-      r'(https?:\/\/[^\s]+)',
-      caseSensitive: false,
-    );
-    final match = urlRegex.firstMatch(text);
-    return match?.group(0);
+    return DealUrlDetector.extractUrl(text);
   }
 
   void _startInitialLoadingTimeout() {
@@ -314,12 +413,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_viewMode == CardViewMode.vertical) {
       return GridView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
+        padding: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 8),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 0.61,
+          mainAxisSpacing: 11,
+          childAspectRatio: 0.635,
         ),
         itemCount: 6,
         itemBuilder: (context, index) {
@@ -1231,7 +1330,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   // ─── SATIR 2: Chips (Kataloglar, Kuponlar) + View ────
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 12, 6),
+                    padding: const EdgeInsets.fromLTRB(16, 2, 12, 4),
                     child: Row(
                       children: [
                         StreamBuilder<bool>(
@@ -1414,7 +1513,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                 ],
               ],
             ),
@@ -1782,12 +1881,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             ? GridView.builder(
                                 controller: _scrollController,
                                 key: ValueKey('deal_grid_$_selectedCategory'),
-                                padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
+                                padding: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 8),
                                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 2,
                                   crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
-                                  childAspectRatio: 0.61,
+                                  mainAxisSpacing: 11,
+                                  childAspectRatio: 0.635,
                                 ),
                                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                                 cacheExtent: 500, // Optimize edilmiş cache
@@ -2063,25 +2162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 3. Özel Dairesel Orta Buton (Aksiyon: Fırsat Paylaş - Odak Formu)
                 _buildCenterActionButton(
                   targetKey: _tutorialService.bottomNavAddKey,
-                  onTap: () {
-                    final user = _authService.currentUser;
-                    if (user == null) {
-                      showGuestLoginBottomSheet(
-                        context,
-                        title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
-                        message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
-                        primaryButtonText: '🚀 Google ile Giriş Yap',
-                      );
-                      return;
-                    }
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SubmitDealScreen(),
-                        fullscreenDialog: true,
-                      ),
-                    );
-                  },
+                  onTap: _handleCenterActionTap,
                 ),
                 // 4. Kaydedilenler (Index 2)
                 _buildBottomNavItem(
@@ -2193,13 +2274,66 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _handleCenterActionTap() async {
+    final user = _authService.currentUser;
+    if (user == null) {
+      showGuestLoginBottomSheet(
+        context,
+        title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
+        message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
+        primaryButtonText: '🚀 Google ile Giriş Yap',
+      );
+      return;
+    }
+
+    // 1. Paylaşım Şalteri ve Kullanıcı Ban Kontrolü (Paralel sorgulama)
+    final results = await Future.wait([
+      _firestoreService.isDealSharingEnabled(),
+      _firestoreService.isUserDealBanned(user.uid),
+    ]);
+
+    if (!mounted) return;
+
+    final isSharingEnabled = results[0];
+    final isDealBanned = results[1];
+
+    // Paylaşım herkese durdurulduğunda sayfa ASLA açılmamalı
+    if (!isSharingEnabled) {
+      showDealSharingDisabledBottomSheet(context);
+      return;
+    }
+
+    // Kullanıcının fırsat paylaşımı kısıtlandıysa sayfa ASLA açılmamalı
+    if (isDealBanned) {
+      showDealBannedBottomSheet(context);
+      return;
+    }
+
+    // Kullanıcı blocked ise
+    final isBlocked = await _firestoreService.isUserBlocked(user.uid);
+    if (!mounted) return;
+    if (isBlocked) {
+      showAccountBlockedBottomSheet(context);
+      return;
+    }
+
+    // Tüm kontroller geçtiğinde formu aç
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SubmitDealScreen(),
+        fullscreenDialog: true,
+      ),
+    );
+  }
+
   /// Minimalist & Uyumlu Orta Buton (Fırsat Paylaş)
   Widget _buildCenterActionButton({
     required VoidCallback onTap,
     Key? targetKey,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const activeColor = AppTheme.primary;
+    final inactiveColor = isDark ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93);
 
     return Expanded(
       child: InkWell(
@@ -2217,23 +2351,27 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 26,
-                height: 26,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
                     colors: [
-                      Color(0xFFFF7A45), // Canlı Turuncu
-                      Color(0xFFFF3D00), // Ateş / Marka Turuncusu
+                      Color(0xFFFF8243), // Yumuşak Sıcak Turuncu
+                      Color(0xFFFF5F24), // Zarif Marka Turuncusu
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: isDark ? 0.20 : 0.40),
+                    width: 1.2,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF5722).withValues(alpha: isDark ? 0.35 : 0.25),
-                      blurRadius: 6,
-                      offset: const Offset(0, 1.5),
+                      color: const Color(0xFFFF5722).withValues(alpha: isDark ? 0.22 : 0.16),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
@@ -2241,7 +2379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Icon(
                     Icons.add_rounded,
                     color: Colors.white,
-                    size: 18,
+                    size: 19,
                   ),
                 ),
               ),
@@ -2250,8 +2388,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Fırsat Paylaş',
                 style: TextStyle(
                   fontSize: 10.0,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? const Color(0xFFFF8C5A) : activeColor,
+                  fontWeight: FontWeight.w500,
+                  color: inactiveColor,
                   letterSpacing: -0.1,
                   height: 1.1,
                 ),

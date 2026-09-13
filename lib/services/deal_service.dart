@@ -226,17 +226,18 @@ class DealService {
     bool hidePrice = false,
   }) async {
     try {
+      // Fırsat paylaşım engeli kontrolü: Admin dahil kimse paylaşım yasağındayken fırsat ekleyemez
+      final dealBanDoc = await _firestore.collection('dealBannedUsers').doc(userId).get();
+      if (dealBanDoc.exists) {
+        throw Exception('Fırsat paylaşım izniniz kısıtlanmıştır. Topluluk kurallarına uyum nedeniyle yeni fırsat paylaşamazsınız.');
+      }
+
       final isAdmin = await _authService.isAdmin();
       
       if (!isAdmin) {
         final isSharingEnabled = await isDealSharingEnabled();
         if (!isSharingEnabled) {
-          throw Exception('Şu anda yeni fırsat paylaşımı yapılamıyor.');
-        }
-        
-        final dealBanDoc = await _firestore.collection('dealBannedUsers').doc(userId).get();
-        if (dealBanDoc.exists) {
-          throw Exception('Paylaşım yapma yetkiniz kaldırılmış.');
+          throw Exception('Fırsat paylaşımı şu anda bakım nedeniyle geçici olarak durdurulmuştur.');
         }
       }
       
@@ -433,6 +434,11 @@ class DealService {
         stack: stack,
         metadata: {'title': title, 'store': store, 'userId': userId},
       );
+      if (e is FirebaseException && e.code == 'permission-denied') {
+        throw Exception('Fırsat paylaşım izniniz kısıtlanmıştır veya bu işlem için yetkiniz bulunmamaktadır.');
+      } else if (e.toString().contains('permission-denied')) {
+        throw Exception('Fırsat paylaşım izniniz kısıtlanmıştır veya bu işlem için yetkiniz bulunmamaktadır.');
+      }
       rethrow;
     }
   }

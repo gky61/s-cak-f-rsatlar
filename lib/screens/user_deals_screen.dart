@@ -202,9 +202,9 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
                                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 2,
-                                  childAspectRatio: 0.61,
+                                  childAspectRatio: 0.635,
                                   crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
+                                  mainAxisSpacing: 11,
                                 ),
                                 itemCount: filteredDeals.length,
                                 itemBuilder: (context, index) {
@@ -397,9 +397,9 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.61,
+        childAspectRatio: 0.635,
         crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        mainAxisSpacing: 11,
       ),
       itemCount: 6,
       itemBuilder: (context, index) {

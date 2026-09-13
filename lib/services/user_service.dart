@@ -371,8 +371,13 @@ class UserService {
   }
 
   Future<bool> isUserBlocked(String userId) async {
-    final doc = await _firestore.collection('blockedUsers').doc(userId).get();
-    return doc.exists;
+    try {
+      final doc = await _firestore.collection('blockedUsers').doc(userId).get();
+      return doc.exists;
+    } catch (e) {
+      _log('Kullanıcı engel kontrol hatası: $e');
+      return false;
+    }
   }
 
   Future<bool> blockUser(String userId) async {

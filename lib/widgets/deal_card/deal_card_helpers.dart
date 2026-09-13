@@ -167,10 +167,10 @@ String formatRelativeTimeCompact(DateTime date) {
   }
 }
 
-/// Fırsat kartlarında yorum sayısını gösteren şık, sabit hizalı mikro rozet.
+/// Fırsat kartlarında yorum sayısını gösteren şık, modern e-ticaret mikro rozeti.
 ///
-/// [count] == 0 ise: Soluk, minimalist outline ikon ve hafif nötr gri ton ile görünür.
-/// [count] > 0 ise: Canlı, dikkat çekici, içi dolu ikon ve sıcak canlı renk (AppTheme.primary) ile parıldayan mikro kapsül.
+/// [count] == 0 ise: Minimalist, ferah nötr gri ton ile görünür.
+/// [count] > 0 ise: Canlı, dikkat çekici, hafif ışıltılı sıcak e-ticaret turuncusu (AppTheme.primary) ile parıldayan mikro kapsül.
 Widget buildDealCommentBadge({
   required int count,
   required bool isDark,
@@ -179,30 +179,30 @@ Widget buildDealCommentBadge({
   final bool hasComments = count > 0;
 
   final Color contentColor = hasComments
-      ? const Color(0xFFFF5722)
+      ? (isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C))
       : (isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8));
 
   final Color bgColor = hasComments
-      ? const Color(0xFFFF5722).withValues(alpha: isDark ? 0.16 : 0.10)
-      : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03));
+      ? (isDark ? const Color(0xFF431407).withValues(alpha: 0.55) : const Color(0xFFFFF7ED))
+      : (isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC));
 
   final Color borderColor = hasComments
-      ? const Color(0xFFFF5722).withValues(alpha: isDark ? 0.35 : 0.22)
-      : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06));
+      ? (isDark ? const Color(0xFF9A3412).withValues(alpha: 0.5) : const Color(0xFFFFEDD5))
+      : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0));
 
   final badgeWidget = Container(
-    padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
     decoration: BoxDecoration(
       color: bgColor,
-      borderRadius: BorderRadius.circular(4),
-      border: Border.all(color: borderColor, width: 0.5),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: borderColor, width: 0.8),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Icon(
-          Icons.chat_bubble_outline_rounded,
+          hasComments ? Icons.chat_bubble_rounded : Icons.chat_bubble_outline_rounded,
           size: 9.5,
           color: contentColor,
         ),
@@ -210,9 +210,10 @@ Widget buildDealCommentBadge({
         Text(
           '$count',
           style: TextStyle(
-            fontSize: 8.5,
+            fontSize: 9,
             fontWeight: hasComments ? FontWeight.w800 : FontWeight.w600,
             color: contentColor,
+            letterSpacing: -0.1,
             height: 1.1,
           ),
         ),
@@ -223,7 +224,7 @@ Widget buildDealCommentBadge({
   if (onTap != null) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(6),
       child: badgeWidget,
     );
   }

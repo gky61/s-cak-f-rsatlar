@@ -21,6 +21,7 @@ import '../utils/asset_path_migration.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/store_price_badge.dart';
 import 'deal_detail_screen.dart';
+import '../widgets/deal_restriction_bottom_sheet.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -157,6 +158,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   bool _isLoadingImage = false;
   String? _previewImageUrl;
   bool _dealSharingEnabled = true;
+  bool _isUserDealBanned = false;
   Timer? _urlDebounceTimer;
   Timer? _textDebounceTimer;
   bool _isCategoryLockedByScraper = false;
@@ -194,11 +196,32 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   }
 
   Future<void> _checkDealSharingStatus() async {
-    final enabled = await _firestoreService.isDealSharingEnabled();
-    if (mounted) {
-      setState(() {
-        _dealSharingEnabled = enabled;
-      });
+    final user = _authService.currentUser;
+    final results = await Future.wait([
+      _firestoreService.isDealSharingEnabled(),
+      if (user != null) _firestoreService.isUserDealBanned(user.uid) else Future.value(false),
+    ]);
+
+    if (!mounted) return;
+
+    final isSharingEnabled = results[0];
+    final isBanned = results.length > 1 ? results[1] : false;
+
+    setState(() {
+      _dealSharingEnabled = isSharingEnabled;
+      _isUserDealBanned = isBanned;
+    });
+
+    if (!isSharingEnabled) {
+      await showDealSharingDisabledBottomSheet(context);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } else if (isBanned) {
+      await showDealBannedBottomSheet(context);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     }
   }
 
@@ -424,11 +447,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     HapticFeedback.lightImpact();
     try {
       final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (!mounted) return;
       if (clipboardData?.text != null && clipboardData!.text!.trim().isNotEmpty) {
         final text = clipboardData.text!.trim();
         _urlController.text = text;
         _urlController.selection = TextSelection.fromPosition(TextPosition(offset: text.length));
         _formKey.currentState?.validate();
+        FocusScope.of(context).unfocus();
         setState(() {});
       } else {
         _showCustomSnackBar(
@@ -943,15 +968,34 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   Future<void> _submitDeal() async {
     HapticFeedback.mediumImpact();
-    final isEnabled = await _firestoreService.isDealSharingEnabled();
+    final user = _authService.currentUser;
+    if (user == null) {
+      _showCustomSnackBar(
+        message: 'Fırsat paylaşmak için giriş yapmalısınız',
+        icon: Icons.lock_outline_rounded,
+        backgroundColor: const Color(0xFFC62828),
+      );
+      return;
+    }
+
+    final results = await Future.wait([
+      _firestoreService.isDealSharingEnabled(),
+      _firestoreService.isUserDealBanned(user.uid),
+    ]);
+
+    final isEnabled = results[0];
+    final isBanned = results[1];
+
     if (!isEnabled) {
       if (mounted) {
-        _showCustomSnackBar(
-          message: 'Fırsat paylaşımı şu anda geçici olarak durdurulmuştur. Lütfen daha sonra tekrar deneyin.',
-          icon: Icons.warning_amber_rounded,
-          backgroundColor: const Color(0xFFEF6C00),
-          duration: const Duration(seconds: 4),
-        );
+        showDealSharingDisabledBottomSheet(context);
+      }
+      return;
+    }
+
+    if (isBanned) {
+      if (mounted) {
+        showDealBannedBottomSheet(context);
       }
       return;
     }
@@ -969,16 +1013,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     final validationResult = await DomainAllowlistService.validateUrl(urlControllerText);
     if (validationResult != UrlValidationResult.valid) {
       _showUrlValidationErrorDialog(validationResult);
-      return;
-    }
-
-    final user = _authService.currentUser;
-    if (user == null) {
-      _showCustomSnackBar(
-        message: 'Fırsat paylaşmak için giriş yapmalısınız',
-        icon: Icons.lock_outline_rounded,
-        backgroundColor: const Color(0xFFC62828),
-      );
       return;
     }
 
@@ -1052,9 +1086,19 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           if (errorMsg.contains('already_shared:')) {
             final dealId = errorMsg.split('already_shared:')[1].trim();
             _showAlreadySharedDialog(context, dealId);
+          } else if (errorMsg.contains('permission-denied') ||
+                     errorMsg.contains('yetkiniz kaldırılmış') ||
+                     errorMsg.contains('paylaşım izniniz kısıtlanmış') ||
+                     errorMsg.contains('yetkiniz bulunmamaktadır')) {
+            showDealBannedBottomSheet(context);
           } else {
+            final cleanMsg = errorMsg
+                .replaceAll('Exception: ', '')
+                .replaceAll(RegExp(r'\[cloud_firestore\/.*?\]'), '')
+                .replaceAll(RegExp(r'\[.*?\/.*?\]'), '')
+                .trim();
             _showCustomSnackBar(
-              message: errorMsg.replaceAll('Exception: ', ''),
+              message: cleanMsg.isNotEmpty ? cleanMsg : 'Fırsat paylaşılırken bir hata oluştu.',
               icon: Icons.error_outline_rounded,
               backgroundColor: const Color(0xFFC62828),
               duration: const Duration(seconds: 4),
@@ -1064,13 +1108,25 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final cleanError = e.toString().replaceAll('Exception: ', '').trim();
-        _showCustomSnackBar(
-          message: cleanError.isNotEmpty ? cleanError : 'Fırsat paylaşılırken bir hata oluştu.',
-          icon: Icons.error_outline_rounded,
-          backgroundColor: const Color(0xFFC62828),
-          duration: const Duration(seconds: 4),
-        );
+        final errorMsg = e.toString();
+        if (errorMsg.contains('permission-denied') ||
+            errorMsg.contains('yetkiniz kaldırılmış') ||
+            errorMsg.contains('paylaşım izniniz kısıtlanmış') ||
+            errorMsg.contains('yetkiniz bulunmamaktadır')) {
+          showDealBannedBottomSheet(context);
+        } else {
+          final cleanError = errorMsg
+              .replaceAll('Exception: ', '')
+              .replaceAll(RegExp(r'\[cloud_firestore\/.*?\]'), '')
+              .replaceAll(RegExp(r'\[.*?\/.*?\]'), '')
+              .trim();
+          _showCustomSnackBar(
+            message: cleanError.isNotEmpty ? cleanError : 'Fırsat paylaşılırken bir hata oluştu.',
+            icon: Icons.error_outline_rounded,
+            backgroundColor: const Color(0xFFC62828),
+            duration: const Duration(seconds: 4),
+          );
+        }
       }
     } finally {
       if (mounted) {
@@ -1166,6 +1222,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Text(
           'Fırsat Paylaş',
@@ -1190,71 +1247,83 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           tooltip: 'Geri',
         ),
       ),
-      bottomNavigationBar: _buildStickySubmitBar(isDark),
-      body: StreamBuilder<bool>(
-        stream: _firestoreService.dealSharingEnabledStream(),
-        builder: (context, snapshot) {
-          final isEnabled = snapshot.data ?? true;
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.opaque,
+        child: StreamBuilder<bool>(
+          stream: _firestoreService.dealSharingEnabledStream(),
+          builder: (context, snapshot) {
+            final isEnabled = snapshot.data ?? true;
 
-          return Form(
-            key: _formKey,
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 36),
+            return Column(
               children: [
-                // 1. Paylaşım Durduruldu Bildirimi
-                if (!isEnabled) _buildSharingDisabledAlert(isDark),
+                Expanded(
+                  child: Form(
+                    key: _formKey,
+                    child: ListView(
+                      physics: const BouncingScrollPhysics(),
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 36),
+                      children: [
+                        // 1. Paylaşım Durduruldu Bildirimi
+                        if (!isEnabled) _buildSharingDisabledAlert(isDark),
+                        if (_isUserDealBanned) _buildBannedUserAlert(isDark),
 
-                // 2. Sihirli Link & Otomatik Tarama Alanı
-                _buildMagicLinkSection(isDark),
+                        // 2. Sihirli Link & Otomatik Tarama Alanı
+                        _buildMagicLinkSection(isDark),
 
-                const SizedBox(height: 20),
+                        const SizedBox(height: 20),
 
-                // 3. Canlı Fırsat Vitrini (Hero Live Preview)
-                _buildLiveHeroPreviewCard(isDark),
+                        // 3. Canlı Fırsat Vitrini (Hero Live Preview)
+                        _buildLiveHeroPreviewCard(isDark),
 
-                const SizedBox(height: 20),
+                        const SizedBox(height: 20),
 
-                // 4. Form Alanları (Skeleton Loader veya Kartlar - Akıcı Geçiş)
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 550),
-                  reverseDuration: const Duration(milliseconds: 250),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (Widget child, Animation<double> animation) {
-                    final offsetAnimation = Tween<Offset>(
-                      begin: const Offset(0.0, 0.05),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOutCubic,
-                    ));
+                        // 4. Form Alanları (Skeleton Loader veya Kartlar - Akıcı Geçiş)
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 550),
+                          reverseDuration: const Duration(milliseconds: 250),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (Widget child, Animation<double> animation) {
+                            final offsetAnimation = Tween<Offset>(
+                              begin: const Offset(0.0, 0.05),
+                              end: Offset.zero,
+                            ).animate(CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                            ));
 
-                    return FadeTransition(
-                      opacity: CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOut,
-                      ),
-                      child: SlideTransition(
-                        position: offsetAnimation,
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: _isAutoDetecting
-                      ? KeyedSubtree(
-                          key: const ValueKey('form_skeleton'),
-                          child: _buildModernSkeletonLoader(isDark),
-                        )
-                      : KeyedSubtree(
-                          key: const ValueKey('form_loaded'),
-                          child: _buildFormSections(isDark),
+                            return FadeTransition(
+                              opacity: CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOut,
+                              ),
+                              child: SlideTransition(
+                                position: offsetAnimation,
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: _isAutoDetecting
+                              ? KeyedSubtree(
+                                  key: const ValueKey('form_skeleton'),
+                                  child: _buildModernSkeletonLoader(isDark),
+                                )
+                              : KeyedSubtree(
+                                  key: const ValueKey('form_loaded'),
+                                  child: _buildFormSections(isDark),
+                                ),
                         ),
+                      ],
+                    ),
+                  ),
                 ),
+                _buildStickySubmitBar(isDark),
               ],
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -1386,6 +1455,42 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     );
   }
 
+  // --- BANNED USER ALERT ---
+  Widget _buildBannedUserAlert(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF450A0A).withValues(alpha: 0.6) : const Color(0xFFFEE2E2),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? const Color(0xFFDC2626).withValues(alpha: 0.6) : const Color(0xFFEF4444),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.gpp_bad_rounded,
+            color: isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626),
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Hesabınızın fırsat paylaşım izni kısıtlanmıştır.',
+              style: TextStyle(
+                color: isDark ? const Color(0xFFFECACA) : const Color(0xFF991B1B),
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- SECTION 1: MAGIC LINK & BOTKOLIK BAR (SPACIOUS NOTCHED BORDER DESIGN) ---
   Widget _buildMagicLinkSection(bool isDark) {
     final isUrlFilled = _urlController.text.isNotEmpty;
@@ -1421,6 +1526,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               TextFormField(
                 controller: _urlController,
                 autovalidateMode: AutovalidateMode.onUserInteraction,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
                 style: TextStyle(
                   color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                   fontSize: 13.5,
@@ -2179,6 +2286,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             // Başlık
             TextFormField(
               controller: _titleController,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
               style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 13.5),
               decoration: InputDecoration(
                 labelText: 'Fırsat Başlığı *',
@@ -2279,6 +2388,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             TextFormField(
               controller: _priceController,
               enabled: !_hidePrice,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
               style: TextStyle(color: textColor, fontWeight: FontWeight.w700, fontSize: 15),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
@@ -2393,6 +2504,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               const SizedBox(height: 14),
               TextFormField(
                 controller: _customStoreController,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
                 style: TextStyle(color: textColor),
                 decoration: InputDecoration(
                   labelText: 'Özel Mağaza Adı *',
@@ -2826,10 +2939,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   // --- STICKY FLOATING SUBMIT BAR ---
   Widget _buildStickySubmitBar(bool isDark) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final isKeyboardOpen = keyboardHeight > 0;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, isKeyboardOpen ? 8 : 16),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface.withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.95),
+        color: isDark ? AppTheme.darkSurface.withValues(alpha: 0.98) : Colors.white.withValues(alpha: 0.98),
         border: Border(
           top: BorderSide(
             color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
@@ -2838,18 +2954,20 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, -3),
           ),
         ],
       ),
       child: SafeArea(
         top: false,
+        bottom: !isKeyboardOpen,
         child: SizedBox(
+          width: double.infinity,
           height: 46,
           child: ElevatedButton(
-            onPressed: (_isLoading || !_dealSharingEnabled) ? null : _submitDeal,
+            onPressed: (_isLoading || !_dealSharingEnabled || _isUserDealBanned) ? null : _submitDeal,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
               foregroundColor: Colors.white,
@@ -2869,17 +2987,28 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
-                : const Row(
+                : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.rocket_launch_rounded, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        'Fırsatı Toplulukla Paylaş',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
+                      Icon(
+                        _isUserDealBanned
+                            ? Icons.block_rounded
+                            : (!_dealSharingEnabled ? Icons.pause_circle_filled_rounded : Icons.rocket_launch_rounded),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          _isUserDealBanned
+                              ? 'Fırsat Paylaşımı Kısıtlandı'
+                              : (!_dealSharingEnabled ? 'Paylaşım Geçici Olarak Kapalı' : 'Fırsatı Toplulukla Paylaş'),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],

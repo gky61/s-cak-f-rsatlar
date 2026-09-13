@@ -97,9 +97,17 @@
 					<string>com.googleusercontent.apps.560592268193-a70ituj4997v31non78gvno3f5tsked7</string>
 					<!-- Custom Scheme for Deep Linking -->
 					<string>firsatkolik</string>
+					<!-- receive_sharing_intent URL Scheme for iOS Share Extension -->
+					<string>ShareMedia-$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+					<string>ShareMedia-com.firsatkolik.app</string>
+					<string>ShareMedia-com.firsatkolik.app.dev</string>
 				</array>
 			</dict>
 		</array>
+
+		<!-- receive_sharing_intent App Group Identifier -->
+		<key>AppGroupId</key>
+		<string>group.com.firsatkolik.app</string>
 
 		<!-- Google Mobile Ads (AdMob) iOS Application ID -->
 		<key>GADApplicationIdentifier</key>

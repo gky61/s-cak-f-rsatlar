@@ -98,8 +98,8 @@ class ProfileSkeleton extends StatelessWidget {
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.61,
+                mainAxisSpacing: 11,
+                childAspectRatio: 0.635,
               ),
               itemCount: 4,
               itemBuilder: (context, index) => const DealCardSkeleton(viewMode: CardViewMode.vertical),

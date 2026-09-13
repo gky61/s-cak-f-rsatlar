@@ -1088,9 +1088,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          childAspectRatio: 0.61,
+          childAspectRatio: 0.635,
           crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+          mainAxisSpacing: 11,
         ),
         itemCount: deals.length,
         itemBuilder: (context, index) {
@@ -1398,9 +1398,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.61,
+        childAspectRatio: 0.635,
         crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        mainAxisSpacing: 11,
       ),
       itemCount: 6,
       itemBuilder: (context, index) {

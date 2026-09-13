@@ -42,15 +42,16 @@ class DealCardSkeleton extends StatelessWidget {
               Shimmer.fromColors(
                 baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                 highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-            child: AspectRatio(
-              aspectRatio: 1.0,
-                child: Container(
+            child: SizedBox(
+              height: 142,
+              width: double.infinity,
+              child: Container(
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
                 ),
-                  ),
-                ),
+              ),
+            ),
               ),
           // İçerik Skeleton
               Expanded(
