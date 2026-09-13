@@ -34,11 +34,6 @@ target 'Runner' do
   target 'RunnerTests' do
     inherit! :search_paths
   end
-
-  # Share Extension: receive_sharing_intent framework ve başlıklarını Runner'dan devralır
-  target 'ShareExtension' do
-    inherit! :search_paths
-  end
 end
 
 post_install do |installer|

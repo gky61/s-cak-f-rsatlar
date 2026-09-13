@@ -141,7 +141,8 @@ void main() {
       final swiftCode = swiftFile.readAsStringSync();
       expect(swiftCode.contains('com.firsatkolik.app'), isTrue);
       expect(swiftCode.contains('group.com.firsatkolik.app'), isTrue);
-      expect(swiftCode.contains('RSIShareViewController'), isTrue);
+      expect(swiftCode.contains('SLComposeServiceViewController'), isTrue);
+      expect(swiftCode.contains('SharedMediaFile'), isTrue);
 
       // 6. project.pbxproj target registration
       final pbxproj = File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
