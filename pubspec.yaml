@@ -73,6 +73,7 @@ flutter:
   
   assets:
     - assets/
+    - assets/avatars/
     - assets/data/
     - shorebird.yaml
 

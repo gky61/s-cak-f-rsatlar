@@ -53,7 +53,7 @@ graph TD
     
     Engine -->|1. Global Sistem Switch| F1{systemConfig/notifications.enabled}
     Engine -->|2. Sessiz Saatler| F2{quietHours: 23:00 - 08:00}
-    Engine -->|3. Kategori Hız Limiti| F3{Saatlik 3 / Günlük 8 Limit}
+    Engine -->|3. Hız Limitleri & Anti-Spam| F3{Kategori, Yazar, Kelime, Burst, Yorum, Pazarlama}
     Engine -->|4. Master Switch| F4{pushMasterEnabled}
     Engine -->|5. Alt Kanal & Dinamik Fallback| F5{Grup Tercihleri: keyword > author > category}
     
@@ -313,9 +313,12 @@ Uygulama tamamen kapalıyken bildirime tıklandığında:
 
 ### iOS APNs Yapılandırması:
 * **Ses & Rozet:** `sound: 'default'`, `badge: 1`.
-* **Kategori & Öncelik:** `apns-priority: 10`, `interruption-level: active` (Admin mesajlarında `time-sensitive`).
+* **Kategori & Öncelik:** `apns-priority: 10`, `apns-push-type: 'alert'`, `interruption-level: active` (Admin mesajlarında `time-sensitive`).
+* **Alert & Görsel Sunum:** Apple kuralları gereği kilit ekranı ve bildirim merkezinde afiş gösterimi için `payload.aps.alert: { title: '...', body: '...' }` tanımlanır. Android data-only yapısını korurken iOS cihazlara doğrudan işletim sistemi seviyesinde kilit ekranı bildirim kartı oluşturulması sağlanır.
 * **Content Available:** Arka plan veri senkronizasyonu için `content-available: 1`.
 * **APNs Collapse ID & Thread ID:** `apns-collapse-id: "msg_" + senderId` ve `thread-id: "conv_" + senderId` ile kilit ekranında sohbet bazlı gruplama.
+* **Ön Plan Bildirim Delegasyonu (`AppDelegate.swift`):** `UNUserNotificationCenter.current().delegate = self` üzerinden `userNotificationCenter(_:willPresent:withCompletionHandler:)` çağrısına `[.banner, .list, .badge, .sound]` sunum seçenekleri eklenmiştir.
+* **Ön Plan Gerçek Zamanlı In-App Afiş Motoru (`NotificationService`):** Uygulama açıkken (foreground) APNs veya FCM gecikmelerinden bağımsız olarak, Firestore `messages` koleksiyonundaki `receiverId == userId` anlık dinleyicisi (`_setupForegroundMessageListener()`) sayesinde 0 ms gecikmeyle `InAppMessageBanner.show()` tetiklenir (Aktif sohbetteyse bastırılır, diğer ekranlarda afiş gösterilir).
 
 ---
 
@@ -385,6 +388,13 @@ Cloud Functions `onNotificationCreated` motoru her bildirim dokümanına şu dur
 | **`disabled_by_user_group_<grup>`** | Kullanıcı ilgili bildirim grubunu kapatmıştır (Örn: `disabled_by_user_group_category`, `disabled_by_user_group_deal`). |
 | **`skipped_quiet_hours`** | Kullanıcının belirlediği sessiz saatler aralığında olunduğu için push gönderimi atlandı. |
 | **`skipped_category_limit`** | Kullanıcının saatlik (3) veya günlük (8) kategori bildirim kotası dolduğu için push atlandı. |
+| **`skipped_author_limit`** | Kullanıcının saatlik (4) veya günlük (12) yazar bildirim kotası dolduğu için push atlandı. |
+| **`skipped_keyword_limit`** | Kullanıcının saatlik (6) veya günlük (18) anahtar kelime bildirim kotası dolduğu için push atlandı. |
+| **`skipped_deal_burst_cooldown`** | Fırsat bildirimleri arasında 30 saniye minimum soğuma süresi dolmadığı için push atlandı. |
+| **`skipped_deal_hourly_total_limit`** | Kullanıcının toplam saatlik fırsat tavanı (8) dolduğu için push atlandı. |
+| **`skipped_comment_rate_limit`** | Viral fırsat yorum koruması: 10 dakikada 5 veya saatte 10 yorum sınırı aşıldığı için atlandı. |
+| **`skipped_marketing_limit`** | Günlük azami 2 pazarlama push sınırı dolduğu için atlandı. |
+| **`skipped_admin_message_rate_limit`** | Saatte azami 6 admin mesajı güvenlik sınırı aşıldığı için atlandı. |
 
 ---
 
@@ -401,7 +411,7 @@ Kullanıcıların Bildirim Merkezi (`users/{userId}/notifications`) kutusunda at
 
 Web Admin panelinde [web/admin/app.js](file:///d:/firsatkolik/web/admin/app.js) ve [web/admin/index.html](file:///d:/firsatkolik/web/admin/index.html) üzerinden bildirimler merkezi olarak yönetilir:
 * **Global Push Şalteri:** `systemConfig/notifications.enabled` değerini anlık gösteren canlı rozet ve acil durdurma/başlatma toggle'ı.
-* **Kategori Hız Limitleri:** Saatlik (`categoryHourlyLimit`) ve günlük (`categoryDailyLimit`) bildirim kotalarını Bildirim Merkezi'nden doğrudan yönetme.
+* **Bildirim Hız Limitleri & Anti-Spam Yönetimi:** Kategori (saatlik: 3 / günlük: 8), Yazar (saatlik: 4 / günlük: 12), Anahtar Kelime (saatlik: 6 / günlük: 18), Burst Bekleme Cooldown (30sn), Toplam Fırsat Saatlik Tavanı (8) ve Pazarlama (günlük: 2) kotalarını Bildirim Merkezi'nden doğrudan tek ekranda yönetme ve güncelleme.
 * **Manuel Push & Kategori Seçimi (`sendManualNotification`):** Tüm Kullanıcılar, Belirli UID veya Belirli Token hedeflenerek bildirim gönderilir; `Yönetici Duyurusu` veya `Pazarlama / Kampanya` türü seçilebilir. Girilen `dealId` mobil istemcide tıklandığında ilgili fırsatı anında açar.
 * **Geçersiz Token Temizliği (`cleanupInvalidTokens`):** Veritabanındaki aktif cihazların token geçerliliğini test edip bayat token'ları otomatik pasife alır.
 * **30+ Günlük Bildirim Temizliği (`purgeOldNotificationsManual`):** Sunucu yetkisiyle 30 günden eski bildirimleri tek tıkla toplu temizler.
@@ -417,11 +427,13 @@ Tüm bildirim sistemi ve senaryoları tam kapsamlı (%100) doğrulanmaktadır:
 
 | Test Dosyası | Kapsam | Komut |
 | :--- | :--- | :--- |
+| **`test/notification_ui_ux_test.dart`** | UI/UX, yönlendirme, başlık temizleme, fallback ve tüm reason hız limiti birim testleri (11 Test) | `flutter test test/notification_ui_ux_test.dart` |
 | **`test/messaging_and_anti_spam_test.dart`** | Anti-spam (5s/max 3 msg), deterministik notifId & tag, payload parser, instant seeding & dedup birim testleri (11 Test) | `flutter test test/messaging_and_anti_spam_test.dart` |
 | **`test/notification_logic_test.dart`** | Flutter birim testleri, serileştirme (toMap/fromFirestore), Master Switch State Preservation (3 Test) | `flutter test test/notification_logic_test.dart` |
 | **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
 | **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |
 | **`functions/tests/test_all_notification_scenarios.js`** | 21 Senaryoluk Çaprazlama Uçtan Uca Bütünleşik Test Süiti: 10 Senaryo + varyasyonlarını canlı Firestore üzerinde çapraz kontrol eder | `node functions/tests/test_all_notification_scenarios.js` |
+| **`functions/tests/test_emergency_controls.js`** | 6 Acil Durum Kontrolü: Global bildirim şalteri, fırsat ve yorum acil kapatma, bot kontrolleri | `node functions/tests/test_emergency_controls.js` |
 
 ---
 
@@ -431,7 +443,15 @@ Tüm bildirim sistemi ve senaryoları tam kapsamlı (%100) doğrulanmaktadır:
 1. **`userDevices` Kaydı:** Kullanıcının aktif bir cihazı var mı (`active == true`) ve token'ı dolu mu?
 2. **Kullanıcı Tercihleri:** `pushMasterEnabled: true` mu? İlgili alt kanal açık mı?
 3. **Sessiz Saatler:** Şu an kullanıcının `quietHours` aralığında mıyız? (`skipped_quiet_hours`).
-4. **Kategori Hız Limiti:** Son 1 saatte 3'ten veya son 24 saatte 8'den fazla kategori bildirimi gitti mi? (`skipped_category_limit`).
+4. **Hız Limitleri ve Anti-Spam (pushStatus Kontrolü):**
+   - `skipped_category_limit`: Saatlik 3 veya günlük 8 kategori kotası dolmuştur.
+   - `skipped_author_limit`: Saatlik 4 veya günlük 12 yazar kotası dolmuştur.
+   - `skipped_keyword_limit`: Saatlik 6 veya günlük 18 anahtar kelime kotası dolmuştur.
+   - `skipped_deal_burst_cooldown`: Son 30 saniye içinde başka bir fırsat bildirimi iletilmiştir (30sn soğuma devrede).
+   - `skipped_deal_hourly_total_limit`: Kullanıcı saatte azami 8 toplam fırsat tavanına ulaşmıştır.
+   - `skipped_comment_rate_limit`: Aynı fırsata 10 dakikada 5'ten veya saatte 10'dan fazla yorum bildirimi gitmesi engellenmiştir.
+   - `skipped_marketing_limit`: Günlük 2 pazarlama kotası dolmuştur.
+   - `skipped_admin_message_rate_limit`: Saatte 6 admin mesajı kotası dolmuştur.
 5. **Fırsat Durumu:** Fırsat `published` ve `isApproved == true` durumunda mı?
 6. **FCM V1 Tip Güvenliği:** FCM data parametrelerinin tümü String tipinde olmalıdır (Tüm nesneler `String()` veya `JSON.stringify()` ile serileştirilir).
 

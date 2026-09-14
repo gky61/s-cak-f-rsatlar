@@ -62,6 +62,13 @@ Cloud Functions `onNotificationCreated` motoru her bildirim için kararı verip 
 | **`disabled_by_user_group_<grup>`** | Kullanıcı ilgili bildirim grubunu kapatmıştır (Örn: `disabled_by_user_group_category`, `disabled_by_user_group_deal`). |
 | **`skipped_quiet_hours`** | Kullanıcının belirlediği sessiz saatler aralığında olunduğu için push gönderimi atlandı. |
 | **`skipped_category_limit`** | Kullanıcının saatlik (3) veya günlük (8) kategori bildirim kotası dolduğu için push atlandı. |
+| **`skipped_author_limit`** | Kullanıcının saatlik (4) veya günlük (12) yazar bildirim kotası dolduğu için push atlandı. |
+| **`skipped_keyword_limit`** | Kullanıcının saatlik (6) veya günlük (18) anahtar kelime bildirim kotası dolduğu için push atlandı. |
+| **`skipped_deal_burst_cooldown`** | Ardışık fırsat push'ları arasında 30 saniye minimum soğuma süresi dolmadığı için push atlandı. |
+| **`skipped_deal_hourly_total_limit`** | Kullanıcının tüm fırsat türleri toplamındaki saatlik azami kotası (8) dolduğu için push atlandı. |
+| **`skipped_comment_rate_limit`** | Viral fırsat yorum koruması: Aynı fırsata 10 dakikada 5 veya saatte 10 yorum push sınırı aşıldığı için atlandı. |
+| **`skipped_marketing_limit`** | Kullanıcının günlük pazarlama bildirim kotası (2) dolduğu için push atlandı. |
+| **`skipped_admin_message_rate_limit`** | Güvenlik koruması: Kullanıcıya saatte azami 6 admin mesajı push sınırı aşıldığı için atlandı. |
 
 ---
 

@@ -493,8 +493,8 @@ class NotificationService {
         try {
           String? apnsToken = await _messaging.getAPNSToken();
           int retry = 0;
-          while (apnsToken == null && retry < 5) {
-            _log('⏳ iOS: APNs token bekleniyor... (${retry + 1}/5)');
+          while (apnsToken == null && retry < 8) {
+            _log('⏳ iOS: APNs token bekleniyor... (${retry + 1}/8)');
             await Future.delayed(const Duration(milliseconds: 1000));
             apnsToken = await _messaging.getAPNSToken();
             retry++;
@@ -656,12 +656,114 @@ class NotificationService {
     _log('🛑 Yorum cevabı bildirim listener\'ı durduruldu');
   }
 
+  // Gerçek zamanlı ön plan mesaj dinleyicisi (FCM ve APNs gecikmelerinden bağımsız 0ms in-app afiş garantisi)
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _foregroundMessageListener;
+  final Set<String> _handledInAppMessageIds = <String>{};
+
+  void _stopForegroundMessageListener() {
+    _foregroundMessageListener?.cancel();
+    _foregroundMessageListener = null;
+    _handledInAppMessageIds.clear();
+    _log('🛑 Ön plan mesaj dinleyicisi durduruldu');
+  }
+
+  void _setupForegroundMessageListener() {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) {
+      _log('⚠️ Ön plan mesaj listener başlatılamadı: userId null');
+      return;
+    }
+
+    _foregroundMessageListener?.cancel();
+    _log('🔔 Gerçek zamanlı ön plan mesaj dinleyicisi başlatılıyor: userId=$userId');
+
+    bool isFirst = true;
+
+    _foregroundMessageListener = _firestore
+        .collection('messages')
+        .where('receiverId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(20)
+        .snapshots()
+        .listen((snapshot) async {
+      if (isFirst) {
+        isFirst = false;
+        for (final doc in snapshot.docs) {
+          _handledInAppMessageIds.add(doc.id);
+        }
+        _log('ℹ️ Ön plan mesaj ilk snapshot hafızaya alındı (${snapshot.docs.length} mesaj).');
+        return;
+      }
+
+      for (final change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          final doc = change.doc;
+          final messageId = doc.id;
+          if (_handledInAppMessageIds.contains(messageId)) continue;
+          _handledInAppMessageIds.add(messageId);
+
+          final data = doc.data();
+          if (data == null) continue;
+
+          if (data['isRead'] == true) continue;
+          final senderId = (data['senderId'] ?? '').toString().trim();
+          if (senderId.isEmpty || senderId == userId) continue;
+
+          final currentActiveChat = activeChatUserId?.trim();
+          if (currentActiveChat != null && currentActiveChat.isNotEmpty) {
+            final isSameUser = currentActiveChat.toLowerCase() == senderId.toLowerCase();
+            final isAdminChat = (currentActiveChat == 'admin' || currentActiveChat == 'adminToUser') && senderId == 'admin';
+            if (isSameUser || isAdminChat) {
+              _log('💬 Kullanıcı zaten aktif sohbette ($currentActiveChat), ön plan afişi bastırıldı.');
+              continue;
+            }
+          }
+
+          try {
+            final userDoc = await _firestore.collection('users').doc(userId).get();
+            final muted = List<String>.from(userDoc.data()?['mutedConversations'] ?? []);
+            if (muted.contains(senderId)) {
+              _log('🔕 Sohbet sessize alınmış ($senderId), afiş bastırıldı.');
+              continue;
+            }
+          } catch (_) {}
+
+          final senderName = (data['senderName'] ?? (senderId == 'admin' ? 'FırsatKolik Yönetim' : 'Kullanıcı')).toString();
+          final senderImageUrl = (data['senderImageUrl'] ?? (senderId == 'admin' ? 'assets/logo.webp' : '')).toString();
+          final messageText = (data['text'] ?? data['content'] ?? 'Yeni bir mesaj aldınız.').toString();
+          final dealTitle = data['dealTitle']?.toString();
+          final dealId = data['dealId']?.toString();
+          final isAdmin = senderId == 'admin';
+
+          _log('💬 [Firestore Realtime] Ön plan mesaj afişi açılıyor: $senderName ($senderId)');
+          InAppMessageBanner.show(
+            context: null,
+            senderId: senderId,
+            senderName: senderName,
+            senderImageUrl: senderImageUrl,
+            messageText: messageText,
+            isAdminMessage: isAdmin,
+            dealTitle: dealTitle,
+            dealId: dealId,
+          );
+        }
+      }
+    }, onError: (err) {
+      if (err.toString().contains('permission-denied')) {
+        _log('ℹ️ Ön plan mesaj listener çıkış sırasında kapandı (beklenen)');
+      } else {
+        _log('⚠️ Ön plan mesaj listener hatası: $err');
+      }
+    });
+  }
+
   Future<void> clearAllSubscriptions() async {
     try {
       _log('🧹 Tüm bildirim abonelikleri temizleniyor...');
       
-      // Yorum cevabı bildirim listener'ını durdur
+      // Yorum cevabı ve ön plan mesaj listener'larını durdur
       _stopCommentReplyListener();
+      _stopForegroundMessageListener();
       
       // Admin topic'inden çık
       await _messaging.unsubscribeFromTopic('admin_deals');
@@ -753,6 +855,9 @@ class NotificationService {
 
       // Yorum cevabı bildirimlerini dinle
       _setupCommentReplyListener();
+
+      // Gerçek zamanlı ön plan mesajlaşma bildirimlerini dinle (In-App Banner garantisi)
+      _setupForegroundMessageListener();
 
       // Bildirim dinleyicilerini başlat (ön plan, arka plan, kapalı durumlar için)
       // Bunu sadece bir kez başlatmak yeterli olabilir ama idempotent (tekrarlanabilir) olmalı
@@ -876,16 +981,16 @@ class NotificationService {
         .collection('users')
         .doc(userId)
         .collection('notifications')
-        .where('type', isEqualTo: 'comment_reply')
+        .where('type', whereIn: ['comment_reply', 'comment'])
         .where('read', isEqualTo: false)
         .snapshots()
         .listen(
       (snapshot) async {
-        _log('📬 Yorum cevabı bildirim listener tetiklendi: ${snapshot.docChanges.length} (Değişiklik) (isFirst: $isFirst)');
+        _log('📬 Yorum/cevap bildirim listener tetiklendi: ${snapshot.docChanges.length} (Değişiklik) (isFirst: $isFirst)');
         
         if (isFirst) {
           isFirst = false;
-          _log('ℹ️ Yorum cevabı ilk snapshot es geçildi, bildirim tetiklenmeyecek.');
+          _log('ℹ️ Yorum/cevap ilk snapshot es geçildi, bildirim tetiklenmeyecek.');
           return;
         }
         
@@ -899,13 +1004,18 @@ class NotificationService {
               final data = doc.data();
               if (data == null) continue;
               
+              final notifType = data['type'] as String? ?? 'comment_reply';
               final dealId = data['dealId'] as String? ?? '';
               final commentId = data['commentId'] as String? ?? '';
-              final replyUserName = data['replyUserName'] as String? ?? 'Birisi';
-              final replyText = data['replyText'] as String? ?? '';
+              final replyUserName = (data['replyUserName'] ?? data['commentUserName'] ?? 'Bir kullanıcı').toString();
+              final replyText = (data['replyText'] ?? data['body'] ?? '').toString();
               final dealTitle = data['dealTitle'] as String? ?? 'Fırsat';
+              final isRootComment = notifType == 'comment';
+              final notifTitle = isRootComment
+                  ? '$replyUserName fırsatınıza yorum yaptı'
+                  : '$replyUserName yorumunuza cevap verdi';
               
-              _log('📨 Yorum cevabı bildirimi işleniyor: dealId=$dealId, commentId=$commentId, replyUserName=$replyUserName');
+              _log('📨 Yorum bildirimi işleniyor: type=$notifType, dealId=$dealId, commentId=$commentId, user=$replyUserName');
               
               // Yorum bildirimleri açıksa telefon bildirimi göster
               if (commentNotificationsEnabled) {
@@ -916,8 +1026,9 @@ class NotificationService {
                   replyUserName: replyUserName,
                   replyText: replyText,
                   dealTitle: dealTitle,
+                  customTitle: notifTitle,
                 );
-                _log('✅ Yorum cevabı telefon bildirimi gösterildi');
+                _log('✅ Yorum telefon bildirimi gösterildi: $notifTitle');
               } else {
                 _log('🚫 Yorum bildirimleri kapalı, telefon bildirimi gösterilmedi (sadece profilde görünecek)');
               }
@@ -949,6 +1060,7 @@ class NotificationService {
     required String replyUserName,
     required String replyText,
     required String dealTitle,
+    String? customTitle,
   }) async {
     if (kIsWeb) return;
     
@@ -985,7 +1097,7 @@ class NotificationService {
 
     await _localNotifications.show(
       commentId.hashCode,
-      '$replyUserName yorumunuza cevap verdi',
+      customTitle ?? '$replyUserName yorumunuza cevap verdi',
       replyText,
       details,
       payload: payload,
@@ -1100,48 +1212,12 @@ class NotificationService {
     });
   }
   
-  // Kullanıcının takip ettiği tüm topic'lere yeniden abone ol
+  // Kullanıcının takip ettiği tüm topic'lere yeniden abone ol (Legacy FCM topic temizliği)
   Future<void> resubscribeToTopics() async {
-    try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return;
-      
-      final categoryEnabled = await getCategoryNotificationsEnabled(userId);
-      
-      final categories = await getFollowedCategories();
-      final subCategories = await getFollowedSubCategories();
-      
-      // Kategorilere abone ol
-      for (final categoryId in categories) {
-        if (categoryEnabled) {
-          await _messaging.subscribeToTopic('category_$categoryId');
-          _log('✅ Kategori topic abone olundu: category_$categoryId');
-        } else {
-          await _messaging.unsubscribeFromTopic('category_$categoryId');
-          _log('🚫 Kategori topic aboneliği kaldırıldı: category_$categoryId');
-        }
-      }
-      
-      // Alt kategorilere abone ol
-      for (final subCategoryKey in subCategories) {
-        final parts = subCategoryKey.split(':');
-        if (parts.length == 2) {
-          final categoryId = parts[0];
-          final subCategoryId = parts[1];
-          final sanitizedSubCategory = _sanitizeTopicName(subCategoryId);
-          final topic = 'subcategory_${categoryId}_$sanitizedSubCategory';
-          if (categoryEnabled) {
-            await _messaging.subscribeToTopic(topic);
-            _log('✅ Alt kategori topic abone olundu: $topic');
-          } else {
-            await _messaging.unsubscribeFromTopic(topic);
-            _log('🚫 Alt kategori topic aboneliği kaldırıldı: $topic');
-          }
-        }
-      }
-    } catch (e) {
-      _log('❌ Topic yeniden abonelik hatası: $e');
-    }
+    // FırsatKolik mimarisinde kategori bildirimleri FCM topic'leri yerine
+    // doğrudan Firestore 'notificationSubscriptions' koleksiyonu ve tekil cihaz token'ı üzerinden
+    // yönetilmektedir. Gereksiz ağ trafiğini ve pil tüketimini önlemek için döngü optimize edildi.
+    _log('ℹ️ Bildirimler doğrudan Firestore abonelik koleksiyonları ve cihaz token motoru üzerinden yönetilmektedir.');
   }
 
 
@@ -1187,7 +1263,7 @@ class NotificationService {
     } else if (payload.startsWith('admin_deal:')) {
       final dealId = payload.substring('admin_deal:'.length);
       _handleNotificationTap({'type': 'admin_deal', 'dealId': dealId});
-    } else if (payload.startsWith('comment_reply:')) {
+    } else if (payload.startsWith('comment_reply:') || payload.startsWith('comment:')) {
       final parts = payload.split(':');
       final dealId = parts.length > 1 ? parts[1] : '';
       final commentId = parts.length > 2 ? parts[2] : '';
@@ -1326,6 +1402,7 @@ class NotificationService {
         _navigateToAdminScreen();
         break;
         
+      case 'comment':
       case 'comment_reply':
         if (dealId.isNotEmpty) {
           _navigateToDeal(dealId, commentId: commentId.isNotEmpty ? commentId : null);
@@ -1520,6 +1597,16 @@ class NotificationService {
 
       if (isMessageNotification) {
         _log('💬 Mesaj bildirimi (ön plan): senderId="$senderId", activeChatUserId="$currentActiveChat"');
+
+        final msgId = (message.data['messageId'] ?? '').toString().trim();
+        if (msgId.isNotEmpty && _handledInAppMessageIds.contains(msgId)) {
+          _log('ℹ️ Mesaj afişi zaten Firestore üzerinden gösterildi (onMessage atlanıyor): $msgId');
+          return;
+        }
+        if (msgId.isNotEmpty) {
+          _handledInAppMessageIds.add(msgId);
+        }
+
         if (currentActiveChat != null && currentActiveChat.isNotEmpty) {
           final isSameUser = senderId.isEmpty || currentActiveChat.toLowerCase() == senderId.toLowerCase();
           final isAdminChat = (currentActiveChat == 'admin' || currentActiveChat == 'adminToUser') && (senderId == 'admin' || type == 'admin_message');
@@ -1589,16 +1676,31 @@ class NotificationService {
     });
   }
 
-  // Yerel bildirim gösterme yardımcısı
+  // Yerel bildirim gösterme yardımcısı (Boş/başlıksız bildirim korumalı & deterministik ID)
   Future<void> _showLocalNotification(RemoteMessage message) async {
     try {
       final data = message.data;
-      final type = (data['type'] ?? 'deal').toString();
-      final dealId = (data['dealId'] ?? '').toString();
-      final commentId = (data['commentId'] ?? '').toString();
-      final messageId = (data['messageId'] ?? '').toString();
 
-      final senderId = (
+      // 1. Ghost / DryRun / Sessiz push koruması (İçi boş veya test mesajlarını bastır)
+      if (data.isEmpty && message.notification == null) {
+        _log('⚠️ Boş veya veri içermeyen push mesajı yakalandı, yerel bildirim bastırıldı.');
+        return;
+      }
+      if (data['dryRun'] == 'true' || data['silent'] == 'true') {
+        _log('ℹ️ DryRun/Sessiz test mesajı yerel bildirim oluşturulmadan yutuldu.');
+        return;
+      }
+
+      String clean(dynamic val) => val == null ? '' : val.toString().trim();
+
+      final type = clean(data['type']).isEmpty ? 'deal' : clean(data['type']);
+      final dealId = clean(data['dealId']);
+      final dealTitle = clean(data['dealTitle']);
+      final commentId = clean(data['commentId']);
+      final messageId = clean(data['messageId']);
+      final notificationId = clean(data['notificationId']);
+
+      String senderId = clean(
         data['senderId'] ??
         data['sender_id'] ??
         data['senderUid'] ??
@@ -1606,65 +1708,127 @@ class NotificationService {
         data['fromUserId'] ??
         data['from_user_id'] ??
         data['userId'] ??
-        data['user_id'] ??
-        ''
-      ).toString().trim();
+        data['user_id'],
+      );
 
-      final senderName = (
+      String senderName = clean(
         data['senderName'] ??
         data['sender_name'] ??
-        data['notification_title'] ??
-        'Kullanıcı'
-      ).toString().replaceAll('💬 ', '').trim();
+        data['notification_title'],
+      );
+      if (senderName.isEmpty) {
+        senderName = 'Kullanıcı';
+      }
+      senderName = senderName.replaceAll('💬 ', '').trim();
 
+      // 2. Akıllı Başlık Çıkarma (Boş string veya "Yeni Bildirim" gibi anlamsız fallbacksiz)
+      String title = clean(data['notification_title']);
+      if (title.isEmpty) title = clean(data['title']);
+      if (title.isEmpty) title = clean(message.notification?.title);
+
+      if (title.isEmpty || title == 'Yeni Bildirim') {
+        if (type == 'deal') {
+          title = '🎯 Yeni Fırsat!';
+        } else if (type == 'comment') {
+          title = '💬 $senderName fırsatınıza yorum yaptı';
+        } else if (type == 'comment_reply') {
+          title = '💬 $senderName yorumunuza cevap verdi';
+        } else if (type == 'admin_deal') {
+          title = '👮‍♂️ Onay Bekleyen Fırsat';
+        } else if (type == 'admin_message') {
+          title = '🛡️ FırsatKolik Yönetim';
+        } else if (type == 'keyword') {
+          title = '🎯 İlginizi Çeken Kelime!';
+        } else if (type == 'marketing') {
+          title = '🔥 Özel Fırsat Duyurusu';
+        } else if (dealTitle.isNotEmpty) {
+          title = '🎯 $dealTitle';
+        } else {
+          title = '🔔 FırsatKolik';
+        }
+      }
+
+      // 3. Akıllı Gövde Çıkarma (Asla boş string kalmayacak şekilde)
+      String body = clean(data['notification_body']);
+      if (body.isEmpty) body = clean(data['body']);
+      if (body.isEmpty) body = clean(data['messageText']);
+      if (body.isEmpty) body = clean(message.notification?.body);
+
+      if (body.isEmpty) {
+        if (dealTitle.isNotEmpty) {
+          body = '$dealTitle\nFırsatı görmek için dokunun.';
+        } else if (type == 'deal') {
+          body = 'İlginizi çekebilecek yeni bir indirim paylaşıldı.';
+        } else if (type == 'comment' || type == 'comment_reply') {
+          body = 'Yorum detaylarını incelemek için dokunun.';
+        } else if (type == 'admin_message') {
+          body = 'Yeni bir yönetici bildiriminiz var.';
+        } else {
+          body = 'Detayları görüntülemek için dokunun.';
+        }
+      }
+
+      // 4. Kanal, Tag ve Deterministik ID Yapılandırması
       String channelId = 'sicak_firsatlar_general_v2';
       String channelName = 'Sıcak Fırsatlar';
       String channelDescription = 'Fırsat ve indirim bildirimleri';
-      String tag = 'deal_$dealId';
-      int notifId = (dealId.isNotEmpty ? dealId.hashCode : DateTime.now().millisecondsSinceEpoch) % 100000;
-      String title = data['notification_title'] ?? data['title'] ?? message.notification?.title ?? 'Yeni Bildirim';
-      String body = data['notification_body'] ?? data['body'] ?? data['messageText'] ?? message.notification?.body ?? '';
       String payload = dealId;
+
+      // Deterministik tohum (Seed) anahtarı: Rastgele timestamp yerine tutarlı anahtar
+      final seedKey = notificationId.isNotEmpty
+          ? notificationId
+          : (dealId.isNotEmpty
+              ? dealId
+              : (commentId.isNotEmpty
+                  ? commentId
+                  : (messageId.isNotEmpty
+                      ? messageId
+                      : (senderId.isNotEmpty ? senderId : type))));
+
+      int notifId = (seedKey.hashCode & 0x7FFFFFFF) % 100000;
+      String tag = '${type}_$seedKey';
 
       if (type == 'admin_deal') {
         channelId = 'admin_channel';
         channelName = 'Admin Bildirimleri';
         channelDescription = 'Onay bekleyen ve sistem admin bildirimleri';
-        tag = 'admin_deal_$dealId';
-        notifId = ('admin_$dealId').hashCode % 100000;
-        title = data['notification_title'] ?? message.notification?.title ?? '👮‍♂️ Onay Bekleyen Fırsat';
+        tag = 'admin_deal_${dealId.isNotEmpty ? dealId : seedKey}';
+        notifId = ('admin_${dealId.isNotEmpty ? dealId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
         payload = 'admin_deal:$dealId';
       } else if (type == 'keyword') {
         channelId = 'keyword_alerts_channel';
         channelName = 'Özel Fırsat Bildirimleri';
         channelDescription = 'Takip ettiğiniz anahtar kelimelere ait fırsat bildirimleri';
-        tag = 'keyword_$dealId';
-        notifId = ('kw_$dealId').hashCode % 100000;
-        title = data['notification_title'] ?? message.notification?.title ?? '🎯 İlginizi Çeken Kelime!';
+        tag = 'keyword_${dealId.isNotEmpty ? dealId : seedKey}';
+        notifId = ('kw_${dealId.isNotEmpty ? dealId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
         payload = dealId;
       } else if (type == 'comment_reply') {
         channelId = 'comment_replies_channel';
         channelName = 'Yorum Cevapları';
         channelDescription = 'Yorumlarınıza gelen cevaplar için bildirimler';
-        tag = 'reply_${commentId.isNotEmpty ? commentId : dealId}';
-        notifId = (commentId.isNotEmpty ? commentId.hashCode : dealId.hashCode) % 100000;
-        title = data['notification_title'] ?? message.notification?.title ?? '$senderName yorumunuza cevap verdi';
+        tag = 'reply_${commentId.isNotEmpty ? commentId : (dealId.isNotEmpty ? dealId : seedKey)}';
+        notifId = ('reply_${commentId.isNotEmpty ? commentId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
         payload = 'comment_reply:$dealId:$commentId';
+      } else if (type == 'comment') {
+        channelId = 'comment_replies_channel';
+        channelName = 'Yorum Bildirimleri';
+        channelDescription = 'Fırsatlarınıza gelen yorumlar için bildirimler';
+        tag = 'comment_${commentId.isNotEmpty ? commentId : (dealId.isNotEmpty ? dealId : seedKey)}';
+        notifId = ('comment_${commentId.isNotEmpty ? commentId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
+        payload = 'comment:$dealId:$commentId';
       } else if (type == 'admin_message') {
         channelId = 'admin_messages_channel_v3';
         channelName = 'Yönetici Bildirimleri';
         channelDescription = 'FırsatKolik Yönetim bildirimleri';
-        tag = 'admin_msg_${messageId.isNotEmpty ? messageId : dealId}';
-        notifId = (messageId.isNotEmpty ? messageId.hashCode : 9999) % 100000;
-        title = data['notification_title'] ?? message.notification?.title ?? '🛡️ FırsatKolik Yönetim';
+        tag = 'admin_msg_${messageId.isNotEmpty ? messageId : seedKey}';
+        notifId = ('admin_msg_${messageId.isNotEmpty ? messageId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
         payload = 'admin_message';
       } else if (type == 'message' || type == 'user_message' || type == 'chat' || senderId.isNotEmpty) {
         channelId = 'messages_channel_v3';
         channelName = 'Mesaj Bildirimleri';
         channelDescription = 'Kullanıcılar arası mesajlaşma bildirimleri';
         tag = 'msg_$senderId';
-        notifId = (senderId.isNotEmpty ? senderId.hashCode : 8888) % 100000;
-        title = data['notification_title'] ?? message.notification?.title ?? '💬 $senderName';
+        notifId = (senderId.hashCode & 0x7FFFFFFF) % 100000;
         payload = 'message:$senderId:$senderName:$body';
       }
 
@@ -1680,7 +1844,13 @@ class NotificationService {
         enableVibration: true,
         tag: tag,
         onlyAlertOnce: isMessage,
-        groupKey: isMessage ? 'group_messages' : null,
+        groupKey: isMessage ? 'group_messages' : 'group_deals',
+        styleInformation: BigTextStyleInformation(
+          body,
+          contentTitle: title,
+          htmlFormatBigText: false,
+          htmlFormatContentTitle: false,
+        ),
       );
 
       await _localNotifications.show(

@@ -34,7 +34,6 @@ import '../utils/asset_path_migration.dart';
 import '../utils/badge_helper.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/deal_restriction_bottom_sheet.dart';
-import '../widgets/clipboard_deal_prompt_sheet.dart';
 import '../utils/deal_url_detector.dart';
 import '../services/in_app_tutorial_service.dart';
 import '../widgets/in_app_tutorial/tutorial_spotlight_overlay.dart';
@@ -63,16 +62,13 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+class _HomeScreenState extends State<HomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
   final ThemeService _themeService = ThemeService();
   final InAppTutorialService _tutorialService = InAppTutorialService();
 
-  String? _lastCheckedClipboardUrl;
-  bool _isCheckingClipboard = false;
-  
   late int _currentTabIndex;
   String _selectedCategory = 'tumu';
   String? _selectedSubCategory;
@@ -165,20 +161,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _scrollController.addListener(_onScroll);
     // Share Intent dinleyici
     _initShareIntentListener();
-    // App lifecycle dinleyicisi (Mağazadan link kopyalayıp dönüldüğünde otomatik yakalama)
-    WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkClipboardForDealLink();
-    });
     // In-App Tutorial Kontrolü
     _checkAndTriggerTutorial();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checkClipboardForDealLink();
-    }
   }
 
   @override
@@ -254,7 +238,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _categoryScrollController.dispose();
     _searchController.dispose();
     _userSearchDebounceTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -282,58 +265,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       });
     } catch (e) {
       _log("ReceiveSharingIntent init error: $e");
-    }
-  }
-
-  Future<void> _checkClipboardForDealLink() async {
-    if (kIsWeb || !mounted || _isCheckingClipboard) return;
-    _isCheckingClipboard = true;
-
-    try {
-      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-      final rawText = clipboardData?.text?.trim();
-      if (rawText == null || rawText.isEmpty) {
-        _isCheckingClipboard = false;
-        return;
-      }
-
-      final url = DealUrlDetector.extractUrl(rawText);
-      if (url == null) {
-        _isCheckingClipboard = false;
-        return;
-      }
-
-      // Aynı link için oturumda tekrar tekrar pop-up açılmasını engelle
-      if (_lastCheckedClipboardUrl == url) {
-        _isCheckingClipboard = false;
-        return;
-      }
-
-      final storeName = DealUrlDetector.detectStoreName(url);
-      if (storeName == null) {
-        _isCheckingClipboard = false;
-        return;
-      }
-
-      _lastCheckedClipboardUrl = url;
-
-      if (!mounted) {
-        _isCheckingClipboard = false;
-        return;
-      }
-
-      ClipboardDealPromptSheet.show(
-        context,
-        url: url,
-        storeName: storeName,
-        onProceed: () {
-          _navigateToSubmitDealWithUrl(url);
-        },
-      );
-    } catch (e) {
-      _log('Pano link kontrol hatası: $e');
-    } finally {
-      _isCheckingClipboard = false;
     }
   }
 

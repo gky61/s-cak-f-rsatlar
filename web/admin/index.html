@@ -2132,27 +2132,83 @@
                                 <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/50">
                                     <div class="flex items-center gap-2">
                                         <span class="material-symbols-outlined text-indigo-500 text-2xl">speed</span>
-                                        <h3 class="text-lg font-bold text-slate-900 dark:text-white">Kategori Hız Limitleri</h3>
+                                        <h3 class="text-lg font-bold text-slate-900 dark:text-white">Bildirim Hız Limitleri & Anti-Spam</h3>
                                     </div>
-                                    <span class="text-xs bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded font-semibold">Anti-Spam Koruması</span>
+                                    <span class="text-xs bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded font-semibold">Tüm Nedenler (Reasons) Koruması</span>
                                 </div>
                                 <p class="text-xs text-slate-500 dark:text-slate-400">
-                                    Kullanıcılara giden kategori fırsat push bildirimleri için saatlik ve günlük azami kota koyar. Sessiz saatler haricinde bu kotalar aşıldığında bildirim atlanır.
+                                    Kullanıcılara giden push bildirimlerini spam ve flood saldırılarına karşı korur. Her bildirim sebebi (reason) için saatlik ve günlük kotalar uygular.
                                 </p>
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div class="flex flex-col gap-1.5">
-                                        <label class="text-xs font-bold text-slate-700 dark:text-slate-300" for="notifCategoryHourlyLimit">Saatlik Bildirim Limiti</label>
-                                        <input type="number" id="notifCategoryHourlyLimit" min="1" max="20" class="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm" placeholder="3">
-                                    </div>
-                                    <div class="flex flex-col gap-1.5">
-                                        <label class="text-xs font-bold text-slate-700 dark:text-slate-300" for="notifCategoryDailyLimit">Günlük Bildirim Limiti</label>
-                                        <input type="number" id="notifCategoryDailyLimit" min="1" max="50" class="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm" placeholder="8">
+
+                                <!-- Kategori Limitleri -->
+                                <div class="pt-2">
+                                    <span class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">🏷️ Kategori Bildirimleri</span>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1.5">
+                                        <div class="flex flex-col gap-1">
+                                            <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400" for="notifCategoryHourlyLimit">Saatlik Kota</label>
+                                            <input type="number" id="notifCategoryHourlyLimit" min="1" max="20" class="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:ring-1 focus:ring-indigo-500" placeholder="3">
+                                        </div>
+                                        <div class="flex flex-col gap-1">
+                                            <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400" for="notifCategoryDailyLimit">Günlük Kota</label>
+                                            <input type="number" id="notifCategoryDailyLimit" min="1" max="50" class="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:ring-1 focus:ring-indigo-500" placeholder="8">
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="flex items-center gap-3">
+
+                                <!-- Yazar & Anahtar Kelime Limitleri -->
+                                <div class="pt-2 border-t border-slate-100 dark:border-slate-800/50">
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <span class="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">👤 Yazar Takibi</span>
+                                            <div class="grid grid-cols-2 gap-2 mt-1.5">
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400" for="notifAuthorHourlyLimit">Saatlik</label>
+                                                    <input type="number" id="notifAuthorHourlyLimit" min="1" max="30" class="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:ring-1 focus:ring-amber-500" placeholder="4">
+                                                </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400" for="notifAuthorDailyLimit">Günlük</label>
+                                                    <input type="number" id="notifAuthorDailyLimit" min="1" max="50" class="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:ring-1 focus:ring-amber-500" placeholder="12">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">🎯 Anahtar Kelime</span>
+                                            <div class="grid grid-cols-2 gap-2 mt-1.5">
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400" for="notifKeywordHourlyLimit">Saatlik</label>
+                                                    <input type="number" id="notifKeywordHourlyLimit" min="1" max="30" class="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:ring-1 focus:ring-emerald-500" placeholder="6">
+                                                </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400" for="notifKeywordDailyLimit">Günlük</label>
+                                                    <input type="number" id="notifKeywordDailyLimit" min="1" max="50" class="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:ring-1 focus:ring-emerald-500" placeholder="18">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Burst Debounce & Topluluk/Pazarlama -->
+                                <div class="pt-2 border-t border-slate-100 dark:border-slate-800/50">
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div class="flex flex-col gap-1">
+                                            <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400" for="notifDealBurstSeconds">⚡ Burst Bekleme (sn)</label>
+                                            <input type="number" id="notifDealBurstSeconds" min="0" max="300" class="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:ring-1 focus:ring-indigo-500" placeholder="30">
+                                        </div>
+                                        <div class="flex flex-col gap-1">
+                                            <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400" for="notifDealMaxHourly">📊 Toplam Fırsat (Saatlik)</label>
+                                            <input type="number" id="notifDealMaxHourly" min="1" max="50" class="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:ring-1 focus:ring-indigo-500" placeholder="8">
+                                        </div>
+                                        <div class="flex flex-col gap-1">
+                                            <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400" for="notifMarketingDailyLimit">📣 Kampanya (Günlük)</label>
+                                            <input type="number" id="notifMarketingDailyLimit" min="1" max="10" class="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-900 dark:text-slate-100 text-xs focus:ring-1 focus:ring-indigo-500" placeholder="2">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-3 pt-2">
                                     <button type="button" id="saveNotifLimitsBtn" class="flex-1 flex items-center justify-center gap-1.5 rounded-lg h-10 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold transition-all shadow-sm">
                                         <span class="material-symbols-outlined text-[18px]">save</span>
-                                        <span>Limitleri Güncelle</span>
+                                        <span>Tüm Hız Limitlerini Güncelle</span>
                                     </button>
                                 </div>
                                 <div id="notifLimitsResult" class="hidden p-2.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-emerald-800 dark:text-emerald-400 text-xs font-semibold text-center"></div>

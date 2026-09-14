@@ -220,10 +220,15 @@ class AuthService {
           final existingUser = app_user.AppUser.fromFirestore(existingUserDoc);
           _log('📋 Mevcut kullanıcı bulundu. Following listesi: ${existingUser.following.length} kişi');
           
-          // Mevcut kullanıcıyı güncelle (following listesi korunur)
+          // Mevcut kullanıcıyı güncelle (Kullanıcı kendi avatarını seçtiyse Google fotoğrafıyla ezme)
+          final hasCustomAvatar = existingUser.profileImageUrl.isNotEmpty;
+          final effectiveProfileImage = hasCustomAvatar
+              ? existingUser.profileImageUrl
+              : (currentUser.photoURL ?? '');
+
           appUser = existingUser.copyWith(
             username: currentUser.displayName ?? existingUser.username,
-            profileImageUrl: currentUser.photoURL ?? existingUser.profileImageUrl,
+            profileImageUrl: effectiveProfileImage,
           );
           
           // Sadece değişen alanları güncelle (following listesi korunur)
@@ -232,7 +237,8 @@ class AuthService {
             updateData['username'] = currentUser.displayName;
             updateData['displayName'] = currentUser.displayName;
           }
-          if (currentUser.photoURL != null && currentUser.photoURL != existingUser.profileImageUrl) {
+          // Yalnızca kullanıcının henüz bir profil resmi yoksa Google fotoğrafını ata
+          if (!hasCustomAvatar && currentUser.photoURL != null && currentUser.photoURL!.isNotEmpty) {
             updateData['profileImageUrl'] = currentUser.photoURL;
             updateData['photoURL'] = currentUser.photoURL;
           }
@@ -340,11 +346,17 @@ class AuthService {
           final existingUser = app_user.AppUser.fromFirestore(existingUserDoc);
           _log('📋 Mevcut kullanıcı bulundu. Following listesi: ${existingUser.following.length} kişi');
           
+          // Mevcut kullanıcıyı güncelle (Kullanıcı kendi avatarını seçtiyse Google fotoğrafıyla ezme)
+          final hasCustomAvatar = existingUser.profileImageUrl.isNotEmpty;
+          final effectiveProfileImage = hasCustomAvatar
+              ? existingUser.profileImageUrl
+              : (firebaseUser.photoURL ?? '');
+
           appUser = existingUser.copyWith(
             username: (effectiveName != null && effectiveName.isNotEmpty && (existingUser.username == 'Kullanıcı' || existingUser.username.isEmpty))
                 ? effectiveName
                 : (firebaseUser.displayName ?? existingUser.username),
-            profileImageUrl: firebaseUser.photoURL ?? existingUser.profileImageUrl,
+            profileImageUrl: effectiveProfileImage,
           );
           
           // Mevcut kullanıcı varsa, sadece değişen alanları güncelle (takip verileri korunur)
@@ -356,7 +368,8 @@ class AuthService {
             updateData['username'] = firebaseUser.displayName;
             updateData['displayName'] = firebaseUser.displayName;
           }
-          if (firebaseUser.photoURL != null && firebaseUser.photoURL != existingUser.profileImageUrl) {
+          // Yalnızca kullanıcının henüz bir profil resmi yoksa Google fotoğrafını ata
+          if (!hasCustomAvatar && firebaseUser.photoURL != null && firebaseUser.photoURL!.isNotEmpty) {
             updateData['profileImageUrl'] = firebaseUser.photoURL;
             updateData['photoURL'] = firebaseUser.photoURL;
           }

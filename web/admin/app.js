@@ -24,10 +24,22 @@ try {
     throw error;
 }
 
-// Helper to clean profile image URL and format local asset paths
+// Helper to clean profile image URL and format local asset paths with legacy avatar mapping
 function cleanProfileImageUrl(url) {
     if (typeof url !== 'string') return '';
-    const trimmed = url.trim();
+    let trimmed = url.trim();
+    if (!trimmed) return '';
+
+    // Legacy avatar mappings
+    const lower = trimmed.toLowerCase();
+    if (lower.includes('kullanıcı pp') || lower.includes('kullanici pp')) {
+        trimmed = 'assets/avatars/avatar_cat.webp';
+    } else if (lower.includes('kkpp') || lower.includes('ayi') || lower.includes('ayı') || lower.includes('kullanıcı profili') || lower.includes('kullanici profili')) {
+        trimmed = 'assets/avatars/avatar_duck.webp';
+    } else if (lower === 'assets/profil.jpg' || lower === 'assets/profil.webp') {
+        trimmed = 'assets/avatars/avatar_duck.webp';
+    }
+
     if (trimmed.startsWith('assets/')) {
         const webpPath = trimmed.replace(/\.(jpg|jpeg|png)$/i, '.webp');
         return '/' + webpPath;
@@ -10350,15 +10362,36 @@ async function loadSystemNotificationConfig() {
     console.log('⚙️ Loading system notification config (systemConfig/notifications)...');
     try {
         const doc = await db.collection('systemConfig').doc('notifications').get();
-        const data = doc.exists ? doc.data() : { enabled: true, categoryHourlyLimit: 3, categoryDailyLimit: 8 };
+        const data = doc.exists ? doc.data() : {
+            enabled: true,
+            categoryHourlyLimit: 3,
+            categoryDailyLimit: 8,
+            authorHourlyLimit: 4,
+            authorDailyLimit: 12,
+            keywordHourlyLimit: 6,
+            keywordDailyLimit: 18,
+            dealMinIntervalSeconds: 30,
+            dealMaxHourlyTotal: 8,
+            marketingDailyLimit: 2
+        };
 
         currentGlobalNotificationState = (data.enabled !== false);
         updateGlobalNotifEngineUI(currentGlobalNotificationState);
 
-        const hourlyInput = document.getElementById('notifCategoryHourlyLimit');
-        const dailyInput = document.getElementById('notifCategoryDailyLimit');
-        if (hourlyInput) hourlyInput.value = data.categoryHourlyLimit || 3;
-        if (dailyInput) dailyInput.value = data.categoryDailyLimit || 8;
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el && val !== undefined) el.value = val;
+        };
+
+        setVal('notifCategoryHourlyLimit', data.categoryHourlyLimit ?? 3);
+        setVal('notifCategoryDailyLimit', data.categoryDailyLimit ?? 8);
+        setVal('notifAuthorHourlyLimit', data.authorHourlyLimit ?? 4);
+        setVal('notifAuthorDailyLimit', data.authorDailyLimit ?? 12);
+        setVal('notifKeywordHourlyLimit', data.keywordHourlyLimit ?? 6);
+        setVal('notifKeywordDailyLimit', data.keywordDailyLimit ?? 18);
+        setVal('notifDealBurstSeconds', data.dealMinIntervalSeconds ?? 30);
+        setVal('notifDealMaxHourly', data.dealMaxHourlyTotal ?? 8);
+        setVal('notifMarketingDailyLimit', data.marketingDailyLimit ?? 2);
     } catch (err) {
         console.error('❌ Error loading system notification config:', err);
     }
@@ -10414,20 +10447,25 @@ async function toggleGlobalNotificationState() {
 }
 
 async function saveCategoryLimitsFromNotifs() {
-    const hourlyInput = document.getElementById('notifCategoryHourlyLimit');
-    const dailyInput = document.getElementById('notifCategoryDailyLimit');
+    const getNum = (id, fallback) => {
+        const el = document.getElementById(id);
+        if (!el) return fallback;
+        const v = parseInt(el.value, 10);
+        return isNaN(v) ? fallback : v;
+    };
+
+    const catHourly = getNum('notifCategoryHourlyLimit', 3);
+    const catDaily = getNum('notifCategoryDailyLimit', 8);
+    const authorHourly = getNum('notifAuthorHourlyLimit', 4);
+    const authorDaily = getNum('notifAuthorDailyLimit', 12);
+    const kwHourly = getNum('notifKeywordHourlyLimit', 6);
+    const kwDaily = getNum('notifKeywordDailyLimit', 18);
+    const burstSec = getNum('notifDealBurstSeconds', 30);
+    const dealHourly = getNum('notifDealMaxHourly', 8);
+    const mktDaily = getNum('notifMarketingDailyLimit', 2);
+
     const resultEl = document.getElementById('notifLimitsResult');
     const saveBtn = document.getElementById('saveNotifLimitsBtn');
-
-    if (!hourlyInput || !dailyInput) return;
-
-    const hourlyVal = parseInt(hourlyInput.value, 10) || 3;
-    const dailyVal = parseInt(dailyInput.value, 10) || 8;
-
-    if (hourlyVal < 1 || dailyVal < 1) {
-        showError('Limit değerleri 1 veya daha büyük olmalıdır.');
-        return;
-    }
 
     if (saveBtn) {
         saveBtn.disabled = true;
@@ -10436,24 +10474,31 @@ async function saveCategoryLimitsFromNotifs() {
 
     try {
         await db.collection('systemConfig').doc('notifications').set({
-            categoryHourlyLimit: hourlyVal,
-            categoryDailyLimit: dailyVal,
+            categoryHourlyLimit: catHourly,
+            categoryDailyLimit: catDaily,
+            authorHourlyLimit: authorHourly,
+            authorDailyLimit: authorDaily,
+            keywordHourlyLimit: kwHourly,
+            keywordDailyLimit: kwDaily,
+            dealMinIntervalSeconds: burstSec,
+            dealMaxHourlyTotal: dealHourly,
+            marketingDailyLimit: mktDaily,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
         if (resultEl) {
             resultEl.classList.remove('hidden');
-            resultEl.textContent = `✅ Kategori hız limitleri kaydedildi (Saatlik: ${hourlyVal}, Günlük: ${dailyVal}).`;
+            resultEl.textContent = `✅ Tüm bildirim hız limitleri ve burst koruması başarıyla güncellendi.`;
             setTimeout(() => resultEl.classList.add('hidden'), 4000);
         }
-        showSuccess('✅ Kategori hız limitleri başarıyla güncellendi!');
+        showSuccess('✅ Tüm bildirim hız limitleri başarıyla kaydedildi!');
     } catch (err) {
         console.error('❌ Error saving notification limits:', err);
         showError('Limitler kaydedilirken hata: ' + err.message);
     } finally {
         if (saveBtn) {
             saveBtn.disabled = false;
-            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span><span>Limitleri Güncelle</span>';
+            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span><span>Tüm Hız Limitlerini Güncelle</span>';
         }
     }
 }

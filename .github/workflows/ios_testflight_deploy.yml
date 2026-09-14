@@ -103,6 +103,9 @@ jobs:
           # TestFlight için daima kayıtlı com.firsatkolik.app kimliğini kullan
           sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com\.sicakfirsatlar\.sicakFirsatlar;/PRODUCT_BUNDLE_IDENTIFIER = com.firsatkolik.app;/g" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
 
+          # TestFlight / App Store dağıtımı için aps-environment production değerini garanti et
+          sed -i '' "s/<string>development<\/string>/<string>production<\/string>/g" ios/Runner/Runner.entitlements 2>/dev/null || true
+
           # İlgili ortama (flavor) ait GoogleService-Info.plist dosyasını bağla
           if [ "${{ inputs.flavor }}" = "dev" ] && [ -f "ios/Runner/GoogleService-Info-dev.plist" ]; then
             cp "ios/Runner/GoogleService-Info-dev.plist" "ios/Runner/GoogleService-Info.plist"

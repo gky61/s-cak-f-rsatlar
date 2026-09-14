@@ -54,16 +54,34 @@ Firestore okuma maliyetlerini ve sayfa açılış gecikmelerini sıfıra indirme
 
 ## 2. Asset Dosyaları ve Yerel Avatarlar
 
-Yerel avatarlar doğrudan `assets/` klasöründe yer alır ve tamamı optimize `.webp` formatındadır:
+Yerel avatarlar `assets/avatars/` (ve web için `web/assets/avatars/`) klasöründe yer alır ve tamamı optimize `.webp` (384x384 kare) formatındadır:
 
-| Dosya Yolu | Açıklama | Kullanım Yeri |
-|---|---|---|
-| `assets/kullanıcı pp.webp` | Erkek varsayılan profil avatarı | Profil Seçici, Kullanıcı Profili |
-| `assets/kkpp.webp` | Kadın varsayılan profil avatarı | Profil Seçici, Kullanıcı Profili |
-| `assets/botkolik.webp` | Botkolik otonom bot avatarı | Botkolik fırsat kartları, Botkolik profil sayfası, İletişim |
-| `assets/logo.webp` | FırsatKolik marka logosu | Splash, Giriş, Bildirimler, Yönetim |
+| Dosya Yolu | Açıklama / Etiket | Kategori | Boyut |
+|---|---|---|---|
+| `assets/avatars/avatar_kupon_krali.webp` | Kupon Kralı | Maskot & Karakter | ~55 KB |
+| `assets/avatars/avatar_dedektif.webp` | Fırsat Dedektifi | Maskot & Karakter | ~15 KB |
+| `assets/avatars/avatar_cat.webp` | Kara Kedi | Temel Klasik | ~11 KB |
+| `assets/avatars/avatar_duck.webp` | Sarı Civciv | Temel Klasik | ~5 KB |
+| `assets/avatars/avatar_uykucu.webp` | Uykucu Panda | Maskot & Karakter | ~7 KB |
+| `assets/avatars/avatar_alisverisci.webp` | Alışveriş Tutkunu | İlgi Alanı / Yaşam | ~38 KB |
+| `assets/avatars/avatar_oyuncu.webp` | Oyuncu (Gamer) | İlgi Alanı / Yaşam | ~16 KB |
+| `assets/avatars/avatar_teknoloji_meraklisi.webp` | Teknoloji Kurdu | İlgi Alanı / Yaşam | ~10 KB |
+| `assets/avatars/avatar_kamp_tutkunu.webp` | Kampçı Gezgin | İlgi Alanı / Yaşam | ~16 KB |
+| `assets/avatars/avatar_fotograf_gezgini.webp` | Fotoğrafçı | İlgi Alanı / Yaşam | ~13 KB |
+| `assets/avatars/avatar_kahve_tutkunu.webp` | Kahve Sever | İlgi Alanı / Yaşam | ~14 KB |
+| `assets/avatars/avatar_pizza_sever.webp` | Gurme Pizza | İlgi Alanı / Yaşam | ~20 KB |
+| `assets/avatars/avatar_kitap_kurdu.webp` | Kitap Kurdu | İlgi Alanı / Yaşam | ~12 KB |
+| `assets/avatars/avatar_muzik_tutkunu.webp` | Müzik Aşığı | İlgi Alanı / Yaşam | ~12 KB |
+| `assets/avatars/avatar_fitness_tutkunu.webp` | Spor & Fitness | İlgi Alanı / Yaşam | ~13 KB |
+| `assets/avatars/avatar_guzellik_meraklisi.webp` | Güzellik & Bakım | İlgi Alanı / Yaşam | ~11 KB |
+| `assets/avatars/avatar_ev_dekorasyoncusu.webp` | Ev & Tasarım | İlgi Alanı / Yaşam | ~11 KB |
+| `assets/avatars/avatar_mutfak_meraklisi.webp` | Mutfak Şefi | İlgi Alanı / Yaşam | ~12 KB |
 
-> **Önemli Kural:** Projeye yeni bir varsayılan profil resmi ekleneceğinde görsel `.webp` formatında kaydedilmeli, `pubspec.yaml` altına eklenmeli ve `ProfileScreen`'deki `profileImages` listesine tanımlanmalıdır.
+Diğer Sistem Assetleri:
+- `assets/botkolik.webp`: Botkolik fırsat kartı ve bot profili
+- `assets/logo.webp`: Marka logosu (Splash, Login vb.)
+
+> **Önemli Kural:** Projeye yeni bir varsayılan profil resmi ekleneceğinde görsel `.webp` formatında `assets/avatars/` ve `web/assets/avatars/` altına eklenmeli, `lib/utils/asset_path_migration.dart` içindeki `AppAvatars` kataloğuna tanımlanmalıdır.
 
 ---
 

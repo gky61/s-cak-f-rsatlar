@@ -359,104 +359,341 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    // Assets klasöründeki profil resimleri
-    final List<String> profileImages = [
-      'assets/kullanıcı pp.webp',
-      'assets/kkpp.webp',
-    ];
+    final currentAvatarPath = migrateAssetPath(_user?.profileImageUrl ?? '');
+    const avatarList = AppAvatars.all;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (BuildContext context) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final primaryColor = Theme.of(context).colorScheme.primary;
-        
-        return AlertDialog(
-          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-          title: const Text('Profil Resmi Seç'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // "Kaldır" seçeneği
-                ListTile(
-                  leading: const Icon(Icons.delete_outline, color: Colors.red),
-                  title: const Text('Profil Resmini Kaldır'),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _updateProfileImage('');
-                  },
-                ),
-                const Divider(),
-                // Görselleri grid olarak göster
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.0,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext bSheetContext) {
+        final isDark = Theme.of(bSheetContext).brightness == Brightness.dark;
+        final primaryColor = Theme.of(bSheetContext).colorScheme.primary;
+        final sheetBg = isDark ? AppTheme.darkSurface : Colors.white;
+        final textMain = isDark ? Colors.white : const Color(0xFF1E293B);
+        final textSub = isDark ? Colors.grey[400]! : const Color(0xFF64748B);
+        final borderColor = isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE2E8F0);
+
+        return Container(
+          height: MediaQuery.of(bSheetContext).size.height * 0.82,
+          decoration: BoxDecoration(
+            color: sheetBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(bSheetContext).padding.bottom + 8,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Drag Handle
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4.5,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey[700] : Colors.grey[300],
+                    borderRadius: BorderRadius.circular(3),
                   ),
-                  itemCount: profileImages.length,
-                  itemBuilder: (context, index) {
-                    final imagePath = profileImages[index];
-                    
-                    return InkWell(
-                      onTap: () async {
-                        Navigator.pop(context);
-                        await _updateProfileImage(imagePath);
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: _user?.profileImageUrl == imagePath
-                              ? Border.all(color: primaryColor, width: 3)
-                              : Border.all(color: Colors.grey[300]!, width: 2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: Image.asset(
-                                imagePath,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    color: Colors.grey[200],
-                                    child: const Icon(Icons.person),
-                                  );
-                                },
-                              ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // 2. Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.face_retouching_natural_rounded,
+                        color: primaryColor,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Profil Avatarı Seç',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: textMain,
+                              letterSpacing: -0.3,
                             ),
-                            if (_user?.profileImageUrl == imagePath)
-                              Positioned(
-                                top: 4,
-                                right: 4,
-                                child: Container(
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: BoxDecoration(
-                                    color: primaryColor,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.check,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Toplulukta ve fırsatlarında görünecek avatarını belirle',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: textSub,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close_rounded, color: textSub),
+                      onPressed: () => Navigator.pop(bSheetContext),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+              Divider(height: 1, color: borderColor),
+              const SizedBox(height: 16),
+
+              // 3. Mevcut Avatar Önizleme Çubuğu
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      // Küçük avatar önizleme
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: primaryColor.withValues(alpha: 0.4),
+                            width: 1.8,
+                          ),
+                        ),
+                        child: ClipOval(
+                          child: currentAvatarPath.isNotEmpty
+                              ? (currentAvatarPath.startsWith('assets/')
+                                  ? Image.asset(
+                                      currentAvatarPath,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Icon(Icons.person, color: textSub),
+                                    )
+                                  : CachedNetworkImage(
+                                      imageUrl: currentAvatarPath,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (_, __, ___) => Icon(Icons.person, color: textSub),
+                                    ))
+                              : Container(
+                                  color: primaryColor.withValues(alpha: 0.12),
+                                  child: Icon(Icons.person_rounded, color: primaryColor, size: 24),
                                 ),
-                              ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Mevcut Profiliniz',
+                              style: TextStyle(fontSize: 11, color: textSub, fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _user?.displayName ?? 'Kullanıcı',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textMain),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ),
+                      ),
+                      if (currentAvatarPath.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () async {
+                            HapticFeedback.lightImpact();
+                            Navigator.pop(bSheetContext);
+                            await _updateProfileImage('');
+                          },
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 16),
+                          label: const Text(
+                            'Kaldır',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 18),
+
+              // 4. Hazır Avatarlar Başlığı
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Text(
+                      'HAZIR AVATARLAR',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        color: textSub,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${avatarList.length}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // 5. Avatarlar Grid Listesi (Kaydırılabilir 24 Avatar Galerisi)
+              Expanded(
+                child: GridView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(18, 4, 18, 16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 14,
+                    childAspectRatio: 0.80,
+                  ),
+                  itemCount: avatarList.length,
+                  itemBuilder: (context, index) {
+                    final avatarPath = avatarList[index];
+                    final isSelected = currentAvatarPath == avatarPath;
+                    final label = AppAvatars.getLabel(avatarPath);
+
+                    return GestureDetector(
+                      onTap: () async {
+                        HapticFeedback.lightImpact();
+                        Navigator.pop(bSheetContext);
+                        await _updateProfileImage(avatarPath);
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Expanded(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? (isSelected ? primaryColor.withValues(alpha: 0.15) : AppTheme.darkSurfaceElevated)
+                                    : (isSelected ? primaryColor.withValues(alpha: 0.08) : Colors.grey[50]),
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: isSelected ? primaryColor : borderColor,
+                                  width: isSelected ? 2.5 : 1.2,
+                                ),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: primaryColor.withValues(alpha: 0.35),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 3),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Stack(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.all(7),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.asset(
+                                        avatarPath,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            color: Colors.grey[200],
+                                            child: Icon(Icons.person, color: textSub),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  if (isSelected)
+                                    Positioned(
+                                      top: 4,
+                                      right: 4,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(2.5),
+                                        decoration: BoxDecoration(
+                                          color: primaryColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.check_rounded,
+                                          color: Colors.white,
+                                          size: 13,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                              color: isSelected ? primaryColor : textSub,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     );
                   },
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },

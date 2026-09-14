@@ -39,7 +39,7 @@ graph TD
     
     F -->|1. Global Sistem Switch| G[systemConfig/notifications.enabled]
     F -->|2. Sessiz Saatler Kontrolü| H[quietHours: 23:00 - 08:00]
-    F -->|3. Kategori Hız Limiti| I[Saatlik / Günlük Sayaçlar]
+    F -->|3. Hız Limitleri & Anti-Spam| I[Kategori, Yazar, Kelime, Burst, Yorum, Pazarlama]
     F -->|4. Master Switch Kontrolü| J[pushMasterEnabled]
     F -->|5. Alt Kanal & Dinamik Fallback| K[Grup Tercihleri]
     
@@ -173,6 +173,16 @@ Kullanıcının uygulama içindeki Bildirim Merkezi'ni besleyen ana koleksiyondu
   "enabled": true,
   "categoryHourlyLimit": 3,
   "categoryDailyLimit": 8,
+  "authorHourlyLimit": 4,
+  "authorDailyLimit": 12,
+  "keywordHourlyLimit": 6,
+  "keywordDailyLimit": 18,
+  "dealMinIntervalSeconds": 30,
+  "dealMaxHourlyTotal": 8,
+  "commentHourlyLimit": 10,
+  "commentDealTenMinLimit": 5,
+  "marketingDailyLimit": 2,
+  "adminMessageHourlyLimit": 6,
   "updatedAt": "Timestamp"
 }
 ```
@@ -271,7 +281,7 @@ Tüm fonksiyonlar `functions/index.js` içerisinde modüler olarak tanımlanmı�
 | **`onCommentCreated`** | Firestore `deals/{dealId}/comments/{commentId}` (onCreate) | Yorum moderasyonu yapar. Bir yoruma yanıt yazıldığında (`parentCommentId`) alıcıya `comment_reply`, fırsata ana yorum yazıldığında ise fırsat sahibine (`deal.postedBy`) `comment` bildirim dokümanı oluşturur. |
 | **`onAdminMessageCreated`**| Firestore `adminToUserMessages/{messageId}` (onCreate) | Admin panelinden kullanıcıya mesaj atıldığında `users/{uid}/notifications/admin_msg_{messageId}` belgesini yazar. Push gönderimini `onNotificationCreated` motoruna bırakır. |
 | **`onUserMessageCreated`** | Firestore `messages/{messageId}` (onCreate) | Birebir sohbette yeni mesaj geldiğinde alıcının cihazlarına **data-only payload** iletir. |
-| **`onNotificationCreated`** | Firestore `users/{uid}/notifications/{id}` (onCreate) | **Merkezi Push Motoru:** Tüm bildirim dokümanlarını dinler; sistem şalteri, sessiz saatler, kategori limitleri, kullanıcı tercihleri ve cihaz token kontrollerini yaparak FCM push gönderir. Yazar fırsatlarını `follow_channel` kanalına yönlendirir. Başarılı teslimatta (`successCount > 0`) günlük `notificationStats` sayacını anında artırır. |
+| **`onNotificationCreated`** | Firestore `users/{uid}/notifications/{id}` (onCreate) | **Merkezi Push Motoru:** Tüm bildirim dokümanlarını dinler; sistem şalteri, sessiz saatler, tüm bildirim sebepleri hız limitleri (kategori, yazar, kelime, burst cooldown, yorum/topluluk, pazarlama ve admin güvenlik tavanı), kullanıcı tercihleri ve cihaz token kontrollerini yaparak FCM push gönderir. Yazar fırsatlarını `follow_channel` kanalına yönlendirir. Başarılı teslimatta (`successCount > 0`) günlük `notificationStats` sayacını anında artırır. |
 | **`purgeOldDeals`** | PubSub Schedule (`0 4 * * 0` - Her Pazar 04:00) | **30 Günlük Derin Temizlik:** 30 günden eski fırsatları, yorumları, favori referanslarını ve **tüm kullanıcılardaki (`collectionGroup('notifications')`) 30 günü geçmiş bildirimleri** kalıcı olarak siler. |
 | **`purgeOldDealsManual`** | HTTPS Callable (`onCall`) | Admin panelinden 30+ günlük eski fırsatları ve ilişkili eski bildirimleri manuel olarak kalıcı siler. |
 | **`purgeOldNotificationsManual`** | HTTPS Callable (`onCall`) | Admin yetkisiyle yalnızca 30 günü geçmiş bildirim dokümanlarını (`collectionGroup`) toplu siler. |
@@ -303,7 +313,7 @@ Uygulama arka planda, kapalıyken (cold start) veya ön plandayken bildirime tı
 | Payload Verisi | Hedef Ekran | Parametreler |
 | :--- | :--- | :--- |
 | `type == 'deal'` veya `dealId` | **`DealDetailScreen`** | `dealId` ile detay ekranı açılır |
-| `type == 'comment_reply'` | **`DealDetailScreen`** | `dealId` açılır ve `commentId`'ye otomatik odaklanır |
+| `type == 'comment_reply'` veya `type == 'comment'` | **`DealDetailScreen`** | `dealId` açılır ve `commentId`'ye otomatik kaydırılarak odaklanır |
 | `type == 'message'` | **`MessageScreen`** | `senderId`, `senderName`, `messageText`, `dealId` vb. ile sohbet odası anında açılır |
 | `type == 'admin_deal'` | **`AdminScreen`** | Admin onay paneli açılır |
 | `type == 'admin_message'` | **`MessageScreen`** / **`AdminNotificationsScreen`** | Yönetici duyuruları / destek sohbeti açılır |
@@ -332,9 +342,12 @@ Uygulama tamamen kapalıyken bildirime tıklandığında:
 
 ### iOS APNs Yapılandırması:
 * **Ses & Rozet:** `sound: 'default'`, `badge: 1`.
-* **Kategori & Öncelik:** `apns-priority: 10`, `interruption-level: active` (Admin mesajlarında `time-sensitive`).
+* **Kategori & Öncelik:** `apns-priority: 10`, `apns-push-type: 'alert'`, `interruption-level: active` (Admin mesajlarında `time-sensitive`).
+* **Alert & Görsel Sunum:** Apple kuralları gereği kilit ekranı ve bildirim merkezinde afiş gösterimi için `payload.aps.alert: { title: '...', body: '...' }` tanımlanır. Android data-only yapısını korurken iOS cihazlara doğrudan işletim sistemi seviyesinde kilit ekranı bildirim kartı oluşturulması sağlanır.
 * **Content Available:** Arka plan veri senkronizasyonu için `content-available: 1`.
 * **APNs Collapse ID & Thread ID:** `apns-collapse-id: "msg_" + senderId` ve `thread-id: "conv_" + senderId` ile kilit ekranında sohbet bazlı gruplama.
+* **Ön Plan Bildirim Delegasyonu (`AppDelegate.swift`):** `UNUserNotificationCenter.current().delegate = self` üzerinden `userNotificationCenter(_:willPresent:withCompletionHandler:)` çağrısına `[.banner, .list, .badge, .sound]` sunum seçenekleri eklenmiştir.
+* **Ön Plan Gerçek Zamanlı In-App Afiş Motoru (`NotificationService`):** Uygulama açıkken (foreground) APNs veya FCM gecikmelerinden bağımsız olarak, Firestore `messages` koleksiyonundaki `receiverId == userId` anlık dinleyicisi (`_setupForegroundMessageListener()`) sayesinde 0 ms gecikmeyle `InAppMessageBanner.show()` tetiklenir (Aktif sohbetteyse bastırılır, diğer ekranlarda afiş gösterilir).
 
 ---
 
@@ -367,13 +380,20 @@ Kullanıcılar arası mesajlaşmada bildirim deneyimini kusursuz kılmak ve spam
 - **Aktif Chat Bastırma:** `NotificationService.activeChatUserId == senderId` ise ön planda ne push ne de In-App banner üretilir.
 - **In-App Banner Titreşim Koruması:** Hızlı mesaj akışlarında haptic motorunu korumak için 1.5 saniyelik Haptic Debounce uygulanır.
 
+### 8.6 ⚡ Fırsat Bildirimlerinde Burst Debounce & Fırsat Tavanı Koruması
+- **Fırsat Burst Debounce (30sn Soğuma):** Bot kazıma veya avcı paylaşımlarıyla ardı ardına fırsat geldiğinde, kullanıcıya bir fırsat bildirimi gittikten sonra en az 30 saniye (`dealMinIntervalSeconds: 30`) geçmeden yeni bir fırsat push'u gönderilmez (`skipped_deal_burst_cooldown`). Doküman bildirim kutusuna yazılmaya devam eder.
+- **Toplam Fırsat Saatlik Tavanı:** Kullanıcı saatte tüm kaynaklardan (kategori + yazar + kelime) toplam en fazla 8 fırsat push'u alabilir (`skipped_deal_hourly_total_limit`).
+- **Viral Yorum Flood Koruması:** Bir fırsata çok sayıda yorum geldiğinde, aynı fırsat için 10 dakikada en fazla 5, saatte en fazla 10 push iletilir (`skipped_comment_rate_limit`).
+- **Pazarlama Kotası:** Günde en fazla 2 pazarlama push'u iletilir (`skipped_marketing_limit`).
+- **Yönetici Güvenlik Tavanı:** Olası otomasyon döngülerini engellemek için saatte en fazla 6 admin mesajı push'u iletilir (`skipped_admin_message_rate_limit`).
+
 ---
 
 ## 9. 💻 Web Admin Paneli Bildirim Yetenekleri
 
 Web yönetim paneli (`web/admin/`), bildirim sistemini yönetmek için şu araçları ve operasyonel modülleri sunar:
 1. **Global Push Şalteri & Canlı Durum Kartı:** `systemConfig/notifications.enabled` değerini anlık gösteren durum rozeti ve tek tıkla tüm push motorunu acil durdurma/başlatma anahtarı.
-2. **Kategori Hız Limitleri Canlı Yönetimi:** Kategori saatlik (`categoryHourlyLimit`) ve günlük (`categoryDailyLimit`) hız kotalarını Bildirim Merkezi ekranından anında görüntüleme ve güncelleme.
+2. **Bildirim Hız Limitleri & Anti-Spam Yönetim Merkezi:** Kategori (saatlik: 3 / günlük: 8), Yazar (saatlik: 4 / günlük: 12), Anahtar Kelime (saatlik: 6 / günlük: 18), Burst Bekleme Süresi (30sn), Saatlik Toplam Fırsat Tavanı (8) ve Günlük Pazarlama Kotası (2) değerlerini Bildirim Merkezi ekranından anında görüntüleme ve tek tıkla güncelleme.
 3. **Manuel Push Gönderimi & Kategori Seçimi:** Başlık, içerik, isteğe bağlı görsel URL, opsiyonel `dealId` ve bildirim türü (`Yönetici Duyurusu` vs `Pazarlama / Kampanya`) girilerek `Tüm Kullanıcılar`, `Belirli UID` veya `Belirli FCM Token` hedeflenerek bildirim gönderilir. `dealId` girildiğinde mobil kullanıcı bildirime tıkladığı anda doğrudan ilgili fırsat detay ekranı açılır.
 4. **Geçersiz Token Temizliği (`cleanupInvalidTokens`):** Veritabanındaki aktif cihazların token geçerliliğini test edip bayat token'ları otomatik pasife alır.
 5. **30+ Günlük Eski Bildirim Temizliği (`purgeOldNotificationsManual`):** Sunucu tarafındaki callable Cloud Function aracılığıyla 30 günü geçmiş eski bildirim dokümanlarını (`collectionGroup`) tek tıkla temizler.
@@ -389,11 +409,13 @@ Tüm bildirim sistemi ve senaryoları tam kapsamlı (%100) doğrulanmaktadır:
 
 | Test Dosyası | Kapsam | Komut |
 | :--- | :--- | :--- |
+| **`test/notification_ui_ux_test.dart`** | UI/UX, yönlendirme, başlık temizleme, fallback ve tüm reason hız limiti birim testleri (11 Test) | `flutter test test/notification_ui_ux_test.dart` |
 | **`test/messaging_and_anti_spam_test.dart`** | Anti-spam (5s/max 3 msg), deterministik notifId & tag, payload parser, instant seeding & dedup birim testleri (11 Test) | `flutter test test/messaging_and_anti_spam_test.dart` |
 | **`test/notification_logic_test.dart`** | Flutter birim testleri, serileştirme (toMap/fromFirestore), Master Switch State Preservation (3 Test) | `flutter test test/notification_logic_test.dart` |
 | **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
 | **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |
 | **`functions/tests/test_all_notification_scenarios.js`** | 21 Senaryoluk Çaprazlama Uçtan Uca Bütünleşik Test Süiti: 10 Senaryo + varyasyonlarını canlı veritabanı üzerinde çapraz kontrol eder | `node functions/tests/test_all_notification_scenarios.js` |
+| **`functions/tests/test_emergency_controls.js`** | 6 Acil Durum Kontrolü: Global bildirim şalteri, fırsat ve yorum acil kapatma, bot kontrolleri | `node functions/tests/test_emergency_controls.js` |
 
 ---
 
@@ -403,7 +425,15 @@ Tüm bildirim sistemi ve senaryoları tam kapsamlı (%100) doğrulanmaktadır:
 1. **`userDevices` Kaydı:** Kullanıcının aktif bir cihazı var mı (`active == true`) ve token'ı dolu mu?
 2. **Kullanıcı Tercihleri:** `pushMasterEnabled: true` mu? İlgili alt kanal açık mı?
 3. **Sessiz Saatler:** Şu an kullanıcının `quietHours` aralığında mıyız? (Bildirim belgesindeki `pushStatus` alanı `skipped_quiet_hours` ise sessiz saate takılmıştır).
-4. **Kategori Hız Limiti:** Son 1 saatte 3'ten veya son 24 saatte 8'den fazla kategori bildirimi gitti mi? (`skipped_category_limit`).
+4. **Hız Limitleri ve Anti-Spam (pushStatus Kontrolü):**
+   - `skipped_category_limit`: Saatlik 3 veya günlük 8 kategori kotası dolmuştur.
+   - `skipped_author_limit`: Saatlik 4 veya günlük 12 yazar kotası dolmuştur.
+   - `skipped_keyword_limit`: Saatlik 6 veya günlük 18 anahtar kelime kotası dolmuştur.
+   - `skipped_deal_burst_cooldown`: Son 30 saniye içinde başka bir fırsat bildirimi iletilmiştir (30sn soğuma devrede).
+   - `skipped_deal_hourly_total_limit`: Kullanıcı saatte azami 8 toplam fırsat tavanına ulaşmıştır.
+   - `skipped_comment_rate_limit`: Aynı fırsata 10 dakikada 5'ten veya saatte 10'dan fazla yorum bildirimi gitmesi engellenmiştir.
+   - `skipped_marketing_limit`: Günlük 2 pazarlama kotası dolmuştur.
+   - `skipped_admin_message_rate_limit`: Saatte 6 admin mesajı kotası dolmuştur.
 5. **Fırsat Durumu:** Fırsat `published` ve `isApproved == true` durumunda mı?
 6. **FCM V1 Tip Hatası:** Cloud Functions loglarında `type 'List<Object?>' is not a subtype of type...` hatası var mı? (Tüm `data` parametreleri String olmalıdır).
 
@@ -413,6 +443,13 @@ Tüm bildirim sistemi ve senaryoları tam kapsamlı (%100) doğrulanmaktadır:
 ### 11.3 Web Admin Panelinde Bildirim Temizliği Sırasında `Missing or insufficient permissions` Hatası:
 * İstemci tarayıcısının `collectionGroup('notifications')` sorgusu atabilmesi için `firestore.rules` dosyasında `match /{path=**}/notifications/{notificationId} { allow read, write: if isAdmin(); }` tanımlı olmalıdır.
 * En sağlıklı yöntem, web admin butonunun `purgeOldDealsManual` Cloud Function'ını çağırarak işlemi sunucuda Admin SDK yetkisiyle gerçekleştirmesidir.
+
+### 11.4 iOS TestFlight ve APNs Sorun Giderme (`messaging/third-party-auth-error`):
+* **Hata Tanımı:** Cloud Functions veya sunucu üzerinden FCM mesajı gönderildiğinde `messaging/third-party-auth-error: Invalid APNs credential` hatası alınıyorsa, Firebase Console'a Apple Developer Portal'dan üretilen APNs Kimlik Doğrulama Anahtarı (`.p8`) yüklenmemiştir.
+* **Çözüm:** 
+  1. [Apple Developer Portal - Keys](https://developer.apple.com/account/resources/authkeys/list) sayfasından `Apple Push Notifications service (APNs)` yetkili yeni bir `.p8` anahtarı üretilir.
+  2. Firebase Console (`sicak-firsatlar-e6eae` ve `firsatkolik-prod-e6eae`) > Proje Ayarları > Cloud Messaging > Apple Uygulama Yapılandırması (`com.firsatkolik.app`) altına bu `.p8` dosyası, Key ID ve Team ID (`973W9DTDY9`) ile yüklenir.
+* **`aps-environment` Uyuşmazlığı:** TestFlight derlemelerinde `Runner.entitlements` içindeki `aps-environment` değeri `production` olmalıdır (`development` kalırsa push sertifikası eşleşmez). Bu işlem `.github/workflows/ios_testflight_deploy.yml` içinde otomatikleştirilmiştir.
 
 ---
 

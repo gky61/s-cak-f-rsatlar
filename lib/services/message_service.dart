@@ -43,7 +43,7 @@ class MessageService {
         senderName = 'Ahmet Yılmaz (Test)';
       } else if (senderId == 'test_user_zeynep') {
         senderName = 'Zeynep Kaya (Test)';
-        senderImageUrl = 'assets/profil.jpg';
+        senderImageUrl = 'assets/avatars/avatar_duck.webp';
       } else {
         final senderDoc = await _firestore.collection('users').doc(senderId).get();
         if (!senderDoc.exists) return null;
@@ -64,7 +64,7 @@ class MessageService {
         receiverName = 'Ahmet Yılmaz (Test)';
       } else if (receiverId == 'test_user_zeynep') {
         receiverName = 'Zeynep Kaya (Test)';
-        receiverImageUrl = 'assets/profil.jpg';
+        receiverImageUrl = 'assets/avatars/avatar_duck.webp';
       } else {
         final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
         if (!receiverDoc.exists) return null;

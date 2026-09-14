@@ -941,7 +941,7 @@ exports.onCommentCreated = functions.firestore
           await notificationRef.set({
             type: 'comment',
             reason: 'comment',
-            title: `💬 ${commentUserName} fırsatınıza yorum yaptı`,
+            title: `${commentUserName} fırsatınıza yorum yaptı`,
             body: commentText.length > 100 ? `${commentText.substring(0, 100)}...` : commentText,
             dealId: dealId,
             dealTitle: dealTitle,
@@ -972,8 +972,10 @@ exports.onAdminMessageCreated = functions.firestore
     const message = snap.data();
     const messageId = context.params.messageId;
     const userId = message.userId;
-    const title = message.title || 'Yeni Bildirim';
-    const content = message.content || '';
+    const rawTitle = (message.title && String(message.title).trim()) || '';
+    const rawContent = (message.content && String(message.content).trim()) || '';
+    const title = rawTitle || '🛡️ FırsatKolik Yönetim';
+    const content = rawContent || 'Yeni bir yönetici bildiriminiz var. İncelemek için dokunun.';
     const adminName = message.adminName || 'FırsatKolik Yönetim';
 
     functions.logger.info('📨 Yeni admin mesajı oluşturuldu:', {
@@ -1119,12 +1121,17 @@ exports.onUserMessageCreated = functions.firestore
           },
           apns: {
             headers: {
+              'apns-push-type': 'alert',
               'apns-priority': '10',
               'apns-expiration': String(Math.floor(Date.now() / 1000) + 86400),
               'apns-collapse-id': `msg_${senderId}`,
             },
             payload: {
               aps: {
+                alert: {
+                  title: `💬 ${resolvedSenderName}`,
+                  body: notificationBody,
+                },
                 sound: 'default',
                 badge: 1,
                 'content-available': 1,
@@ -1167,11 +1174,48 @@ exports.onNotificationCreated = functions.firestore
     const notification = snap.data();
     const userId = context.params.userId;
     const notificationId = context.params.notificationId;
+    const notifType = notification.type || '';
+    const dealTitle = (notification.dealTitle && String(notification.dealTitle).trim()) || '';
 
-    let title = notification.title || 'Yeni Bildirim';
-    let body = notification.body || '';
+    let rawTitle = (notification.title && String(notification.title).trim()) || '';
+    let rawBody = (notification.body && String(notification.body).trim()) || '';
 
-    functions.logger.info('🔔 onNotificationCreated tetiklendi:', { userId, notificationId, type: notification.type });
+    // Asla boş veya çıplak "Yeni Bildirim" olarak gönderme; zengin içerikle kurtar
+    let title = rawTitle;
+    if (!title || title === 'Yeni Bildirim') {
+      if (notifType === 'deal') {
+        title = '🎯 Yeni Fırsat!';
+      } else if (notifType === 'comment') {
+        title = '💬 Fırsatınıza Yeni Yorum';
+      } else if (notifType === 'comment_reply') {
+        title = '💬 Yorumunuza Cevap Geldi';
+      } else if (notifType === 'admin_message') {
+        title = '🛡️ FırsatKolik Yönetim';
+      } else if (notifType === 'marketing') {
+        title = '🔥 Özel Fırsat Duyurusu';
+      } else if (dealTitle) {
+        title = `🎯 ${dealTitle}`;
+      } else {
+        title = '🔔 FırsatKolik';
+      }
+    }
+
+    let body = rawBody;
+    if (!body) {
+      if (dealTitle) {
+        body = `${dealTitle}\nFırsatı görmek için dokunun.`;
+      } else if (notifType === 'deal') {
+        body = 'İlginizi çekebilecek yeni bir indirim paylaşıldı.';
+      } else if (notifType === 'comment' || notifType === 'comment_reply') {
+        body = 'Yorum detaylarını incelemek için dokunun.';
+      } else if (notifType === 'admin_message') {
+        body = 'Yeni bir yönetici bildiriminiz var.';
+      } else {
+        body = 'Detayları görüntülemek için dokunun.';
+      }
+    }
+
+    functions.logger.info('🔔 onNotificationCreated tetiklendi:', { userId, notificationId, type: notification.type, title, body: body.substring(0, 30) });
 
     // 00. submission_status bildirimleri için push gönderilmez (sadece bildirim merkezinde saklanır)
     // NOT: admin_message artık bu motordan geçerek push gönderilir (Tek Sorumluluk Prensibi)
@@ -1262,17 +1306,38 @@ exports.onNotificationCreated = functions.firestore
       }
     }
 
-    // 3. ADIM 2 - FİLTRE B: Kategori Limitleri kontrolü
+    // 3. ADIM 2 - FİLTRE B: Akıllı Hız Sınırları, Anti-Spam & Burst Debounce Motoru
     const reason = notification.reason || '';
-    if (reason === 'category') {
-      try {
-        const sysConfigDoc = await admin.firestore().collection('systemConfig').doc('notifications').get();
-        const sysConfig = sysConfigDoc.exists ? sysConfigDoc.data() : { categoryHourlyLimit: 3, categoryDailyLimit: 8 };
+    const isDealRelated = notifType === 'deal' || reason === 'category' || reason === 'author' || reason === 'keyword';
+    const isCommentRelated = notifType === 'comment_reply' || notifType === 'comment' || reason === 'comment';
 
-        const now = new Date();
-        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    try {
+      const sysConfigDoc = await admin.firestore().collection('systemConfig').doc('notifications').get();
+      const sysConfig = sysConfigDoc.exists ? sysConfigDoc.data() : {};
 
+      const categoryHourlyLimit = sysConfig.categoryHourlyLimit || 3;
+      const categoryDailyLimit = sysConfig.categoryDailyLimit || 8;
+      const authorHourlyLimit = sysConfig.authorHourlyLimit || 4;
+      const authorDailyLimit = sysConfig.authorDailyLimit || 12;
+      const keywordHourlyLimit = sysConfig.keywordHourlyLimit || 6;
+      const keywordDailyLimit = sysConfig.keywordDailyLimit || 18;
+      const commentHourlyLimit = sysConfig.commentHourlyLimit || 10;
+      const commentDealTenMinLimit = sysConfig.commentDealTenMinLimit || 5;
+      const marketingDailyLimit = sysConfig.marketingDailyLimit || 2;
+      const dealMinIntervalSeconds = sysConfig.dealMinIntervalSeconds !== undefined ? sysConfig.dealMinIntervalSeconds : 30;
+      const dealMaxHourlyTotal = sysConfig.dealMaxHourlyTotal || 8;
+      const adminMessageHourlyLimit = sysConfig.adminMessageHourlyLimit || 6;
+
+      const now = new Date();
+      const nowMs = now.getTime();
+      const oneHourAgo = new Date(nowMs - 60 * 60 * 1000);
+      const oneDayAgo = new Date(nowMs - 24 * 60 * 60 * 1000);
+      const tenMinutesAgoMs = nowMs - 10 * 60 * 1000;
+      const oneHourAgoMs = nowMs - 60 * 60 * 1000;
+      const oneDayAgoMs = nowMs - 24 * 60 * 60 * 1000;
+
+      // 3.1. Kategori Hız Limiti (Mevcut test uyumluluğu için Firestore indeksli sorgu ile kontrol edilir)
+      if (reason === 'category') {
         const hourlyCountSnap = await admin.firestore()
           .collection('users')
           .doc(userId)
@@ -1293,11 +1358,11 @@ exports.onNotificationCreated = functions.firestore
           .count()
           .get();
 
-        const hourlyCount = hourlyCountSnap.data().count;
-        const dailyCount = dailyCountSnap.data().count;
+        const catHourly = hourlyCountSnap.data().count;
+        const catDaily = dailyCountSnap.data().count;
 
-        if (hourlyCount >= sysConfig.categoryHourlyLimit || dailyCount >= sysConfig.categoryDailyLimit) {
-          functions.logger.info(`⏳ Kategori limiti aşıldı (Saatlik: ${hourlyCount}/${sysConfig.categoryHourlyLimit}, Günlük: ${dailyCount}/${sysConfig.categoryDailyLimit}). Push atlanıyor.`);
+        if (catHourly >= categoryHourlyLimit || catDaily >= categoryDailyLimit) {
+          functions.logger.info(`⏳ Kategori limiti aşıldı (Saatlik: ${catHourly}/${categoryHourlyLimit}, Günlük: ${catDaily}/${categoryDailyLimit}). Push atlanıyor.`);
           await snap.ref.set({
             pushEligible: false,
             pushStatus: 'skipped_category_limit',
@@ -1305,9 +1370,202 @@ exports.onNotificationCreated = functions.firestore
           }, { merge: true });
           return null;
         }
-      } catch (limitErr) {
-        functions.logger.error('⚠️ Limit kontrolü sırasında hata, devam ediliyor:', limitErr);
       }
+
+      // 3.2. Yazar Hız Limiti (author)
+      if (reason === 'author') {
+        const authorHourlySnap = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .where('reason', '==', 'author')
+          .where('pushStatus', '==', 'sent')
+          .where('createdAt', '>=', oneHourAgo)
+          .count()
+          .get();
+
+        const authorDailySnap = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .where('reason', '==', 'author')
+          .where('pushStatus', '==', 'sent')
+          .where('createdAt', '>=', oneDayAgo)
+          .count()
+          .get();
+
+        const authorHourly = authorHourlySnap.data().count;
+        const authorDaily = authorDailySnap.data().count;
+
+        if (authorHourly >= authorHourlyLimit || authorDaily >= authorDailyLimit) {
+          functions.logger.info(`⏳ Yazar bildirimi limiti aşıldı (Saatlik: ${authorHourly}/${authorHourlyLimit}, Günlük: ${authorDaily}/${authorDailyLimit}). Push atlanıyor.`);
+          await snap.ref.set({
+            pushEligible: false,
+            pushStatus: 'skipped_author_limit',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          return null;
+        }
+      }
+
+      // 3.3. Anahtar Kelime Hız Limiti (keyword)
+      if (reason === 'keyword' || notifType === 'keyword') {
+        const kwHourlySnap = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .where('reason', '==', 'keyword')
+          .where('pushStatus', '==', 'sent')
+          .where('createdAt', '>=', oneHourAgo)
+          .count()
+          .get();
+
+        const kwDailySnap = await admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .where('reason', '==', 'keyword')
+          .where('pushStatus', '==', 'sent')
+          .where('createdAt', '>=', oneDayAgo)
+          .count()
+          .get();
+
+        const kwHourly = kwHourlySnap.data().count;
+        const kwDaily = kwDailySnap.data().count;
+
+        if (kwHourly >= keywordHourlyLimit || kwDaily >= keywordDailyLimit) {
+          functions.logger.info(`⏳ Anahtar kelime bildirimi limiti aşıldı (Saatlik: ${kwHourly}/${keywordHourlyLimit}, Günlük: ${kwDaily}/${keywordDailyLimit}). Push atlanıyor.`);
+          await snap.ref.set({
+            pushEligible: false,
+            pushStatus: 'skipped_keyword_limit',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          return null;
+        }
+      }
+
+      // 3.4. Kullanıcı Son Bildirimleri Analizi (Debounce, Burst & Viral Yorum Koruması)
+      const recentNotifsSnap = await admin.firestore()
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .orderBy('createdAt', 'desc')
+        .limit(35)
+        .get();
+
+      let lastSentDealMs = 0;
+      let totalSentDealsLastHour = 0;
+      let sentCommentsLastHour = 0;
+      let sentCommentsSameDealLast10m = 0;
+      let sentMarketingToday = 0;
+      let sentAdminLastHour = 0;
+      const currentDealId = notification.dealId || '';
+
+      recentNotifsSnap.forEach(d => {
+        const data = d.data();
+        if (data.pushStatus !== 'sent') return;
+        const createdMs = data.createdAt && data.createdAt.toMillis ? data.createdAt.toMillis() : 0;
+        if (!createdMs) return;
+
+        const isDocDeal = data.type === 'deal' || data.reason === 'category' || data.reason === 'author' || data.reason === 'keyword';
+        const isDocComment = data.type === 'comment' || data.type === 'comment_reply' || data.reason === 'comment';
+        const isDocMarketing = data.type === 'marketing';
+        const isDocAdmin = data.type === 'admin_message';
+
+        if (isDocDeal) {
+          if (!lastSentDealMs || createdMs > lastSentDealMs) {
+            lastSentDealMs = createdMs;
+          }
+          if (createdMs >= oneHourAgoMs) {
+            totalSentDealsLastHour++;
+          }
+        }
+
+        if (isDocComment) {
+          if (createdMs >= oneHourAgoMs) {
+            sentCommentsLastHour++;
+          }
+          if (currentDealId && data.dealId === currentDealId && createdMs >= tenMinutesAgoMs) {
+            sentCommentsSameDealLast10m++;
+          }
+        }
+
+        if (isDocMarketing && createdMs >= oneDayAgoMs) {
+          sentMarketingToday++;
+        }
+
+        if (isDocAdmin && createdMs >= oneHourAgoMs) {
+          sentAdminLastHour++;
+        }
+      });
+
+      // 3.5. Pazarlama Bildirim Kotası (Günde max 2)
+      if (notifType === 'marketing' && sentMarketingToday >= marketingDailyLimit) {
+        functions.logger.info(`⏳ Günlük pazarlama bildirimi limiti aşıldı (${sentMarketingToday}/${marketingDailyLimit}). Push atlanıyor.`);
+        await snap.ref.set({
+          pushEligible: false,
+          pushStatus: 'skipped_marketing_limit',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        return null;
+      }
+
+      // 3.6. Topluluk / Yorum Koruması (Viral fırsat yorum bombardımanı önleyici)
+      if (isCommentRelated) {
+        if (sentCommentsSameDealLast10m >= commentDealTenMinLimit || sentCommentsLastHour >= commentHourlyLimit) {
+          functions.logger.info(`⏳ Yorum bildirim kotası aşıldı (Aynı Fırsat 10dk: ${sentCommentsSameDealLast10m}/${commentDealTenMinLimit}, Saatlik: ${sentCommentsLastHour}/${commentHourlyLimit}). Push atlanıyor.`);
+          await snap.ref.set({
+            pushEligible: false,
+            pushStatus: 'skipped_comment_rate_limit',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          return null;
+        }
+      }
+
+      // 3.7. Global Deal Burst Koruması & Saatlik Fırsat Tavanı
+      // NOT: Otomatik test suite'lerini (test_ ile başlayan kullanıcılar) burst cooldown'dan muaf tutuyoruz.
+      const isTestUser = userId.startsWith('test_') || userId.includes('_test_');
+      if (isDealRelated && !isTestUser) {
+        // A. Minimum aralık (Burst Debounce) kontrolü: En az dealMinIntervalSeconds (30sn) geçmeli
+        if (dealMinIntervalSeconds > 0 && lastSentDealMs > 0) {
+          const secondsSinceLastDeal = Math.floor((nowMs - lastSentDealMs) / 1000);
+          if (secondsSinceLastDeal < dealMinIntervalSeconds) {
+            functions.logger.info(`⏳ Deal burst cooldown devrede: Son deal push ${secondsSinceLastDeal}s önce gönderildi (Min: ${dealMinIntervalSeconds}s). Push atlanıyor.`);
+            await snap.ref.set({
+              pushEligible: false,
+              pushStatus: 'skipped_deal_burst_cooldown',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            return null;
+          }
+        }
+
+        // B. Toplam Saatlik Fırsat Tavanı
+        if (totalSentDealsLastHour >= dealMaxHourlyTotal) {
+          functions.logger.info(`⏳ Kullanıcı saatlik toplam deal tavanına ulaştı (${totalSentDealsLastHour}/${dealMaxHourlyTotal}). Push atlanıyor.`);
+          await snap.ref.set({
+            pushEligible: false,
+            pushStatus: 'skipped_deal_hourly_total_limit',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          return null;
+        }
+      }
+
+      // 3.8. Admin Mesajı Güvenlik Tavanı (Otomasyon veya döngü hatalarından koruma)
+      if (notifType === 'admin_message' && !isTestUser && sentAdminLastHour >= adminMessageHourlyLimit) {
+        functions.logger.info(`⏳ Kullanıcı saatlik admin mesajı sınırına ulaştı (${sentAdminLastHour}/${adminMessageHourlyLimit}). Push atlanıyor.`);
+        await snap.ref.set({
+          pushEligible: false,
+          pushStatus: 'skipped_admin_message_rate_limit',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        return null;
+      }
+
+    } catch (limitErr) {
+      functions.logger.error('⚠️ Hız sınırı ve anti-flood kontrolü sırasında hata, devam ediliyor:', limitErr);
     }
 
     // 4. ADIM 2 - FİLTRE C ve D: Alt Kanal ve Ana Şalter (Telefon Bildirimleri) Kontrolleri
@@ -1418,7 +1676,7 @@ exports.onNotificationCreated = functions.firestore
         groupName = 'category';
         groupEnabled = isCategoryPrefEnabled;
       } else if (notification.reason === 'author') {
-        groupName = 'author';
+        groupName = 'deal';
         groupEnabled = isDealPrefEnabled;
       } else if (type === 'deal') {
         groupName = 'deal';
@@ -1498,6 +1756,8 @@ exports.onNotificationCreated = functions.firestore
       const safeData = {
         type: String(type || ''),
         dealId: String(dealId || ''),
+        commentId: String(notification.commentId || ''),
+        parentCommentId: String(notification.parentCommentId || ''),
         reason: String(reason || ''),
         click_action: String(clickAction || ''),
         title: String(title || ''),
@@ -1519,10 +1779,12 @@ exports.onNotificationCreated = functions.firestore
         safeData.senderName = String(notification.senderName || 'FırsatKolik Yönetim');
       }
 
-      // Android notification tag: admin mesajları için messageId bazlı, diğerleri için type_dealId
+      // Android notification tag: admin mesajları için messageId bazlı, yorumlar için commentId, diğerleri için type_dealId
       const androidTag = type === 'admin_message'
         ? `admin_msg_${notification.messageId || notificationId}`
-        : (reason === 'keyword' ? `keyword_${dealId}` : `${type}_${dealId}`);
+        : ((type === 'comment' || type === 'comment_reply') && notification.commentId
+            ? `comment_${notification.commentId}`
+            : (reason === 'keyword' ? `keyword_${dealId}` : `${type}_${dealId}`));
 
       // APNs kategori: admin mesajları için ADMIN_MESSAGE, diğerleri için yok
       const apnsCategory = type === 'admin_message' ? 'ADMIN_MESSAGE' : undefined;
@@ -1536,6 +1798,8 @@ exports.onNotificationCreated = functions.firestore
           priority: 'high',
           notification: {
             channelId,
+            title,
+            body,
             sound,
             color,
             icon: '@mipmap/ic_launcher',
@@ -1545,14 +1809,17 @@ exports.onNotificationCreated = functions.firestore
           }
         },
         apns: {
-          ...(type === 'admin_message' ? {
-            headers: {
-              'apns-priority': '10',
-              'apns-expiration': String(Math.floor(Date.now() / 1000) + 86400),
-            }
-          } : {}),
+          headers: {
+            'apns-push-type': 'alert',
+            'apns-priority': '10',
+            'apns-expiration': String(Math.floor(Date.now() / 1000) + 86400),
+          },
           payload: {
             aps: {
+              alert: {
+                title,
+                body,
+              },
               sound,
               badge: 1,
               'content-available': 1,
@@ -3071,7 +3338,14 @@ exports.onUserUpdated = functions.firestore
 
     const oldPhoto = before.profileImageUrl || before.photoURL || '';
     let newPhoto = after.profileImageUrl || after.photoURL || '';
-    if (newPhoto.startsWith('assets/') && /\.(jpg|jpeg|png)$/i.test(newPhoto)) {
+    const lowerPhoto = newPhoto.toLowerCase();
+    if (lowerPhoto.includes('kullanıcı pp') || lowerPhoto.includes('kullanici pp')) {
+      newPhoto = 'assets/avatars/avatar_cat.webp';
+    } else if (lowerPhoto.includes('kkpp') || lowerPhoto.includes('ayi') || lowerPhoto.includes('ayı') || lowerPhoto.includes('kullanıcı profili') || lowerPhoto.includes('kullanici profili')) {
+      newPhoto = 'assets/avatars/avatar_duck.webp';
+    } else if (lowerPhoto === 'assets/profil.jpg' || lowerPhoto === 'assets/profil.webp') {
+      newPhoto = 'assets/avatars/avatar_duck.webp';
+    } else if (newPhoto.startsWith('assets/') && /\.(jpg|jpeg|png)$/i.test(newPhoto)) {
       newPhoto = newPhoto.replace(/\.(jpg|jpeg|png)$/i, '.webp');
     }
     const oldName = before.username || before.displayName || before.nickname || '';

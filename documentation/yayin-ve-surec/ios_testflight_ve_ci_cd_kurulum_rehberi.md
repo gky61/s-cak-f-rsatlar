@@ -14,11 +14,12 @@ Tüm kod yapısı, mevcut projeden tamamen izole edilmiş [`ios_ci/`](file:///d:
 5. [📋 Manuel Adım 1: Apple Developer Portal Hazırlıkları](#5--manuel-adım-1-apple-developer-portal-hazırlıkları)
 6. [🔑 Manuel Adım 2: "Yumurta mı Tavuk mu" Paradoksu ve Windows'ta OpenSSL ile Sertifika (.p12) Üretimi](#6--manuel-adım-2-yumurta-mı-tavuk-mu-paradoksu-ve-windowsta-openssl-ile-sertifika-p12-üretimi)
 7. [🤖 Manuel Adım 3: App Store Connect API Anahtarı (.p8) Üretimi](#7--manuel-adım-3-app-store-connect-api-anahtarı-p8-üretimi)
-8. [🔐 Manuel Adım 4: Base64 Dönüşümü ve GitHub Secrets Yapılandırması](#8--manuel-adım-4-base64-dönüşümü-ve-github-secrets-yapılandırması)
-9. [📱 Manuel Adım 5: App Store Connect'te Uygulama Kaydı ve Dahili Test Grubu Açma](#9--manuel-adım-5-app-store-connectte-uygulama-kaydı-ve-dahili-test-grubu-açma)
-10. [🚀 Manuel Adım 6: GitHub Actions Üzerinden Derleme ve Fastlane ile TestFlight'a Yükleme](#10--manuel-adım-6-github-actions-üzerinden-derleme-ve-fastlane-ile-testflighta-yükleme)
-11. [📲 Manuel Adım 7: Ödünç Alınan iPhone'da Canlı TestFlight Kurulumu ve Doğrulama Protokolü](#11--manuel-adım-7-ödünç-alınan-iphoneda-canlı-testflight-kurulumu-ve-doğrulama-protokolü)
-12. [⚠️ Sık Karşılaşılan Hatalar, Uyarılar ve Anında Çözümler](#12-️-sık-karşılaşılan-hatalar-uyarılar-ve-anında-çözümler)
+8. [🔔 Manuel Adım 4: Apple Push Notification Service (APNs) Anahtarı (.p8) ve Firebase Yapılandırması](#8--manuel-adım-4-apple-push-notification-service-apns-anahtarı-p8-ve-firebase-yapılandırması)
+9. [🔐 Manuel Adım 5: Base64 Dönüşümü ve GitHub Secrets Yapılandırması](#9--manuel-adım-5-base64-dönüşümü-ve-github-secrets-yapılandırması)
+10. [📱 Manuel Adım 6: App Store Connect'te Uygulama Kaydı ve Dahili Test Grubu Açma](#10--manuel-adım-6-app-store-connectte-uygulama-kaydı-ve-dahili-test-grubu-açma)
+11. [🚀 Manuel Adım 7: GitHub Actions Üzerinden Derleme ve Fastlane ile TestFlight'a Yükleme](#11--manuel-adım-7-github-actions-üzerinden-derleme-ve-fastlane-ile-testflighta-yükleme)
+12. [📲 Manuel Adım 8: Ödünç Alınan iPhone'da Canlı TestFlight Kurulumu ve Doğrulama Protokolü](#12--manuel-adım-8-ödünç-alınan-iphoneda-canlı-testflight-kurulumu-ve-doğrulama-protokolü)
+13. [⚠️ Sık Karşılaşılan Hatalar, Uyarılar ve Anında Çözümler](#13-️-sık-karşılaşılan-hatalar-uyarılar-ve-anında-çözümler)
 
 ---
 
@@ -97,18 +98,23 @@ graph LR
 
 Bu süreç için projenizde oluşturulan tüm izole dosyalar şunlardır:
 
-```
 d:\firsatkolik\
 ├── 📁 .github/workflows/
-│   └── 📄 ios_testflight_deploy.yml         # macOS-14 önbellekli, 30 dk timeout'lu iş akışı
+│   └── 📄 ios_testflight_deploy.yml         # macOS-latest önbellekli, 30 dk timeout'lu iş akışı
+│
+├── 📁 ios/Share Extension/                  # Trendyol vb. dış paylaşımları yakalayan saf yerel uzantı
+│   ├── 📄 ShareViewController.swift         # Saf Swift (Zero-Pod) Paylaşım denetleyicisi & UserDefaults köprüsü
+│   ├── 📄 Info.plist                        # Extension aktivasyon kuralları ve AppGroupId eşleşmesi
+│   └── 📄 ShareExtension.entitlements       # group.com.firsatkolik.app App Groups yetkilendirmesi
 │
 ├── 📁 ios_ci/                                # Tamamen izole edilmiş CI/CD klasörü
-│   ├── 📄 README.md                          # Hızlı operasyon el kitabı
-│   ├── 📄 Fastfile                           # [YENİ] Fastlane App Store Connect API yükleme hattı
-│   ├── 📄 ExportOptions_prod.plist           # Production (com.firsatkolik.app) imzalama profili
+│   ├── 📄 README.md                          # Master mimari ve operasyon el kitabı
+│   ├── 📄 Fastfile                           # Fastlane App Store Connect API yükleme hattı
+│   ├── 📄 ExportOptions_prod.plist           # Production (com.firsatkolik.app + ShareExtension) imzalama profili
 │   ├── 📄 ExportOptions_dev.plist            # Development imzalama profili
 │   └── 📁 scripts/
-│       ├── 📄 setup_keychain.sh              # macOS geçici anahtar zinciri ve sertifika kurucu
+│       ├── 📄 setup_keychain.sh              # macOS geçici anahtar zinciri ve profil kurucu
+│       ├── 📄 patch_modular_headers.py       # Clang 19, Xcode 16 ve FlutterFire uyumluluk yamacısı
 │       └── 📄 upload_testflight.sh           # Fastlane (ve yedek xcrun altool) yükleme betiği
 ```
 
@@ -134,19 +140,33 @@ GitHub Actions'ı ücretsiz ve sürpriz faturasız kullanabilmeniz için bilmeni
 
 ## 5. 📋 Manuel Adım 1: Apple Developer Portal Hazırlıkları
 
-TestFlight kullanabilmek için aktif bir **Apple Developer Program** hesabınızın olması gerekir.
+TestFlight kullanabilmek için aktif bir **Apple Developer Program** hesabınızın olması gerekir. Bu adımda ana uygulama, App Group ve Share Extension için gerekli kimlikler oluşturulur:
 
-1. [developer.apple.com/account](https://developer.apple.com/account) adresine giriş yapın.
-2. Sol menüden **Certificates, Identifiers & Profiles** bölümüne tıklayın.
-3. **Identifiers** sekmesine gelin ve mavi **(+)** butonuna basın:
-   * Tür: **App IDs** seçin -> **App** seçin.
-   * **Description:** `FirsatKolik Mobile App`
-   * **Bundle ID:** **Explicit** seçin ve tam olarak `com.firsatkolik.app` yazın.
-4. **Capabilities (Yetenekler)** listesinden şu 3 kutuyu işaretleyin:
+### 1.1. App Group Oluşturma (Ortak Posta Kutusu)
+1. [developer.apple.com/account](https://developer.apple.com/account) adresine gidin -> **Certificates, Identifiers & Profiles** -> **Identifiers** sekmesine gelin.
+2. Mavi **(+)** butonuna basın -> Listeden **App Groups** seçin -> **Continue**.
+3. **Description:** `FirsatKolik App Group`
+4. **Identifier:** `group.com.firsatkolik.app` *(Projeyle harfi harfine aynı olmalıdır)*
+5. **Continue** -> **Register** diyerek kaydedin.
+
+### 1.2. Ana Uygulama App ID'sini Oluşturma (`com.firsatkolik.app`)
+1. **Identifiers** sekmesinde tekrar **(+)** butonuna basın -> **App IDs** -> **App** -> **Continue**.
+2. **Description:** `FirsatKolik Mobile App`
+3. **Bundle ID:** **Explicit** seçin ve tam olarak `com.firsatkolik.app` yazın.
+4. **Capabilities (Yetenekler)** listesinden şu 4 kutuyu işaretleyin:
    * ✅ **Push Notifications** (FCM APNs bildirimleri için zorunlu)
    * ✅ **Sign in with Apple** (Apple ile Giriş Yap butonu için zorunlu)
    * ✅ **Associated Domains** (Universal Deeplink: `firsatkolik.app` için zorunlu)
+   * ✅ **App Groups** (Share Extension ile ortak veri havuzu için zorunlu)
 5. **Continue** ve ardından **Register** butonuna basarak kaydedin.
+6. Listeden `com.firsatkolik.app` kaydına tıklayın, **App Groups** yanındaki **Configure** butonuna basarak `group.com.firsatkolik.app` grubunu seçip **Save** deyin.
+
+### 1.3. Share Extension App ID'sini Oluşturma (`com.firsatkolik.app.ShareExtension`)
+1. **Identifiers** sekmesinde tekrar **(+)** butonuna basın -> **App IDs** -> **App** -> **Continue**.
+2. **Description:** `FirsatKolik Mobile App ShareExtension`
+3. **Bundle ID:** **Explicit** seçin ve tam olarak `com.firsatkolik.app.ShareExtension` yazın.
+4. **Capabilities** listesinden **App Groups** kutucuğunu işaretleyin -> **Continue** -> **Register**.
+5. Listeden yeni oluşturulan `com.firsatkolik.app.ShareExtension` kaydına tıklayın, **App Groups** yanındaki **Configure** butonuna basarak `group.com.firsatkolik.app` grubunu bağlayıp **Save** deyin.
 
 ---
 
@@ -190,13 +210,21 @@ openssl pkcs12 -export -inkey firsatkolik_distribution.key -in distribution.pem 
 ```
 Artık elinizde GitHub Actions'ın kullanacağı **`firsatkolik_distribution.p12`** dosyanız var!
 
-### 2.4. Provisioning Profile Üretme ve İndirme
+### 2.4. Ana Uygulama Provisioning Profile Üretme ve İndirme
 1. Apple Developer Portal > **Profiles** sekmesine gidin.
 2. **(+)** butonuna basın -> Dağıtım türü olarak **App Store** (TestFlight için bu seçilir) seçin -> **Continue**.
 3. **App ID:** `com.firsatkolik.app` seçin -> **Continue**.
 4. **Certificates:** Az önce oluşturduğunuz Apple Distribution sertifikasını seçin -> **Continue**.
 5. **Profile Name:** `FirsatKolik AppStore Profile` yazın ve **Generate** deyin.
-6. Oluşan profili indirin (`FirsatKolik_AppStore_Profile.mobileprovision`). Bu dosyayı da `C:\ios_certs\` klasörüne koyun.
+6. Oluşan profili indirin (`FirsatKolik_AppStore_Profile.mobileprovision`). Bu dosyayı `C:\ios_certs\` klasörüne koyun.
+
+### 2.5. Share Extension Provisioning Profile Üretme ve İndirme
+1. Yine **Profiles** sekmesinde mavi **(+)** butonuna basın.
+2. Dağıtım türü: **App Store** -> **Continue**.
+3. **App ID:** `com.firsatkolik.app.ShareExtension` seçin -> **Continue**.
+4. **Certificates:** Apple Distribution sertifikanızı seçin -> **Continue**.
+5. **Profile Name:** `FirsatKolik ShareExtension Profile` yazın ve **Generate** deyin.
+6. Oluşan profili indirin (`FirsatKolik_ShareExtension_Profile.mobileprovision`). Bu dosyayı da `C:\ios_certs\` klasörüne koyun.
 
 ---
 
@@ -217,38 +245,84 @@ Fastlane ve GitHub Actions'ın Apple sunucularına bağlanırken SMS/2FA kodu so
 
 ---
 
-## 8. 🔐 Manuel Adım 4: Base64 Dönüşümü ve GitHub Secrets Yapılandırması
+## 8. 🔔 Manuel Adım 4: Apple Push Notification Service (APNs) Anahtarı (.p8) ve Firebase Yapılandırması
+
+> [!IMPORTANT]
+> **App Store Connect API Key vs APNs Key Ayrımı:**
+> - **App Store Connect API Key (`AuthKey_XUVRF9F2Y3.p8`):** Yalnızca GitHub Actions ve Fastlane'in derlenen `.ipa` paketini TestFlight'a yüklemesi içindir. Bildirimlerle **hiçbir ilgisi yoktur**.
+> - **APNs Authentication Key (`AuthKey_KJ2TZ9F8SG.p8`):** Firebase Cloud Messaging (FCM) sunucularının Apple APNs ağına bağlanarak iOS cihazların kilit ekranına ve bildirim merkezine push iletmesini sağlayan kriptografik anahtardır.
+
+### 4.1. Apple Developer Portal'da APNs Anahtarı Oluşturma
+1. [developer.apple.com/account/resources/authkeys/list](https://developer.apple.com/account/resources/authkeys/list) adresine gidin.
+2. Sol menüden **Certificates, Identifiers & Profiles** > **Keys** sekmesini açın.
+3. Mavi **(+)** butonuna tıklayın:
+   - **Key Name:** `FirsatKolik APNs Key`
+   - Listeden **Apple Push Notifications service (APNs)** kutucuğunu işaretleyin.
+   - Sağındaki **Configure** butonuna tıklayın:
+     - **Environment:** **`Sandbox & Production`** seçin *(Kritik: Varsayılan Sandbox bırakılırsa TestFlight'ta bildirimler düşmez; bu seçenek hem yerel test hem TestFlight/App Store'u kapsar)*.
+     - **Key Restriction:** `Team Scoped (All Topics)` olarak bırakın.
+     - **Save** butonuna basın.
+4. **Continue** ve ardından **Register** butonuna basın.
+5. **Download** butonuna tıklayarak **`AuthKey_KJ2TZ9F8SG.p8`** dosyasını bilgisayarınıza indirin.
+   *(ÖNEMLİ: Bu dosya da Apple tarafından yalnızca 1 kez indirilebilir. Dosyayı `d:\firsatkolik\ios\Push_Notifications\` klasöründe güvenle saklayın).*
+6. Sayfada yazan 10 haneli **Key ID**'yi (`KJ2TZ9F8SG`) ve sağ üstteki **Team ID**'nizi (`973W9DTDY9`) not edin.
+
+### 4.2. Firebase Console'a APNs Anahtarını Yükleme
+Firebase Console'a giderek bu işlemi sırasıyla **her iki projeniz** için yapın (**`sicak-firsatlar-e6eae`** ve **`firsatkolik-prod-e6eae`**):
+1. [Firebase Console](https://console.firebase.google.com/) -> Sol üstteki dişli simgesi -> **Proje Ayarları (Project Settings)**.
+2. Üstteki sekmelerden **Cloud Messaging** sekmesini açın.
+3. Sayfanın alt kısmındaki **Apple uygulama yapılandırması (Apple app configuration)** tablosuna gelin:
+   - Sol tarafta `com.firsatkolik.app` uygulamasının seçili olduğundan emin olun.
+   - **APNs Kimlik Doğrulama Anahtarı (APNs Authentication Key)** tablosunda:
+     - **Development APNs auth key** yanındaki **Upload** butonuna tıklayın: `AuthKey_KJ2TZ9F8SG.p8` dosyasını seçin, Key ID (`KJ2TZ9F8SG`) ve Team ID (`973W9DTDY9`) girip kaydedin.
+     - **Production APNs auth key** yanındaki **Upload** butonuna da tıklayın: **Yine aynı** `AuthKey_KJ2TZ9F8SG.p8` dosyasını seçin, aynı Key ID ve Team ID ile kaydedin.
+   - **APNs Sertifikaları (APNs Certificates) Bölümü:** Bu bölümü **TAMAMEN BOŞ** bırakın. Modern `.p8` anahtarı yıllık yenileme gerektiren eski sertifikaların yerini almıştır.
+
+### 4.3. Mimari ve Kod Seviyesinde Tamamlanan Güvenceler
+1. **Cloud Functions APNs Alert Formatı ([`functions/index.js`](file:///d:/firsatkolik/functions/index.js)):** Birebir mesajlaşmada (`onUserMessageCreated`) Android için `data-only` yapısı korunurken, iOS APNs payload'ına `'apns-push-type': 'alert'`, `aps.alert: { title: '💬 ...', body: '...' }`, `aps.sound: 'default'` ve `aps.badge: 1` eklenmiştir. Bu sayede iOS işletim sistemi kilit ekranında doğrudan bildirim kartını gösterir.
+2. **Çift Kanallı Anlık In-App Afiş Motoru ([`lib/services/notification_service.dart`](file:///d:/firsatkolik/lib/services/notification_service.dart)):** Uygulama açıkken (foreground) APNs gecikmelerinden bağımsız olarak, Firestore `messages` koleksiyonundaki `receiverId == userId` anlık dinleyicisi (`_setupForegroundMessageListener()`) sayesinde 0 ms gecikmeyle `InAppMessageBanner.show()` tetiklenir (Aktif sohbetteyse bastırılır, diğer ekranlarda afiş gösterilir).
+3. **Natif `AppDelegate.swift` Delegasyonu ([`ios/Runner/AppDelegate.swift`](file:///d:/firsatkolik/ios/Runner/AppDelegate.swift)):** `UNUserNotificationCenterDelegate` metodları (`userNotificationCenter(_:willPresent:withCompletionHandler:)`) `[.banner, .list, .badge, .sound]` sunum seçenekleriyle sisteme bağlanmıştır.
+4. **CI/CD `aps-environment` Production Eşitlemesi ([`.github/workflows/ios_testflight_deploy.yml`](file:///d:/firsatkolik/.github/workflows/ios_testflight_deploy.yml)):** GitHub Actions TestFlight dağıtımında `Runner.entitlements` içindeki `aps-environment` değeri derleme anında otomatik `production` yapılmaktadır.
+
+---
+
+## 9. 🔐 Manuel Adım 5: Base64 Dönüşümü ve GitHub Secrets Yapılandırması
 
 Sertifikaları ve profilleri GitHub Secrets'a dosya olarak değil, **Base64 metin dizgisi** olarak ekleriz.
 
-### 4.1. Windows PowerShell ile Base64 Metinlerini Alma
+### 5.1. Windows PowerShell ile Base64 Metinlerini Alma
 Windows PowerShell açın ve şu komutları sırayla çalıştırın:
 
 ```powershell
 # 1. P12 Sertifikasını Base64 yapıp panoya kopyalama:
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\ios_certs\firsatkolik_distribution.p12")) | Set-Clipboard
-# (Şu an panonuzda P12 sertifikasının Base64 metni var, GitHub'a yapıştırın)
+# (Panodaki P12 sertifikasını GitHub Secrets > BUILD_CERTIFICATE_BASE64'e yapıştırın)
 
-# 2. Provisioning Profile dosyasını Base64 yapıp panoya kopyalama:
+# 2. Ana Uygulama Profilini Base64 yapıp panoya kopyalama:
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\ios_certs\FirsatKolik_AppStore_Profile.mobileprovision")) | Set-Clipboard
-# (Şu an panonuzda profilin Base64 metni var, GitHub'a yapıştırın)
+# (Panodaki ana profili GitHub Secrets > BUILD_PROVISION_PROFILE_BASE64'e yapıştırın)
+
+# 3. Share Extension Profilini Base64 yapıp panoya kopyalama:
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\ios_certs\FirsatKolik_ShareExtension_Profile.mobileprovision")) | Set-Clipboard
+# (Panodaki uzantı profilini GitHub Secrets > SHARE_EXT_PROVISION_PROFILE_BASE64'e yapıştırın)
 ```
 
-### 4.2. GitHub Secrets Tablosunu Doldurma
-GitHub deponuza gidin: **Settings** > **Secrets and variables** > **Actions** > **New repository secret** diyerek aşağıdaki 6 anahtarı tek tek ekleyin:
+### 5.2. GitHub Secrets Tablosunu Doldurma
+GitHub deponuza gidin: **Settings** > **Secrets and variables** > **Actions** > **New repository secret** diyerek aşağıdaki 7 anahtarı tek tek ekleyin:
 
 | Secret Adı | Değer (Value) | Nereden Alındı? |
 | :--- | :--- | :--- |
 | `BUILD_CERTIFICATE_BASE64` | `MIIK...` (Çok uzun Base64 metni) | PowerShell ile panoya kopyalanan `.p12` içeriği |
 | `P12_PASSWORD` | Belirlediğiniz parola (Örn: `FirsatKolik2026!`) | OpenSSL ile `.p12` üretirken girdiğiniz parola |
-| `BUILD_PROVISION_PROFILE_BASE64` | `MIIS...` (Çok uzun Base64 metni) | PowerShell ile panoya kopyalanan `.mobileprovision` |
+| `BUILD_PROVISION_PROFILE_BASE64` | `MIIS...` (Çok uzun Base64 metni) | PowerShell ile panoya kopyalanan ana `.mobileprovision` |
+| `SHARE_EXT_PROVISION_PROFILE_BASE64` | `MIIS...` (Çok uzun Base64 metni) | PowerShell ile panoya kopyalanan uzantı `.mobileprovision` |
 | `APP_STORE_CONNECT_KEY_ID` | `2X9R4ABCD2` (10 haneli) | App Store Connect API sayfasındaki Key ID |
 | `APP_STORE_CONNECT_ISSUER_ID` | `69a6de70-xxxx-xxxx-xxxx-xxxxxxxxxxxx` | App Store Connect API sayfasındaki Issuer ID |
 | `APP_STORE_CONNECT_PRIVATE_KEY` | `-----BEGIN PRIVATE KEY----- ... -----END PRIVATE KEY-----` | İndirdiğiniz `.p8` dosyasını Not Defteri ile açıp tamamını kopyalayın |
 
 ---
 
-## 9. 📱 Manuel Adım 5: App Store Connect'te Uygulama Kaydı ve Dahili Test Grubu Açma
+## 10. 📱 Manuel Adım 6: App Store Connect'te Uygulama Kaydı ve Dahili Test Grubu Açma
 
 1. [appstoreconnect.apple.com/apps](https://appstoreconnect.apple.com/apps) sayfasına gidin.
 2. **(+)** butonuna tıklayıp **New App** deyin:
@@ -266,7 +340,7 @@ GitHub deponuza gidin: **Settings** > **Secrets and variables** > **Actions** > 
 
 ---
 
-## 10. 🚀 Manuel Adım 6: GitHub Actions Üzerinden Derleme ve Fastlane ile TestFlight'a Yükleme
+## 11. 🚀 Manuel Adım 7: GitHub Actions Üzerinden Derleme ve Fastlane ile TestFlight'a Yükleme
 
 1. GitHub deponuza gidin ve üstteki **Actions** sekmesine tıklayın.
 2. Sol menüdeki iş akışları listesinden **iOS TestFlight Deployment** seçeneğine tıklayın.
@@ -291,20 +365,20 @@ GitHub deponuza gidin: **Settings** > **Secrets and variables** > **Actions** > 
 
 ---
 
-## 11. 📲 Manuel Adım 7: Ödünç Alınan iPhone'da Canlı TestFlight Kurulumu ve Doğrulama Protokolü
+## 12. 📲 Manuel Adım 8: Ödünç Alınan iPhone'da Canlı TestFlight Kurulumu ve Doğrulama Protokolü
 
 Build başarıyla yüklendikten yaklaşık 5-10 dakika sonra Apple paketi işler (processing) ve arkadaşınızın iPhone'una TestFlight bildirimi düşer.
 
-### 11.1. Cihaza Kurulum ve Temiz Kurulum Tavsiyesi
+### 8.1. Cihaza Kurulum ve Temiz Kurulum Tavsiyesi
 1. **Temiz Kurulum Tavsiyesi (Önemli):** Eğer iPhone'da daha önceden yüklenmiş bir FırsatKolik sürümü varsa, iOS'un yerel URL Scheme (`CFBundleURLSchemes`) ve yetki önbelleğini sıfırlamak için ana ekrandan uygulamaya uzun basıp **"Uygulamayı Sil"** diyerek tamamen kaldırın.
 2. Arkadaşınızın iPhone'undan Apple'ın resmi **TestFlight** uygulamasını açın.
 3. TestFlight ekranında yeni **FırsatKolik** derlemesini göreceksiniz. Sıfırdan **"YÜKLE (INSTALL)"** butonuna dokunun.
 
 ---
 
-### 11.2. Uçtan Uca Canlı Test Protokolü (11 Kritik Kontrol)
+### 8.2. Uçtan Uca Canlı Test Protokolü (12 Kritik Kontrol)
 
-Uygulama açıldıktan sonra aşağıdaki 11 testi sırayla gerçekleştirin:
+Uygulama açıldıktan sonra aşağıdaki 12 testi sırayla gerçekleştirin:
 
 | # | Test Başlığı | Nasıl Test Edilir? | Beklenen Başarı Kriteri |
 | :---: | :--- | :--- | :--- |
@@ -319,10 +393,11 @@ Uygulama açıldıktan sonra aşağıdaki 11 testi sırayla gerçekleştirin:
 | **9** | **Native Paylaşım Menüsü (Share Sheet)**| Fırsat detayındaki "Paylaş" ikonuna dokunun. | Standart iOS paylaşım menüsü açılmalı; WhatsApp, Telegram veya AirDrop seçilebilmeli. |
 | **10**| **Ağ Kesintisi ve Offline Mod** | iPhone'u "Uçak Modu"na alın ve fırsat listesini yenilemeyi deneyin. | Uygulama çökmek yerine zarif "İnternet bağlantınızı kontrol edin" banner'ı göstermeli. |
 | **11**| **Hesap Silme (Apple Guideline 5.1.1)** | Profil > Ayarlar > "Hesabımı Sil" seçeneğini test edin. | Apple incelemesinde red yememek için hesabın ve verilerin silindiğini onaylayan diyalog çalışmalı. |
+| **12**| **Dış Mağazalardan Paylaşım (Share Extension)** | Trendyol, Amazon veya Safari'de herhangi bir ürün linkine gidip iOS "Paylaş" menüsünden FırsatKolik'i seçin. | FırsatKolik ön plana açılmalı, paylaşılan link `group.com.firsatkolik.app` havuzundan okunarak doğrudan "Fırsat Paylaş" ekranına (`SubmitDealScreen(initialUrl: url)`) otomatik yönlenmelidir. |
 
 ---
 
-## 12. ⚠️ Sık Karşılaşılan Hatalar, Uyarılar ve Anında Çözümler
+## 13. ⚠️ Sık Karşılaşılan Hatalar, Uyarılar ve Anında Çözümler
 
 ### 1. Hata: `ITMS-90186: Missing Push Notification Entitlement`
 * **Neden:** Apple Developer Portal'da App ID oluşturulurken Push Notifications yeteneği açılmamış veya Provisioning Profile güncellenmemiştir.
@@ -356,6 +431,17 @@ Uygulama açıldıktan sonra aşağıdaki 11 testi sırayla gerçekleştirin:
 * **Neden:** Fastlane çalışmaya başladığında mevcut çalışma dizinini (CWD) otomatik olarak `./fastlane/` dizinine taşır. CI betiğinden lane parametresi olarak göreceli yol (`build/ios/ipa/*.ipa`) aktarıldığında Fastlane dosyayı `./fastlane/build/...` olarak arar ve bulamaz. Bu durum derlemenin Apple tarafından 1 Kasım 2023'te kullanımdan kaldırılmış (deprecated) `xcrun altool` yedek mekanizmasına devretmesine yol açar.
 * **Çözüm:** `ios_ci/scripts/upload_testflight.sh` içinde `$1` argümanı Fastlane'e iletilmeden önce mutlak yola (`IPA_DIR="$(cd "$(dirname "$IPA_INPUT")" && pwd)"`) dönüştürülmüştür. Ayrıca `ios_ci/Fastfile` içine göreceli yolları bir üst proje kök diziniyle (`File.join("..", raw_path)`) harmanlayan çift katmanlı yol çözümleme mimarisi eklenmiştir. Fastlane artık ilk denemede doğrudan App Store Connect REST API v1 üzerinden TestFlight'a yükleme yapmaktadır.
 
+### 9. Hata: `fatal error: 'Flutter/Flutter.h' file not found (Share Extension Derleme Hatası)`
+* **Neden:** `ios/Podfile` içerisine `target 'ShareExtension'` eklenmesi veya uzantıya CocoaPods eklentilerinin bağlanması durumunda, Xcode derleyicisi iOS App Extension binary'sinde `Flutter.framework` arar ve bulamadığı için derlemeyi durdurur.
+* **Çözüm:** Share Extension tamamen saf Swift (Zero-Pod) mimarisiyle kurulmuştur ([`ios/Share Extension/ShareViewController.swift`](file:///d:/firsatkolik/ios/Share%20Extension/ShareViewController.swift)). [`ios/Podfile`](file:///d:/firsatkolik/ios/Podfile) dosyasında ShareExtension için hiçbir CocoaPods hedefi tanımlanmamalıdır. Veri paylaşımı CocoaPods olmadan, Apple'ın yerel `App Groups` (`UserDefaults(suiteName: "group.com.firsatkolik.app")`) mekanizması üzerinden yürütülür.
+
+### 10. Hata: `TestFlight'ta Push Bildirimlerinin Gelmemesi (messaging/third-party-auth-error: Invalid APNs credential)`
+* **Neden:** TestFlight dağıtımı için App Store Connect API Key (`AuthKey_XXXXXXXXXX.p8`) GitHub Secrets'a girilmiş olsa da, Firebase Console'da Apple Push Notification service (APNs) Authentication Key (`.p8`) tanımlanmamıştır. Firebase, Apple APNs sunucularına bağlanamadığı için push istekleri `Invalid APNs credential` hatasıyla reddedilir.
+* **Çözüm:** 
+  1. [Apple Developer Portal - Keys](https://developer.apple.com/account/resources/authkeys/list) adresinden **Apple Push Notifications service (APNs)** yetkili yeni bir `.p8` anahtarı üretip indirin.
+  2. Firebase Console -> Proje Ayarları -> Cloud Messaging -> Apple Uygulama Yapılandırması (`com.firsatkolik.app`) alanında bu `.p8` dosyasını, 10 haneli Key ID ve Team ID (`973W9DTDY9`) ile yükleyin. (Ayrıntılı rehber için bkz. [`ios_ci/README.md`](file:///d:/firsatkolik/ios_ci/README.md) Adım 6).
+* **Ek Güvence:** CI/CD iş akışında (`.github/workflows/ios_testflight_deploy.yml`) derleme anında `Runner.entitlements` içindeki `aps-environment` otomatik olarak `production` yapılır. Ayrıca ön plandayken mesaj bildirim afişleri için `NotificationService` doğrudan Firestore `messages` koleksiyonunu gerçek zamanlı dinleyerek (`_setupForegroundMessageListener()`) APNs gecikmelerinden bağımsız anlık afiş sunumu sağlar.
+
 ---
 
 ## 🏁 Özet ve Sonuç
@@ -366,3 +452,4 @@ Bu kılavuzdaki adımları takip ederek:
 3. 10x macOS dakika kotasını CocoaPods önbelleği ve hızlı çıkış (`skip_waiting_for_build_processing`) ile koruyarak,
 4. Sıfır ek maliyetle GitHub Actions üzerinden TestFlight dağıtımını gerçekleştirebilir,
 5. Arkadaşınızdan alacağınız iPhone ile tüm sistem özelliklerini gerçek dünyada test edebilirsiniz!
+

@@ -164,13 +164,24 @@ Web Admin Paneli
 
 ### 7. 🔔 Bildirimler Merkezi Görünümü (`showNotificationsView`)
 * **Cihaz ve İzin İstatistikleri (`loadDeviceStats`):** Toplam kayıtlı cihaz sayısı, aktif cihazlar, Android/iOS dağılımı.
-* **Bildirim Hız Limitleri Yönetimi:**
-  - Kategori saatlik limit (`categoryHourlyLimit`) ve günlük limit (`categoryDailyLimit`) değerlerini `systemConfig/notifications` belgesine canlı kaydeder.
-* **Manuel Push Gönderimi:**
+* **Genişletilmiş Bildirim Hız Limitleri & Anti-Spam Yönetimi (`loadNotificationConfig` / `saveNotificationLimits`):**
+  - **Kategori Bildirim Limitleri:** Saatlik (`categoryHourlyLimit` - varsayılan: 3) ve Günlük (`categoryDailyLimit` - varsayılan: 8) kotalar.
+  - **Yazar Bildirim Limitleri:** Takip edilen yazar/avcı paylaşımları için Saatlik (`authorHourlyLimit` - varsayılan: 4) ve Günlük (`authorDailyLimit` - varsayılan: 12) limitler.
+  - **Anahtar Kelime Radar Limitleri:** Takip edilen anahtar kelime bildirimleri için Saatlik (`keywordHourlyLimit` - varsayılan: 6) ve Günlük (`keywordDailyLimit` - varsayılan: 18) limitler.
+  - **Fırsat Burst Koruması & Tavanı:** Art arda fırlatılan fırsat bildirimleri arasına zorunlu bekleme süresi (Burst Cooldown - `dealMinIntervalSeconds` - varsayılan: 30sn) ve bir saatte tek bir cihaza gidebilecek maksimum fırsat sayısı (`dealMaxHourlyTotal` - varsayılan: 8).
+  - **Viral Yorum & Spam Koruması:** Tek bir fırsatta 10 dakikada fırlatılabilecek maksimum yorum bildirimi (`commentDealTenMinLimit` - varsayılan: 5) ve bir kullanıcının saatte alabileceği toplam yorum bildirimi (`commentHourlyLimit` - varsayılan: 10).
+  - **Pazarlama / Kampanya Limiti:** Kullanıcılara bir günde iletilebilecek maksimum pazarlama bildirimi (`marketingDailyLimit` - varsayılan: 2).
+  - **Acil Durum Bildirim Şalteri (`toggleGlobalNotifications`):** Tüm sistemi tek tıkla durduran acil durum güvenlik kilidi (`systemConfig/notifications.enabled`).
+* **Manuel Push Gönderimi (`sendManualNotification`):**
   - Hedef Kitle (`Tüm Kullanıcılar`, `Belirli Kategori`, `Belirli Kullanıcı UID`).
-  - Bildirim Başlığı, İçeriği, Yönlendirme Linki (Deep Link) girilerek `sendManualNotification` Cloud Function'ını tetikler.
+  - Bildirim Tipi (`Yönetici Duyurusu / Destek` ➔ `admin_message`, `Pazarlama / Kampanya` ➔ `marketing`).
+  - Bildirim Başlığı, İçeriği, Yönlendirme Linki (Deep Link) girilerek güvenli ve sessiz saat kurallarına uyumlu manuel push gönderimi.
 * **Geçersiz Token Temizliği (`cleanupInvalidTokens`):**
-  - Uygulamayı silmiş cihazların geçersizleşmiş FCM token'larını tek tıkla temizler.
+  - Uygulamayı silmiş veya token'ı düşmüş cihazların FCM token'larını tek tıkla temizler ve kota tasarrufu sağlar.
+* **Canlı Bildirim Akışı ve Çift Yönlü Filtreleme:**
+  - `collectionGroup('notifications')` üzerinden canlı akış; Durum Filtresi (`sent`, `skipped_*`, `disabled_*`, `failed`) ve Kanal/Tür Filtresi (`Yönetici`, `Kampanya`, `Topluluk`, `Yazar`, `Kategori`, `Anahtar Kelime`) ile kombine filtreleme.
+* **Hibrit 7 Günlük Trend Grafiği:**
+  - `notificationStats` dokümanları ile `collectionGroup('notifications')` canlı kayıtlarını birleştiren hibrit agregasyon motoruyla sıfır kayıp garantili trend çizimi.
 
 ---
 

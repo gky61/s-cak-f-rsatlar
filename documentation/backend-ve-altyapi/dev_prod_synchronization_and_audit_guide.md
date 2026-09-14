@@ -227,7 +227,7 @@ Canlıya geçiş operasyonunda tek bir maddenin dahi atlanmadığından emin olm
 - [ ] **10. Firestore Kuralları:** `firestore.rules` PROD'a deploy edildi mi?
 - [ ] **11. Storage Kuralları:** `storage.rules` PROD'a deploy edildi mi?
 - [ ] **12. Firestore İndeksleri:** `firestore.indexes.json` PROD'a deploy edildi mi?
-- [ ] **13. Bildirim Hız Limitleri:** PROD `systemConfig/notifications` dokümanında `categoryHourlyLimit: 3` ve `categoryDailyLimit: 8` tanımlı mı?
+- [ ] **13. Bildirim Hız Limitleri & Anti-Spam:** PROD `systemConfig/notifications` dokümanında çoklu hız limitleri (`categoryHourlyLimit: 3`, `categoryDailyLimit: 8`, `authorHourlyLimit: 4`, `authorDailyLimit: 12`, `keywordHourlyLimit: 6`, `keywordDailyLimit: 18`, `dealMinIntervalSeconds: 30`, `dealMaxHourlyTotal: 8`, `commentHourlyLimit: 10`, `commentDealTenMinLimit: 5`, `marketingDailyLimit: 2`, `adminMessageHourlyLimit: 6`) eksiksiz tanımlı mı?
 - [ ] **14. Bot Kanalları:** PROD `settings/telegramBot` dokümanında `@indirimkaplani` ve `@firsatkolik_canli` kanalları tanımlı mı?
 - [ ] **15. Bot Heartbeat:** PROD botunun VM üzerinde aktif çalıştığı (`lastHeartbeatAt` zaman damgasının güncel olduğu) teyit edildi mi?
 - [ ] **16. Web Admin Dağıtımı:** `https://firsatkolik-prod-e6eae.web.app/admin/` ve `https://firsatkolik.app/admin/` adreslerine en son V9 / APM sürümü deploy edildi mi?

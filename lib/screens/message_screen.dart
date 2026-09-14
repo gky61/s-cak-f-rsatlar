@@ -131,7 +131,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       _liveOtherUserName = 'Ahmet Yılmaz (Test)';
       _liveIsUserDeleted = false;
     } else if (widget.otherUserId == 'test_user_zeynep') {
-      _liveOtherUserImageUrl = 'assets/profil.jpg';
+      _liveOtherUserImageUrl = 'assets/avatars/avatar_duck.webp';
       _liveOtherUserName = 'Zeynep Kaya (Test)';
       _liveIsUserDeleted = false;
     } else {
@@ -770,7 +770,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
               isUserDeleted = false;
             } else if (widget.otherUserId == 'test_user_zeynep') {
               otherUserName = 'Zeynep Kaya (Test)';
-              otherUserImageUrl = 'assets/profil.jpg';
+              otherUserImageUrl = 'assets/avatars/avatar_duck.webp';
               isUserDeleted = false;
             } else if (!widget.isAdminMessage) {
               if (otherUserSnapshot.hasData && otherUserSnapshot.data!.exists) {

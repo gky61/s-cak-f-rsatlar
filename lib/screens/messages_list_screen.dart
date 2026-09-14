@@ -315,7 +315,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                 isDeleted = false;
                               } else if (otherUserId == 'test_user_zeynep') {
                                 displayName = 'Zeynep Kaya (Test)';
-                                profileImageUrl = 'assets/profil.jpg';
+                                profileImageUrl = 'assets/avatars/avatar_duck.webp';
                                 isDeleted = false;
                               } else if (userSnapshot.hasData && userSnapshot.data!.exists) {
                                 final userData = userSnapshot.data!.data();

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -86,7 +87,8 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       } else if (mounted) {
         _showModernNotificationDetailDialog(context, item);
       }
-    } else if (type == 'comment_reply') {
+    } else if (type == 'comment_reply' || type == 'comment') {
+      // Hem yoruma cevap hem de fırsata ana yorum doğrudan ilgili yoruma scroll eder
       if (dealId.isNotEmpty && mounted) {
         Navigator.push(
           context,
@@ -131,8 +133,29 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           ),
         );
       }
+    } else if (type == 'marketing' || type == 'manual_notification' || type == 'admin') {
+      // Bir fırsata işaret ediyorsa ve görsel/uzun kampanya metni yoksa doğrudan fırsata git
+      final hasImage = (item['imageUrl'] as String? ?? '').trim().isNotEmpty;
+      final bodyText = (item['body'] as String? ?? '').trim();
+      if (dealId.isNotEmpty && !hasImage && bodyText.length < 80 && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DealDetailScreen(dealId: dealId),
+          ),
+        );
+      } else if (mounted) {
+        _showModernNotificationDetailDialog(context, item);
+      }
     } else {
-      if (mounted) {
+      if (dealId.isNotEmpty && !isRejected && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DealDetailScreen(dealId: dealId),
+          ),
+        );
+      } else if (mounted) {
         _showModernNotificationDetailDialog(context, item);
       }
     }
@@ -149,6 +172,8 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final dealId = (item['dealId'] ?? '').toString().trim();
     final dealTitle = (item['dealTitle'] ?? '').toString().trim();
+    final commentId = (item['commentId'] ?? '').toString().trim();
+    final imageUrl = (item['imageUrl'] as String? ?? '').trim();
     final title = (item['title'] ?? 'Bildirim Detayı').toString().trim();
     final body = (item['body'] ?? '').toString().trim();
     final type = (item['type'] ?? '').toString();
@@ -179,6 +204,16 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       headerColor = const Color(0xFF2196F3);
       headerBg = isDark ? const Color(0xFF2196F3).withValues(alpha: 0.2) : const Color(0xFFEFF6FF);
       headerBadgeText = 'TOPLULUK';
+    } else if (type == 'marketing') {
+      headerIcon = Icons.local_offer_rounded;
+      headerColor = const Color(0xFFFF6B35);
+      headerBg = isDark ? const Color(0xFFFF6B35).withValues(alpha: 0.2) : const Color(0xFFFFF3EE);
+      headerBadgeText = 'KAMPANYA';
+    } else if (type == 'deal') {
+      headerIcon = Icons.local_fire_department_rounded;
+      headerColor = const Color(0xFFFF6B35);
+      headerBg = isDark ? const Color(0xFFFF6B35).withValues(alpha: 0.2) : const Color(0xFFFFF3EE);
+      headerBadgeText = 'FIRSAT';
     }
 
     await showModalBottomSheet<void>(
@@ -285,6 +320,24 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                 ),
               ),
             ],
+            if (imageUrl.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  width: double.infinity,
+                  height: 180,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    height: 180,
+                    color: isDark ? Colors.white10 : Colors.black12,
+                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             Text(
               body,
@@ -327,7 +380,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             const SizedBox(height: 24),
             Row(
               children: [
-                if (dealId.isNotEmpty && (isApproved || type == 'deal')) ...[
+                if (dealId.isNotEmpty && !isRejected) ...[
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
@@ -335,12 +388,24 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => DealDetailScreen(dealId: dealId),
+                            builder: (_) => DealDetailScreen(
+                              dealId: dealId,
+                              scrollToCommentId: commentId.isNotEmpty ? commentId : null,
+                            ),
                           ),
                         );
                       },
-                      icon: const Icon(Icons.launch_rounded, size: 18),
-                      label: const Text('Fırsatı Görüntüle'),
+                      icon: Icon(
+                        (type == 'comment' || type == 'comment_reply')
+                            ? Icons.chat_bubble_outline_rounded
+                            : Icons.launch_rounded,
+                        size: 18,
+                      ),
+                      label: Text(
+                        (type == 'comment' || type == 'comment_reply')
+                            ? 'Yorumu Gör'
+                            : 'Fırsatı Görüntüle',
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
@@ -785,9 +850,14 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           iconBg = isDark
               ? const Color(0xFF2196F3).withValues(alpha: 0.18)
               : const Color(0xFFEFF6FF);
+        } else if (type == 'marketing') {
+          icon = Icons.local_offer_rounded;
+          iconColor = const Color(0xFFFF6B35);
+          iconBg = isDark
+              ? const Color(0xFFFF6B35).withValues(alpha: 0.18)
+              : const Color(0xFFFFF3EE);
         } else if (type == 'admin_message' ||
             type == 'admin' ||
-            type == 'marketing' ||
             type == 'manual_notification') {
           icon = Icons.campaign_rounded;
           iconColor = const Color(0xFFFF5722);
@@ -813,6 +883,33 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         }
 
         final notifId = item['id'] as String;
+
+        // Başlık metnini biçimlendir (Topluluk bildirimlerindeki mükerrer 💬 emojisini temizle)
+        String displayTitle = (item['title'] as String? ?? 'Bildirim').trim();
+        if ((type == 'comment' || type == 'comment_reply') && displayTitle.startsWith('💬')) {
+          displayTitle = displayTitle.replaceFirst('💬', '').trim();
+        }
+
+        // Gövde metnini biçimlendir (dealTitle mükerrerliğini temizle)
+        final rawBody = (item['body'] as String? ?? '').trim();
+        String displayBody = rawBody;
+        final itemDealTitle = (item['dealTitle'] ?? '').toString().trim();
+
+        if (itemDealTitle.isNotEmpty) {
+          if (displayBody.startsWith(itemDealTitle)) {
+            displayBody = displayBody.substring(itemDealTitle.length).trim();
+            if (displayBody.startsWith(':') || displayBody.startsWith('-')) {
+              displayBody = displayBody.substring(1).trim();
+            }
+          }
+          if (type == 'submission_status') {
+            if (isAppr) {
+              displayBody = 'Fırsatınız başarıyla onaylandı ve yayına alındı.';
+            } else if (isRej) {
+              displayBody = 'Fırsatınız topluluk kurallarımıza uymadığı için reddedildi.';
+            }
+          }
+        }
 
         return Dismissible(
           key: Key(notifId),
@@ -913,7 +1010,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                item['title'] as String? ?? 'Bildirim',
+                                displayTitle,
                                 style: TextStyle(
                                   fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
                                   fontSize: 15,
@@ -935,12 +1032,11 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        if (item['dealTitle'] != null &&
-                            item['dealTitle'].toString().trim().isNotEmpty)
+                        if (itemDealTitle.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 2.0),
                             child: Text(
-                              item['dealTitle'] as String,
+                              itemDealTitle,
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -949,16 +1045,17 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        Text(
-                          item['body'] as String? ?? '',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDark ? Colors.grey[400] : Colors.grey[700],
-                            height: 1.3,
+                        if (displayBody.isNotEmpty)
+                          Text(
+                            displayBody,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? Colors.grey[400] : Colors.grey[700],
+                              height: 1.3,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
