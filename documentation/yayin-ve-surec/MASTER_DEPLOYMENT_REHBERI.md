@@ -484,6 +484,7 @@ gh run watch
 * `Runner.entitlements` içindeki `aps-environment` değerini otomatik `production` yapar.
 * Monoton artan derleme numarası basar (`--build-number=${{ github.run_number }}`), `ITMS-90189` mükerrer build hatasını kökten engeller.
 * CocoaPods önbelleği (`actions/cache@v6`) ile derleme süresini 15 dakikadan **6-8 dakikaya** indirir (10x macOS kota koruması).
+* [`ios_ci/scripts/patch_modular_headers.py`](file:///d:/firsatkolik/ios_ci/scripts/patch_modular_headers.py) ile FlutterFire (`firebase_analytics`, `firebase_messaging`, `firebase_app_check` vb.) başlıklarını Xcode 16 Clang modüler `@import` sözdizimine dönüştürür; `FIRAnalytics` / `FIRConsentType` / `FIRAuth` tanımsız sembol ve `gRPC-Core` C++ şablon hatalarını derleme öncesi çözer.
 * Saf Swift Zero-Pod `ShareExtension` sayesinde `Flutter/Flutter.h not found` çökmesini önler.
 * Fastlane üzerinden App Store Connect API v1 ile iletişime geçerek `.ipa` ikilisini doğrudan TestFlight'a yükler.
 

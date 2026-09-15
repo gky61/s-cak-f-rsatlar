@@ -121,7 +121,7 @@ flowchart LR
 
 ## 4. Karşılaşılan Derleme Engelleri ve Çözüm Mühendisliği
 
-Süreç boyunca karşılaşılan ve her biri kod seviyesinde kalıcı olarak çözülen 13 kritik problem:
+Süreç boyunca karşılaşılan ve her biri kod seviyesinde kalıcı olarak çözülen 16 kritik problem:
 
 ### 1. BoringSSL-GRPC `-G` Derleyici Bayrağı Hatası
 - **Hata:** `clang: error: unsupported option '-G'`
@@ -230,6 +230,14 @@ Süreç boyunca karşılaşılan ve her biri kod seviyesinde kalıcı olarak ç�
     2. Fırsat (`deal`), yorum (`comment`, `comment_reply`) ve anahtar kelime (`keyword`) bildirimlerinde ise `AppDelegate`, Apple OS native banner'ını (`[.banner, .list, .badge, .sound]`) doğrudan sunar; Flutter tarafındaki `_showLocalNotification` çağrısı ise sadece Android'e (`defaultTargetPlatform == TargetPlatform.android`) yönlendirilerek iOS'ta mükerrer ikinci bir yerel afiş açılması %100 önlenir.
     3. Uygulama arka planda veya kilit ekranındayken ise `aps.alert` doğrudan Apple sistemi tarafından tekil ve pürüzsüz olarak sunulur.
   - **CI/CD `aps-environment` Otomasyonu ([`.github/workflows/ios_testflight_deploy.yml`](file:///d:/firsatkolik/.github/workflows/ios_testflight_deploy.yml)):** GitHub Actions TestFlight derleme adımında `Runner.entitlements` içindeki `aps-environment` değeri otomatik `production` yapılmaktadır.
+
+### 16. Xcode 16 Clang 'FIRAnalytics' & 'FIRConsentType' Undeclared Identifier Hatası (`firebase_analytics` Modüler Başlık Yaması)
+- **Hata:** `Semantic Issue (Xcode): Use of undeclared identifier 'FIRAnalytics'`, `Generics Issue (Xcode): No type or protocol named 'FIRConsentType'`, `Semantic Issue (Xcode): Use of undeclared identifier 'FIRConsentTypeAdStorage'` vb. (`FLTFirebaseAnalyticsPlugin.m`).
+- **Kök Neden:** Projeye `firebase_analytics: ^10.10.7` bağımlılığı eklendikten sonra, [`ios_ci/scripts/patch_modular_headers.py`](file:///d:/firsatkolik/ios_ci/scripts/patch_modular_headers.py) betiği içinde `firebase_analytics` paketi için özel bir modüler kural bulunmadığından, genel `firebase_*` yedek (fallback) kuralı tetikleniyordu. Bu genel kural dosyadaki `#import <Firebase/Firebase.h>` satırını yalnızca `@import FirebaseCore;` ile değiştiriyor; ancak `FirebaseAnalytics` çatısını modüle dahil etmiyordu. Sonuç olarak Xcode 16 Clang derleyicisi, `FLTFirebaseAnalyticsPlugin.m` dosyasını derlerken `FIRAnalytics` sınıfını ve `FIRConsentType` enum türlerini tanıyamayarak derleme hatası fırlatıyordu.
+- **Çözüm:**
+  - [`ios_ci/scripts/patch_modular_headers.py`](file:///d:/firsatkolik/ios_ci/scripts/patch_modular_headers.py) içine `firebase_analytics-*` dizinini tarayan özel bir kural eklendi. `FLTFirebaseAnalyticsPlugin.m` içindeki `#import <Firebase/Firebase.h>` veya önceden yamalanmış `@import FirebaseCore;` satırları eksiksiz bir şekilde `@import FirebaseAnalytics;\n@import FirebaseCore;` modüler importlarına dönüştürüldü.
+  - Yedek `firebase_*` kuralının `firebase_analytics` dizinini atlaması (`if "firebase_analytics" in p: continue`) sağlanarak çifte değiştirme ve gerileme riski %100 ortadan kaldırıldı.
+  - [test/ios_compatibility_test.dart](file:///d:/firsatkolik/test/ios_compatibility_test.dart) test paketine tüm FlutterFire eklentilerinin (Analytics dahil) `patch_modular_headers.py` içinde modüler tanımlandığını garanti eden otomatik birim testi eklendi.
 
 ---
 

@@ -165,5 +165,23 @@ void main() {
       expect(pbxproj.contains('ShareExtension.appex'), isTrue);
       expect(pbxproj.contains('com.firsatkolik.app.ShareExtension'), isTrue);
     });
+
+    test('ios_ci/scripts/patch_modular_headers.py covers all FlutterFire plugins including firebase_analytics for Xcode 16', () {
+      final patchScript = File('ios_ci/scripts/patch_modular_headers.py').readAsStringSync();
+      expect(patchScript.contains('firebase_analytics-*'), isTrue);
+      expect(patchScript.contains('@import FirebaseAnalytics;'), isTrue);
+      expect(patchScript.contains('firebase_messaging-*'), isTrue);
+      expect(patchScript.contains('@import FirebaseMessaging;'), isTrue);
+      expect(patchScript.contains('firebase_app_check-*'), isTrue);
+      expect(patchScript.contains('@import FirebaseAppCheck;'), isTrue);
+      expect(patchScript.contains('firebase_crashlytics-*'), isTrue);
+      expect(patchScript.contains('@import FirebaseCrashlytics;'), isTrue);
+      expect(patchScript.contains('firebase_performance-*'), isTrue);
+      expect(patchScript.contains('@import FirebasePerformance;'), isTrue);
+      expect(patchScript.contains('firebase_auth-*'), isTrue);
+      expect(patchScript.contains('@import FirebaseAuth;'), isTrue);
+      expect(patchScript.contains('cloud_firestore-*'), isTrue);
+      expect(patchScript.contains('@import FirebaseFirestore;'), isTrue);
+    });
   });
 }
