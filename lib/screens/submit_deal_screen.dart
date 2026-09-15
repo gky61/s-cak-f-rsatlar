@@ -12,6 +12,7 @@ import '../services/ai_service.dart';
 import '../services/link_preview_service.dart';
 import '../services/domain_allowlist_service.dart';
 import '../services/advertising_compliance_service.dart';
+import '../services/analytics_service.dart';
 import '../models/category.dart';
 import '../models/deal.dart';
 import '../widgets/category_selector_widget.dart';
@@ -1066,6 +1067,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           brand: _scrapedBrand,
           isAmazonWarehouse: _isAmazonWarehouse,
           hidePrice: _hidePrice,
+        );
+
+        // Observability: Yeni fırsat paylaşım telemetrisi
+        AnalyticsService.instance.logDealSubmitted(
+          category: categoryId,
+          storeName: _storeController.text.trim(),
+          hasImage: imageUrl.isNotEmpty,
         );
 
         if (mounted) {

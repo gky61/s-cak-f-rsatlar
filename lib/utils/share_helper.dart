@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import '../services/analytics_service.dart';
 
 /// iOS, iPadOS ve Android platformları arasında natif paylaşımı sorunsuz kılan yardımcı sınıf.
 ///
@@ -59,6 +60,12 @@ class ShareHelper {
     BuildContext? context,
     Rect? sharePositionOrigin,
   }) async {
+    // Observability: Paylaşım telemetrisi
+    AnalyticsService.instance.logDealShared(
+      contentType: 'text_link',
+      itemId: subject ?? 'shared_content',
+    );
+
     final origin = sharePositionOrigin ?? calculateOrigin(context);
     return await Share.share(
       text,
@@ -75,6 +82,12 @@ class ShareHelper {
     BuildContext? context,
     Rect? sharePositionOrigin,
   }) async {
+    // Observability: Dosya paylaşım telemetrisi
+    AnalyticsService.instance.logDealShared(
+      contentType: 'file',
+      itemId: files.isNotEmpty ? files.first.name : 'shared_file',
+    );
+
     final origin = sharePositionOrigin ?? calculateOrigin(context);
     return await Share.shareXFiles(
       files,

@@ -9,6 +9,7 @@ import 'package:shimmer/shimmer.dart';
 import '../models/kupon.dart';
 import '../services/kupon_service.dart';
 import '../services/auth_service.dart';
+import '../services/analytics_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
@@ -431,9 +432,17 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     }
   }
 
-  void _copyToClipboard(String kuponId, String code) {
+  void _copyToClipboard(String kuponId, String code, {String? storeName, String? source}) {
     HapticFeedback.selectionClick();
     Clipboard.setData(ClipboardData(text: code));
+
+    // Observability: Kupon kopyalama telemetrisi
+    AnalyticsService.instance.logCouponCopied(
+      couponId: kuponId,
+      storeName: storeName ?? 'magaza',
+      source: source ?? 'kuponlar',
+    );
+
     setState(() {
       _copiedKuponIds.add(kuponId);
     });
@@ -474,6 +483,13 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
 
     HapticFeedback.lightImpact();
     final userId = currentUser.uid;
+
+    // Observability: Kupon oylama telemetrisi
+    AnalyticsService.instance.logCustomEvent('coupon_voted', {
+      'coupon_id': kuponId,
+      'vote_type': voteType,
+    });
+
     final currentVote = _userVotes[kuponId];
 
     final prevHot = _localHotCounts[kuponId] ?? 0;
@@ -999,10 +1015,10 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           if (loggedIn == true && mounted) {
                             _checkAdminStatus();
                             setState(() {});
-                            _copyToClipboard(kupon.id, kupon.kuponKodu);
+                            _copyToClipboard(kupon.id, kupon.kuponKodu, storeName: kupon.magazaAdi, source: kupon.kaynakTipi);
                           }
                         } else {
-                          _copyToClipboard(kupon.id, kupon.kuponKodu);
+                          _copyToClipboard(kupon.id, kupon.kuponKodu, storeName: kupon.magazaAdi, source: kupon.kaynakTipi);
                         }
                       },
                       borderRadius: BorderRadius.circular(9),

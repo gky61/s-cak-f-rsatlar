@@ -685,6 +685,14 @@ function initEventListeners() {
         });
     }
 
+    const observabilityMenuBtn = document.getElementById('observabilityMenuBtn');
+    if (observabilityMenuBtn) {
+        observabilityMenuBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            showObservabilityView();
+        });
+    }
+
     // Load initial global settings status
     loadDealSharingStatus();
     loadCommentSharingStatus();
@@ -3385,7 +3393,7 @@ function handleCancelDeal(event) {
 
 // View management
 function showView(viewId) {
-    const views = ['dashboardView', 'dealsView', 'couponsView', 'catalogsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'telegramBotView'];
+    const views = ['dashboardView', 'dealsView', 'couponsView', 'catalogsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'telegramBotView', 'observabilityView'];
     views.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -4808,6 +4816,14 @@ function updateMenuActiveState(activeView) {
             telegramBotMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
             telegramBotMenuItem.classList.remove('text-slate-400');
             const icon = telegramBotMenuItem.querySelector('.material-symbols-outlined');
+            if (icon) icon.classList.add('icon-filled');
+        }
+    } else if (activeView === 'observability') {
+        const obsMenuItem = document.getElementById('observabilityMenuBtn');
+        if (obsMenuItem) {
+            obsMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
+            obsMenuItem.classList.remove('text-slate-400');
+            const icon = obsMenuItem.querySelector('.material-symbols-outlined');
             if (icon) icon.classList.add('icon-filled');
         }
     }
@@ -13962,6 +13978,16 @@ function showTelegramBotView() {
 }
 window.showTelegramBotView = showTelegramBotView;
 
+function showObservabilityView() {
+    currentView = 'observability';
+    showView('observabilityView');
+    updateMenuActiveState('observability');
+    if (window.ObservabilityManager) {
+        window.ObservabilityManager.init();
+    }
+}
+window.showObservabilityView = showObservabilityView;
+
 // ---------- Real-time Firestore Listener for settings/telegramBot ----------
 
 function loadTelegramBotDetailedView() {
@@ -14487,13 +14513,27 @@ window.loadBotRecentDeals = async function() {
     `;
 
     try {
-        const snapshot = await db.collection('deals')
-            .where('source', '==', 'telegram')
-            .orderBy('createdAt', 'desc')
-            .limit(12)
-            .get();
+        let docs = [];
+        try {
+            const snapshot = await db.collection('deals')
+                .where('source', '==', 'telegram')
+                .orderBy('createdAt', 'desc')
+                .limit(12)
+                .get();
+            docs = snapshot.docs;
+        } catch (idxErr) {
+            console.warn('⚠️ Composite index henüz oluşturulmadı/hazırlanıyor, istemci tarafı filtreleme devrede:', idxErr.message);
+            const fallbackSnap = await db.collection('deals')
+                .orderBy('createdAt', 'desc')
+                .limit(60)
+                .get();
+            docs = fallbackSnap.docs.filter(doc => {
+                const d = doc.data();
+                return d.source === 'telegram' || d.telegramChatId || d.telegramMessageId || d.postedBy === 'botkolik';
+            }).slice(0, 12);
+        }
 
-        if (snapshot.empty) {
+        if (!docs || docs.length === 0) {
             container.innerHTML = `
                 <div class="col-span-full p-12 text-center bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800">
                     <span class="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 mb-2">inbox</span>
@@ -14506,9 +14546,9 @@ window.loadBotRecentDeals = async function() {
         }
 
         const badge = document.getElementById('botTabBadgeDeals');
-        if (badge) badge.textContent = snapshot.size;
+        if (badge) badge.textContent = docs.length;
 
-        container.innerHTML = snapshot.docs.map(doc => {
+        container.innerHTML = docs.map(doc => {
             const d = doc.data();
             const price = d.price ? `${parseFloat(d.price).toLocaleString('tr-TR', {minimumFractionDigits: 2})} ₺` : '';
             const origPrice = d.originalPrice ? `${parseFloat(d.originalPrice).toLocaleString('tr-TR', {minimumFractionDigits: 2})} ₺` : '';
@@ -14575,13 +14615,29 @@ async function loadBotApmLogs() {
     `;
 
     try {
-        const snapshot = await db.collection('systemLogs')
-            .where('category', '==', 'bot')
-            .orderBy('createdAt', 'desc')
-            .limit(20)
-            .get();
+        let docs = [];
+        try {
+            const snapshot = await db.collection('systemErrors')
+                .where('category', '==', 'bot')
+                .orderBy('createdAt', 'desc')
+                .limit(20)
+                .get();
+            docs = snapshot.docs;
+        } catch (idxErr) {
+            console.warn('⚠️ systemErrors bot composite index sorgusu yerine bellek içi filtreleme devrede:', idxErr.message);
+            const fallbackSnap = await db.collection('systemErrors')
+                .orderBy('createdAt', 'desc')
+                .limit(80)
+                .get();
+            docs = fallbackSnap.docs.filter(doc => {
+                const d = doc.data();
+                const cat = (d.category || '').toLowerCase();
+                const srv = (d.service || d.errorType || '').toLowerCase();
+                return cat === 'bot' || srv.includes('bot') || srv.includes('telegram');
+            }).slice(0, 20);
+        }
 
-        if (snapshot.empty) {
+        if (!docs || docs.length === 0) {
             container.innerHTML = `
                 <div class="p-8 text-center bg-white dark:bg-surface-dark rounded-2xl border border-slate-200 dark:border-slate-800">
                     <span class="material-symbols-outlined text-4xl text-emerald-400 mb-2">check_circle</span>
@@ -14592,7 +14648,7 @@ async function loadBotApmLogs() {
             return;
         }
 
-        container.innerHTML = snapshot.docs.map(doc => {
+        container.innerHTML = docs.map(doc => {
             const d = doc.data();
             const severity = (d.severity || 'error').toLowerCase();
             const createdAt = d.createdAt?.toDate ? d.createdAt.toDate() : null;

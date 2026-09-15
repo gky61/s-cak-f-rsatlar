@@ -88,7 +88,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                 ? Colors.orange[600]! 
                 : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1))));
     final borderWidth = (deal.isRejected || deal.isApproved == false || deal.isEditorPick) ? 2.0 : 1.5;    final inceleButton = ElevatedButton(
-      onPressed: () => openProductLink(context, deal.link, deal.store),
+      onPressed: () => openProductLink(context, deal.link, deal.store, deal),
       style: ElevatedButton.styleFrom(
         backgroundColor: isExpired ? const Color(0xFF64748B) : AppTheme.primary,
         foregroundColor: Colors.white,

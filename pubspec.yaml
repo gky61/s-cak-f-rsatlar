@@ -19,6 +19,7 @@ dependencies:
   firebase_messaging: ^14.7.10
   firebase_app_check: ^0.2.1+15
   firebase_crashlytics: 3.5.7
+  firebase_analytics: ^10.10.7
   
   # Authentication paketleri
   google_sign_in: ^6.2.1

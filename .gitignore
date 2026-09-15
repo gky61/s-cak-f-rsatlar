@@ -99,3 +99,8 @@ cloud-run-bot/scratch/
 
 # Agent customizations and skills
 .agents/
+
+# Temporary avatar source files and scraper dumps
+assets/new_avatar/
+cloud-run-bot/*.html
+cloud-run-bot/*_dump.json

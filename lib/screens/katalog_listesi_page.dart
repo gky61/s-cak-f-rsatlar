@@ -552,8 +552,20 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
           HapticFeedback.lightImpact();
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => KatalogDetayPage(catalog: catalog),
+            PageRouteBuilder(
+              opaque: false,
+              barrierDismissible: false,
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  KatalogDetayPage(catalog: catalog),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return FadeTransition(
+                  opacity: CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  ),
+                  child: child,
+                );
+              },
             ),
           );
         },

@@ -3555,3 +3555,12 @@ exports.scrapeCatalogsScheduled = functions
     return null;
   }));
 
+/**
+ * 20. OBSERVABILITY & TELEMETRİ GÖZLEMLEME SERVİSİ (Modül 11)
+ * Web Admin için GA4 Data API ve veritabanı telemetri verilerini çeker.
+ */
+const { getObservabilityMetricsHandler } = require('./observability_service');
+exports.getObservabilityMetrics = functions
+  .runWith({ timeoutSeconds: 60, memory: '512MB' })
+  .https.onCall(wrapCall('getObservabilityMetrics', getObservabilityMetricsHandler));
+

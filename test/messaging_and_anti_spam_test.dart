@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sicak_firsatlar/models/message.dart';
 
@@ -261,6 +262,138 @@ void main() {
       expect(allMessages[0].text, equals('Harika bir fırsat buldum!'));
       expect(allMessages[1].id, equals('server_real_doc_older'));
       expect(allMessages[1].text, equals('Eski mesaj'));
+    });
+  });
+
+  group('5. In-App Message Dual-Channel Deduplication & Debounce Tests', () {
+    test('Dual-channel deduplication: Firestore first, then FCM is suppressed', () {
+      final handledIds = <String>{};
+      int bannerShowCount = 0;
+
+      void onReceiveMessage(String messageId, String channel) {
+        if (handledIds.contains(messageId)) {
+          return; // Zaten işlenmiş, afiş basılmaz
+        }
+        handledIds.add(messageId);
+        bannerShowCount++;
+      }
+
+      const testMsgId = 'msg_doc_abc123';
+
+      // 1. Kanal (0 ms): Firestore snapshot gelir
+      onReceiveMessage(testMsgId, 'firestore');
+      expect(bannerShowCount, equals(1));
+      expect(handledIds.contains(testMsgId), isTrue);
+
+      // 2. Kanal (~1000 ms sonra): FCM onMessage gelir
+      onReceiveMessage(testMsgId, 'fcm_on_message');
+      // Afiş tekrar basılmamalı, dedup çalışmalı
+      expect(bannerShowCount, equals(1));
+    });
+
+    test('Dual-channel deduplication: FCM first, then Firestore is suppressed', () {
+      final handledIds = <String>{};
+      int bannerShowCount = 0;
+
+      void onReceiveMessage(String messageId, String channel) {
+        if (handledIds.contains(messageId)) {
+          return;
+        }
+        handledIds.add(messageId);
+        bannerShowCount++;
+      }
+
+      const testMsgId = 'msg_doc_xyz789';
+
+      // 1. FCM ilk ulaşırsa
+      onReceiveMessage(testMsgId, 'fcm_on_message');
+      expect(bannerShowCount, equals(1));
+
+      // 2. Firestore snapshot arkasından ulaşırsa
+      onReceiveMessage(testMsgId, 'firestore');
+      expect(bannerShowCount, equals(1));
+    });
+
+    test('Bounded cache evicts oldest entries when capacity exceeds 200', () {
+      final handledIds = <String>{};
+
+      void addHandledId(String id) {
+        if (handledIds.length >= 200) {
+          handledIds.remove(handledIds.first);
+        }
+        handledIds.add(id);
+      }
+
+      // 205 mesaj ekle
+      for (int i = 1; i <= 205; i++) {
+        addHandledId('msg_$i');
+      }
+
+      expect(handledIds.length, equals(200));
+      // İlk 5 mesaj atılmış olmalı (FIFO)
+      expect(handledIds.contains('msg_1'), isFalse);
+      expect(handledIds.contains('msg_5'), isFalse);
+      // Son mesajlar korunmalı
+      expect(handledIds.contains('msg_6'), isTrue);
+      expect(handledIds.contains('msg_205'), isTrue);
+    });
+
+    test('InAppMessageBanner 3000ms sliding window debounce suppresses duplicate banners', () {
+      String? lastShownKey;
+      DateTime? lastShownTime;
+      int renderedBanners = 0;
+
+      bool tryShowBanner(String senderId, String messageText, DateTime time) {
+        final bannerKey = '${senderId}_${messageText.trim()}';
+        if (lastShownKey == bannerKey &&
+            lastShownTime != null &&
+            time.difference(lastShownTime!).inMilliseconds < 3000) {
+          return false; // Mükerrer, bastırıldı
+        }
+        lastShownKey = bannerKey;
+        lastShownTime = time;
+        renderedBanners++;
+        return true;
+      }
+
+      final baseTime = DateTime(2026, 8, 29, 14, 0, 0);
+
+      // 1. İlk mesaj -> Gösterilmeli
+      expect(tryShowBanner('user_ali', 'Selam naber?', baseTime), isTrue);
+      expect(renderedBanners, equals(1));
+
+      // 2. 1000ms sonra aynı mesaj (FCM ikinci tetiklemesi senaryosu) -> BASTIRILMALI
+      expect(tryShowBanner('user_ali', 'Selam naber?', baseTime.add(const Duration(milliseconds: 1000))), isFalse);
+      expect(renderedBanners, equals(1));
+
+      // 3. 2500ms sonra aynı mesaj -> BASTIRILMALI (<3000ms)
+      expect(tryShowBanner('user_ali', 'Selam naber?', baseTime.add(const Duration(milliseconds: 2500))), isFalse);
+      expect(renderedBanners, equals(1));
+
+      // 4. 2600ms anında FARKLI bir mesaj veya kullanıcı -> GÖSTERİLMELİ
+      expect(tryShowBanner('user_veli', 'Fırsat linki var mı?', baseTime.add(const Duration(milliseconds: 2600))), isTrue);
+      expect(renderedBanners, equals(2));
+
+      // 5. 3100ms sonra Ali'den tekrar mesaj gelirse -> GÖSTERİLMELİ (>3000ms)
+      expect(tryShowBanner('user_ali', 'Selam naber?', baseTime.add(const Duration(milliseconds: 5800))), isTrue);
+      expect(renderedBanners, equals(3));
+    });
+  });
+
+  group('6. Android Background Channel & messages_channel_v3 Consistency Tests', () {
+    test('main.dart background handler uses messages_channel_v3 and Importance.max', () {
+      final mainDartCode = File('lib/main.dart').readAsStringSync();
+      expect(mainDartCode.contains("channelId = 'messages_channel_v3';"), isTrue);
+      expect(mainDartCode.contains("'messages_channel_v3'"), isTrue);
+      expect(mainDartCode.contains("channelId = 'messages_channel'"), isFalse);
+    });
+
+    test('notification_service.dart uses messages_channel_v3 consistently without legacy channel', () {
+      final notifServiceCode = File('lib/services/notification_service.dart').readAsStringSync();
+      expect(notifServiceCode.contains("'messages_channel_v3'"), isTrue);
+      // Ensure no legacy 'messages_channel' string literal remains
+      final legacyChannelRegex = RegExp(r"""['"]messages_channel['"]""");
+      expect(legacyChannelRegex.hasMatch(notifServiceCode), isFalse);
     });
   });
 }

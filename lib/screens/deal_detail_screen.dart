@@ -12,6 +12,7 @@ import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/link_preview_service.dart';
 import '../services/affiliate/store_redirect_service.dart';
+import '../services/analytics_service.dart';
 import '../theme/app_theme.dart';
 import 'profile_screen.dart';
 import 'botkolik_profile_screen.dart';
@@ -192,6 +193,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     }
 
     if (_currentDeal == null) return;
+
+    // Observability: Oylama telemetrisi
+    AnalyticsService.instance.logDealVoted(
+      dealId: widget.dealId,
+      voteType: isHot ? 'hot' : 'cold',
+    );
 
     // Anında Optimistic UI Güncellemesi (0ms gecikme, kilitlenme yok)
     setState(() {
@@ -398,6 +405,15 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           _coldVotes = deal.coldVotes;
           _expiredVotes = deal.expiredVotes;
         });
+
+        // Observability: Fırsat detay görüntüleme
+        AnalyticsService.instance.logDealView(
+          dealId: deal.id,
+          storeName: deal.store,
+          category: deal.category,
+          source: widget.scrollToCommentId != null ? 'notification' : 'feed',
+        );
+
         _checkUserVote();
         // Eğer görsel yoksa, temiz linkten çekmeyi dene
         if (deal.imageUrl.isEmpty && deal.displayUrl.isNotEmpty && !_hasTriedFetching) {
@@ -1932,6 +1948,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       context,
       rawUrl: link,
       storeName: currentDeal?.store,
+      dealId: currentDeal?.id ?? widget.dealId,
+      category: currentDeal?.category,
+      price: currentDeal?.price,
     );
   }
 

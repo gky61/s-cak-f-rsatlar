@@ -250,11 +250,14 @@ String formatExactDateTime(DateTime date) {
   }
 }
 
-Future<void> openProductLink(BuildContext context, String url, [String? storeName]) async {
+Future<void> openProductLink(BuildContext context, String url, [String? storeName, Deal? deal]) async {
   await StoreRedirectService.launchStore(
     context,
     rawUrl: url,
-    storeName: storeName,
+    storeName: storeName ?? deal?.store,
+    dealId: deal?.id,
+    category: deal?.category,
+    price: deal?.price,
   );
 }
 
@@ -353,7 +356,7 @@ void showExpiredBottomSheet(BuildContext context, Deal deal) {
                   child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(context);
-                      openProductLink(context, deal.link, deal.store);
+                      openProductLink(context, deal.link, deal.store, deal);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primary,

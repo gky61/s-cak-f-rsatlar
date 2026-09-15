@@ -9,7 +9,7 @@ Bu doküman; **FırsatKolik** platformunun sunucu (Firebase Cloud Functions v1/v
 
 ## 📑 İçindekiler
 1. [🌟 Genel Backend Mimarisi ve Altyapı Bileşenleri](#1--genel-backend-mimarisi-ve-altyapı-bileşenleri)
-2. [⚡ 26 Cloud Function Tam Envanteri ve Tetikleme Sözleşmesi](#2--26-cloud-function-tam-envanteri-ve-tetikleme-sözleşmesi)
+2. [⚡ 27 Cloud Function Tam Envanteri ve Tetikleme Sözleşmesi](#2--27-cloud-function-tam-envanteri-ve-tetikleme-sözleşmesi)
 3. [⚙️ Ortam Yönetimi ve Flavor Mimarisi (DEV vs PROD)](#3-️-ortam-yönetimi-ve-flavor-mimarisi-dev-vs-prod)
 4. [🔒 Firestore ve Storage Güvenlik Mimarisi (Security Rules & RBAC)](#4-️-firestore-ve-storage-güvenlik-mimarisi-security-rules--rbac)
 5. [💰 Google Cloud Sıfır Maliyet Mimarisi ve Free Tier VM](#5--google-cloud-sıfır-maliyet-mimarisi-ve-free-tier-vm)
@@ -57,17 +57,17 @@ graph TD
 
 ### Temel Mimari Bileşenler:
 1. **Cloud Firestore:** NoSQL doküman tabanlı veritabanı. Fırsatlar, yorumlar, kullanıcılar, kuponlar, aktüel kataloglar ve bildirim kutularını yönetir.
-2. **Firebase Cloud Functions (Node.js):** 26 adet sunucusuz fonksiyon (`functions/index.js`). Firestore tetikleyicileri, callable admin API'leri, zamanlanmış cron görevleri ve HTTPS proxy servislerini barındırır.
+2. **Firebase Cloud Functions (Node.js):** 27 adet sunucusuz fonksiyon (`functions/index.js`). Firestore tetikleyicileri, callable admin API'leri, zamanlanmış cron görevleri, HTTPS proxy servisleri ve Observability telemetri köprüsünü barındırır.
 3. **Google Compute Engine VM (`telegram-bot-server`):** Free Tier `e2-micro` makinede çalışan Docker container'ları ile Telegram indirim kanallarını 7/24 dinler.
 4. **Firebase Cloud Messaging (FCM HTTP v1):** 7 Android bildirim kanalı ve iOS APNs entegrasyonu ile akıllı push dağıtımı sağlar.
 5. **Firebase Storage:** Fırsat görsellerini ve aktüel broşürlerini barındırır.
 
 ---
 
-## 2. ⚡ 26 Cloud Function Tam Envanteri ve Tetikleme Sözleşmesi
+## 2. ⚡ 27 Cloud Function Tam Envanteri ve Tetikleme Sözleşmesi
 
 > 🔗 **Detaylı Referans Dokümanı:**
-> - [Cloud Functions ve Backend Servisleri Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/cloud_functions_rehberi.md) — 26 fonksiyonun tetiklenme türleri, parametreleri ve somut kullanım senaryoları.
+> - [Cloud Functions ve Backend Servisleri Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/cloud_functions_rehberi.md) — 27 fonksiyonun tetiklenme türleri, parametreleri ve somut kullanım senaryoları.
 
 Tüm backend fonksiyonları [functions/index.js](file:///d:/firsatkolik/functions/index.js) içerisinde modüler olarak tanımlanmıştır:
 
@@ -99,6 +99,7 @@ Tüm backend fonksiyonları [functions/index.js](file:///d:/firsatkolik/function
 | 24 | **`scrapeCouponsManual`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Kupon kazıma botunu admin panelinden manuel tetikler. |
 | 25 | **`scrapeCatalogsScheduled`** | Scheduled Cron (Her 12 saatte bir) | GCP Cloud Scheduler | Market aktüel afiş ve kataloglarını otonom tarar. |
 | 26 | **`scrapeCatalogsManual`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Broşür kazıma botunu admin panelinden manuel tetikler. |
+| 27 | **`getObservabilityMetrics`** | HTTPS Callable (`onCall`) | Web Admin (`observability_manager.js`) | Web Admin Modül 11 için GA4 Data API ve telemetri verilerini güvenle çeker. |
 
 ---
 
@@ -120,7 +121,7 @@ FırsatKolik, **Geliştirme (DEV)** ve **Canlı (PROD)** olmak üzere iki tamame
 | **AdMob Reklamları** | Google Test Banner ID (`ca-app-pub-3940...`) | Gerçek Banner ID (`ca-app-pub-6853...`) |
 | **App Check Sağlayıcısı**| Debug Provider (Debug Token) | Play Integrity API (Google Play Store) |
 | **Android Keystore** | Varsayılan Debug Keystore | `android/app/upload-keystore.jks` (Alias: upload) |
-| **Cloud Functions** | 26 Bağımsız Fonksiyon (İzole Trigger & Cron) | 26 Bağımsız Fonksiyon (İzole Trigger & Cron) |
+| **Cloud Functions** | 27 Bağımsız Fonksiyon (İzole Trigger & Cron) | 27 Bağımsız Fonksiyon (İzole Trigger & Cron) |
 | **Web Admin URL** | `localhost:5000` / `sicak-firsatlar-e6eae.web.app` | `https://firsatkolik-prod-e6eae.web.app` ve `firsatkolik.app` |
 | **Telegram Bot Portu** | Port `8081` (`dev-bot` Container) | Port `8082` (`prod-bot` Container) |
 | **Cihazda Yan Yana Kurulum** | Desteklenir (Paket ID: `com.sicakfirsatlar...`) | Desteklenir (Paket ID: `com.firsatkolik.app`) |
@@ -282,7 +283,7 @@ docker logs -f prod-bot
 
 | Rol / Katman | Dosya Yolu | Açıklama |
 | :--- | :--- | :--- |
-| **Cloud Functions Merkezi** | [functions/index.js](file:///d:/firsatkolik/functions/index.js) | 26 adet backend fonksiyonunun kaynak kodu. |
+| **Cloud Functions Merkezi** | [functions/index.js](file:///d:/firsatkolik/functions/index.js) | 27 adet backend fonksiyonunun kaynak kodu. |
 | **Firestore Güvenlik Kuralları**| [firestore.rules](file:///d:/firsatkolik/firestore.rules) | Veritabanı RBAC ve alan bazlı güvenlik kuralları. |
 | **Storage Güvenlik Kuralları** | [storage.rules](file:///d:/firsatkolik/storage.rules) | Dosya depolama erişim kuralları. |
 | **Firestore İndeksleri** | [firestore.indexes.json](file:///d:/firsatkolik/firestore.indexes.json) | Bileşik sorgular ve collectionGroup indeksleri. |

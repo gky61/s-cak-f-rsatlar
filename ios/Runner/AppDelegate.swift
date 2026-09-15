@@ -96,6 +96,20 @@ import UserNotifications
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
+    let userInfo = notification.request.content.userInfo
+    let type = (userInfo["type"] as? String) ?? ""
+    let category = notification.request.content.categoryIdentifier
+
+    // Birebir sohbet mesajları ve admin mesajları uygulama açıkken Flutter tarafında InAppMessageBanner ile sunulur.
+    // Ön plandayken Apple sistem push bildiriminin (tepe banner) basılmasını engelle (çift bildirim önleyici).
+    let isChatMessage = type == "message" || type == "user_message" || type == "chat" || category == "USER_MESSAGE" || (userInfo["senderId"] != nil && type != "deal" && type != "comment_reply" && type != "admin_deal")
+    let isAdminMessage = type == "admin_message" || category == "ADMIN_MESSAGE"
+
+    if isChatMessage || isAdminMessage {
+      completionHandler([])
+      return
+    }
+
     if #available(iOS 14.0, *) {
       completionHandler([.banner, .list, .badge, .sound])
     } else {

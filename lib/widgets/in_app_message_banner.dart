@@ -11,6 +11,8 @@ import '../main.dart'; // navigatorKey
 class InAppMessageBanner {
   static OverlayEntry? _currentEntry;
   static DateTime? _lastHapticTime;
+  static String? _lastShownBannerKey;
+  static DateTime? _lastShownBannerTime;
 
   static void show({
     required BuildContext? context,
@@ -22,6 +24,20 @@ class InAppMessageBanner {
     String? dealTitle,
     String? dealId,
   }) {
+    // Mükerrer bildirim koruması (aynı mesaj 3 saniye içinde tekrar tetiklenirse bastır)
+    final now = DateTime.now();
+    final bannerKey = '${senderId}_${messageText.trim()}';
+    if (_lastShownBannerKey == bannerKey &&
+        _lastShownBannerTime != null &&
+        now.difference(_lastShownBannerTime!).inMilliseconds < 3000) {
+      if (kDebugMode) {
+        print('ℹ️ InAppMessageBanner: Mükerrer afiş bastırıldı ($bannerKey)');
+      }
+      return;
+    }
+    _lastShownBannerKey = bannerKey;
+    _lastShownBannerTime = now;
+
     OverlayState? overlayState;
     if (context != null) {
       overlayState = Overlay.maybeOf(context);
@@ -38,7 +54,6 @@ class InAppMessageBanner {
     _currentEntry?.remove();
     _currentEntry = null;
 
-    final now = DateTime.now();
     if (_lastHapticTime == null || now.difference(_lastHapticTime!).inMilliseconds > 1500) {
       _lastHapticTime = now;
       HapticFeedback.lightImpact();

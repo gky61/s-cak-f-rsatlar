@@ -3,7 +3,7 @@
 > [!NOTE]
 > Bu doküman Cloud Functions servislerinin detaylı envanter kılavuzudur. Sistemin güncel güvenlik kuralları, ortam yönetimi, sıfır maliyet VM mimarisi ve test süitleri için lütfen **[Backend ve Bulut Altyapısı Master Mimari Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/backend_ve_altyapi_rehberi.md)** dokümanını inceleyiniz.
 
-Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **26 adet Cloud Function'ın** tetiklenme türlerini, çalışma amaçlarını, **projede kullanıldıkları / çağrıldıkları yerleri** ve **somut kullanım senaryolarını** detaylı bir şekilde açıklamaktadır.
+Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **27 adet Cloud Function'ın** tetiklenme türlerini, çalışma amaçlarını, **projede kullanıldıkları / çağrıldıkları yerleri** ve **somut kullanım senaryolarını** detaylı bir şekilde açıklamaktadır.
 
 ---
 
@@ -37,10 +37,11 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **26 
 | 24 | **`scrapeCouponsManual`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
 | 25 | **`scrapeCatalogsScheduled`** | Scheduled (Cron 12h) | GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
 | 26 | **`scrapeCatalogsManual`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
+| 27 | **`getObservabilityMetrics`** | HTTPS Callable | Web Admin Paneli (`observability_manager.js`) | 🟢 Aktif Canlı Sistem |
 
 ---
 
-## 🔍 26 Cloud Function Detaylı İncelemesi
+## 🔍 27 Cloud Function Detaylı İncelemesi
 
 ---
 
@@ -249,6 +250,17 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **26 
 ### 26. `scrapeCatalogsManual`
 * **Tetikleyici Türü:** HTTPS Callable
 * **Kullanım Amacı:** Broşür kazıma botunu admin panelinden elle çalıştırmaya yarar.
+
+---
+
+### 27. `getObservabilityMetrics`
+* **Tetikleyici Türü:** HTTPS Callable (`onCall`, 512MB, 60s timeout)
+* **Kullanıldığı / Tetiklendiği Yerler:**
+  - `web/admin/observability_manager.js` (Web Admin Paneli Modül 11: Observability Hub)
+  - `functions/observability_service.js`
+* **Kullanım Amacı:** Web Admin Paneli için Google Analytics 4 (GA4) Data API ve Firestore koleksiyon telemetri verilerini birleştirerek güvenli bir şekilde sunar. Anlık aktif kullanıcılar, 24 saatlik olay sayıları (`deal_outbound_click`, `coupon_copied`, `catalog_view`), altyapı kota durumu ve bot heartbeat sağlık durumunu çeker.
+* **Somut Senaryo:**
+  > Yönetici Web Admin Modül 11'i açtığında bu fonksiyon çağrılır; GA4'ten son 30 dakikadaki anlık kullanıcı sayısını ve son 24 saatte kaç kişinin "Mağazaya Git" affiliate linkine tıkladığını güvenle çekip ekrana basar.
 
 ---
 

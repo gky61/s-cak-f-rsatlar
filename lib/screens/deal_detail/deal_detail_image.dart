@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../models/deal.dart';
+import '../../widgets/swipe_to_dismiss_image_viewer.dart';
 
 /// Fırsat detay sayfası görsel bileşeni ve tam ekran görüntüleyici.
 class DealDetailImage extends StatelessWidget {
@@ -129,63 +130,8 @@ class DealDetailImage extends StatelessWidget {
     );
   }
 
-  /// Tam ekran görsel dialog'u.
+  /// Tam ekran görsel görüntüleyici (Aşağı kaydırarak küçülüp kapanma özellikli).
   static void showFullScreenImage(BuildContext context, String imageUrl) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.9),
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          children: [
-            // Görsel - Pinch to zoom özelliği ile
-            Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: CachedNetworkImage(
-                  imageUrl: imageUrl,
-                  fit: BoxFit.contain,
-                  placeholder: (context, url) => const Center(
-              child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                color: Colors.white,
-              ),
-            ),
-                  errorWidget: (context, url, error) => const Center(
-              child: Icon(
-                Icons.error_outline,
-                color: Colors.white,
-                      size: 64,
-              ),
-            ),
-          ),
-              ),
-            ),
-            // Kapat butonu
-            Positioned(
-              top: 40,
-              right: 16,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.close,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    SwipeToDismissImageViewer.show(context, imageUrl: imageUrl);
   }
 }

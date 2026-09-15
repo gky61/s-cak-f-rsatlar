@@ -36,10 +36,348 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
   void initState() {
     super.initState();
     _currentUser = widget.user;
+    if (_currentUser == null && _authService.currentUser != null) {
+      _loadCurrentUser();
+    }
+  }
+
+  Future<void> _loadCurrentUser() async {
+    final uid = _authService.currentUser?.uid;
+    if (uid != null) {
+      final user = await _authService.getUserData(uid);
+      if (user != null && mounted) {
+        setState(() => _currentUser = user);
+      }
+    }
+  }
+
+  /// Kullanıcının arayüzde görünecek en temiz ismi (Örn: Elif Güven)
+  String? get _userDisplayName {
+    final appDisplayName = _currentUser?.displayName.trim();
+    if (appDisplayName != null &&
+        appDisplayName.isNotEmpty &&
+        appDisplayName != 'Kullanıcı') {
+      return appDisplayName;
+    }
+    final appUsername = _currentUser?.username.trim();
+    if (appUsername != null &&
+        appUsername.isNotEmpty &&
+        appUsername != 'Kullanıcı') {
+      return appUsername;
+    }
+    final fbDisplayName = _authService.currentUser?.displayName?.trim();
+    if (fbDisplayName != null &&
+        fbDisplayName.isNotEmpty &&
+        fbDisplayName != 'Kullanıcı') {
+      return fbDisplayName;
+    }
+    return null;
+  }
+
+  /// Apple ile mi giriş yapılmış?
+  bool get _isAppleSignIn {
+    final user = _authService.currentUser;
+    if (user == null) return false;
+    final hasAppleProvider = user.providerData.any((p) => p.providerId == 'apple.com');
+    final hasAppleEmail = user.email?.toLowerCase().endsWith('@privaterelay.appleid.com') ?? false;
+    return hasAppleProvider || hasAppleEmail;
+  }
+
+  /// Apple "E-postamı Gizle" (Hide My Email / Private Relay) adresi mi?
+  bool get _isApplePrivateRelay {
+    final email = _authService.currentUser?.email?.toLowerCase() ?? '';
+    return email.endsWith('@privaterelay.appleid.com');
+  }
+
+  /// Google ile mi giriş yapılmış?
+  bool get _isGoogleSignIn {
+    final user = _authService.currentUser;
+    if (user == null) return false;
+    return user.providerData.any((p) => p.providerId == 'google.com');
+  }
+
+  /// Sağlayıcı ikonu
+  IconData get _providerIcon {
+    if (_isAppleSignIn) return Icons.apple;
+    if (_isGoogleSignIn) return Icons.g_mobiledata;
+    if (_authService.currentUser?.email != null &&
+        _authService.currentUser!.email!.isNotEmpty) {
+      return Icons.alternate_email_rounded;
+    }
+    return Icons.person_outline_rounded;
+  }
+
+  /// Çıkış Yap butonu alt metni
+  String get _signOutSubtitle {
+    final name = _userDisplayName;
+    if (_isApplePrivateRelay) {
+      return name != null
+          ? '$name oturumunu kapat'
+          : 'Apple ile bağlı oturumu kapat';
+    }
+    if (name != null) {
+      return '$name oturumunu kapat';
+    }
+    final email = _authService.currentUser?.email;
+    if (email != null && email.isNotEmpty) {
+      return '$email oturumunu kapat';
+    }
+    return 'Oturumunuzu güvenle sonlandırın';
+  }
+
+  /// Hesabımı Sil butonu alt metni
+  String get _deleteAccountSubtitle {
+    final name = _userDisplayName;
+    if (_isApplePrivateRelay) {
+      return name != null
+          ? '$name hesabını ve tüm verileri sil'
+          : 'Apple hesabınızı ve tüm verilerinizi silin';
+    }
+    if (name != null) {
+      return '$name hesabını ve tüm verileri sil';
+    }
+    final email = _authService.currentUser?.email;
+    if (email != null && email.isNotEmpty) {
+      return '$email ve tüm verileri sil';
+    }
+    return 'Hesabınızı ve tüm verilerinizi silin';
+  }
+
+  /// Onay diyaloglarında kullanıcı dostu hesap kimlik kartı
+  Widget _buildDialogAccountCard({
+    required bool isDark,
+    required Color borderColor,
+    required Color textMain,
+    required Color textSub,
+    bool isDestructive = false,
+  }) {
+    final name = _userDisplayName;
+    final email = _authService.currentUser?.email;
+    final isApple = _isAppleSignIn;
+    final isRelay = _isApplePrivateRelay;
+    final isGoogle = _isGoogleSignIn;
+
+    final cardBg = isDestructive
+        ? Colors.red.withValues(alpha: isDark ? 0.12 : 0.06)
+        : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100);
+    final cardBorder = isDestructive
+        ? Colors.red.withValues(alpha: isDark ? 0.35 : 0.20)
+        : borderColor;
+
+    String subInfo;
+    if (isRelay) {
+      subInfo = 'Apple Kimliği ile Bağlı • Gizli E-posta';
+    } else if (isApple) {
+      subInfo = (email != null && email.isNotEmpty) ? email : 'Apple Kimliği ile Bağlı';
+    } else if (isGoogle) {
+      subInfo = (email != null && email.isNotEmpty) ? 'Google • $email' : 'Google ile Bağlı';
+    } else if (email != null && email.isNotEmpty) {
+      subInfo = email;
+    } else {
+      subInfo = 'Kayıtlı Oturum';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cardBorder, width: 0.9),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: isDestructive
+                  ? Colors.red.withValues(alpha: isDark ? 0.25 : 0.15)
+                  : (isDark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06)),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Icon(
+                isApple
+                    ? Icons.apple
+                    : (isGoogle
+                        ? Icons.g_mobiledata
+                        : (isDestructive ? Icons.delete_outline_rounded : Icons.person_rounded)),
+                size: isGoogle ? 24 : 18,
+                color: isDestructive
+                    ? (isDark ? const Color(0xFFFCA5A5) : Colors.red.shade700)
+                    : textMain,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (name != null)
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: isDestructive && isDark ? const Color(0xFFFCA5A5) : textMain,
+                      letterSpacing: -0.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                Text(
+                  subInfo,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: name != null ? FontWeight.w500 : FontWeight.w700,
+                    color: isDestructive
+                        ? (isDark ? const Color(0xFFFCA5A5).withValues(alpha: 0.8) : Colors.red.shade800)
+                        : textSub,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// OTURUM & GÜVENLİK kartı üstündeki aktif hesap kimlik widget'ı
+  Widget _buildActiveAccountHeader({
+    required bool isDark,
+    required Color textMain,
+    required Color textSub,
+    required Color borderColor,
+  }) {
+    final name = _userDisplayName;
+    final isRelay = _isApplePrivateRelay;
+    final isApple = _isAppleSignIn;
+    final isGoogle = _isGoogleSignIn;
+    final email = _authService.currentUser?.email;
+
+    String subtitleText;
+    if (isRelay) {
+      subtitleText = 'Apple ile Giriş Yapıldı (Gizli E-posta)';
+    } else if (isApple) {
+      subtitleText = (email != null && email.isNotEmpty)
+          ? '$email • Apple'
+          : 'Apple ile Giriş Yapıldı';
+    } else if (isGoogle) {
+      subtitleText = (email != null && email.isNotEmpty)
+          ? '$email • Google'
+          : 'Google ile Giriş Yapıldı';
+    } else if (email != null && email.isNotEmpty) {
+      subtitleText = email;
+    } else {
+      subtitleText = 'Kayıtlı Hesap';
+    }
+
+    final avatarUrl = _currentUser?.profileImageUrl;
+    final hasAvatar = avatarUrl != null && avatarUrl.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.grey.shade200,
+              border: Border.all(
+                color: borderColor,
+                width: 1,
+              ),
+            ),
+            child: ClipOval(
+              child: hasAvatar
+                  ? Image.network(
+                      avatarUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Center(
+                        child: Icon(
+                          _providerIcon,
+                          size: 20,
+                          color: textMain,
+                        ),
+                      ),
+                    )
+                  : Center(
+                      child: Icon(
+                        _providerIcon,
+                        size: _isGoogleSignIn ? 26 : 20,
+                        color: textMain,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name ?? 'Hesabım',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: textMain,
+                          letterSpacing: -0.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: isDark ? 0.20 : 0.10),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Aktif',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? const Color(0xFF4ADE80) : Colors.green.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitleText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: textSub,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _signOut() async {
-    final email = _authService.currentUser?.email;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
     final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
@@ -84,39 +422,15 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (email != null && email.isNotEmpty) ...[
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: borderColor, width: 0.8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.alternate_email_rounded, size: 14, color: textSub),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        email,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: textMain,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
+            if (_authService.currentUser != null)
+              _buildDialogAccountCard(
+                isDark: isDark,
+                borderColor: borderColor,
+                textMain: textMain,
+                textSub: textSub,
               ),
-            ],
             Text(
-              email != null && email.isNotEmpty
-                  ? 'Bu hesaptan çıkış yapmak istediğinize emin misiniz? Dilediğiniz zaman tekrar giriş yapabilirsiniz.'
-                  : 'Çıkış yapmak istediğinize emin misiniz?',
+              'Bu hesaptan çıkış yapmak istediğinize emin misiniz? Dilediğiniz zaman tekrar giriş yapabilirsiniz.',
               style: TextStyle(
                 fontSize: 13.5,
                 color: textSub,
@@ -185,7 +499,6 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
   }
 
   Future<void> _deleteAccount() async {
-    final email = _authService.currentUser?.email;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
     final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
@@ -230,38 +543,14 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (email != null && email.isNotEmpty) ...[
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: isDark ? 0.12 : 0.06),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.red.withValues(alpha: isDark ? 0.35 : 0.20),
-                    width: 0.8,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.alternate_email_rounded, size: 14, color: Colors.red.shade400),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        email,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: isDark ? const Color(0xFFFCA5A5) : Colors.red.shade900,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
+            if (_authService.currentUser != null)
+              _buildDialogAccountCard(
+                isDark: isDark,
+                borderColor: borderColor,
+                textMain: textMain,
+                textSub: textSub,
+                isDestructive: true,
               ),
-            ],
             Text(
               'Bu işlem GERİ ALINAMAZ. Paylaştığınız tüm fırsatlar, yorumlar, avcı puanlarınız ve rozetleriniz kalıcı olarak silinecektir.',
               style: TextStyle(
@@ -620,13 +909,19 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
                       ),
                       child: Column(
                         children: [
+                          if (_authService.currentUser != null) ...[
+                            _buildActiveAccountHeader(
+                              isDark: isDark,
+                              textMain: textMain,
+                              textSub: textSub,
+                              borderColor: borderColor,
+                            ),
+                            _buildDivider(isDark, borderColor),
+                          ],
                           _buildHubItem(
                             icon: Icons.logout_rounded,
                             title: 'Çıkış Yap',
-                            subtitle: _authService.currentUser?.email != null &&
-                                    _authService.currentUser!.email!.isNotEmpty
-                                ? '${_authService.currentUser!.email} oturumunu kapat'
-                                : 'Oturumunuzu güvenle sonlandırın',
+                            subtitle: _signOutSubtitle,
                             iconBgColor: Colors.red.withValues(alpha: isDark ? 0.18 : 0.10),
                             iconColor: Colors.red.shade400,
                             isDark: isDark,
@@ -638,10 +933,7 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
                           _buildHubItem(
                             icon: Icons.delete_outline_rounded,
                             title: 'Hesabımı Kalıcı Olarak Sil',
-                            subtitle: _authService.currentUser?.email != null &&
-                                    _authService.currentUser!.email!.isNotEmpty
-                                ? '${_authService.currentUser!.email} ve tüm verileri sil'
-                                : 'Hesabınızı ve tüm verilerinizi silin',
+                            subtitle: _deleteAccountSubtitle,
                             iconBgColor: Colors.red.withValues(alpha: isDark ? 0.12 : 0.06),
                             iconColor: Colors.red.shade400,
                             isDark: isDark,

@@ -7,6 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, defaultTargetPlatform, TargetPlatform;
 import 'notification_service.dart';
+import 'analytics_service.dart';
 import '../models/user.dart' as app_user;
 import '../firebase_options.dart';
 
@@ -433,6 +434,13 @@ class AuthService {
       } catch (tokenErr) {
         _log('⚠️ Login sonrası FCM Token kaydetme hatası: $tokenErr');
       }
+
+      // Observability: Kullanıcı kimliğini Analytics ve Crashlytics'e eşle
+      try {
+        await AnalyticsService.instance.setUser(firebaseUser.uid);
+      } catch (analyticsErr) {
+        _log('⚠️ Login sonrası Analytics setUser hatası: $analyticsErr');
+      }
       
       return appUser;
     } catch (e) {
@@ -671,6 +679,14 @@ class AuthService {
       
       // Firebase Auth oturumunu temizle
       await _auth.signOut();
+
+      // Observability: Analytics ve Crashlytics kullanıcı kimliğini sıfırla
+      try {
+        await AnalyticsService.instance.setUser(null);
+      } catch (e) {
+        _log('Analytics clear user: $e');
+      }
+
       _log('✅ Çıkış başarılı');
     } catch (e) {
       _log('Sign-Out hatası: $e');

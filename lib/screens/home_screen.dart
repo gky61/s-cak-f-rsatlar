@@ -6,6 +6,7 @@ import '../services/firestore_service.dart';
 import '../services/deal_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
+import '../services/analytics_service.dart';
 import '../services/theme_service.dart';
 import '../services/deal_search_engine.dart';
 import '../widgets/deal_card.dart';
@@ -1077,6 +1078,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               controller: _searchController,
                               autofocus: true,
                               onChanged: _onSearchChanged,
+                              onSubmitted: (val) {
+                                if (val.trim().isNotEmpty) {
+                                  AnalyticsService.instance.logSearch(searchTerm: val.trim());
+                                }
+                              },
                               style: TextStyle(
                                 color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
                                 fontSize: 13.5,
@@ -1364,6 +1370,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         return GestureDetector(
                           onTap: () {
                             HapticFeedback.selectionClick();
+                            AnalyticsService.instance.logFilterApplied(
+                              filterType: 'category',
+                              selectedValue: category.id,
+                            );
                             setState(() {
                               _selectedCategory = category.id;
                               _selectedSubCategory = null;

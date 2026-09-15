@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification_preferences.dart';
 import '../models/notification_subscription.dart';
 import '../models/user_device.dart';
+import 'analytics_service.dart';
 
 import '../main.dart'; // navigatorKey için
 import '../screens/deal_detail_screen.dart';
@@ -30,6 +31,10 @@ void _log(String message) {
 }
 
 class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
   static final StreamController<String> logStream = StreamController<String>.broadcast();
   static String? activeChatUserId;
 
@@ -658,7 +663,15 @@ class NotificationService {
 
   // Gerçek zamanlı ön plan mesaj dinleyicisi (FCM ve APNs gecikmelerinden bağımsız 0ms in-app afiş garantisi)
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _foregroundMessageListener;
-  final Set<String> _handledInAppMessageIds = <String>{};
+  static final Set<String> _handledInAppMessageIds = <String>{};
+
+  static void _addHandledMessageId(String id) {
+    if (id.isEmpty) return;
+    if (_handledInAppMessageIds.length > 200) {
+      _handledInAppMessageIds.remove(_handledInAppMessageIds.first);
+    }
+    _handledInAppMessageIds.add(id);
+  }
 
   void _stopForegroundMessageListener() {
     _foregroundMessageListener?.cancel();
@@ -689,7 +702,7 @@ class NotificationService {
       if (isFirst) {
         isFirst = false;
         for (final doc in snapshot.docs) {
-          _handledInAppMessageIds.add(doc.id);
+          _addHandledMessageId(doc.id);
         }
         _log('ℹ️ Ön plan mesaj ilk snapshot hafızaya alındı (${snapshot.docs.length} mesaj).');
         return;
@@ -700,7 +713,7 @@ class NotificationService {
           final doc = change.doc;
           final messageId = doc.id;
           if (_handledInAppMessageIds.contains(messageId)) continue;
-          _handledInAppMessageIds.add(messageId);
+          _addHandledMessageId(messageId);
 
           final data = doc.data();
           if (data == null) continue;
@@ -1309,6 +1322,13 @@ class NotificationService {
     final commentId = (data['commentId'] ?? data['comment_id'] ?? '').toString().trim();
     final messageId = (data['messageId'] ?? data['message_id'] ?? '').toString().trim();
 
+    // Observability: Bildirim etkileşim telemetrisi
+    AnalyticsService.instance.logNotificationInteraction(
+      type: type,
+      reason: (data['reason'] ?? data['channel'] ?? 'push').toString(),
+      dealId: dealId.isNotEmpty ? dealId : null,
+    );
+
     final tapKey = '$type:$senderId:$dealId:$commentId:$messageId';
     final now = DateTime.now();
 
@@ -1604,7 +1624,7 @@ class NotificationService {
           return;
         }
         if (msgId.isNotEmpty) {
-          _handledInAppMessageIds.add(msgId);
+          _addHandledMessageId(msgId);
         }
 
         if (currentActiveChat != null && currentActiveChat.isNotEmpty) {
@@ -1657,8 +1677,13 @@ class NotificationService {
         return;
       }
 
-      // Diğer bildirimler için Local notification göster
-      _showLocalNotification(message);
+      // Diğer bildirimler için (fırsat, yorum, anahtar kelime vb.):
+      // iOS tarafında AppDelegate willPresent bu bildirimleri native banner ([.banner, .sound]) olarak
+      // işletim sistemi seviyesinde doğrudan sunar. Bu nedenle iOS'ta yerel bildirim tetiklenmez (çift afiş önleyici).
+      // Android'de ise ön planda sistem afişi düşmediğinden FlutterLocalNotificationsPlugin şarttır.
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        _showLocalNotification(message);
+      }
     });
 
     // Bildirime tıklayınca (uygulama arka planda veya kapalı)
@@ -2130,11 +2155,11 @@ class NotificationService {
       final body = '$senderName: ${messageText.length > 50 ? "${messageText.substring(0, 50)}..." : messageText}';
 
       const androidDetails = AndroidNotificationDetails(
-        'messages_channel',
+        'messages_channel_v3',
         'Mesaj Bildirimleri',
         channelDescription: 'Kullanıcılar arası mesajlaşma bildirimleri',
-        importance: Importance.high,
-        priority: Priority.high,
+        importance: Importance.max,
+        priority: Priority.max,
         playSound: true,
         enableVibration: true,
         enableLights: true,

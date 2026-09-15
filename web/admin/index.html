@@ -85,6 +85,21 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+    <!-- Modular Firestore Helper for Zero-Cost Document Count Aggregation -->
+    <script type="module">
+        import { getFirestore, collection, getCountFromServer } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        window.fetchServerCollectionCount = async function(collectionName) {
+            try {
+                const db = getFirestore();
+                const collRef = collection(db, collectionName);
+                const snapshot = await getCountFromServer(collRef);
+                return snapshot.data().count;
+            } catch (err) {
+                console.warn(`[AggregateCount] ${collectionName} sayılamadı:`, err.message);
+                return null;
+            }
+        };
+    </script>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -204,6 +219,13 @@
                 <a id="logsMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
                     <span class="material-symbols-outlined">bug_report</span>
                     <p class="text-sm font-medium">Sistem Logları</p>
+                </a>
+                <a id="observabilityMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
+                    <span class="material-symbols-outlined">monitoring</span>
+                    <div class="flex items-center justify-between flex-1">
+                        <p class="text-sm font-medium">Observability</p>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">HUB</span>
+                    </div>
                 </a>
                 <a id="telegramBotMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
                     <span class="material-symbols-outlined">smart_toy</span>
@@ -2995,6 +3017,9 @@
                     </div>
                 </div>
 
+                <!-- Observability & Telemetri Hub (Modül 11) View -->
+                <div id="observabilityView" class="hidden max-w-7xl mx-auto flex flex-col gap-6"></div>
+
                 <!-- Settings (Ayarlar) View -->
                 <div id="settingsView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
                     <!-- Page Heading -->
@@ -4016,6 +4041,7 @@
 
     <script src="config.js?v=3.1"></script>
     <script src="affiliate_manager.js?v=1.0"></script>
+    <script src="observability_manager.js?v=1.1"></script>
     <script>
         // Version check - Force cache refresh
         console.log('Admin Panel v9.01 - ' + new Date().toISOString());
@@ -4031,6 +4057,6 @@
             }
         });
     </script>
-    <script src="app.js?v=9.18"></script>
+    <script src="app.js?v=9.19"></script>
 </body>
 </html>

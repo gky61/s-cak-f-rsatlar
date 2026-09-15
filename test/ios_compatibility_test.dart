@@ -82,6 +82,20 @@ void main() {
       expect(appDelegate.contains('GeneratedPluginRegistrant.register(with: self)'), isTrue);
     });
 
+    test('AppDelegate.swift suppresses foreground push banners for chat and admin messages (prevents duplicate push + in-app)', () {
+      final appDelegate = File('ios/Runner/AppDelegate.swift').readAsStringSync();
+      expect(appDelegate.contains('completionHandler([])'), isTrue);
+      expect(appDelegate.contains('USER_MESSAGE'), isTrue);
+      expect(appDelegate.contains('isChatMessage'), isTrue);
+      expect(appDelegate.contains('isAdminMessage'), isTrue);
+    });
+
+    test('NotificationService delegates foreground notifications: only Android triggers local notification, iOS relies on native AppDelegate willPresent', () {
+      final notifServiceCode = File('lib/services/notification_service.dart').readAsStringSync();
+      expect(notifServiceCode.contains('defaultTargetPlatform == TargetPlatform.android'), isTrue);
+      expect(notifServiceCode.contains('_showLocalNotification(message)'), isTrue);
+    });
+
     test('GoogleService-Info.plist exists and contains valid iOS Google configuration', () {
       final plistFile = File('ios/Runner/GoogleService-Info.plist');
       expect(plistFile.existsSync(), isTrue);

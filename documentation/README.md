@@ -257,55 +257,64 @@ Backend tarafında `functions/index.js` dosyasında yer alan **26 adet Cloud Fun
 
 ## 11. 🚀 Üretim (Production) Süreci, Dağıtım ve Hızlı Komutlar
 
-### 📱 Mobil Uygulama (Flutter & Shorebird Code-Push)
+FırsatKolik ekosisteminde yer alan tüm servislerin (Cloud Functions, Firestore Rules & Indexes, Storage, Web Admin, Hosting, Telegram Bot VM Konteynerleri, Android AAB/Shorebird ve iOS TestFlight CI/CD) **kesintisiz, sıfır veri kaybı ve mutlak izolasyonla** dağıtılabilmesi için resmi **Master Deployment Rehberi** hazırlanmıştır:
+
+> 📘 **Kapsamlı Dağıtım Kılavuzu:**  
+> 🔗 **[Master Deployment ve DevOps Orkestrasyon Rehberi](file:///d:/firsatkolik/documentation/yayin-ve-surec/MASTER_DEPLOYMENT_REHBERI.md)**  
+> *Tüm teknolojilerin dökümü, DEV/PROD matrisi, 7 katmanlı hiyerarşik dağıtım sırası, otomatik GitHub Actions iş akışı, tek tıkla rollback ve acil durum kurtarma protokolleri bu rehberde toplanmıştır.*
+
+### ⚡ Hızlı Dağıtım Komutları Özeti (Master Deployment Summary)
+
+#### 1. Güvenlik Kuralları, İndeksler ve Storage
 ```bash
-# DEV ortamında kendi cihazında test etme
-flutter run -d <cihaz_id> --flavor dev --dart-define=FLAVOR=dev
+# DEV
+firebase deploy --only firestore,storage -P dev
 
-# 1. Google Play Store İçin İlk Sürümü Derleme (Shorebird Release)
-shorebird release android --flavor prod -t lib/main.dart
-
-# 2. Canlıdaki Kullanıcılara Anlık Kod Yaması Gönderme (Shorebird Patch - Mağaza Onaysız)
-shorebird patch android --flavor prod -t lib/main.dart
+# PROD
+firebase deploy --only firestore,storage -P prod
 ```
 
-*Detaylı Code-Push stratejileri ve CI/CD akışı için: [Flutter Canlı Kod Güncelleme Rehberi](file:///d:/firsatkolik/documentation/mobil-ve-ui/flutter_live_code_push_and_hot_reload_strategies.md)*
-
-### ⚡ Cloud Functions, Güvenlik Kuralları ve Web Admin Deploy
+#### 2. Cloud Functions (27 Servis) ve Web Admin Hosting
 ```bash
-# DEV Ortamına Dağıtım
-firebase use dev
-firebase deploy --only functions,firestore,storage,hosting
+# DEV
+firebase deploy --only functions,hosting -P dev
 
-# PROD (Canlı) Ortamına Dağıtım
-firebase use prod
-firebase deploy --only functions,firestore,storage,hosting --force
+# PROD (Canlıya Çıkış)
+firebase deploy --only functions,hosting -P prod --force
 ```
 
-### 🤖 Telegram Botunu Sanal Makinede Güncelleme (VM Deploy)
+#### 3. Otonom Telegram Botu (GCP VM Docker Dağıtımı)
 ```bash
 cd cloud-run-bot
-
-# DEV Botunu Güncelle
-python deploy_to_vm.py dev
-
-# PROD Botunu Güncelle
-python deploy_to_vm.py prod
+python deploy_to_vm.py dev   # DEV Bot (Port 8081)
+python deploy_to_vm.py prod  # PROD Bot (Port 8082)
+cd ..
 ```
 
-### 🔍 Sunucu Sağlık ve Log Kontrolü
+#### 4. Mobil Yayınlar (Google Play & iOS TestFlight)
 ```bash
-# Sağlık Kontrolü
-curl http://34.135.181.112:8081/health  # DEV
-curl http://34.135.181.112:8082/health  # PROD
+# Android Standart AAB Derlemesi
+scripts\build_release_aab.bat
 
-# VM İçerisinde Canlı Logları İzleme (SSH)
-gcloud compute ssh telegram-bot-server --zone=us-central1-a --project=firsatkolik-prod-e6eae
-pm2 logs dev-bot
-pm2 logs prod-bot
+# Android Shorebird OTA Destekli Release
+shorebird release android --flavor prod -t lib/main.dart
+
+# Canlıdaki Kullanıcılara Mağaza Onaysız Anlık Kod Yaması (Patch)
+shorebird patch android --flavor prod -t lib/main.dart
+
+# iOS TestFlight Dağıtımı (GitHub Actions Terminalden Tetikleme)
+gh workflow run ios_testflight_deploy.yml -f flavor=prod -f upload_to_testflight=true
+```
+
+#### 5. Sunucu Sağlık ve Telemetri Kontrolleri
+```bash
+curl http://34.135.181.112:8081/health  # DEV Bot
+curl http://34.135.181.112:8082/health  # PROD Bot
+curl.exe -I https://firsatkolik.app/     # Canlı Web Vitrini & SSL
 ```
 
 ### 📚 İlgili Yayın ve Süreç Dokümanları:
+* 🔗 [Master Deployment ve DevOps Orkestrasyon Rehberi](file:///d:/firsatkolik/documentation/yayin-ve-surec/MASTER_DEPLOYMENT_REHBERI.md) — [MASTER KONTRAT] Uçtan uca hiyerarşik dağıtım protokolü, komutlar, ortam matrisi ve acil durum rollback kılavuzu.
 * 🔗 [iOS TestFlight ve CI/CD Dağıtım Rehberi](file:///d:/firsatkolik/documentation/yayin-ve-surec/ios_testflight_ve_ci_cd_kurulum_rehberi.md) — Sıfır Mac ile GitHub Actions (macOS M2) üzerinden TestFlight dağıtım el kitabı.
 * 🔗 [iOS Production ve Mimari Kontrol Rehberi](file:///d:/firsatkolik/documentation/yayin-ve-surec/ios_production_ve_mimari_kontrol_rehberi.md) — Uçtan uca iOS uyumluluk denetimi, APNs mimarisi ve App Store onay checklist'i.
 * 🔗 [Android Production Çıkış ve Büyüme Yol Haritası](file:///d:/firsatkolik/documentation/yayin-ve-surec/firsatkolik_production_roadmap.md) — 7 fazlık kapsamlı Google Play yayın el kitabı.
@@ -395,7 +404,11 @@ documentation/
 ├── 📁 web-ve-domain/                                         # Resmi Web Vitrini, Domain & Hosting Altyapısı
 │   └── 📄 domain_ve_web_showcase_rehberi.md                  # [MASTER KONTRAT] firsatkolik.app, Cloudflare DNS, SSL & Amazon Yasal Uyum Rehberi
 │
+├── 📁 observability/                                         # Canlı Trafik, Aksiyonlar, Hata & Performans
+│   └── 📄 observability_rehberi.md                           # [MASTER KONTRAT] Canlı Trafik, Kullanıcı Aksiyonları, Hata ve Performans İzleme (Observability) Rehberi
+│
 └── 📁 yayin-ve-surec/                                        # Store Yayın, iOS Uyumluluk & İlerleme
+    ├── 📄 MASTER_DEPLOYMENT_REHBERI.md                       # [MASTER KONTRAT] Uçtan Uca Master Dağıtım, DEV/PROD Hiyerarşisi, CI/CD, AAB & Shorebird Rehberi
     ├── 📄 ios_testflight_ve_ci_cd_kurulum_rehberi.md         # [YENİ] Sıfır Mac ile GitHub Actions & TestFlight Dağıtım El Kitabı
     ├── 📄 ios_production_ve_mimari_kontrol_rehberi.md        # [YENİ] Uçtan Uca iOS Uyumluluk, Checklist ve App Store Yayın Rehberi
     ├── 📄 firsatkolik_production_roadmap.md                  # 7 Fazlık Production Çıkış ve Büyüme Rehberi

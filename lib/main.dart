@@ -6,10 +6,11 @@ import 'package:firebase_performance/firebase_performance.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, FlutterError;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, FlutterError, defaultTargetPlatform;
 import 'dart:async';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
+import 'services/analytics_service.dart';
 import 'services/notification_service.dart';
 import 'services/theme_service.dart';
 import 'services/connectivity_service.dart';
@@ -76,7 +77,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     title = data['notification_title'] ?? '💬 $senderName';
     body = data['notification_body'] ?? data['messageText'] ?? 'Yeni mesaj';
     payload = 'message:$senderId:$senderName:$body';
-    channelId = 'messages_channel';
+    channelId = 'messages_channel_v3';
   }
 
   if (title == null || body == null) return;
@@ -113,10 +114,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     enableVibration: true,
   );
   const androidChannelUserMsg = AndroidNotificationChannel(
-    'messages_channel',
-    'Mesajlar',
-    description: 'Sohbet bildirimleri',
-    importance: Importance.high,
+    'messages_channel_v3',
+    'Mesaj Bildirimleri',
+    description: 'Kullanıcılar arası mesajlaşma bildirimleri',
+    importance: Importance.max,
     playSound: true,
     enableVibration: true,
   );
@@ -150,7 +151,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           channelId,
           channelId == 'admin_messages_channel_v3'
               ? 'Admin Mesajları'
-              : (channelId == 'messages_channel' ? 'Mesajlar' : 'Admin Bildirimleri'),
+              : (channelId == 'messages_channel_v3' ? 'Mesaj Bildirimleri' : 'Admin Bildirimleri'),
           channelDescription: 'Bildirim',
           importance: Importance.max,
           priority: Priority.max,
@@ -226,6 +227,17 @@ void main() async {
       _log('✅ Firebase Performance Monitoring aktifleştirildi');
     } catch (e) {
       _log('⚠️ Firebase Performance Monitoring başlatma hatası: $e');
+    }
+
+    // Crashlytics ve Observability Ortam Parametreleri
+    try {
+      final envFlavor = isProductionFlavor ? 'prod' : 'dev';
+      final platformName = kIsWeb ? 'web' : defaultTargetPlatform.name;
+      await FirebaseCrashlytics.instance.setCustomKey('flavor', envFlavor);
+      await FirebaseCrashlytics.instance.setCustomKey('platform', platformName);
+      _log('✅ Crashlytics ortam parametreleri aktifleştirildi: flavor=$envFlavor, platform=$platformName');
+    } catch (e) {
+      _log('⚠️ Crashlytics setCustomKey hatası: $e');
     }
     
     // AdMob Başlatıcı Yardımcı Fonksiyonu
@@ -392,6 +404,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         darkTheme: darkTheme,
         themeMode: _themeService.themeMode,
         navigatorKey: navigatorKey,
+        navigatorObservers: [
+          AnalyticsService.instance.observer,
+        ],
         builder: (context, child) {
           return RepaintBoundary(
             key: rootRepaintBoundaryKey,
@@ -642,6 +657,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             // Kullanıcı zaten giriş yapmış
             if (_lastUserId != currentUser.uid) {
               _lastUserId = currentUser.uid;
+              AnalyticsService.instance.setUser(currentUser.uid);
               // Önce engelleme kontrolü yap
               _checkAndHandleBlockedUser(currentUser.uid).then((isBlocked) {
                 // Engellenmemişse bildirim servisini başlat
@@ -668,6 +684,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           if (currentUser != null) {
             if (_lastUserId != currentUser.uid) {
               _lastUserId = currentUser.uid;
+              AnalyticsService.instance.setUser(currentUser.uid);
               // Önce engelleme kontrolü yap
               _checkAndHandleBlockedUser(currentUser.uid).then((isBlocked) {
                 // Engellenmemişse bildirim servisini başlat
@@ -687,6 +704,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           // Kullanıcı değiştiyse _lastUserId'yi güncelle ve bildirim servisini başlat
           if (_lastUserId != currentUserId) {
             _lastUserId = currentUserId;
+            AnalyticsService.instance.setUser(currentUserId);
             // Önce engelleme kontrolü yap
             _checkAndHandleBlockedUser(currentUserId).then((isBlocked) {
               // Engellenmemişse bildirim servisini başlat
@@ -706,6 +724,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           // Kullanıcı varsa ama stream henüz güncellenmemiş
           if (_lastUserId != currentUser.uid) {
             _lastUserId = currentUser.uid;
+            AnalyticsService.instance.setUser(currentUser.uid);
             // Önce engelleme kontrolü yap
             _checkAndHandleBlockedUser(currentUser.uid).then((isBlocked) {
               // Engellenmemişse bildirim servisini başlat
@@ -723,6 +742,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           _notificationService.clearAllSubscriptions();
           _blockedUserListener?.cancel();
           _blockedUserListener = null;
+          AnalyticsService.instance.setUser(null);
         }
         _lastUserId = null;
         _log('No user logged in (Guest Mode Active)');

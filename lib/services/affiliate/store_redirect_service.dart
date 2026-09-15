@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/deal.dart';
 import '../../widgets/affiliate/store_redirect_dialog.dart';
+import '../analytics_service.dart';
+import 'package:firebase_performance/firebase_performance.dart';
 import 'adapters/hepsiburada_affiliate_adapter.dart';
 import 'adapters/amazon_affiliate_adapter.dart';
 import 'affiliate_service.dart';
@@ -36,6 +38,9 @@ class StoreRedirectService {
     BuildContext context, {
     required String rawUrl,
     String? storeName,
+    String? dealId,
+    String? category,
+    double? price,
   }) async {
     if (rawUrl.isEmpty) {
       if (context.mounted) {
@@ -45,6 +50,12 @@ class StoreRedirectService {
       }
       return;
     }
+
+    Trace? redirectTrace;
+    try {
+      redirectTrace = FirebasePerformance.instance.newTrace('store_redirect_latency');
+      await redirectTrace.start();
+    } catch (_) {}
 
     try {
       // 1. URL Temizleme / Normalizasyon
@@ -56,6 +67,19 @@ class StoreRedirectService {
       // 2. Kill-Switch Kontrolü (Web Admin Ayarı)
       final adapter = AffiliateService.getAdapter(cleanUrl);
       final bool isAffiliateEnabled = adapter != null && adapter.isEnabled;
+
+      final effectiveStoreName = storeName?.isNotEmpty == true 
+          ? storeName! 
+          : (adapter?.storeName ?? 'Mağaza');
+
+      // Observability: "Fırsata Git" Outbound Affiliate Tıklaması
+      AnalyticsService.instance.logDealOutboundClick(
+        dealId: dealId ?? 'unknown',
+        storeName: effectiveStoreName,
+        category: category ?? 'diger',
+        price: price,
+        url: cleanUrl,
+      );
 
       if (adapter != null && !adapter.isEnabled) {
         _log('🛑 [AFFILIATE-KILLSWITCH] ${adapter.storeName} affiliate şalteri KAPALI. Organik linke unwrap ediliyor: $cleanUrl');
@@ -71,9 +95,6 @@ class StoreRedirectService {
       }
 
       final uri = Uri.parse(cleanUrl);
-      final effectiveStoreName = storeName?.isNotEmpty == true 
-          ? storeName! 
-          : (adapter?.storeName ?? 'Mağaza');
 
       // 3. Şalter KAPALI veya Desteklenmeyen Normal Mağaza ise:
       // Eskisi gibi organik link doğrudan açılır (0 ms native app veya browser; geçiş HUD'ı açılmaz).
@@ -156,6 +177,10 @@ class StoreRedirectService {
           ),
         );
       }
+    } finally {
+      try {
+        await redirectTrace?.stop();
+      } catch (_) {}
     }
   }
 
