@@ -157,24 +157,10 @@ def main():
 
         # 8. firebase_analytics (Fixes FIRAnalytics and FIRConsentType undeclared identifier in Xcode 16)
         for p in glob.glob(os.path.join(cache_dir, "firebase_analytics-*", "ios", "Classes", "**", "*.[hm]"), recursive=True):
-            try:
-                with open(p, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
-                if "@import FirebaseAnalytics;" not in content:
-                    if "#import <Firebase/Firebase.h>" in content:
-                        new_content = content.replace("#import <Firebase/Firebase.h>", "@import FirebaseAnalytics;\n@import FirebaseCore;")
-                    elif "@import FirebaseCore;" in content:
-                        new_content = content.replace("@import FirebaseCore;", "@import FirebaseAnalytics;\n@import FirebaseCore;")
-                    else:
-                        new_content = None
-
-                    if new_content:
-                        with open(p, "w", encoding="utf-8", newline="\n") as f:
-                            f.write(new_content)
-                        print(f"   [+] Patched (FirebaseAnalytics): {os.path.basename(p)} ({p})")
-                        total_patched += 1
-            except Exception as e:
-                print(f"   [!] Error patching {p}: {e}")
+            if patch_file(p, [
+                ("#import <Firebase/Firebase.h>", "@import FirebaseAnalytics;\n@import FirebaseCore;")
+            ]):
+                total_patched += 1
 
         # 9. Fallback for any other firebase_* package headers importing <Firebase/Firebase.h>
         for p in glob.glob(os.path.join(cache_dir, "firebase_*", "ios", "Classes", "**", "*.[hm]"), recursive=True):
