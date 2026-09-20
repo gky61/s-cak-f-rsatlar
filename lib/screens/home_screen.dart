@@ -6,6 +6,7 @@ import '../services/firestore_service.dart';
 import '../services/deal_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
+import '../services/app_badge_service.dart';
 import '../services/analytics_service.dart';
 import '../services/theme_service.dart';
 import '../services/deal_search_engine.dart';
@@ -414,6 +415,12 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() {
               _unreadNotificationCount = unreadCount;
             });
+            final totalBadge = _unreadNotificationCount + _unreadMessageCount + _unreadAdminMessageCount;
+            if (totalBadge <= 0) {
+              AppBadgeService.instance.clearBadge();
+            } else {
+              AppBadgeService.instance.setBadge(totalBadge);
+            }
           }
         },
         onError: (err) => _log('⚠️ HomeScreen unread notification count stream error: $err'),
@@ -1209,7 +1216,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   MaterialPageRoute(
                                     builder: (_) => const AdminNotificationsScreen(),
                                   ),
-                                );
+                                ).then((_) {
+                                  AppBadgeService.instance.syncBadgeWithFirestore();
+                                });
                               },
                               isDark: isDark,
                             ),

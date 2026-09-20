@@ -121,6 +121,9 @@ void main() {
           'senderName': senderName,
           'messageText': messageText,
         };
+      } else if (payload.startsWith('coupon:')) {
+        final kuponId = payload.substring('coupon:'.length);
+        return {'type': 'coupon', 'kuponId': kuponId.isNotEmpty ? kuponId : null};
       } else {
         return {'type': 'deal', 'dealId': payload};
       }
@@ -132,6 +135,12 @@ void main() {
       expect(res['senderId'], 'user_456');
       expect(res['senderName'], 'Ahmet Yılmaz');
       expect(res['messageText'], 'Saat 14:30 da buluşalım: tamam mı?');
+    });
+
+    test('Parses coupon payload', () {
+      final res = parsePayload('coupon:kupon_abc_123');
+      expect(res['type'], 'coupon');
+      expect(res['kuponId'], 'kupon_abc_123');
     });
 
     test('Parses admin message payload', () {
@@ -189,12 +198,18 @@ void main() {
         mergedMap[m.id] = m;
       }
       for (var m in optimisticList) {
-        final hasDuplicate = serverMessages.any((sm) =>
-          sm.id == m.id ||
-          (sm.senderId == m.senderId &&
-           sm.text.trim() == m.text.trim() &&
-           sm.createdAt.difference(m.createdAt).inSeconds.abs() < 120)
-        );
+        final isIncomingSeed = m.senderId == 'user_sender' || m.id.startsWith('incoming_');
+        final hasDuplicate = isIncomingSeed
+            ? serverMessages.any((sm) =>
+                sm.id == m.id ||
+                (sm.senderId == m.senderId &&
+                 (sm.text.trim() == m.text.trim() ||
+                  (m.text.trim().endsWith('...') && sm.text.trim().startsWith(m.text.trim().substring(0, m.text.trim().length - 3).trim())))))
+            : serverMessages.any((sm) =>
+                sm.id == m.id ||
+                (sm.senderId == m.senderId &&
+                 sm.text.trim() == m.text.trim() &&
+                 sm.createdAt.difference(m.createdAt).inSeconds.abs() < 120));
         if (!hasDuplicate) mergedMap[m.id] = m;
       }
 
@@ -238,17 +253,35 @@ void main() {
         ),
       ];
 
+      // PROD-READY Eviction & Reconciliation
+      optimisticList.removeWhere((om) {
+        final isIncomingSeed = om.senderId == 'user_sender' || om.id.startsWith('incoming_');
+        if (!isIncomingSeed) return false;
+        return serverMessages.any((sm) =>
+          sm.id == om.id ||
+          (sm.senderId == om.senderId &&
+           (sm.text.trim() == om.text.trim() ||
+            (om.text.trim().endsWith('...') && sm.text.trim().startsWith(om.text.trim().substring(0, om.text.length - 3).trim()))))
+        );
+      });
+
       mergedMap = {};
       for (var m in serverMessages) {
         mergedMap[m.id] = m;
       }
       for (var m in optimisticList) {
-        final hasDuplicate = serverMessages.any((sm) =>
-          sm.id == m.id ||
-          (sm.senderId == m.senderId &&
-           sm.text.trim() == m.text.trim() &&
-           sm.createdAt.difference(m.createdAt).inSeconds.abs() < 120)
-        );
+        final isIncomingSeed = m.senderId == 'user_sender' || m.id.startsWith('incoming_');
+        final hasDuplicate = isIncomingSeed
+            ? serverMessages.any((sm) =>
+                sm.id == m.id ||
+                (sm.senderId == m.senderId &&
+                 (sm.text.trim() == m.text.trim() ||
+                  (m.text.trim().endsWith('...') && sm.text.trim().startsWith(m.text.trim().substring(0, m.text.trim().length - 3).trim())))))
+            : serverMessages.any((sm) =>
+                sm.id == m.id ||
+                (sm.senderId == m.senderId &&
+                 sm.text.trim() == m.text.trim() &&
+                 sm.createdAt.difference(m.createdAt).inSeconds.abs() < 120));
         if (!hasDuplicate) mergedMap[m.id] = m;
       }
 
@@ -262,6 +295,161 @@ void main() {
       expect(allMessages[0].text, equals('Harika bir fırsat buldum!'));
       expect(allMessages[1].id, equals('server_real_doc_older'));
       expect(allMessages[1].text, equals('Eski mesaj'));
+    });
+
+    test('Incoming seeded message NEVER duplicates even after 24-minute delay (User Screenshot Bug Simulation)', () {
+      final now = DateTime.now();
+      // Gönderici mesajı 15:53'te attı (24 dakika önce)
+      final originalSentTime = now.subtract(const Duration(minutes: 24));
+
+      // Kullanıcı bildirime 16:17'de (now) tıkladı
+      final incomingSeedMessage = Message(
+        id: 'incoming_${now.millisecondsSinceEpoch}',
+        conversationId: 'conv_gky61',
+        senderId: 'gky61',
+        senderName: 'gky61',
+        senderImageUrl: '',
+        receiverId: 'my_user_id',
+        receiverName: '',
+        receiverImageUrl: '',
+        text: 'Neyse hata olmasın da',
+        createdAt: now, // 16:17
+        isRead: true,
+        status: 'sent',
+      );
+
+      final optimisticList = [incomingSeedMessage];
+
+      // Firestore'dan gelen gerçek mesajlar (15:53 tarihli)
+      final serverMessages = [
+        Message(
+          id: 'firestore_msg_real_001',
+          conversationId: 'conv_gky61',
+          senderId: 'gky61',
+          senderName: 'gky61',
+          senderImageUrl: '',
+          receiverId: 'my_user_id',
+          receiverName: '',
+          receiverImageUrl: '',
+          text: 'Neyse hata olmasın da',
+          createdAt: originalSentTime, // 15:53 (24 dk fark!)
+          isRead: false,
+          status: 'delivered',
+        ),
+        Message(
+          id: 'firestore_msg_real_002',
+          conversationId: 'conv_gky61',
+          senderId: 'gky61',
+          senderName: 'gky61',
+          senderImageUrl: '',
+          receiverId: 'my_user_id',
+          receiverName: '',
+          receiverImageUrl: '',
+          text: 'Acaba o da mı oldu',
+          createdAt: originalSentTime.subtract(const Duration(seconds: 10)),
+          isRead: true,
+          status: 'read',
+        ),
+      ];
+
+      // PROD-READY Eviction & Reconciliation çalıştır
+      optimisticList.removeWhere((om) {
+        final isIncomingSeed = om.senderId == 'gky61' || om.id.startsWith('incoming_');
+        if (!isIncomingSeed) return false;
+        return serverMessages.any((sm) =>
+          sm.id == om.id ||
+          (sm.senderId == om.senderId &&
+           (sm.text.trim() == om.text.trim() ||
+            (om.text.trim().endsWith('...') && sm.text.trim().startsWith(om.text.trim().substring(0, om.text.length - 3).trim()))))
+        );
+      });
+
+      final Map<String, Message> mergedMap = {};
+      for (var m in serverMessages) {
+        mergedMap[m.id] = m;
+      }
+      for (var m in optimisticList) {
+        final isIncomingSeed = m.senderId == 'gky61' || m.id.startsWith('incoming_');
+        final hasDuplicate = isIncomingSeed
+            ? serverMessages.any((sm) =>
+                sm.id == m.id ||
+                (sm.senderId == m.senderId &&
+                 (sm.text.trim() == m.text.trim() ||
+                  (m.text.trim().endsWith('...') && sm.text.trim().startsWith(m.text.trim().substring(0, m.text.trim().length - 3).trim())))))
+            : serverMessages.any((sm) =>
+                sm.id == m.id ||
+                (sm.senderId == m.senderId &&
+                 sm.text.trim() == m.text.trim() &&
+                 sm.createdAt.difference(m.createdAt).inSeconds.abs() < 120));
+        if (!hasDuplicate) mergedMap[m.id] = m;
+      }
+
+      final allMessages = mergedMap.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // KRİTİK DOĞRULAMA:
+      // 1. Tohum mesaj listeden temizlenmeli (evicted)
+      expect(optimisticList.isEmpty, isTrue);
+      // 2. Toplam mesaj sayısı tam 2 olmalı (mükerrer/hayalet 16:17 mesajı OLMAMALI!)
+      expect(allMessages.length, equals(2));
+      // 3. En son mesaj 15:53 tarihli gerçek Firestore mesajı olmalı
+      expect(allMessages[0].id, equals('firestore_msg_real_001'));
+      expect(allMessages[0].text, equals('Neyse hata olmasın da'));
+      expect(allMessages[0].createdAt, equals(originalSentTime));
+      // 4. İkinci mesaj bir önceki mesaj olmalı
+      expect(allMessages[1].text, equals('Acaba o da mı oldu'));
+    });
+
+    test('Incoming truncated notification body with ellipsis dedups against full server message', () {
+      final now = DateTime.now();
+
+      // Bildirim gövdesi 100 karaktere kesilmiş mesaj
+      final incomingSeedMessage = Message(
+        id: 'incoming_truncated_123',
+        conversationId: 'conv_user',
+        senderId: 'user_long',
+        senderName: 'Yazar',
+        senderImageUrl: '',
+        receiverId: 'my_id',
+        receiverName: '',
+        receiverImageUrl: '',
+        text: 'Bu çok uzun bir mesajdır ve bildirim payloadı içerisine sığmadığı için yüz karaktere kesilmiştir...',
+        createdAt: now,
+        isRead: true,
+        status: 'sent',
+      );
+
+      final optimisticList = [incomingSeedMessage];
+
+      final serverMessages = [
+        Message(
+          id: 'server_long_001',
+          conversationId: 'conv_user',
+          senderId: 'user_long',
+          senderName: 'Yazar',
+          senderImageUrl: '',
+          receiverId: 'my_id',
+          receiverName: '',
+          receiverImageUrl: '',
+          text: 'Bu çok uzun bir mesajdır ve bildirim payloadı içerisine sığmadığı için yüz karaktere kesilmiştir ve devamında çok önemli bilgiler vardır.',
+          createdAt: now.subtract(const Duration(minutes: 10)),
+          isRead: false,
+          status: 'delivered',
+        ),
+      ];
+
+      optimisticList.removeWhere((om) {
+        final isIncomingSeed = om.senderId == 'user_long' || om.id.startsWith('incoming_');
+        if (!isIncomingSeed) return false;
+        return serverMessages.any((sm) =>
+          sm.id == om.id ||
+          (sm.senderId == om.senderId &&
+           (sm.text.trim() == om.text.trim() ||
+            (om.text.trim().endsWith('...') && sm.text.trim().startsWith(om.text.trim().substring(0, om.text.length - 3).trim()))))
+        );
+      });
+
+      expect(optimisticList.isEmpty, isTrue);
     });
   });
 

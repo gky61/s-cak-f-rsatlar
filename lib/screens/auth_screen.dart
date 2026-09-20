@@ -248,7 +248,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _sendEmail() async {
     final Uri emailUri = Uri(
       scheme: 'mailto',
-      path: 'kolikfirsat@gmail.com',
+      path: 'destek@firsatkolik.app',
     );
     
     try {
@@ -256,7 +256,7 @@ class _AuthScreenState extends State<AuthScreen> {
         await launchUrl(emailUri);
       } else {
         if (mounted) {
-          _showError('E-posta uygulaması açılamadı. Lütfen manuel olarak kolikfirsat@gmail.com adresine mail gönderin.');
+          _showError('E-posta uygulaması açılamadı. Lütfen manuel olarak destek@firsatkolik.app adresine mail gönderin.');
         }
       }
     } catch (e) {

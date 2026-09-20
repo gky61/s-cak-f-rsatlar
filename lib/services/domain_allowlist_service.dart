@@ -34,7 +34,9 @@ class DomainAllowlistService {
     "migros": ["migros.com.tr"],
     "getir": ["getir.com"],
     "havit_turkiye": ["havitstore.com.tr"],
-    "boyner": ["boyner.com.tr"]
+    "boyner": ["boyner.com.tr"],
+    "gamer_gen": ["gamer.gen.tr"],
+    "gaming_gen": ["gaming.gen.tr"]
   };
 
   static final Set<String> _fallbackAllowedDomains = _fallbackStores.values

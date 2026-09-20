@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data'; // For Int64List
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -9,8 +10,6 @@ import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, defaultTargetP
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification_preferences.dart';
-import '../models/notification_subscription.dart';
-import '../models/user_device.dart';
 import 'analytics_service.dart';
 
 import '../main.dart'; // navigatorKey için
@@ -19,7 +18,41 @@ import '../screens/admin_notifications_screen.dart';
 import '../screens/admin_screen.dart';
 import '../screens/message_screen.dart';
 import '../screens/messages_list_screen.dart';
+import '../screens/kuponlar_page.dart';
 import '../widgets/in_app_message_banner.dart';
+
+/// Bildirim yönlendirme hedef tipleri
+enum NotificationDestinationType {
+  deal,
+  chat,
+  messagesList,
+  adminChat,
+  adminScreen,
+  adminNotifications,
+  coupons,
+  none,
+}
+
+/// Bildirim yönlendirme karar modeli
+class NotificationRoutingDecision {
+  final NotificationDestinationType destination;
+  final String? dealId;
+  final String? commentId;
+  final String? senderId;
+  final String? senderName;
+  final String? kuponId;
+  final int initialTabIndex;
+
+  const NotificationRoutingDecision({
+    required this.destination,
+    this.dealId,
+    this.commentId,
+    this.senderId,
+    this.senderName,
+    this.kuponId,
+    this.initialTabIndex = 0,
+  });
+}
 
 /// Debug modda log yazdır
 void _log(String message) {
@@ -37,6 +70,9 @@ class NotificationService {
 
   static final StreamController<String> logStream = StreamController<String>.broadcast();
   static String? activeChatUserId;
+  static String? activeDealId;
+  static bool isAdminScreenActive = false;
+  static bool isCouponsScreenActive = false;
 
   static bool _notificationListenersSetup = false;
   static bool _isLocalNotificationsInitialized = false;
@@ -48,9 +84,7 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _keywordListener;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _followDealsListener;
   final Set<String> _notifiedDealIds = <String>{};
-  final Set<String> _notifiedFollowDealIds = <String>{};
   bool _keywordListenerAttached = false;
 
   StreamSubscription<String>? _tokenRefreshSub;
@@ -748,6 +782,14 @@ class NotificationService {
           final dealId = data['dealId']?.toString();
           final isAdmin = senderId == 'admin';
 
+          DateTime? messageCreatedAt;
+          final rawTs = data['createdAt'];
+          if (rawTs is Timestamp) {
+            messageCreatedAt = rawTs.toDate();
+          } else if (rawTs is String && rawTs.isNotEmpty) {
+            messageCreatedAt = DateTime.tryParse(rawTs);
+          }
+
           _log('💬 [Firestore Realtime] Ön plan mesaj afişi açılıyor: $senderName ($senderId)');
           InAppMessageBanner.show(
             context: null,
@@ -755,6 +797,8 @@ class NotificationService {
             senderName: senderName,
             senderImageUrl: senderImageUrl,
             messageText: messageText,
+            messageId: messageId,
+            messageCreatedAt: messageCreatedAt,
             isAdminMessage: isAdmin,
             dealTitle: dealTitle,
             dealId: dealId,
@@ -886,7 +930,7 @@ class NotificationService {
   // Onay bekleyen fırsatları dinle (Admin için - Bot & Kullanıcı Hepsi)
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _adminDealsListener;
 
-  void _setupAdminDealsListener() {
+  void setupAdminDealsListener() {
     // Sadece admin çağırmalı (üst blokta kontrol ediliyor ama double-check)
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
@@ -1134,7 +1178,7 @@ class NotificationService {
     _log('KeywordCheck çağrıldı: $title');
   }
 
-  Future<void> _startKeywordListener() async {
+  Future<void> startKeywordListener() async {
     if (_keywordListenerAttached) return;
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
@@ -1242,6 +1286,141 @@ class NotificationService {
   static DateTime? _lastHandledTapTime;
   static String? _lastHandledTapKey;
 
+  /// Bildirim yönlendirme kararını çözen saf (pure) ve test edilebilir resolver
+  static NotificationRoutingDecision resolveRouting(Map<String, dynamic> data) {
+    final rawType = (data['type'] ?? 'deal').toString().trim().toLowerCase();
+    final reason = (data['reason'] ?? data['channel'] ?? '').toString().trim().toLowerCase();
+
+    final dealId = (
+      data['dealId'] ??
+      data['deal_id'] ??
+      data['targetDealId'] ??
+      data['target_deal_id'] ??
+      ''
+    ).toString().trim();
+
+    final commentId = (
+      data['commentId'] ??
+      data['comment_id'] ??
+      data['targetCommentId'] ??
+      ''
+    ).toString().trim();
+
+    final isDirectMessage = rawType == 'message' || rawType == 'user_message' || rawType == 'chat';
+
+    // Mesajlaşma Gönderici ID'si:
+    // SADECE açıkça mesaj tiplerinde (message, user_message, chat) userId fallback'i kullanılır.
+    // Fırsat veya kelime bildirimlerindeki hedef/sahip userId alanı asla sohbet göndericisi sanılmamalıdır.
+    String senderId = (
+      data['senderId'] ??
+      data['sender_id'] ??
+      data['senderUid'] ??
+      data['sender_uid'] ??
+      data['fromUserId'] ??
+      data['from_user_id'] ??
+      ''
+    ).toString().trim();
+
+    if (senderId.isEmpty && isDirectMessage) {
+      senderId = (data['userId'] ?? data['user_id'] ?? '').toString().trim();
+    }
+
+    final senderName = (
+      data['senderName'] ??
+      data['sender_name'] ??
+      data['notification_title'] ??
+      'Kullanıcı'
+    ).toString().replaceAll('💬 ', '').trim();
+
+    // 1. Yönetici Mesajı / Duyurusu
+    if (rawType == 'admin_message') {
+      return const NotificationRoutingDecision(destination: NotificationDestinationType.adminChat);
+    }
+
+    // 2. Yönetici Bildirim Merkezi
+    if (rawType == 'admin_notifications') {
+      return const NotificationRoutingDecision(destination: NotificationDestinationType.adminNotifications);
+    }
+
+    // 2.1 Kullanıcı Fırsat Gönderim Durumu (submission_status)
+    if (rawType == 'submission_status') {
+      final status = (data['status'] ?? '').toString().trim().toLowerCase();
+      if ((status == 'approved' || status.isEmpty) && dealId.isNotEmpty) {
+        return NotificationRoutingDecision(
+          destination: NotificationDestinationType.deal,
+          dealId: dealId,
+        );
+      }
+      return const NotificationRoutingDecision(destination: NotificationDestinationType.adminNotifications);
+    }
+
+    // 3. Onay Bekleyen Fırsat (Admin)
+    if (rawType == 'admin_deal') {
+      return NotificationRoutingDecision(
+        destination: NotificationDestinationType.adminScreen,
+        dealId: dealId.isNotEmpty ? dealId : null,
+      );
+    }
+
+    // 4. Birebir Sohbet / Kullanıcı Mesajı
+    if (isDirectMessage) {
+      if (senderId.isNotEmpty) {
+        return NotificationRoutingDecision(
+          destination: NotificationDestinationType.chat,
+          senderId: senderId,
+          senderName: senderName,
+          dealId: dealId.isNotEmpty ? dealId : null,
+        );
+      } else {
+        return const NotificationRoutingDecision(destination: NotificationDestinationType.messagesList);
+      }
+    }
+
+    // 5. Yorum veya Yoruma Cevap Bildirimi
+    if (rawType == 'comment' || rawType == 'comment_reply') {
+      if (dealId.isNotEmpty) {
+        return NotificationRoutingDecision(
+          destination: NotificationDestinationType.deal,
+          dealId: dealId,
+          commentId: commentId.isNotEmpty ? commentId : null,
+        );
+      }
+      return const NotificationRoutingDecision(destination: NotificationDestinationType.none);
+    }
+
+    // 5.1. Topluluk Kuponu Bildirimi (NOTIF-15)
+    final kuponId = (
+      data['kuponId'] ??
+      data['kupon_id'] ??
+      data['couponId'] ??
+      data['coupon_id'] ??
+      ''
+    ).toString().trim();
+
+    if (rawType == 'coupon' || rawType == 'community_coupon') {
+      return NotificationRoutingDecision(
+        destination: NotificationDestinationType.coupons,
+        kuponId: kuponId.isNotEmpty ? kuponId : null,
+        initialTabIndex: 1, // Her zaman 'Topluluk Kuponları' sekmesi
+      );
+    }
+
+    // 6. Fırsat Odaklı Tüm Bildirimler (Kelime Takibi, Yazar/Bot Takibi, Kategori, Fırsat, Pazarlama)
+    // dealId içeren TÜM bildirimler öncelikli olarak doğrudan ilgili fırsat detayına yönlendirilir!
+    if (dealId.isNotEmpty || rawType == 'deal' || rawType == 'keyword' || rawType == 'author' || rawType == 'follow' || reason == 'keyword' || reason == 'author' || reason == 'category') {
+      if (dealId.isNotEmpty) {
+        return NotificationRoutingDecision(
+          destination: NotificationDestinationType.deal,
+          dealId: dealId,
+          commentId: commentId.isNotEmpty ? commentId : null,
+        );
+      }
+    }
+
+    // 7. Fırsat ID'si içermeyen pazarlama veya genel duyuru bildirimi
+    return const NotificationRoutingDecision(destination: NotificationDestinationType.none);
+  }
+
   void _startPendingNotificationCheck(Map<String, dynamic> data) {
     _pendingNotificationTapData = data;
     _pendingTimer?.cancel();
@@ -1250,8 +1429,9 @@ class NotificationService {
       attempts++;
       final navigator = navigatorKey.currentState;
       final currentUser = _auth.currentUser;
-      final type = (data['type'] ?? 'deal').toString();
-      final isAuthRequired = type == 'message' || type == 'user_message';
+      final decision = resolveRouting(data);
+      final isAuthRequired = decision.destination == NotificationDestinationType.chat ||
+          decision.destination == NotificationDestinationType.messagesList;
 
       final isReady = navigator != null && (!isAuthRequired || currentUser != null);
 
@@ -1261,7 +1441,9 @@ class NotificationService {
           final pendingData = _pendingNotificationTapData!;
           _pendingNotificationTapData = null;
           _log('🚀 Navigator ve Oturum aktifleşti, bekleyen bildirim açılıyor: $pendingData');
-          _handleNotificationTap(pendingData, isFromPending: true);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _handleNotificationTap(pendingData, isFromPending: true);
+          });
         }
       } else if (attempts > 75) {
         timer.cancel();
@@ -1271,11 +1453,41 @@ class NotificationService {
   }
 
   void _handlePayloadString(String payload) {
+    if (payload.isEmpty) return;
+
+    // JSON formatında payload kontrolü (örn: {"type":"deal","dealId":"xyz"} veya {"dealId":"xyz"})
+    if (payload.trim().startsWith('{') && payload.trim().endsWith('}')) {
+      try {
+        final decoded = jsonDecode(payload);
+        if (decoded is Map<String, dynamic>) {
+          _handleNotificationTap(decoded);
+          return;
+        }
+      } catch (e) {
+        _log('⚠️ Payload JSON ayrıştırma hatası, fallback formatlara geçiliyor: $e');
+      }
+    }
+
+    if (payload.startsWith('{') && payload.endsWith('}')) {
+      try {
+        final decoded = jsonDecode(payload);
+        if (decoded is Map<String, dynamic>) {
+          _handleNotificationTap(decoded);
+          return;
+        }
+      } catch (_) {}
+    }
+
     if (payload.startsWith('admin_message:') || payload == 'admin_message') {
       _handleNotificationTap({'type': 'admin_message'});
     } else if (payload.startsWith('admin_deal:')) {
       final dealId = payload.substring('admin_deal:'.length);
       _handleNotificationTap({'type': 'admin_deal', 'dealId': dealId});
+    } else if (payload.startsWith('submission_status:')) {
+      final parts = payload.split(':');
+      final dealId = parts.length > 1 ? parts[1] : '';
+      final status = parts.length > 2 ? parts[2] : '';
+      _handleNotificationTap({'type': 'submission_status', 'dealId': dealId, 'status': status});
     } else if (payload.startsWith('comment_reply:') || payload.startsWith('comment:')) {
       final parts = payload.split(':');
       final dealId = parts.length > 1 ? parts[1] : '';
@@ -1285,13 +1497,24 @@ class NotificationService {
       final parts = payload.split(':');
       final senderId = parts.length > 1 ? parts[1] : '';
       final senderName = parts.length > 2 ? parts[2] : 'Kullanıcı';
-      final messageText = parts.length > 3 ? parts.sublist(3).join(':') : '';
+      String messageId = '';
+      String messageText = '';
+      if (parts.length > 4 && parts[3].length >= 15 && !parts[3].contains(' ')) {
+        messageId = parts[3];
+        messageText = parts.sublist(4).join(':');
+      } else {
+        messageText = parts.length > 3 ? parts.sublist(3).join(':') : '';
+      }
       _handleNotificationTap({
         'type': 'message',
         'senderId': senderId,
         'senderName': senderName,
+        'messageId': messageId.isNotEmpty ? messageId : null,
         'messageText': messageText,
       });
+    } else if (payload.startsWith('coupon:')) {
+      final kuponId = payload.substring('coupon:'.length);
+      _handleNotificationTap({'type': 'coupon', 'kuponId': kuponId});
     } else {
       _handleNotificationTap({'type': 'deal', 'dealId': payload});
     }
@@ -1303,33 +1526,21 @@ class NotificationService {
 
   // Bildirime tıklandığında yönlendirme yap
   void _handleNotificationTap(Map<String, dynamic> data, {bool isFromPending = false}) {
-    final type = (data['type'] ?? 'deal').toString();
-    _log('🔔 Bildirim yönlendirmesi işleniyor: $type, isFromPending: $isFromPending, data: $data');
-    
-    final senderId = (
-      data['senderId'] ??
-      data['sender_id'] ??
-      data['senderUid'] ??
-      data['sender_uid'] ??
-      data['fromUserId'] ??
-      data['from_user_id'] ??
-      data['userId'] ??
-      data['user_id'] ??
-      ''
-    ).toString().trim();
+    final rawType = (data['type'] ?? 'deal').toString().trim().toLowerCase();
+    final reason = (data['reason'] ?? data['channel'] ?? '').toString().trim().toLowerCase();
+    _log('🔔 Bildirim yönlendirmesi işleniyor: type=$rawType, reason=$reason, isFromPending=$isFromPending, data=$data');
 
-    final dealId = (data['dealId'] ?? data['deal_id'] ?? '').toString().trim();
-    final commentId = (data['commentId'] ?? data['comment_id'] ?? '').toString().trim();
-    final messageId = (data['messageId'] ?? data['message_id'] ?? '').toString().trim();
+    final decision = resolveRouting(data);
 
     // Observability: Bildirim etkileşim telemetrisi
     AnalyticsService.instance.logNotificationInteraction(
-      type: type,
-      reason: (data['reason'] ?? data['channel'] ?? 'push').toString(),
-      dealId: dealId.isNotEmpty ? dealId : null,
+      type: rawType,
+      reason: reason.isNotEmpty ? reason : 'push',
+      dealId: decision.dealId,
     );
 
-    final tapKey = '$type:$senderId:$dealId:$commentId:$messageId';
+    final messageId = (data['messageId'] ?? data['message_id'] ?? '').toString().trim();
+    final tapKey = '$rawType:${decision.senderId ?? ""}:${decision.dealId ?? ""}:${decision.commentId ?? ""}:$messageId';
     final now = DateTime.now();
 
     // 2.5 saniye içinde aynı bildirim tıklaması geldiyse es geç (Sadece direkt kullanıcı tıklamaları için; kuyruktan gelenler engellenmez)
@@ -1342,7 +1553,8 @@ class NotificationService {
 
     final navigator = navigatorKey.currentState;
     final currentUser = _auth.currentUser;
-    final isAuthRequired = type == 'message' || type == 'user_message';
+    final isAuthRequired = decision.destination == NotificationDestinationType.chat ||
+        decision.destination == NotificationDestinationType.messagesList;
 
     if (navigator == null || (isAuthRequired && currentUser == null)) {
       _log('⏳ Navigator veya Oturum henüz hazır değil (${navigator == null ? "Navigator yok" : "Oturum bekleniyor"}), bildirim tıklaması sıraya alındı: $data');
@@ -1356,87 +1568,111 @@ class NotificationService {
     _pendingNotificationTapData = null;
     _pendingTimer?.cancel();
 
-    final senderName = (
-      data['senderName'] ??
-      data['sender_name'] ??
-      data['notification_title'] ??
-      'Kullanıcı'
-    ).toString().replaceAll('💬 ', '').trim();
+    switch (decision.destination) {
+      case NotificationDestinationType.adminChat:
+        _navigateToAdminChat();
+        break;
 
-    final senderImageUrl = (
-      data['senderImageUrl'] ??
-      data['sender_image_url'] ??
-      ''
-    ).toString().trim();
+      case NotificationDestinationType.adminNotifications:
+        _navigateToAdminNotifications();
+        break;
 
-    final messageText = (
-      data['messageText'] ??
-      data['message_text'] ??
-      data['notification_body'] ??
-      data['body'] ??
-      ''
-    ).toString().trim();
+      case NotificationDestinationType.adminScreen:
+        _navigateToAdminScreen(dealId: decision.dealId);
+        break;
 
-    final dealTitle = (data['dealTitle'] ?? data['deal_title'] ?? '').toString().trim();
-    final dealImageUrl = (data['dealImageUrl'] ?? data['deal_image_url'] ?? '').toString().trim();
-    final dealPrice = (data['dealPrice'] ?? data['deal_price'] ?? '').toString().trim();
-    final dealStore = (data['dealStore'] ?? data['deal_store'] ?? '').toString().trim();
-
-    if (type == 'admin_message') {
-      _navigateToAdminChat();
-      return;
-    }
-
-    if (type == 'message' || type == 'user_message' || (senderId.isNotEmpty && type != 'deal' && type != 'comment_reply' && type != 'admin_deal')) {
-      if (senderId.isNotEmpty) {
-        final resolvedName = senderName.isNotEmpty
-            ? senderName
-            : (senderId == 'admin'
+      case NotificationDestinationType.chat:
+        final sId = decision.senderId ?? '';
+        final sName = decision.senderName ?? 'Kullanıcı';
+        final resolvedName = sName.isNotEmpty
+            ? sName
+            : (sId == 'admin'
                 ? 'FırsatKolik Yönetim'
-                : (senderId == 'botkolik' ? 'Botkolik' : 'Kullanıcı'));
-        final resolvedImage = senderImageUrl.isNotEmpty
-            ? senderImageUrl
-            : (senderId == 'admin'
-                ? 'assets/logo.webp'
-                : (senderId == 'botkolik' ? 'assets/botkolik.webp' : null));
+                : (sId == 'botkolik' ? 'Botkolik' : 'Kullanıcı'));
+        final resolvedImage = (sId == 'admin'
+            ? 'assets/logo.webp'
+            : (sId == 'botkolik' ? 'assets/botkolik.webp' : null));
+
+        final messageText = (
+          data['messageText'] ??
+          data['message_text'] ??
+          data['notification_body'] ??
+          data['body'] ??
+          ''
+        ).toString().trim();
+
+        DateTime? messageCreatedAt;
+        final rawCreatedAt = data['createdAt'] ?? data['created_at'] ?? data['timestamp'];
+        if (rawCreatedAt != null) {
+          if (rawCreatedAt is int) {
+            messageCreatedAt = DateTime.fromMillisecondsSinceEpoch(rawCreatedAt);
+          } else if (rawCreatedAt is String && rawCreatedAt.isNotEmpty) {
+            messageCreatedAt = DateTime.tryParse(rawCreatedAt);
+          }
+        }
+
+        final dealTitle = (data['dealTitle'] ?? data['deal_title'] ?? '').toString().trim();
+        final dealImageUrl = (data['dealImageUrl'] ?? data['deal_image_url'] ?? '').toString().trim();
+        final dealPrice = (data['dealPrice'] ?? data['deal_price'] ?? '').toString().trim();
+        final dealStore = (data['dealStore'] ?? data['deal_store'] ?? '').toString().trim();
+
         _navigateToChat(
-          senderId,
+          sId,
           resolvedName,
           userImageUrl: resolvedImage,
           messageText: messageText.isNotEmpty ? messageText : null,
           messageId: messageId.isNotEmpty ? messageId : null,
-          dealId: dealId.isNotEmpty ? dealId : null,
+          messageCreatedAt: messageCreatedAt,
+          dealId: decision.dealId,
           dealTitle: dealTitle.isNotEmpty ? dealTitle : null,
           dealImageUrl: dealImageUrl.isNotEmpty ? dealImageUrl : null,
           dealPrice: dealPrice.isNotEmpty ? dealPrice : null,
           dealStore: dealStore.isNotEmpty ? dealStore : null,
         );
-      } else {
-        _navigateToMessagesList();
-      }
-      return;
-    }
+        break;
 
-    switch (type) {
-      case 'admin_deal':
-        _navigateToAdminScreen();
+      case NotificationDestinationType.messagesList:
+        _navigateToMessagesList();
         break;
-        
-      case 'comment':
-      case 'comment_reply':
-        if (dealId.isNotEmpty) {
-          _navigateToDeal(dealId, commentId: commentId.isNotEmpty ? commentId : null);
+
+      case NotificationDestinationType.deal:
+        if (decision.dealId != null && decision.dealId!.isNotEmpty) {
+          _navigateToDeal(decision.dealId!, commentId: decision.commentId);
         }
         break;
-        
-      case 'keyword':
-      case 'follow':
-      case 'deal':
-      default:
-        if (dealId.isNotEmpty) {
-          _navigateToDeal(dealId);
-        }
+
+      case NotificationDestinationType.coupons:
+        _navigateToCoupons(
+          initialTabIndex: decision.initialTabIndex,
+          kuponId: decision.kuponId,
+        );
         break;
+
+      case NotificationDestinationType.none:
+        _log('ℹ️ Yönlendirme gerektirmeyen bildirim: $data');
+        break;
+    }
+  }
+
+  // Kuponlar sayfasına yönlendirme (Topluluk Kuponları sekmesi)
+  void _navigateToCoupons({int initialTabIndex = 1, String? kuponId}) {
+    final navigator = navigatorKey.currentState;
+    if (navigator != null) {
+      _log('🔔 Kuponlar sayfasına yönlendiriliyor (tab: $initialTabIndex, kuponId: $kuponId)');
+      navigator.push(
+        MaterialPageRoute(
+          builder: (context) => KuponlarPage(
+            initialTabIndex: initialTabIndex,
+            highlightKuponId: kuponId,
+          ),
+        ),
+      );
+    } else {
+      _log('⚠️ Navigator henüz hazır değil, kupon yönlendirmesi sıraya alınıyor');
+      _startPendingNotificationCheck({
+        'type': 'coupon',
+        'kuponId': kuponId ?? '',
+      });
     }
   }
 
@@ -1450,6 +1686,11 @@ class NotificationService {
           builder: (context) => const MessagesListScreen(),
         ),
       );
+    } else {
+      _log('⚠️ Navigator henüz hazır değil, mesajlar listesi sıraya alınıyor');
+      _startPendingNotificationCheck({
+        'type': 'message',
+      });
     }
   }
 
@@ -1460,6 +1701,7 @@ class NotificationService {
     String? userImageUrl,
     String? messageText,
     String? messageId,
+    DateTime? messageCreatedAt,
     String? dealId,
     String? dealTitle,
     String? dealImageUrl,
@@ -1477,6 +1719,7 @@ class NotificationService {
             otherUserImageUrl: userImageUrl ?? '',
             initialIncomingMessageText: messageText,
             initialIncomingMessageId: messageId,
+            initialIncomingMessageTime: messageCreatedAt,
             initialDealId: dealId,
             initialDealTitle: dealTitle,
             initialDealImageUrl: dealImageUrl,
@@ -1494,6 +1737,7 @@ class NotificationService {
         'senderImageUrl': userImageUrl,
         'messageText': messageText,
         'messageId': messageId,
+        'createdAt': messageCreatedAt?.toIso8601String(),
         'dealId': dealId,
         'dealTitle': dealTitle,
         'dealImageUrl': dealImageUrl,
@@ -1522,7 +1766,12 @@ class NotificationService {
         ),
       );
     } else {
-      _log('⚠️ Navigator henüz hazır değil, yönlendirme yapılamıyor');
+      _log('⚠️ Navigator henüz hazır değil, deal yönlendirmesi sıraya alınıyor: $dealId');
+      _startPendingNotificationCheck({
+        'type': 'deal',
+        'dealId': dealId,
+        if (commentId != null && commentId.isNotEmpty) 'commentId': commentId,
+      });
     }
   }
 
@@ -1542,7 +1791,10 @@ class NotificationService {
         ),
       );
     } else {
-      _log('⚠️ Navigator henüz hazır değil, admin sohbet yönlendirmesi yapılamıyor');
+      _log('⚠️ Navigator henüz hazır değil, admin sohbet yönlendirmesi sıraya alınıyor');
+      _startPendingNotificationCheck({
+        'type': 'admin_message',
+      });
     }
   }
 
@@ -1557,22 +1809,32 @@ class NotificationService {
         ),
       );
     } else {
-      _log('⚠️ Navigator henüz hazır değil, yönlendirme yapılamıyor');
+      _log('⚠️ Navigator henüz hazır değil, admin bildirimler ekranı sıraya alınıyor');
+      _startPendingNotificationCheck({
+        'type': 'admin_notifications',
+      });
     }
   }
 
   // Admin ekranına yönlendirme (onay bekleyen fırsatlar için)
-  void _navigateToAdminScreen() {
+  void _navigateToAdminScreen({String? dealId, int? tabIndex}) {
     final navigator = navigatorKey.currentState;
     if (navigator != null) {
-      _log('🔔 Admin ekranına yönlendiriliyor (onay bekleyen fırsatlar)');
+      _log('🔔 Admin ekranına yönlendiriliyor (onay bekleyen fırsatlar, dealId: $dealId, tabIndex: $tabIndex)');
       navigator.push(
         MaterialPageRoute(
-          builder: (context) => const AdminScreen(),
+          builder: (context) => AdminScreen(
+            initialDealId: dealId,
+            initialTabIndex: tabIndex ?? 0,
+          ),
         ),
       );
     } else {
-      _log('⚠️ Navigator henüz hazır değil, yönlendirme yapılamıyor');
+      _log('⚠️ Navigator henüz hazır değil, admin ekranı yönlendirmesi sıraya alınıyor');
+      _startPendingNotificationCheck({
+        'type': 'admin_deal',
+        if (dealId != null && dealId.isNotEmpty) 'dealId': dealId,
+      });
     }
   }
 
@@ -1593,13 +1855,19 @@ class NotificationService {
       sound: false,
     );
 
-    // Uygulama ön planda iken gelen bildirimler
+    // Uygulama ön planda iken gelen bildirimler (PROD-READY Evrensel In-App Banner & Kendi Ekranı Bastırma)
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       _log('📬 Yeni bildirim (ön plan): ${message.notification?.title}');
       _log('📬 Bildirim verisi: ${message.data}');
 
-      final type = (message.data['type'] ?? 'deal').toString();
-      final senderId = (
+      String clean(dynamic val) => val == null ? '' : val.toString().trim();
+
+      final type = clean(message.data['type']).isEmpty ? 'deal' : clean(message.data['type']);
+      final reason = clean(message.data['reason']).isEmpty ? clean(message.data['channel']) : clean(message.data['reason']);
+      final dealId = clean(message.data['dealId']).isNotEmpty ? clean(message.data['dealId']) : clean(message.data['deal_id']);
+      final dealTitle = clean(message.data['dealTitle']).isNotEmpty ? clean(message.data['dealTitle']) : clean(message.data['deal_title']);
+
+      final senderId = clean(
         message.data['senderId'] ??
         message.data['sender_id'] ??
         message.data['senderUid'] ??
@@ -1607,17 +1875,52 @@ class NotificationService {
         message.data['fromUserId'] ??
         message.data['from_user_id'] ??
         message.data['userId'] ??
-        message.data['user_id'] ??
-        ''
-      ).toString().trim();
+        message.data['user_id'],
+      );
+
+      final senderName = clean(
+        message.data['senderName'] ??
+        message.data['sender_name'] ??
+        message.data['notification_title'],
+      ).replaceAll('💬 ', '').trim();
+
+      final senderImageUrl = clean(
+        message.data['senderImageUrl'] ??
+        message.data['sender_image_url'] ??
+        message.data['userImageUrl'] ??
+        message.data['user_image_url'] ??
+        message.data['dealImageUrl'] ??
+        message.data['deal_image_url'],
+      );
+
       final currentActiveChat = activeChatUserId?.trim();
+      final currentActiveDeal = activeDealId?.trim();
 
-      // Mesaj bildirimi kontrolü: Eğer kullanıcı herhangi bir sohbet odasındaysa BİLDİRİMİ TAMAMEN BASTIR
-      final isMessageNotification = type == 'message' || type == 'user_message' || type == 'chat' || (senderId.isNotEmpty && type != 'deal' && type != 'comment_reply' && type != 'admin_deal');
+      // 1. KENDİ EKRANI SPAM KORUMASI (ACTIVE SCREEN SUPPRESSION)
+      // A. Kullanıcı ilgili fırsatın detay sayfasındaysa (DealDetailScreen)
+      //    Yorumlar ve güncellemeler canlı aktığı için bildirimi bastır
+      if (currentActiveDeal != null && currentActiveDeal.isNotEmpty && dealId.isNotEmpty && currentActiveDeal == dealId) {
+        if (type == 'comment' || type == 'comment_reply' || type == 'deal' || type == 'vote' || type == 'keyword' || type == 'author') {
+          _log('🛡️ Kullanıcı zaten bu fırsatın detay sayfasında ($dealId), ön plan bildirim bastırıldı.');
+          return;
+        }
+      }
 
+      // B. Yönetici Admin panelindeyse ve onay bekleyen fırsat bildirimi geldiyse bastır
+      if (isAdminScreenActive && (type == 'admin_deal' || reason == 'admin_deal')) {
+        _log('🛡️ Yönetici zaten admin ekranında, onay bekleyen fırsat ön plan bildirimi bastırıldı.');
+        return;
+      }
+
+      // C. Kullanıcı Kuponlar sayfasındaysa ve kupon bildirimi geldiyse bastır
+      if (isCouponsScreenActive && (type == 'coupon' || type == 'community_coupon')) {
+        _log('🛡️ Kullanıcı zaten Kuponlar sayfasında, ön plan kupon bildirimi bastırıldı.');
+        return;
+      }
+
+      // D. Birebir sohbet mesajı ve kullanıcı aynı odadaysa veya sessize almışsa bastır
+      final isMessageNotification = type == 'message' || type == 'user_message' || type == 'chat';
       if (isMessageNotification) {
-        _log('💬 Mesaj bildirimi (ön plan): senderId="$senderId", activeChatUserId="$currentActiveChat"');
-
         final msgId = (message.data['messageId'] ?? '').toString().trim();
         if (msgId.isNotEmpty && _handledInAppMessageIds.contains(msgId)) {
           _log('ℹ️ Mesaj afişi zaten Firestore üzerinden gösterildi (onMessage atlanıyor): $msgId');
@@ -1636,7 +1939,6 @@ class NotificationService {
           }
         }
 
-        // Sessize alınmış sohbet kontrolü
         final myUid = _auth.currentUser?.uid;
         if (myUid != null && senderId.isNotEmpty) {
           final userDoc = await _firestore.collection('users').doc(myUid).get();
@@ -1647,15 +1949,30 @@ class NotificationService {
           }
         }
 
-        // Kullanıcı sohbet odasında değilse (örneğin anasayfada geziniyorsa) SADECE In-App Banner göster
+        DateTime? messageCreatedAt;
+        final rawCreatedAt = message.data['createdAt'];
+        if (rawCreatedAt != null && rawCreatedAt.toString().isNotEmpty) {
+          messageCreatedAt = DateTime.tryParse(rawCreatedAt.toString());
+        }
+
         InAppMessageBanner.show(
           context: null,
           senderId: senderId,
-          senderName: message.data['senderName']?.toString() ?? message.data['sender_name']?.toString() ?? message.notification?.title ?? 'Kullanıcı',
-          senderImageUrl: message.data['senderImageUrl']?.toString() ?? message.data['sender_image_url']?.toString() ?? '',
-          messageText: message.data['messageText']?.toString() ?? message.data['notification_body']?.toString() ?? message.notification?.body ?? '',
-          dealTitle: message.data['dealTitle']?.toString(),
-          dealId: message.data['dealId']?.toString(),
+          senderName: senderName.isNotEmpty ? senderName : (message.notification?.title ?? 'Kullanıcı'),
+          senderImageUrl: senderImageUrl,
+          messageText: clean(message.data['messageText']).isNotEmpty
+              ? clean(message.data['messageText'])
+              : (clean(message.data['notification_body']).isNotEmpty
+                  ? clean(message.data['notification_body'])
+                  : (message.notification?.body ?? '')),
+          messageId: msgId.isNotEmpty ? msgId : null,
+          messageCreatedAt: messageCreatedAt ?? message.sentTime,
+          dealTitle: dealTitle.isNotEmpty ? dealTitle : null,
+          dealId: dealId.isNotEmpty ? dealId : null,
+          badgeText: 'Yeni Mesaj',
+          badgeColor: const Color(0xFF2196F3),
+          leadingIcon: Icons.chat_bubble_rounded,
+          rawData: message.data,
         );
         return;
       }
@@ -1671,19 +1988,121 @@ class NotificationService {
           senderId: 'admin',
           senderName: 'FırsatKolik Yönetim',
           senderImageUrl: 'assets/logo.webp',
-          messageText: message.data['notification_body'] ?? message.notification?.body ?? 'Yeni bir yönetici bildiriminiz var.',
+          messageText: clean(message.data['notification_body']).isNotEmpty
+              ? clean(message.data['notification_body'])
+              : (message.notification?.body ?? 'Yeni bir yönetici bildiriminiz var.'),
           isAdminMessage: true,
+          badgeText: 'Yönetici Mesajı',
+          badgeColor: Colors.redAccent,
+          leadingIcon: Icons.admin_panel_settings_rounded,
+          rawData: message.data,
         );
         return;
       }
 
-      // Diğer bildirimler için (fırsat, yorum, anahtar kelime vb.):
-      // iOS tarafında AppDelegate willPresent bu bildirimleri native banner ([.banner, .sound]) olarak
-      // işletim sistemi seviyesinde doğrudan sunar. Bu nedenle iOS'ta yerel bildirim tetiklenmez (çift afiş önleyici).
-      // Android'de ise ön planda sistem afişi düşmediğinden FlutterLocalNotificationsPlugin şarttır.
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        _showLocalNotification(message);
+      // 2. DÜNYA STANDARTLARINDA UNIVERSAL FOREGROUND IN-APP BANNER
+      // Tüm diğer bildirim türleri (yorum, yanıt, fırsat onayı, anahtar kelime, yazar takip, marketing vs.)
+      // için OS Heads-Up popupları yerine branded InAppMessageBanner gösterilir.
+
+      // Başlık ve gövde tespiti
+      String title = clean(message.data['notification_title']);
+      if (title.isEmpty) title = clean(message.data['title']);
+      if (title.isEmpty) title = clean(message.notification?.title);
+
+      String body = clean(message.data['notification_body']);
+      if (body.isEmpty) body = clean(message.data['body']);
+      if (body.isEmpty) body = clean(message.data['messageText']);
+      if (body.isEmpty) body = clean(message.notification?.body);
+
+      // Konfigürasyon belirleme
+      String badge = 'Bildirim';
+      Color color = const Color(0xFFFF5722);
+      IconData icon = Icons.notifications_active_rounded;
+
+      if (type == 'comment_reply') {
+        badge = 'Yorum Cevabı';
+        color = const Color(0xFF673AB7); // Deep Purple
+        icon = Icons.reply_rounded;
+        if (title.isEmpty) title = senderName.isNotEmpty ? senderName : 'Yorumunuza Cevap';
+        if (body.isEmpty) body = 'Yorumunuza yeni bir yanıt geldi.';
+      } else if (type == 'comment') {
+        badge = 'Yeni Yorum';
+        color = const Color(0xFF2196F3); // Blue
+        icon = Icons.comment_rounded;
+        if (title.isEmpty) title = senderName.isNotEmpty ? senderName : 'Yeni Yorum';
+        if (body.isEmpty) body = 'Fırsatınıza yeni bir yorum yapıldı.';
+      } else if (type == 'submission_status') {
+        final status = clean(message.data['status']).toLowerCase();
+        if (status == 'approved') {
+          badge = 'Onaylandı';
+          color = const Color(0xFF4CAF50); // Green
+          icon = Icons.check_circle_rounded;
+          if (title.isEmpty) title = 'Fırsatınız Yayında!';
+          if (body.isEmpty) body = 'Tebrikler! Gönderdiğiniz fırsat onaylandı.';
+        } else {
+          badge = 'Reddedildi';
+          color = const Color(0xFFE53935); // Red
+          icon = Icons.cancel_rounded;
+          if (title.isEmpty) title = 'Fırsatınız Onaylanamadı';
+          if (body.isEmpty) body = 'Gönderdiğiniz fırsat maalesef onaylanamadı.';
+        }
+      } else if (type == 'keyword' || reason == 'keyword') {
+        badge = 'Kelime Radarı';
+        color = const Color(0xFF9C27B0); // Purple
+        icon = Icons.radar_rounded;
+        if (title.isEmpty) title = 'Radarınıza Yakalandı!';
+        if (body.isEmpty) body = dealTitle.isNotEmpty ? dealTitle : 'Takip ettiğiniz kelimeyle ilgili yeni fırsat!';
+      } else if (type == 'author' || type == 'follow' || reason == 'author') {
+        badge = 'Yazar Takip';
+        color = const Color(0xFF00BCD4); // Cyan
+        icon = Icons.person_pin_circle_rounded;
+        if (title.isEmpty) title = senderName.isNotEmpty ? senderName : 'Takip Ettiğiniz Yazar';
+        if (body.isEmpty) body = dealTitle.isNotEmpty ? dealTitle : 'Takip ettiğiniz kullanıcı yeni fırsat paylaştı.';
+      } else if (type == 'admin_deal' || reason == 'admin_deal') {
+        badge = 'Onay Bekliyor';
+        color = const Color(0xFFD32F2F); // Deep Red
+        icon = Icons.admin_panel_settings_rounded;
+        if (title.isEmpty) title = 'Onay Bekleyen Fırsat';
+        if (body.isEmpty) body = dealTitle.isNotEmpty ? dealTitle : 'Yeni bir fırsat onay kuyruğunda bekliyor.';
+      } else if (type == 'badge' || type == 'level_up' || reason == 'gamification') {
+        badge = 'Tebrikler!';
+        color = const Color(0xFFFFB300); // Amber
+        icon = Icons.military_tech_rounded;
+        if (title.isEmpty) title = 'Yeni Başarı!';
+        if (body.isEmpty) body = 'Yeni bir rozet kazandınız veya seviye atladınız!';
+      } else if (type == 'marketing' || reason == 'marketing' || reason == 'campaign') {
+        badge = 'FırsatKolik';
+        color = const Color(0xFFFF5722); // Deep Orange
+        icon = Icons.campaign_rounded;
+        if (title.isEmpty) title = 'Özel Duyuru';
+        if (body.isEmpty) body = 'Sizin için özel bir kampanya duyurusu!';
+      } else if (type == 'coupon' || type == 'community_coupon') {
+        badge = 'Topluluk Kuponu';
+        color = const Color(0xFF8E24AA); // Purple
+        icon = Icons.confirmation_number_rounded;
+        if (title.isEmpty) title = 'Yeni Kupon Paylaşıldı';
+        if (body.isEmpty) body = 'Toplulukta yeni bir indirim kuponu paylaşıldı.';
+      } else {
+        badge = 'Sıcak Fırsat';
+        color = const Color(0xFFFF6D00); // Orange
+        icon = Icons.local_fire_department_rounded;
+        if (title.isEmpty) title = 'Yeni Fırsat Paylaşıldı';
+        if (body.isEmpty) body = dealTitle.isNotEmpty ? dealTitle : 'İlginizi çekebilecek yeni bir indirim var.';
       }
+
+      InAppMessageBanner.show(
+        context: null,
+        senderId: senderId.isNotEmpty ? senderId : (dealId.isNotEmpty ? dealId : 'firsatkolik'),
+        senderName: title,
+        senderImageUrl: senderImageUrl,
+        messageText: body,
+        dealTitle: dealTitle.isNotEmpty ? dealTitle : null,
+        dealId: dealId.isNotEmpty ? dealId : null,
+        badgeText: badge,
+        badgeColor: color,
+        leadingIcon: icon,
+        rawData: message.data,
+      );
     });
 
     // Bildirime tıklayınca (uygulama arka planda veya kapalı)
@@ -1702,7 +2121,7 @@ class NotificationService {
   }
 
   // Yerel bildirim gösterme yardımcısı (Boş/başlıksız bildirim korumalı & deterministik ID)
-  Future<void> _showLocalNotification(RemoteMessage message) async {
+  Future<void> showLocalNotification(RemoteMessage message) async {
     try {
       final data = message.data;
 
@@ -1719,6 +2138,7 @@ class NotificationService {
       String clean(dynamic val) => val == null ? '' : val.toString().trim();
 
       final type = clean(data['type']).isEmpty ? 'deal' : clean(data['type']);
+      final reason = clean(data['reason']);
       final dealId = clean(data['dealId']);
       final dealTitle = clean(data['dealTitle']);
       final commentId = clean(data['commentId']);
@@ -1758,14 +2178,20 @@ class NotificationService {
           title = '💬 $senderName fırsatınıza yorum yaptı';
         } else if (type == 'comment_reply') {
           title = '💬 $senderName yorumunuza cevap verdi';
+        } else if (type == 'submission_status') {
+          final status = (data['status'] ?? '').toString().trim().toLowerCase();
+          title = status == 'approved' ? '🎉 Fırsatınız Onaylandı!' : 'ℹ️ Fırsatınız Reddedildi';
         } else if (type == 'admin_deal') {
           title = '👮‍♂️ Onay Bekleyen Fırsat';
         } else if (type == 'admin_message') {
           title = '🛡️ FırsatKolik Yönetim';
-        } else if (type == 'keyword') {
+        } else if (type == 'keyword' || reason == 'keyword') {
           title = '🎯 İlginizi Çeken Kelime!';
         } else if (type == 'marketing') {
           title = '🔥 Özel Fırsat Duyurusu';
+        } else if (type == 'coupon' || type == 'community_coupon') {
+          final magazaAdi = clean(data['magazaAdi']);
+          title = magazaAdi.isNotEmpty ? '🎟️ $magazaAdi Kuponu!' : '🎟️ Yeni Kupon!';
         } else if (dealTitle.isNotEmpty) {
           title = '🎯 $dealTitle';
         } else {
@@ -1782,12 +2208,19 @@ class NotificationService {
       if (body.isEmpty) {
         if (dealTitle.isNotEmpty) {
           body = '$dealTitle\nFırsatı görmek için dokunun.';
+        } else if (type == 'submission_status') {
+          final status = (data['status'] ?? '').toString().trim().toLowerCase();
+          body = status == 'approved'
+              ? 'Tebrikler! Gönderdiğiniz fırsat onaylandı ve yayınlandı.'
+              : 'Gönderdiğiniz fırsat maalesef onaylanamadı. Detaylar için dokunun.';
         } else if (type == 'deal') {
           body = 'İlginizi çekebilecek yeni bir indirim paylaşıldı.';
         } else if (type == 'comment' || type == 'comment_reply') {
           body = 'Yorum detaylarını incelemek için dokunun.';
         } else if (type == 'admin_message') {
           body = 'Yeni bir yönetici bildiriminiz var.';
+        } else if (type == 'coupon' || type == 'community_coupon') {
+          body = 'Toplulukta yeni bir indirim kuponu paylaşıldı.';
         } else {
           body = 'Detayları görüntülemek için dokunun.';
         }
@@ -1820,12 +2253,27 @@ class NotificationService {
         tag = 'admin_deal_${dealId.isNotEmpty ? dealId : seedKey}';
         notifId = ('admin_${dealId.isNotEmpty ? dealId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
         payload = 'admin_deal:$dealId';
-      } else if (type == 'keyword') {
+      } else if (type == 'submission_status') {
+        final status = (data['status'] ?? '').toString().trim().toLowerCase();
+        channelId = 'sicak_firsatlar_general_v2';
+        channelName = 'Fırsat Onay/Ret';
+        channelDescription = 'Gönderdiğiniz fırsatların onay veya ret bildirimleri';
+        tag = 'submission_${dealId.isNotEmpty ? dealId : seedKey}';
+        notifId = ('submission_${dealId.isNotEmpty ? dealId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
+        payload = 'submission_status:$dealId:$status';
+      } else if (type == 'keyword' || reason == 'keyword') {
         channelId = 'keyword_alerts_channel';
         channelName = 'Özel Fırsat Bildirimleri';
         channelDescription = 'Takip ettiğiniz anahtar kelimelere ait fırsat bildirimleri';
         tag = 'keyword_${dealId.isNotEmpty ? dealId : seedKey}';
         notifId = ('kw_${dealId.isNotEmpty ? dealId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
+        payload = dealId;
+      } else if (type == 'author' || type == 'follow' || reason == 'author') {
+        channelId = 'follow_channel';
+        channelName = 'Takip Bildirimleri';
+        channelDescription = 'Takip ettiğiniz yazar veya bot fırsat bildirimleri';
+        tag = 'author_${dealId.isNotEmpty ? dealId : seedKey}';
+        notifId = ('author_${dealId.isNotEmpty ? dealId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
         payload = dealId;
       } else if (type == 'comment_reply') {
         channelId = 'comment_replies_channel';
@@ -1848,13 +2296,28 @@ class NotificationService {
         tag = 'admin_msg_${messageId.isNotEmpty ? messageId : seedKey}';
         notifId = ('admin_msg_${messageId.isNotEmpty ? messageId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
         payload = 'admin_message';
-      } else if (type == 'message' || type == 'user_message' || type == 'chat' || senderId.isNotEmpty) {
+      } else if (type == 'message' || type == 'user_message' || type == 'chat') {
         channelId = 'messages_channel_v3';
         channelName = 'Mesaj Bildirimleri';
         channelDescription = 'Kullanıcılar arası mesajlaşma bildirimleri';
         tag = 'msg_$senderId';
         notifId = (senderId.hashCode & 0x7FFFFFFF) % 100000;
-        payload = 'message:$senderId:$senderName:$body';
+        payload = jsonEncode({
+          'type': 'message',
+          'senderId': senderId,
+          'senderName': senderName,
+          'messageId': messageId.isNotEmpty ? messageId : null,
+          'messageText': body,
+          'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+        });
+      } else if (type == 'coupon' || type == 'community_coupon') {
+        final kuponId = clean(data['kuponId'] ?? data['kupon_id'] ?? data['couponId'] ?? data['coupon_id']);
+        channelId = 'sicak_firsatlar_general_v2';
+        channelName = 'Kupon Bildirimleri';
+        channelDescription = 'Topluluk tarafından paylaşılan indirim kuponu bildirimleri';
+        tag = 'coupon_${kuponId.isNotEmpty ? kuponId : seedKey}';
+        notifId = ('coupon_${kuponId.isNotEmpty ? kuponId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
+        payload = 'coupon:$kuponId';
       }
 
       final isMessage = type == 'message' || type == 'user_message' || type == 'admin_message';
@@ -1946,7 +2409,6 @@ class NotificationService {
         case AuthorizationStatus.denied:
           return 'denied';
         case AuthorizationStatus.notDetermined:
-        default:
           return 'notDetermined';
       }
     } catch (e) {

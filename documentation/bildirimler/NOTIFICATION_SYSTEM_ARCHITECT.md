@@ -307,23 +307,36 @@ Mobil tarafta bildirim döngüsünü `lib/services/notification_service.dart` y�
 * **`saveFCMToken({String? userId})`:** Cihazın FCM token'ını alır, `userDevices/{userId}_{deviceId}` dokümanına kaydeder ve `onTokenRefresh` dinleyicisini kurar.
 * **`clearDeviceToken()`:** Çıkış yapıldığında token'ı pasife alır ve yerel FCM önbelleğini siler (`deleteToken`).
 
-### 6.2 Derin Linkleme ve Bildirime Tıklama (Deep Linking)
-Uygulama arka planda, kapalıyken (cold start) veya ön plandayken bildirime tıklandığında `_handleNotificationTap(data)` çalışır:
+### 6.2 Derin Linkleme ve Bildirime Tıklama (Deep Linking & Routing Engine)
+Uygulama arka planda, kapalıyken (cold start) veya ön plandayken bildirime tıklandığında `NotificationService.resolveRouting(data)` pure fonksiyonu ve `_handleNotificationTap(data)` motoru devreye girer.
 
-| Payload Verisi | Hedef Ekran | Parametreler |
-| :--- | :--- | :--- |
-| `type == 'deal'` veya `dealId` | **`DealDetailScreen`** | `dealId` ile detay ekranı açılır |
-| `type == 'comment_reply'` veya `type == 'comment'` | **`DealDetailScreen`** | `dealId` açılır ve `commentId`'ye otomatik kaydırılarak odaklanır |
-| `type == 'message'` | **`MessageScreen`** | `senderId`, `senderName`, `messageText`, `dealId` vb. ile sohbet odası anında açılır |
-| `type == 'admin_deal'` | **`AdminScreen`** | Admin onay paneli açılır |
-| `type == 'admin_message'` | **`MessageScreen`** / **`AdminNotificationsScreen`** | Yönetici duyuruları / destek sohbeti açılır |
+#### 🛡️ Chat-Hijacking (Sohbet Gaspı) Koruması:
+Fırsat, kelime veya kategori bildirimlerinin payload'ında hedef veya fırsat sahibine ait `userId` alanı yer alabilir. Eski sistemde bu alan `senderId` olarak alınıp bildirim yanlışlıkla `_navigateToChat`'e yönlendiriliyordu. Yeni mimaride `userId` alanı **yalnızca ve yalnızca** `type == 'message' || type == 'user_message' || type == 'chat'` durumunda gönderici olarak kabul edilir. `dealId` içeren tüm bildirimler öncelikli olarak **Fırsat Detayına** yönlendirilir.
+
+| Payload Verisi / Bildirim Türü | Karar (`NotificationDestinationType`) | Hedef Ekran | Parametreler & Davranış |
+| :--- | :---: | :--- | :--- |
+| **Anahtar Kelime (`reason: 'keyword'` / `type: 'keyword'`)** | `deal` | **`DealDetailScreen`** | `dealId` ile ilgili fırsat detayı anında açılır. |
+| **Yazar / Botkolik Radarı (`reason: 'author'` / `type: 'follow'`)** | `deal` | **`DealDetailScreen`** | `dealId` ile fırsat detayı açılır. |
+| **Kategori Fırsatı (`reason: 'category'`)** | `deal` | **`DealDetailScreen`** | `dealId` ile fırsat detayı açılır. |
+| **Fırsat Yorumu / Yanıtı (`comment`, `comment_reply`)** | `deal` | **`DealDetailScreen`** | `dealId` açılır ve `commentId`'ye otomatik scroll yapılır. |
+| **Fırsat Gönderim Onayı (`submission_status: approved`)** | `deal` | **`DealDetailScreen`** | `dealId` ile onaylanan canlı fırsat detayı açılır. |
+| **Fırsat Gönderim Reddi (`submission_status: rejected`)** | `adminNotifications` | **`AdminNotificationsScreen`** | Bildirim geçmişi açılır ve modern detay modalında moderasyon red gerekçesi (`moderationReason`) gösterilir. |
+| **Genel / Pazarlama Fırsatı (`deal`, `marketing` + `dealId`)** | `deal` | **`DealDetailScreen`** | `dealId` ile detay ekranı açılır. |
+| **Birebir Sohbet (`message`, `user_message`, `chat`)** | `chat` | **`MessageScreen`** | `senderId`, `senderName`, `messageText`, `dealId` ile sohbet odası açılır (`mutedConversations` durumunda push engellenir). |
+| **Gönderensiz Mesaj (`message` without `senderId`)** | `messagesList` | **`MessagesListScreen`** | Gelen kutusu mesaj listesi açılır. |
+| **Yönetici Duyurusu (`admin_message`)** | `adminChat` | **`MessageScreen`** | Yönetici destek sohbeti açılır (`otherUserId: 'admin'`). |
+| **Yönetici Bildirimleri (`admin_notifications`)** | `adminNotifications` | **`AdminNotificationsScreen`** | Bildirim geçmişi ekranı açılır (44x44 görsel ve mağaza/fiyat etiketleriyle listelenir). |
+| **Onay Bekleyen Fırsat (`admin_deal`)** | `adminScreen` | **`AdminScreen`** | `initialDealId` ve `initialTabIndex: 0` ile admin paneli onay bekleyenler sekmesine doğrudan odaklanır. |
+| **Fırsatsız Genel Duyuru (`marketing` without `dealId`)** | `none` | **`HomeScreen`** | Boş ekran açılmaz, anasayfada kalınır. |
 
 ### 6.3 🚀 Cold Start (Uygulama Kapalıyken) Bildirim Kuyruğu ve Akıcı Yönlendirme Mimarisi
 Uygulama tamamen kapalıyken bildirime tıklandığında:
-1. `main()` içinde `initializeLocalNotifications()` ve `getNotificationAppLaunchDetails()` payload'ı yakalar.
-2. `navigatorKey.currentState` henüz `null` olduğu için bildirim `_startPendingNotificationCheck` kuyruğuna alınır.
-3. Kontrol periyodu **200ms**'dir. Fırsat ve genel bildirimler için `currentUser` beklenmez; mesaj bildirimlerinde `_auth.currentUser` oturumu diskten yüklendiği anda kuyruk çözülür.
-4. **Çift Tıklama (Duplicate) Filtre Koruması:** `_lastHandledTapTime` damgası kuyruğa alınırken değil, **yalnızca `navigator.push` fiilen icra edildiğinde** kaydedilir. Kuyruktan gelen çağrılar `isFromPending: true` bayrağı ile duplicate filtresini bypass ederek asla yutulmaz.
+1. **Erken Dinleyici Kaydı (`main.dart`):** `main()` içinde `initializeLocalNotifications()` çağrısının hemen ardına `setupNotificationListeners()` eklenmiştir. Böylece `FirebaseMessaging.instance.getInitialMessage()` dinleyicisi `SplashScreen` animasyonunun (1.7s) bitmesini beklemeden işletim sisteminden intent verisini ilk milisaniyede yakalar.
+2. **Evrensel Kuyruk Mekanizması (`_startPendingNotificationCheck`):** Navigator henüz mount edilmemişken (`navigatorKey.currentState == null`), sadece mesajlar değil **fırsat, admin ve yorum bildirimleri de dahil tüm hedefler** kuyruğa alınır; hiçbir bildirim sessizce düşürülmez.
+3. **200ms Mikro-Kontrol & Oturum Ayrımı:** Fırsat bildirimlerinde (`deal`, `keyword`, `author`, `category`) oturum zorunluluğu aranmaz; kullanıcı misafir olsa dahi navigator hazır olduğu anda ekran açılır. Yalnızca mesajlaşma (`chat`) için `_auth.currentUser` beklenir.
+4. **Post-Frame Callback Güvencesi:** Kuyruk çözüldüğünde `WidgetsBinding.instance.addPostFrameCallback` ile yönlendirme icra edilir. Böylece Flutter build aşamasında route push çağrısı yapılmasından doğabilecek assertion hataları engellenir.
+5. **Çift Tıklama (Duplicate) Filtre Koruması:** `_lastHandledTapTime` damgası kuyruğa alınırken değil, **yalnızca fiilen icra edildiğinde** kaydedilir. Kuyruktan gelen çağrılar `isFromPending: true` bayrağı ile duplicate filtresini aşar.
+6. **Otomatik Birim Test Kapsamı:** [`test/notification_routing_test.dart`](file:///d:/firsatkolik/test/notification_routing_test.dart) test paketi, yukarıdaki 14 farklı yönlendirme senaryosunun ve chat-hijacking korumasının doğruluğunu garanti altına alır.
 
 ---
 

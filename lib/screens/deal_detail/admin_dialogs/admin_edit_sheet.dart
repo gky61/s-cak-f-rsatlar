@@ -109,8 +109,27 @@ void showAdminEditSheet({
       return StatefulBuilder(
         builder: (context, setSheetState) {
           double? parseDouble(String input) {
-            final cleaned = input.replaceAll(RegExp('[^0-9,\\.]'), '').replaceAll(',', '.');
+            String cleaned = input
+                .replaceAll('TL', '')
+                .replaceAll('₺', '')
+                .replaceAll(RegExp(r'\s+'), '')
+                .replaceAll(RegExp('[^0-9,\\.]'), '')
+                .trim();
             if (cleaned.isEmpty) return null;
+
+            if (cleaned.contains('.') && cleaned.contains(',')) {
+              cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
+            } else if (cleaned.contains(',')) {
+              cleaned = cleaned.replaceAll(',', '.');
+            } else if (cleaned.contains('.')) {
+              final parts = cleaned.split('.');
+              if (parts.length == 2 && parts[1].length == 3) {
+                cleaned = cleaned.replaceAll('.', '');
+              } else if (parts.length > 2) {
+                cleaned = cleaned.replaceAll('.', '');
+              }
+            }
+
             return double.tryParse(cleaned);
           }
 
@@ -118,6 +137,23 @@ void showAdminEditSheet({
             final cleaned = input.replaceAll(RegExp('[^0-9]'), '');
             if (cleaned.isEmpty) return null;
             return int.tryParse(cleaned);
+          }
+
+          // Fiyat veya Eski Fiyat değiştiğinde indirim oranını otomatik olarak yeniden hesaplar
+          void updateDiscountRate() {
+            final price = parseDouble(priceController.text);
+            final originalPrice = parseDouble(originalPriceController.text);
+
+            if (originalPrice != null && price != null && originalPrice > price && price > 0) {
+              final rate = (((originalPrice - price) / originalPrice) * 100).round();
+              discountController.text = rate > 0 ? rate.toString() : '';
+            } else if (originalPrice != null && price != null && originalPrice <= price) {
+              // Eski fiyat geçerli fiyattan küçük veya eşitse indirim oranı olamaz
+              discountController.text = '';
+            } else if (originalPrice == null) {
+              // Eski fiyat silindiyse veya boşsa indirim oranı sıfırlanmalıdır
+              discountController.text = '';
+            }
           }
 
           Future<String> resolveAndConvertToAffiliateLink(String originalUrl) {
@@ -210,8 +246,11 @@ void showAdminEditSheet({
 
             final originalPrice = parseDouble(originalPriceController.text);
             var discountRate = parseInt(discountController.text);
-            if (discountRate == null && originalPrice != null && price != null && originalPrice > price && price > 0) {
-              discountRate = (((originalPrice - price) / originalPrice) * 100).round();
+            if (originalPrice != null && price != null && originalPrice > price && price > 0) {
+              discountRate ??= (((originalPrice - price) / originalPrice) * 100).round();
+            } else if (originalPrice != null && price != null && originalPrice <= price) {
+              // Eski fiyat fiyattan küçük veya eşitse indirim oranı olamaz
+              discountRate = null;
             }
 
             setSheetState(() {
@@ -454,6 +493,10 @@ void showAdminEditSheet({
                                     controller: priceController,
                                     placeholder: '0.00',
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    onChanged: (_) {
+                                      updateDiscountRate();
+                                      setSheetState(() {});
+                                    },
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -464,6 +507,10 @@ void showAdminEditSheet({
                                     controller: originalPriceController,
                                     placeholder: 'Opsiyonel',
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    onChanged: (_) {
+                                      updateDiscountRate();
+                                      setSheetState(() {});
+                                    },
                                   ),
                                 ),
                               ],
@@ -473,7 +520,17 @@ void showAdminEditSheet({
                               label: 'İndirim Oranı (%)',
                               controller: discountController,
                               placeholder: 'Örn: 25 (Otomatik hesaplanır)',
+                              helperText: 'Fiyat veya eski fiyat değiştiğinde otomatik güncellenir.',
                               keyboardType: TextInputType.number,
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.sync_rounded, size: 20),
+                                tooltip: 'İndirim Oranını Yeniden Hesapla',
+                                color: isDark ? AppTheme.darkTextSecondary : Colors.grey[700],
+                                onPressed: () {
+                                  updateDiscountRate();
+                                  setSheetState(() {});
+                                },
+                              ),
                             ),
                             const SizedBox(height: 4),
                             _buildStyledTextField(
@@ -1097,6 +1154,7 @@ Widget _buildStyledTextField({
   int maxLines = 1,
   TextInputType keyboardType = TextInputType.text,
   ValueChanged<String>? onChanged,
+  Widget? suffixIcon,
 }) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   final primaryColor = Theme.of(context).colorScheme.primary;
@@ -1138,6 +1196,7 @@ Widget _buildStyledTextField({
               fontSize: 13,
               color: isDark ? Colors.grey[600] : Colors.grey[400],
             ),
+            suffixIcon: suffixIcon,
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             filled: true,
             fillColor: isDark ? AppTheme.darkSurface : Colors.white,

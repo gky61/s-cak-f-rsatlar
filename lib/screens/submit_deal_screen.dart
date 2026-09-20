@@ -78,6 +78,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     'Migros',
     'Getir',
     'Boyner',
+    'Gamer Gen',
+    'Gaming Gen',
     'Diğer',
   ];
 
@@ -133,6 +135,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       matchedStore = 'Getir';
     } else if (lowerName.contains('boyner')) {
       matchedStore = 'Boyner';
+    } else if (lowerName.contains('gamer.gen.tr') || lowerName.contains('gamergen') || lowerName.contains('gamer gen')) {
+      matchedStore = 'Gamer Gen';
+    } else if (lowerName.contains('gaming.gen.tr') || lowerName.contains('gaminggen') || lowerName.contains('gaming gen')) {
+      matchedStore = 'Gaming Gen';
     }
 
     setState(() {
@@ -864,6 +870,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       'images.migrosone.com',
       'cdn.getir.com',
       'cdn.boyner.com.tr',
+      'img.yenieera22.com',
+      'gaming.gen.tr',
       'cdn03.ciceksepeti.net',
       'imgbb.co',
       'imgur.com',

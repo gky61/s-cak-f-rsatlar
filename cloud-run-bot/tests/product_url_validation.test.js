@@ -243,16 +243,39 @@ function runTests() {
   assert(isProductUrl('https://www.havitstore.com.tr/'), 'Anasayfa bile bypass', 'havitstore.com.tr/');
 
   // ========================================
-  // 21. TANIMSIZ MAĞAZA (BYPASS - product_path_rules'da yok)
+  // 21. GAMER GEN
   // ========================================
-  console.log('\n--- 21. Tanımsız Mağaza (BYPASS - kural yok) ---');
+  console.log('\n--- 21. Gamer Gen ---');
+  assert(isProductUrl('https://www.gamer.gen.tr/aoc-q27g41zdf-27-240hz_u56708'), 'Ürün sayfası (_u...)', 'gamer.gen.tr/..._u56708');
+  assert(isProductUrl('https://www.gamer.gen.tr/lian-li-hydro-shift_u57254'), 'Ürün sayfası (_u...)', 'gamer.gen.tr/..._u57254');
+  assert(isProductUrl('https://www.gamer.gen.tr/gg-horizon-5070-v6_h58071'), 'Hazır sistem sayfası (_h...)', 'gamer.gen.tr/..._h58071');
+  assert(isProductUrl('https://www.gamer.gen.tr/gg-horizon-5070-v6_h58071/'), 'Trailing slash hazır sistem', 'gamer.gen.tr/..._h58071/');
+  assert(!isProductUrl('https://www.gamer.gen.tr/cevre-birimleri_uk4'), 'Kategori sayfası (_uk...) engellenmeli', 'gamer.gen.tr/cevre-birimleri_uk4');
+  assert(!isProductUrl('https://www.gamer.gen.tr/monitor_k5'), 'Kategori sayfası (_k...) engellenmeli', 'gamer.gen.tr/monitor_k5');
+  assert(!isProductUrl('https://www.gamer.gen.tr/'), 'Anasayfa engellenmeli', 'gamer.gen.tr/');
+
+  // ========================================
+  // 22. GAMING GEN (gaming.gen.tr)
+  // ========================================
+  console.log('\n--- 22. Gaming Gen ---');
+  assert(isProductUrl('https://www.gaming.gen.tr/urun/542776/pc-hocasi-gg10/'), 'Ürün sayfası (/urun/ID/slug/)', 'gaming.gen.tr/urun/542776/pc-hocasi-gg10/');
+  assert(isProductUrl('https://gaming.gen.tr/urun/612335/ultima-5080/'), 'Ürün sayfası www olmadan', 'gaming.gen.tr/urun/612335/ultima-5080/');
+  assert(isProductUrl('https://www.gaming.gen.tr/urun/384690/thermalright-assassin-king'), 'Trailing slash olmadan', 'gaming.gen.tr/urun/384690/...');
+  assert(!isProductUrl('https://www.gaming.gen.tr/kategori/bilgisayar'), 'Kategori sayfası engellenmeli', 'gaming.gen.tr/kategori/bilgisayar');
+  assert(!isProductUrl('https://www.gaming.gen.tr/sepet/'), 'Sepet sayfası engellenmeli', 'gaming.gen.tr/sepet/');
+  assert(!isProductUrl('https://www.gaming.gen.tr/'), 'Anasayfa engellenmeli', 'gaming.gen.tr/');
+
+  // ========================================
+  // 23. TANIMSIZ MAĞAZA (BYPASS - product_path_rules'da yok)
+  // ========================================
+  console.log('\n--- 23. Tanımsız Mağaza (BYPASS - kural yok) ---');
   assert(isProductUrl('https://www.boyner.com.tr/herhangi-sayfa'), 'Boyner (kural tanımsız, bypass)', 'boyner.com.tr/herhangi-sayfa');
   assert(isProductUrl('https://www.ciceksepeti.com/urun/123'), 'Çiçeksepeti (kural tanımsız, bypass)', 'ciceksepeti.com/urun/123');
 
   // ========================================
-  // 22. EDGE CASES
+  // 24. EDGE CASES
   // ========================================
-  console.log('\n--- 22. Edge Cases ---');
+  console.log('\n--- 24. Edge Cases ---');
   assert(!isProductUrl(''), 'Boş string', '(empty)');
   assert(!isProductUrl(null), 'Null değer', '(null)');
   assert(!isProductUrl(undefined), 'Undefined değer', '(undefined)');

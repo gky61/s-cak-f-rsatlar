@@ -20,9 +20,15 @@ class InAppMessageBanner {
     required String senderName,
     required String senderImageUrl,
     required String messageText,
+    String? messageId,
+    DateTime? messageCreatedAt,
     bool isAdminMessage = false,
     String? dealTitle,
     String? dealId,
+    String? badgeText,
+    Color? badgeColor,
+    IconData? leadingIcon,
+    Map<String, dynamic>? rawData,
   }) {
     // Mükerrer bildirim koruması (aynı mesaj 3 saniye içinde tekrar tetiklenirse bastır)
     final now = DateTime.now();
@@ -66,9 +72,15 @@ class InAppMessageBanner {
         senderName: senderName,
         senderImageUrl: senderImageUrl,
         messageText: messageText,
+        messageId: messageId,
+        messageCreatedAt: messageCreatedAt,
         isAdminMessage: isAdminMessage,
         dealTitle: dealTitle,
         dealId: dealId,
+        badgeText: badgeText,
+        badgeColor: badgeColor,
+        leadingIcon: leadingIcon,
+        rawData: rawData,
         onDismiss: () {
           if (_currentEntry == entry) {
             entry.remove();
@@ -93,9 +105,15 @@ class _InAppBannerWidget extends StatefulWidget {
   final String senderName;
   final String senderImageUrl;
   final String messageText;
+  final String? messageId;
+  final DateTime? messageCreatedAt;
   final bool isAdminMessage;
   final String? dealTitle;
   final String? dealId;
+  final String? badgeText;
+  final Color? badgeColor;
+  final IconData? leadingIcon;
+  final Map<String, dynamic>? rawData;
   final VoidCallback onDismiss;
 
   const _InAppBannerWidget({
@@ -103,9 +121,15 @@ class _InAppBannerWidget extends StatefulWidget {
     required this.senderName,
     required this.senderImageUrl,
     required this.messageText,
+    this.messageId,
+    this.messageCreatedAt,
     this.isAdminMessage = false,
     this.dealTitle,
     this.dealId,
+    this.badgeText,
+    this.badgeColor,
+    this.leadingIcon,
+    this.rawData,
     required this.onDismiss,
   });
 
@@ -202,6 +226,10 @@ class _InAppBannerWidgetState extends State<_InAppBannerWidget>
                 child: InkWell(
                   onTap: () {
                     widget.onDismiss();
+                    if (widget.rawData != null) {
+                      NotificationService().handleNotificationTapPublic(widget.rawData!);
+                      return;
+                    }
                     final nav = navigatorKey.currentState;
                     if (nav != null) {
                       if (widget.isAdminMessage) {
@@ -234,6 +262,8 @@ class _InAppBannerWidgetState extends State<_InAppBannerWidget>
                               otherUserName: resolvedName,
                               otherUserImageUrl: resolvedImage,
                               initialIncomingMessageText: widget.messageText,
+                              initialIncomingMessageId: widget.messageId,
+                              initialIncomingMessageTime: widget.messageCreatedAt,
                               initialDealTitle: widget.dealTitle,
                               initialDealId: widget.dealId,
                               isAdminMessage: false,
@@ -252,23 +282,34 @@ class _InAppBannerWidgetState extends State<_InAppBannerWidget>
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     child: Row(
                       children: [
-                        // Avatar
+                        // Avatar veya İkon
                         Container(
                           width: 44,
                           height: 44,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
+                            color: widget.senderImageUrl.isEmpty
+                                ? (widget.badgeColor ?? primaryColor).withValues(alpha: 0.15)
+                                : Colors.transparent,
                             border: Border.all(
-                              color: primaryColor.withValues(alpha: 0.3),
+                              color: (widget.badgeColor ?? primaryColor).withValues(alpha: 0.3),
                               width: 1.5,
                             ),
                           ),
                           child: ClipOval(
-                            child: _buildAvatar(widget.senderImageUrl, 44),
+                            child: widget.senderImageUrl.isNotEmpty
+                                ? _buildAvatar(widget.senderImageUrl, 44)
+                                : Center(
+                                    child: Icon(
+                                      widget.leadingIcon ?? Icons.notifications_active_rounded,
+                                      color: widget.badgeColor ?? primaryColor,
+                                      size: 22,
+                                    ),
+                                  ),
                           ),
                         ),
                         const SizedBox(width: 12),
-                        // İsim & Mesaj
+                        // İsim, Rozet & Mesaj
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,35 +317,50 @@ class _InAppBannerWidgetState extends State<_InAppBannerWidget>
                             children: [
                               Row(
                                 children: [
-                                  Text(
-                                    widget.senderName,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : AppTheme.textPrimary,
+                                  Expanded(
+                                    child: Text(
+                                      widget.senderName,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                        color: isDark ? Colors.white : AppTheme.textPrimary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(width: 6),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: primaryColor.withValues(alpha: 0.15),
+                                      color: (widget.badgeColor ?? primaryColor).withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
-                                      'Yeni Mesaj',
+                                      widget.badgeText ?? (widget.isAdminMessage ? 'Admin' : 'Yeni Mesaj'),
                                       style: TextStyle(
                                         fontSize: 9.5,
                                         fontWeight: FontWeight.w700,
-                                        color: primaryColor,
+                                        color: widget.badgeColor ?? primaryColor,
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 3),
+                              if (widget.dealTitle != null && widget.dealTitle!.trim().isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.dealTitle!.trim(),
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: primaryColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                              const SizedBox(height: 2),
                               Text(
                                 widget.messageText,
                                 style: TextStyle(

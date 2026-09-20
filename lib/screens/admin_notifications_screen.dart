@@ -5,9 +5,11 @@ import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../services/app_badge_service.dart';
 import '../widgets/skeletons/notification_list_skeleton.dart';
 import 'deal_detail_screen.dart';
 import 'message_screen.dart';
+import 'kuponlar_page.dart';
 
 class AdminNotificationsScreen extends StatefulWidget {
   const AdminNotificationsScreen({super.key});
@@ -20,6 +22,12 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
   String _selectedTab = 'all'; // 'all', 'admin', 'replies'
+
+  @override
+  void initState() {
+    super.initState();
+    AppBadgeService.instance.syncBadgeWithFirestore();
+  }
 
   String _formatDateTime(DateTime dt) {
     try {
@@ -62,6 +70,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     // Okundu işaretle
     if (!(item['read'] as bool? ?? false)) {
       await _firestoreService.markNotificationAsRead(currentUserId, item['id'] as String);
+      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
     }
 
     final type = (item['type'] ?? 'deal').toString();
@@ -129,6 +138,20 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               otherUserName: 'FırsatKolik Yönetim',
               otherUserImageUrl: 'assets/logo.webp',
               isAdminMessage: true,
+            ),
+          ),
+        );
+      }
+    } else if (type == 'coupon' || type == 'community_coupon') {
+      // Topluluk kuponu bildiriminde Kuponlar sayfasının Topluluk sekmesine git
+      if (mounted) {
+        final kId = (item['kuponId'] ?? item['kupon_id'] ?? '').toString().trim();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => KuponlarPage(
+              initialTabIndex: 1,
+              highlightKuponId: kId.isNotEmpty ? kId : null,
             ),
           ),
         );
@@ -209,6 +232,11 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       headerColor = const Color(0xFFFF6B35);
       headerBg = isDark ? const Color(0xFFFF6B35).withValues(alpha: 0.2) : const Color(0xFFFFF3EE);
       headerBadgeText = 'KAMPANYA';
+    } else if (type == 'coupon' || type == 'community_coupon') {
+      headerIcon = Icons.confirmation_number_rounded;
+      headerColor = const Color(0xFF8E24AA);
+      headerBg = isDark ? const Color(0xFF8E24AA).withValues(alpha: 0.2) : const Color(0xFFF3E5F5);
+      headerBadgeText = 'TOPLULUK KUPONU';
     } else if (type == 'deal') {
       headerIcon = Icons.local_fire_department_rounded;
       headerColor = const Color(0xFFFF6B35);
@@ -365,7 +393,9 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Paylaşılan fırsat topluluk kurallarımıza, fiyat/stok kriterlerine veya mükerrer paylaşımlara göre incelenerek onaylanmamıştır.',
+                        (item['moderationReason'] != null && (item['moderationReason'] as String).trim().isNotEmpty)
+                            ? (item['moderationReason'] as String).trim()
+                            : 'Paylaşılan fırsat topluluk kurallarımıza, fiyat/stok kriterlerine veya mükerrer paylaşımlara göre incelenerek onaylanmamıştır.',
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
@@ -451,6 +481,37 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                   ),
                   const SizedBox(width: 12),
                 ],
+                if (type == 'coupon' || type == 'community_coupon') ...[
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        final kId = (item['kuponId'] ?? item['kupon_id'] ?? '').toString().trim();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => KuponlarPage(
+                              initialTabIndex: 1,
+                              highlightKuponId: kId.isNotEmpty ? kId : null,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.confirmation_number_rounded, size: 18),
+                      label: const Text('Kuponu Gör'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8E24AA),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(ctx),
@@ -483,6 +544,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   Future<void> _markAllAsRead(BuildContext context, String currentUserId) async {
     try {
       await _firestoreService.markAllNotificationsAsRead(currentUserId);
+      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -856,6 +918,12 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           iconBg = isDark
               ? const Color(0xFFFF6B35).withValues(alpha: 0.18)
               : const Color(0xFFFFF3EE);
+        } else if (type == 'coupon' || type == 'community_coupon') {
+          icon = Icons.confirmation_number_rounded;
+          iconColor = const Color(0xFF8E24AA);
+          iconBg = isDark
+              ? const Color(0xFF8E24AA).withValues(alpha: 0.18)
+              : const Color(0xFFF3E5F5);
         } else if (type == 'admin_message' ||
             type == 'admin' ||
             type == 'manual_notification') {
@@ -883,6 +951,9 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         }
 
         final notifId = item['id'] as String;
+        final itemImageUrl = (item['imageUrl'] as String? ?? '').trim();
+        final itemMerchant = (item['merchant'] ?? '').toString().trim();
+        final itemPrice = (item['price'] ?? '').toString().trim();
 
         // Başlık metnini biçimlendir (Topluluk bildirimlerindeki mükerrer 💬 emojisini temizle)
         String displayTitle = (item['title'] as String? ?? 'Bildirim').trim();
@@ -906,7 +977,10 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             if (isAppr) {
               displayBody = 'Fırsatınız başarıyla onaylandı ve yayına alındı.';
             } else if (isRej) {
-              displayBody = 'Fırsatınız topluluk kurallarımıza uymadığı için reddedildi.';
+              final modReason = (item['moderationReason'] as String? ?? '').trim();
+              displayBody = modReason.isNotEmpty
+                  ? 'Red sebebi: $modReason'
+                  : 'Fırsatınız topluluk kurallarımıza uymadığı için reddedildi.';
             }
           }
         }
@@ -958,6 +1032,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
             // Firestore'dan tamamen sil
             await _firestoreService.deleteNotification(currentUserId, notifId);
+            AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
 
             if (context.mounted) {
               ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -1045,6 +1120,37 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                        if (itemMerchant.isNotEmpty || itemPrice.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 3.0),
+                            child: Row(
+                              children: [
+                                if (itemMerchant.isNotEmpty)
+                                  Text(
+                                    itemMerchant,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                    ),
+                                  ),
+                                if (itemMerchant.isNotEmpty && itemPrice.isNotEmpty)
+                                  Text(
+                                    ' • ',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                  ),
+                                if (itemPrice.isNotEmpty)
+                                  Text(
+                                    itemPrice,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF10B981),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         if (displayBody.isNotEmpty)
                           Text(
                             displayBody,
@@ -1059,6 +1165,24 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                       ],
                     ),
                   ),
+                  if (itemImageUrl.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: itemImageUrl,
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          width: 44,
+                          height: 44,
+                          color: isDark ? Colors.white10 : Colors.black12,
+                        ),
+                        errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  ],
                   if (isUnread) ...[
                     const SizedBox(width: 8),
                     Container(
@@ -1110,6 +1234,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     if (confirmed == true && mounted) {
       try {
         await _firestoreService.deleteNotification(userId, item['id'] as String);
+        AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1173,6 +1298,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         );
 
         await _firestoreService.deleteAllNotifications(userId);
+        AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId);
 
         if (mounted) {
           Navigator.pop(context); // Close loading dialog

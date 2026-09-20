@@ -85,7 +85,7 @@ class _FAQScreenState extends State<FAQScreen> {
         FAQItem(
           question: 'Hesabımı ve verilerimi nasıl silebilirim?',
           answer:
-              'Profilim > Ayarlar sekmesindeki "Hesabımı Sil" butonuyla veya kolikfirsat@gmail.com adresine yazarak tüm hesap ve kişisel verilerinizin sistemlerimizden anında kalıcı olarak silinmesini sağlayabilirsiniz.',
+              'Profilim > Ayarlar sekmesindeki "Hesabımı Sil" butonuyla veya destek@firsatkolik.app adresine yazarak tüm hesap ve kişisel verilerinizin sistemlerimizden anında kalıcı olarak silinmesini sağlayabilirsiniz.',
         ),
       ],
     ),

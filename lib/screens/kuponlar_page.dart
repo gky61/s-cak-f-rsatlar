@@ -13,10 +13,18 @@ import '../services/analytics_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
+import '../services/notification_service.dart';
 import 'kupon_form_page.dart';
 
 class KuponlarPage extends StatefulWidget {
-  const KuponlarPage({super.key});
+  final int initialTabIndex;
+  final String? highlightKuponId;
+
+  const KuponlarPage({
+    super.key,
+    this.initialTabIndex = 0,
+    this.highlightKuponId,
+  });
 
   @override
   State<KuponlarPage> createState() => _KuponlarPageState();
@@ -40,6 +48,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   late Stream<List<Kupon>> _kuponlarStream;
   late TabController _tabController;
   String _selectedStoreFilter = 'Tümü';
+  String? _highlightedKuponId;
+  Timer? _highlightTimer;
 
   // Custom In-Page Toast Banner State
   Timer? _toastTimer;
@@ -54,7 +64,22 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    NotificationService.isCouponsScreenActive = true;
+    if (widget.highlightKuponId != null && widget.highlightKuponId!.trim().isNotEmpty) {
+      _highlightedKuponId = widget.highlightKuponId!.trim();
+      _highlightTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted) {
+          setState(() {
+            _highlightedKuponId = null;
+          });
+        }
+      });
+    }
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 1),
+    );
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         HapticFeedback.selectionClick();
@@ -81,6 +106,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    NotificationService.isCouponsScreenActive = false;
+    _highlightTimer?.cancel();
     _toastTimer?.cancel();
     for (final timer in _hideTimers.values) {
       timer.cancel();
@@ -389,7 +416,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     if (clean.contains('d&r') || clean.contains('dr')) return 'https://www.dr.com.tr';
     if (clean.contains('vatan')) return 'https://www.vatanbilgisayar.com';
     if (clean.contains('itopya')) return 'https://www.itopya.com';
-    if (clean.contains('gaming.gen')) return 'https://www.gaming.gen.tr';
+    if (clean.contains('gamer.gen') || clean.contains('gamer gen') || clean == 'gamer gen') return 'https://www.gamer.gen.tr';
+    if (clean.contains('gaming.gen') || clean.contains('gaming gen') || clean.contains('gaminggen')) return 'https://www.gaming.gen.tr';
     if (clean.contains('sinerji')) return 'https://www.sinerji.gen.tr';
     if (clean.contains('tebilon')) return 'https://www.tebilon.com';
     if (clean.contains('lcw') || clean.contains('lc waikiki')) return 'https://www.lcwaikiki.com';
@@ -412,7 +440,16 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     return 'https://www.google.com/search?q=${Uri.encodeComponent('$storeName indirim kuponu')}';
   }
 
+  bool _canOpenStore(String storeName) {
+    final clean = storeName.trim().toLowerCase();
+    if (clean.isEmpty || clean == 'diğer' || clean == 'diger' || clean == 'genel' || clean == 'belirtilmemiş') {
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _openStore(String storeName) async {
+    if (!_canOpenStore(storeName)) return;
     HapticFeedback.lightImpact();
     final url = _getStoreUrl(storeName);
     try {
@@ -767,6 +804,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   }) {
     final isCopied = _copiedKuponIds.contains(kupon.id);
     final isInvalid = kupon.durum == 'gecersiz';
+    final isExpired = kupon.isExpired;
     final isRecentlyRestored = _recentlyRestoredKuponIds.contains(kupon.id);
 
     if (currentUser != null && !_userVotes.containsKey(kupon.id)) {
@@ -799,9 +837,10 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
 
     final canManage = currentUser != null && (kupon.paylasanKullaniciId == currentUser.uid || _isAdmin);
     final hasUsername = kupon.kaynakTipi == 'topluluk' && kupon.paylasanKullaniciAdi.isNotEmpty;
+    final isHighlighted = _highlightedKuponId != null && _highlightedKuponId == kupon.id;
 
     return Opacity(
-      opacity: isInvalid ? 0.5 : 1.0,
+      opacity: (isInvalid || isExpired) ? 0.55 : 1.0,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeOutCubic,
@@ -811,19 +850,23 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: isRecentlyRestored
-                  ? AppTheme.primary.withValues(alpha: isDark ? 0.45 : 0.25)
-                  : Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
-              blurRadius: isRecentlyRestored ? 16 : 10,
-              spreadRadius: isRecentlyRestored ? 1.5 : 0,
+              color: isHighlighted
+                  ? const Color(0xFF8E24AA).withValues(alpha: isDark ? 0.50 : 0.28)
+                  : (isRecentlyRestored
+                      ? AppTheme.primary.withValues(alpha: isDark ? 0.45 : 0.25)
+                      : Colors.black.withValues(alpha: isDark ? 0.35 : 0.03)),
+              blurRadius: isHighlighted ? 18 : (isRecentlyRestored ? 16 : 10),
+              spreadRadius: isHighlighted ? 1.8 : (isRecentlyRestored ? 1.5 : 0),
               offset: const Offset(0, 2),
             ),
           ],
           border: Border.all(
-            color: isRecentlyRestored
-                ? AppTheme.primary
-                : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-            width: isRecentlyRestored ? 1.8 : 1.2,
+            color: isHighlighted
+                ? const Color(0xFF8E24AA)
+                : (isRecentlyRestored
+                    ? AppTheme.primary
+                    : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0))),
+            width: isHighlighted ? 2.0 : (isRecentlyRestored ? 1.8 : 1.2),
           ),
         ),
         padding: const EdgeInsets.all(13),
@@ -831,6 +874,34 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (isHighlighted)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8E24AA).withValues(alpha: isDark ? 0.22 : 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF8E24AA).withValues(alpha: 0.35),
+                    width: 1,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.stars_rounded, size: 13, color: Color(0xFF8E24AA)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Bildirimden Açılan Kupon',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF8E24AA),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             // TOP ROW: STORE LOGO + TITLES + VOUCHER CODE BOX
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -889,6 +960,35 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                               ),
                             ),
                           ),
+                          if (kupon.isExpired) ...[
+                            const SizedBox(width: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDC2626).withValues(alpha: isDark ? 0.22 : 0.12),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: const Color(0xFFDC2626).withValues(alpha: 0.35),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.timer_off_outlined, size: 10, color: Color(0xFFDC2626)),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'Süresi Doldu',
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFFDC2626),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           if (hasUsername) ...[
                             const SizedBox(width: 6),
                             Expanded(
@@ -1088,43 +1188,44 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                       ),
                     ),
 
-                    const SizedBox(height: 5),
-
-                    // "Mağazaya Git" Button
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => _openStore(kupon.magazaAdi),
-                        borderRadius: BorderRadius.circular(7),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.06),
-                            borderRadius: BorderRadius.circular(7),
-                            border: Border.all(
-                              color: AppTheme.primary.withValues(alpha: isDark ? 0.35 : 0.2),
-                              width: 0.8,
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Mağazaya Git',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.primary,
-                                  letterSpacing: -0.2,
-                                ),
+                    // "Mağazaya Git" Button (Sadece geçerli bir mağaza varsa gösterilir)
+                    if (_canOpenStore(kupon.magazaAdi)) ...[
+                      const SizedBox(height: 5),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _openStore(kupon.magazaAdi),
+                          borderRadius: BorderRadius.circular(7),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.06),
+                              borderRadius: BorderRadius.circular(7),
+                              border: Border.all(
+                                color: AppTheme.primary.withValues(alpha: isDark ? 0.35 : 0.2),
+                                width: 0.8,
                               ),
-                              SizedBox(width: 3),
-                              Icon(Icons.open_in_new_rounded, size: 10.5, color: AppTheme.primary),
-                            ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Mağazaya Git',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.primary,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                                SizedBox(width: 3),
+                                Icon(Icons.open_in_new_rounded, size: 10.5, color: AppTheme.primary),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ],
@@ -1658,10 +1759,10 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
               final visibleKuponlar = filteredKuponlar.where((k) => !_hiddenKuponIds.contains(k.id)).toList();
 
               final toplulukKuponlar = visibleKuponlar.where((k) => k.kaynakTipi == 'topluluk').toList();
-              toplulukKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank));
+              toplulukKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank, isCommunity: true));
 
               final radarKuponlar = visibleKuponlar.where((k) => k.kaynakTipi == 'web' && k.durum == 'aktif').toList();
-              radarKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank));
+              radarKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank, isCommunity: false));
 
               final currentTabCount = _tabController.index == 0 ? radarKuponlar.length : toplulukKuponlar.length;
               final currentTabTitle = _tabController.index == 0 ? 'Kupon Radarı' : 'Topluluk Kuponları';

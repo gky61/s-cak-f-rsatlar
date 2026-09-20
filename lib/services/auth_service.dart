@@ -7,6 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, defaultTargetPlatform, TargetPlatform;
 import 'notification_service.dart';
+import 'app_badge_service.dart';
 import 'analytics_service.dart';
 import '../models/user.dart' as app_user;
 import '../firebase_options.dart';
@@ -668,6 +669,14 @@ class AuthService {
         await NotificationService().clearDeviceToken();
       } catch (e) {
         _log('NotificationService clear token: $e');
+      }
+
+      // Rozet servisini durdur ve ikondaki rozeti temizle
+      try {
+        AppBadgeService.instance.stopRealtimeBadgeSync();
+        await AppBadgeService.instance.clearBadge();
+      } catch (e) {
+        _log('AppBadgeService clear error: $e');
       }
 
       // Google Sign-In oturumunu temizle

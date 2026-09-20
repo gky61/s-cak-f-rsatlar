@@ -27,7 +27,7 @@ Bu doküman, FırsatKolik uygulamasının Google Play Store'da production-ready 
 
 ### 🏛️ FAZ 1 — Yasal ve Kurumsal Temel
 *   **Durum:** ✅ **Tamamlandı**
-*   **Geliştirici Hesabı:** Bireysel, `muratcan.gokyokus@gmail.com`, destek: `kolikfirsat@gmail.com`
+*   **Geliştirici Hesabı:** Bireysel, `muratcan.gokyokus@gmail.com`, destek: `destek@firsatkolik.app`
 *   **Privacy Policy:** [https://sicak-firsatlar-e6eae.web.app/privacy-policy.html](https://sicak-firsatlar-e6eae.web.app/privacy-policy.html) ✅
 *   **Delete Account:** [https://sicak-firsatlar-e6eae.web.app/delete-account.html](https://sicak-firsatlar-e6eae.web.app/delete-account.html) ✅
 

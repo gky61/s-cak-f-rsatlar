@@ -87,6 +87,9 @@ class Kupon {
     };
   }
 
+  // Süresi dolmuş mu kontrolü
+  bool get isExpired => bitisTarihi != null && bitisTarihi!.isBefore(DateTime.now());
+
   // Net Skor: Sıcak oylar ile Soğuk oylar arasındaki fark
   int get netScore => sicakOySayisi - sogukOySayisi;
 
@@ -106,18 +109,25 @@ class Kupon {
   }
 
   // Sıralama Grubu:
-  // Grup 1: Sıcak Kuponlar (toplam oy >= 3 ve başarı oranı >= 70%)
-  // Grup 2: Normal / Yeni Kuponlar (oylanmamışlar veya araftakiler)
-  // Grup 3: Çöp / Geçersiz Kuponlar (durum == 'gecersiz' veya netScore <= -5)
+  // Grup 1: Sıcak Kuponlar (aktif, süresi dolmamış, toplam oy >= 3 ve başarı oranı >= 70%)
+  // Grup 2: Normal / Yeni Kuponlar (aktif, süresi dolmamış, netScore > -5)
+  // Grup 3: Çöp / Geçersiz / Süresi Dolan Kuponlar (durum == 'gecersiz' veya isExpired veya netScore <= -5)
   int get sortingGroup {
-    if (durum == 'gecersiz' || netScore <= -5) return 3;
+    if (durum == 'gecersiz' || isExpired || netScore <= -5) return 3;
     final toplamOy = sicakOySayisi + sogukOySayisi;
     if (toplamOy >= 3 && (sicakOySayisi / toplamOy) >= 0.7) return 1;
     return 2;
   }
 
-  // Profesyonel Sıralama Karşılaştırıcısı (Comparator)
-  static int compareKuponlar(Kupon a, Kupon b, int Function(String) getStoreRank) {
+  // Dünya Standartlarında (PROD-READY) Sıralama Karşılaştırıcısı
+  // isCommunity: true  -> Topluluk Kuponları (Topluluk akışı: Oy farkı ve tazelik/tarih öncelikli)
+  // isCommunity: false -> Kupon Radarı (Mağaza dizini: Mağaza popülerliği ve oy farkı öncelikli)
+  static int compareKuponlar(
+    Kupon a,
+    Kupon b,
+    int Function(String) getStoreRank, {
+    bool isCommunity = false,
+  }) {
     // 1. Önce Geçerlilik/Sıralama Gruplarına Göre Sırala
     final groupA = a.sortingGroup;
     final groupB = b.sortingGroup;
@@ -126,34 +136,89 @@ class Kupon {
       return groupA.compareTo(groupB); // Sıcaklar (1) en üstte, çöpler (3) en altta
     }
 
-    // Her iki kupon da Sıcak Grubu'ndaysa (Grup 1)
+    // HER İKİ KUPON DA SICAK GRUBU'NDAYSA (GRUP 1)
     if (groupA == 1) {
-      // Wilson Score'a göre azalan sırada sırala
+      // 1. Wilson Score'a göre azalan sırada sırala (istatistiksel güvenilirlik)
       final cmp = b.wilsonScore.compareTo(a.wilsonScore);
       if (cmp != 0) return cmp;
-      
-      // Wilson Score eşitse mağaza sıralamasına göre sırala
-      final rankCmp = getStoreRank(a.magazaAdi).compareTo(getStoreRank(b.magazaAdi));
-      if (rankCmp != 0) return rankCmp;
 
-      return b.sicakOySayisi.compareTo(a.sicakOySayisi);
+      // 2. Wilson Score eşitse Net Skor (Sıcak - Soğuk)
+      final netCmp = b.netScore.compareTo(a.netScore);
+      if (netCmp != 0) return netCmp;
+
+      if (isCommunity) {
+        // Topluluk Kuponları: Taze/güncel paylaşımlar üstte
+        final dateCmp = b.olusturulmaTarihi.compareTo(a.olusturulmaTarihi);
+        if (dateCmp != 0) return dateCmp;
+
+        return getStoreRank(a.magazaAdi).compareTo(getStoreRank(b.magazaAdi));
+      } else {
+        // Kupon Radarı: Popüler mağaza öncelikli
+        final rankCmp = getStoreRank(a.magazaAdi).compareTo(getStoreRank(b.magazaAdi));
+        if (rankCmp != 0) return rankCmp;
+
+        return b.olusturulmaTarihi.compareTo(a.olusturulmaTarihi);
+      }
     }
 
-    // Her iki kupon da Normal/Yeni Grubu'ndaysa (Grup 2)
+    // HER İKİ KUPON DA NORMAL / YENİ GRUBU'NDAYSA (GRUP 2)
     if (groupA == 2) {
-      // Önce mağaza popülerliğine (rank) göre sırala (Önceki gereksinim)
+      // Oylama Katmanı: Pozitif net skorlu kuponlar > Nötr kuponlar > Negatif kuponlar
+      // Bu sayede çalışan/beğenilen kuponlar henüz Grup 1 eşiğine (3 oy & %70) gelmemiş olsa bile
+      // sıfır oylu veya negatif oylu kuponların önüne geçer!
+      final tierA = a.netScore > 0 ? 2 : (a.netScore == 0 ? 1 : 0);
+      final tierB = b.netScore > 0 ? 2 : (b.netScore == 0 ? 1 : 0);
+
+      if (tierA != tierB) {
+        return tierB.compareTo(tierA); // Pozitif (2) > Nötr (1) > Negatif (0)
+      }
+
+      if (isCommunity) {
+        // Topluluk Kuponları:
+        // 1. Net skor azalan
+        final netCmp = b.netScore.compareTo(a.netScore);
+        if (netCmp != 0) return netCmp;
+
+        // 2. Oluşturulma tarihi azalan (Yeni paylaşılan kuponlar üstte)
+        final dateCmp = b.olusturulmaTarihi.compareTo(a.olusturulmaTarihi);
+        if (dateCmp != 0) return dateCmp;
+
+        // 3. Mağaza popülerliği
+        return getStoreRank(a.magazaAdi).compareTo(getStoreRank(b.magazaAdi));
+      } else {
+        // Kupon Radarı:
+        // 1. Mağaza popülerliğine (rank) göre sırala
+        final rankCmp = getStoreRank(a.magazaAdi).compareTo(getStoreRank(b.magazaAdi));
+        if (rankCmp != 0) return rankCmp;
+
+        // 2. Net skor azalan
+        final netCmp = b.netScore.compareTo(a.netScore);
+        if (netCmp != 0) return netCmp;
+
+        // 3. Oluşturulma tarihi azalan
+        return b.olusturulmaTarihi.compareTo(a.olusturulmaTarihi);
+      }
+    }
+
+    // HER İKİ KUPON DA ÇÖP / GEÇERSİZ / SÜRESİ DOLAN GRUBU'NDAYSA (GRUP 3)
+    // Henüz süresi dolmamış olanlar (örneğin sadece -5 almış olanlar), süresi dolmuş olanların üstünde
+    if (a.isExpired != b.isExpired) {
+      return a.isExpired ? 1 : -1; // Süresi dolmayan üstte (-1)
+    }
+
+    if (isCommunity) {
+      final netCmp = b.netScore.compareTo(a.netScore);
+      if (netCmp != 0) return netCmp;
+
+      return b.olusturulmaTarihi.compareTo(a.olusturulmaTarihi);
+    } else {
       final rankCmp = getStoreRank(a.magazaAdi).compareTo(getStoreRank(b.magazaAdi));
       if (rankCmp != 0) return rankCmp;
-      
-      // Mağaza ranki aynı ise oluşturulma tarihine göre azalan sırada (en yeni üstte)
+
+      final netCmp = b.netScore.compareTo(a.netScore);
+      if (netCmp != 0) return netCmp;
+
       return b.olusturulmaTarihi.compareTo(a.olusturulmaTarihi);
     }
-
-    // Her iki kupon da Çöp/Geçersiz Grubu'ndaysa (Grup 3)
-    // Önce mağaza popülerliğine, sonra net skora göre sırala
-    final rankCmp = getStoreRank(a.magazaAdi).compareTo(getStoreRank(b.magazaAdi));
-    if (rankCmp != 0) return rankCmp;
-
-    return b.netScore.compareTo(a.netScore);
   }
 }

@@ -236,7 +236,7 @@
 
         <div class="footer-links">
             <a href="privacy-policy.html">Gizlilik Politikası</a> | 
-            <a href="mailto:kolikfirsat@gmail.com">Destek Al</a>
+            <a href="mailto:destek@firsatkolik.app">Destek Al</a>
         </div>
     </div>
 
@@ -254,7 +254,7 @@
 
             // Eğer Access Key güncellenmemişse, kullanıcıyı mailto linkine yönlendir (failsafe fallback)
             if (object.access_key === 'YOUR_ACCESS_KEY_HERE') {
-                const mailtoUrl = `mailto:kolikfirsat@gmail.com?subject=Hesap Silme Talebi - Fırsatkolik&body=Merhaba,%0D%0A%0D%0A${object.email} e-posta adresine bağlı Fırsatkolik hesabımın ve verilerimin tamamen silinmesini talep ediyorum.%0D%0A%0D%0AAd Soyad: ${object.name}%0D%0AKullanıcı Adı: ${object.username || '-'}%0D%0ASilme Nedeni: ${object.reason || '-'}`;
+                const mailtoUrl = `mailto:destek@firsatkolik.app?subject=Hesap Silme Talebi - Fırsatkolik&body=Merhaba,%0D%0A%0D%0A${object.email} e-posta adresine bağlı Fırsatkolik hesabımın ve verilerimin tamamen silinmesini talep ediyorum.%0D%0A%0D%0AAd Soyad: ${object.name}%0D%0AKullanıcı Adı: ${object.username || '-'}%0D%0ASilme Nedeni: ${object.reason || '-'}`;
                 window.location.href = mailtoUrl;
                 
                 formContainer.style.display = 'none';

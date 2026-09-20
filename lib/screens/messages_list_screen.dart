@@ -9,6 +9,7 @@ import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
+import '../services/app_badge_service.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/skeletons/chat_list_skeleton.dart';
 import 'message_screen.dart';
@@ -32,6 +33,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   @override
   void initState() {
     super.initState();
+    AppBadgeService.instance.syncBadgeWithFirestore();
     final uid = _authService.currentUser?.uid;
     if (uid != null) {
       _messagesStream = _firestoreService.getUserMessagesStream(uid);
@@ -679,6 +681,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                   onTap: () async {
                     Navigator.pop(ctx);
                     await _firestoreService.markConversationAsRead(currentUserId, otherUserId);
+                    AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
                   },
                 ),
               ListTile(

@@ -13,6 +13,7 @@ import '../services/auth_service.dart';
 import '../services/link_preview_service.dart';
 import '../services/affiliate/store_redirect_service.dart';
 import '../services/analytics_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import 'profile_screen.dart';
 import 'botkolik_profile_screen.dart';
@@ -75,6 +76,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   @override
   void initState() {
     super.initState();
+    NotificationService.activeDealId = widget.dealId;
     _loadDeal();
     _checkAdminStatus();
     _checkFavoriteStatus();
@@ -91,6 +93,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
   @override
   void dispose() {
+    if (NotificationService.activeDealId == widget.dealId) {
+      NotificationService.activeDealId = null;
+    }
     _voteDebounceTimer?.cancel();
     _authSub?.cancel();
     super.dispose();

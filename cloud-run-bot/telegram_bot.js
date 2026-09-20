@@ -639,6 +639,7 @@ function extractStoreFromLink(link, text) {
   else if (hostname.includes('gratis') || lowerLink.includes('gratis.com')) store = 'Gratis';
   else if (hostname.includes('ikea') || lowerLink.includes('ikea.com')) store = 'Ikea';
   else if (hostname.includes('boyner') || lowerLink.includes('boyner.com')) store = 'Boyner';
+  else if (hostname.includes('gamer.gen') || lowerLink.includes('gamer.gen')) store = 'Gamer Gen';
   else if (hostname.includes('decathlon') || lowerLink.includes('decathlon.com')) store = 'Decathlon';
   else if (hostname.includes('mediamarkt') || lowerLink.includes('mediamarkt.com')) store = 'MediaMarkt';
   else if (hostname.includes('vatanbilgisayar') || lowerLink.includes('vatanbilgisayar')) store = 'Vatan Bilgisayar';
@@ -661,6 +662,7 @@ function extractStoreFromLink(link, text) {
     if (lowerText.includes('gratis')) return 'Gratis';
     if (lowerText.includes('ikea')) return 'Ikea';
     if (lowerText.includes('boyner')) return 'Boyner';
+    if (lowerText.includes('gamer gen') || lowerText.includes('gamer.gen')) return 'Gamer Gen';
     if (lowerText.includes('decathlon')) return 'Decathlon';
     if (lowerText.includes('mediamarkt')) return 'MediaMarkt';
     if (lowerText.includes('vatan')) return 'Vatan Bilgisayar';

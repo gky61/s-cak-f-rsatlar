@@ -104,6 +104,12 @@ class StoreAssetHelper {
     'incehesap': 'assets/incehesap.webp',
     'itopya': 'assets/itopya.webp',
     'havit': 'assets/havit.webp',
+    'gamergen': 'assets/gamergen.webp',
+    'gamer_gen': 'assets/gamergen.webp',
+    'gamer-gen': 'assets/gamergen.webp',
+    'gaminggen': 'assets/gaminggen.webp',
+    'gaming_gen': 'assets/gaminggen.webp',
+    'gaming-gen': 'assets/gaminggen.webp',
 
     // Pazaryerleri & Moda
     'trendyol': 'assets/trendyol.webp',
@@ -196,6 +202,12 @@ class StoreAssetHelper {
     'incehesap': Color(0xFF1E88E5),
     'itopya': Color(0xFFFF5722),
     'havit': Color(0xFFE53935),
+    'gamergen': Color(0xFFF3D51B),
+    'gamer_gen': Color(0xFFF3D51B),
+    'gamer-gen': Color(0xFFF3D51B),
+    'gaminggen': Color(0xFFE30613),
+    'gaming_gen': Color(0xFFE30613),
+    'gaming-gen': Color(0xFFE30613),
 
     // Pazaryerleri & Moda
     'trendyol': Color(0xFFF27A1A),

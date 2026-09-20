@@ -505,7 +505,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         const Divider(height: 1),
                         _buildChannelTile(
                           title: 'Topluluk Bildirimleri',
-                          subtitle: 'Paylaşımlarınıza gelen yorumlar, yanıtlar ve etiketlemeler.',
+                          subtitle: 'Topluluk tarafından paylaşılan yeni indirim kuponları, paylaşımlarınıza gelen yorumlar ve yanıtlar.',
                           value: _preferences.communityNotificationsEnabled,
                           onChanged: (val) {
                             _updatePrefs(_preferences.copyWith(communityNotificationsEnabled: val));

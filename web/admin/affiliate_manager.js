@@ -481,6 +481,8 @@ const AffiliateManager = {
             if (host.includes('migros.com.tr')) return 'Migros';
             if (host.includes('getir.com')) return 'Getir';
             if (host.includes('boyner.com.tr')) return 'Boyner';
+            if (host.includes('gamer.gen.tr')) return 'Gamer Gen';
+            if (host.includes('gaming.gen.tr')) return 'Gaming Gen';
             return 'Bilinmeyen';
         } catch (_) {
             return 'Bilinmeyen';

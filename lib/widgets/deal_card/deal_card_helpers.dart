@@ -49,6 +49,8 @@ String getStoreAsset(String storeName) {
   if (lower.contains('migros')) return 'assets/migros.webp';
   if (lower.contains('getir')) return 'assets/getir.webp';
   if (lower.contains('boyner')) return 'assets/boyner.webp';
+  if (lower.contains('gaming')) return 'assets/gaminggen.webp';
+  if (lower.contains('gamer')) return 'assets/gamergen.webp';
   if (lower.contains('a101')) return 'assets/a101.webp';
   if (lower.contains('bim')) return 'assets/bim.webp';
   if (lower.contains('şok') || lower.contains('sok')) return 'assets/sok.webp';

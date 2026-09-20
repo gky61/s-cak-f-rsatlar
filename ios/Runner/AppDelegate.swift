@@ -85,36 +85,51 @@ import UserNotifications
           result(FlutterMethodNotImplemented)
         }
       })
+
+      // iOS Uygulama İkonu Bildirim Rozeti (App Icon Badge) Kanalı
+      let badgeChannel = FlutterMethodChannel(
+        name: "com.sicakfirsatlar.app/badge",
+        binaryMessenger: controller.binaryMessenger
+      )
+
+      badgeChannel.setMethodCallHandler({
+        (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
+        if call.method == "setBadge" {
+          let count = (call.arguments as? [String: Any])?["count"] as? Int ?? 0
+          DispatchQueue.main.async {
+            UIApplication.shared.applicationIconBadgeNumber = count
+            if #available(iOS 16.0, *) {
+              UNUserNotificationCenter.current().setBadgeCount(count) { _ in }
+            }
+            result(true)
+          }
+        } else if call.method == "clearBadge" {
+          DispatchQueue.main.async {
+            UIApplication.shared.applicationIconBadgeNumber = 0
+            if #available(iOS 16.0, *) {
+              UNUserNotificationCenter.current().setBadgeCount(0) { _ in }
+            }
+            result(true)
+          }
+        } else {
+          result(FlutterMethodNotImplemented)
+        }
+      })
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   // iOS 10+ Ön plan bildirim sunumu (Foreground Notification Presentation)
+  // Dünya standartlarında (PROD-READY) uygulama içi deneyim: Uygulama ön plandayken
+  // işletim sisteminin kaba native banner'ı yerine Flutter InAppMessageBanner kullanılır.
+  // Bu nedenle foreground'da iOS native banner bastırılır (completionHandler([])).
   override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    let userInfo = notification.request.content.userInfo
-    let type = (userInfo["type"] as? String) ?? ""
-    let category = notification.request.content.categoryIdentifier
-
-    // Birebir sohbet mesajları ve admin mesajları uygulama açıkken Flutter tarafında InAppMessageBanner ile sunulur.
-    // Ön plandayken Apple sistem push bildiriminin (tepe banner) basılmasını engelle (çift bildirim önleyici).
-    let isChatMessage = type == "message" || type == "user_message" || type == "chat" || category == "USER_MESSAGE" || (userInfo["senderId"] != nil && type != "deal" && type != "comment_reply" && type != "admin_deal")
-    let isAdminMessage = type == "admin_message" || category == "ADMIN_MESSAGE"
-
-    if isChatMessage || isAdminMessage {
-      completionHandler([])
-      return
-    }
-
-    if #available(iOS 14.0, *) {
-      completionHandler([.banner, .list, .badge, .sound])
-    } else {
-      completionHandler([.alert, .badge, .sound])
-    }
+    completionHandler([])
   }
 
   // iOS Bildirim Tıklama Yanıtı (Notification Tap Response)

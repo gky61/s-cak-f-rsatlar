@@ -800,14 +800,14 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
                           _buildHubItem(
                             icon: Icons.alternate_email_rounded,
                             title: 'Bize Ulaşın & Geri Bildirim',
-                            subtitle: 'kolikfirsat@gmail.com',
+                            subtitle: 'destek@firsatkolik.app',
                             iconBgColor: Colors.orange.withValues(alpha: isDark ? 0.20 : 0.12),
                             iconColor: isDark ? const Color(0xFFFB923C) : Colors.orange.shade600,
                             isDark: isDark,
                             textMain: textMain,
                             textSub: textSub,
                             onTap: () async {
-                              const email = 'kolikfirsat@gmail.com';
+                              const email = 'destek@firsatkolik.app';
                               final uri = Uri.parse('mailto:$email');
                               try {
                                 if (await canLaunchUrl(uri)) {

@@ -30,20 +30,141 @@ Uygulama içerisinde bildirimlerle ilgili iki temel kavram bulunur:
 
 ---
 
-## 📁 2. Tüm Bildirim Türleri ve Tetiklenme Senaryoları (Tam Matris)
+## 📁 2. Tüm Bildirim Türleri, Aksiyon Tetikleyicileri ve Dağıtım Matrisi
 
-| Senaryo ID | Bildirim Türü (`type`) | Tetikleyici Olay | Kanal ID & Renk | Başlık (`title`) / İçerik (`body`) Şablonu | Koşul, Öncelik & Davranış |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **NOTIF-01** | `deal` (Kategori) | Abone olunan bir kategori veya alt kategoriye ait yeni fırsatın onaylanması / yayınlanması | `sicak_firsatlar_general_v2`<br>(#FF6B35) | **🎯 Yeni Fırsat!**<br>[Fırsat Başlığı]<br>💰 [Fiyat] TL | Kategori aboneliği açık olmalı. En düşük önceliklidir (3. seviye). Saatlik/günlük kategori hız limitlerine ve sessiz saatlere tabidir. |
-| **NOTIF-02** | `deal` (Yazar) | Bildirim zili açılan bir avcının (yazarın) paylaştığı fırsatın onaylanması | `follow_channel`<br>(#4CAF50) | **👤 Takip Ettiğiniz Kişi!**<br>Takip ettiğiniz yazar yeni fırsat paylaştı: [Fırsat Başlığı] | Yazar takibi açık olmalı (`dealNotificationsEnabled`). Orta önceliklidir (2. seviye). Kategori hız limitlerine tabi değildir; sessiz saatlere tabidir. |
-| **NOTIF-03** | `deal` (Anahtar Kelime)| Abone olunan anahtar kelimeyi (Örn: "iphone 15", "dyson") içeren fırsatın onaylanması | `keyword_alerts_channel`<br>(#FF9800) | **🎯 İlginizi Çeken Kelime!**<br>"[Kelime]" içeren yeni fırsat: [Fırsat Başlığı] | Kelime aboneliği açık olmalı (`keywordNotificationsEnabled`). En yüksek önceliklidir (Deduplication). Eğer kullanıcı kelime bildirimlerini kapatmış ama kategori açık ise otomatik olarak kategori başlığına dinamik dönüşüm yapılır. |
-| **NOTIF-04** | `comment_reply` / `comment` | Bir kullanıcının yorumuna yanıt yazılması veya paylaşılan fırsata ana yorum yapılması | `comment_replies_channel`<br>(#2196F3) | **[Kullanıcı Adı] yorumunuza cevap verdi** / **Fırsatınıza yorum yaptı**<br>[Yorum Metni] | Kendine yazılan yorumlar hariç tutulur. **Sessiz saatlerden muaftır** (24 saat anlık iletilir). `communityNotificationsEnabled` anahtarına bağlıdır. |
-| **NOTIF-05** | `submission_status` (Onay) | Kullanıcının paylaştığı fırsatın admin tarafından onaylanması | N/A (Push Yok) | **🎉 Fırsatınız Onaylandı!**<br>Paylaştığınız "[Fırsat Başlığı]" onaylandı ve yayına alındı. | **[SESSİZ BİLDİRİM]** Telefona push gitmez (`disabled_permanently_for_submission_status`), sadece Bildirim Merkezi'nde saklanır. |
-| **NOTIF-06** | `submission_status` (Red) | Kullanıcının paylaştığı fırsatın admin tarafından reddedilmesi | N/A (Push Yok) | **❌ Fırsatınız Reddedildi**<br>Paylaştığınız "[Fırsat Başlığı]" kurallarımıza uymadığı için reddedildi. | **[SESSİZ BİLDİRİM]** Telefona push gitmez (`disabled_permanently_for_submission_status`), sadece Bildirim Merkezi'nde saklanır. |
-| **NOTIF-07** | `admin_message` | Admin panelinden veya sistemden kullanıcıya resmi bildirim gönderilmesi | `admin_messages_channel_v3`<br>(#FF5722) | **🛡️ [Admin Başlığı]**<br>[Admin Mesajı] | **Sessiz saatlerden ve grup tercihlerinden muaftır.** Yalnızca Master Switch kapalıysa engellenir. Ön planda `InAppMessageBanner` ile gösterilir. |
-| **NOTIF-08** | `message` (Sohbet) | Kullanıcılar arası birebir mesajlaşmada yeni mesaj gelmesi | `messages_channel_v3`<br>(#2196F3) | **💬 [Gönderen Adı]**<br>[Mesaj Metni] | **Data-only payload & Anti-Spam.** Gönderici tarafında 5s/max 3 mesaj sliding-window limiter uygulanır. FCM'de `collapseKey: "msg_" + senderId` ve APNs'de `apns-collapse-id` ile sıkıştırma yapılır. Arka planda `tag: "msg_$senderId"` ve `onlyAlertOnce: true` ile bildirim çubuğunda tek kart güncellenir. Tıklandığında `MessageScreen` anlık optimistic seeding ile sıfır gecikmeyle açılır. |
-| **NOTIF-09** | `admin_deal` | Onay bekleyen yeni bir fırsat (kullanıcı veya bot) paylaşıldığında adminlere giden bildirim | `admin_channel`<br>(#2196F3) | **👮‍♂️ Yeni Onay Bekleyen Fırsat ([Kaynak])**<br>[Fırsat Başlığı]<br>💰 [Fiyat] TL | `admin_deals` FCM konusuna (topic) gönderilir. Sadece admin yetkisi olan kullanıcılara iletilir. Deterministik `tag: 'admin_deal_${dealId}'` ile mükerrerlik önlenir. |
-| **NOTIF-10** | `marketing` | Özel kampanyalar, hediye çekleri ve pazarlama duyuruları | `sicak_firsatlar_general_v2`<br>(#FF6B35) | **[Kampanya Başlığı]**<br>[Kampanya Detayı] | Kampanya switch'i açık olmalı. Sessiz saatlere ve master switch'e tabidir. |
+FırsatKolik platformundaki tüm bildirimler dağıtım kanalı ve depolama mekanizmasına göre **3 ana kategoriye** ayrılır:
+
+```mermaid
+graph TD
+    Trigger[Tetikleyici Olay: Fırsat, Yorum, Mesaj, Admin, Sistem] --> Dispatcher{Dağıtım Kanalı}
+    
+    Dispatcher -->|Hem Push Hem Bildirim Kutusu| Dual[🚀 ÇİFT KATMAN: FCM Push + users/uid/notifications]
+    Dispatcher -->|Sadece Bildirim Kutusu: Push Yok| InboxOnly[🔕 SESSİZ / IN-APP ONLY: users/uid/notifications]
+    Dispatcher -->|Sadece Push: Doküman Yok| PushOnly[⚡ PUSH ONLY: Doğrudan FCM / Topic]
+    
+    Dual --> ClientCheck{Mobil İstemci Durumu}
+    InboxOnly --> BMView[📱 Bildirim Merkezi: AdminNotificationsScreen]
+    PushOnly --> ClientCheck
+    
+    ClientCheck -->|Uygulama Kapalı / Arka Planda| SysTray[🔔 Sistem Bildirim Çubuğu / Kilit Ekranı]
+    ClientCheck -->|Uygulama İçindeyken / Ön Planda| ForegroundHandler[📱 Ön Plan Motoru: InAppMessageBanner / Local Notification]
+```
+
+### 2.1 📊 Dağıtım Kanalına Göre Sınıflandırma
+1. **🚀 Kategori A: Hem Push Hem Bildirim Merkezi (Çift Katmanlı Bildirimler):**
+   * Veritabanında `users/{userId}/notifications` altına kaydedilir (Kullanıcının Bildirim Kutusu'nda kalıcı saklanır).
+   * Cloud Functions `onNotificationCreated` motoru üzerinden filtrelere (sessiz saatler, hız limitleri, kullanıcı tercihleri) tabi tutularak kullanıcının telefonuna **FCM Push** bildirimi olarak iletilir.
+   * *Kapsam:* Kategori Fırsatları, Yazar Takip Fırsatları, Botkolik Radarı, Anahtar Kelime Fırsatları, Yoruma Cevap, Fırsata Yorum, Resmi Yönetici Duyuruları, Admin Kampanyaları (all/uid).
+
+2. **🔕 Kategori B: Sadece Bildirim Merkezi (Push Gönderilmez - Sessiz / In-App Only):**
+   * `users/{userId}/notifications` altına doküman yazılır ancak telefon bildirim çubuğuna push **GİTMEZ**.
+   * *Kapsam:*
+     * **Fırsat Onay Bildirimi (`submission_status: approved`):** Kullanıcının paylaştığı fırsat onaylandığında `pushStatus: 'disabled_permanently_for_submission_status'` ile push engellenir; Bildirim Merkezi'nde yeşil rozetle listelenir.
+     * **Fırsat Red Bildirimi (`submission_status: rejected`):** Kullanıcının fırsatı kurallara uymadığı için reddedildiğinde push engellenir; Bildirim Merkezi'nde kırmızı rozetle listelenir.
+     * **Filtreye Takılan Bildirimler (In-App Fallback):** Kullanıcının sessiz saatlerde olması (`skipped_quiet_hours`), saatlik/günlük hız limitlerinin dolması (`skipped_*_limit`), ardışık deal burst cooldown'ı (`skipped_deal_burst_cooldown`), grup switch'inin kapalı olması (`disabled_by_user_group_*`), Master Switch'in kapalı olması (`disabled_by_user_master_switch`) veya aktif cihazının olmaması (`no_active_devices`) durumlarında doküman Bildirim Kutusu'nda kalır; fakat kullanıcının telefonu rahatsız edilmez.
+
+3. **⚡ Kategori C: Sadece Push (Bildirim Merkezine Doküman Yazılmaz):**
+   * Kullanıcının `users/{userId}/notifications` kutusunda doküman oluşturulmaz; anlık operasyonel veya gizlilik gerektiren bildirimlerdir.
+   * *Kapsam:*
+     * **Birebir Sohbet Mesajları (`message`):** Kullanıcılar arası sohbet mesajları Bildirim Kutusu'nda değil, `messages` koleksiyonunda ve "Mesajlar" (`MessagesListScreen`) sayfasında saklanır. Telefona **Data-Only FCM Push** atılır.
+     * **Onay Bekleyen Yeni Fırsat (`admin_deal`):** Bot veya kullanıcı tarafından paylaşılan onaysız fırsatlar yalnızca yöneticilerin abone olduğu `admin_deals` FCM konusuna gönderilir.
+     * **Moderasyona Takılan Fırsat (`admin_deal` - Moderasyon):** Küfür veya yasaklı kelime içeren paylaşımlar admin topic'ine kırmızı uyarıyla push atılır.
+     * **Doğrudan Token Gönderimi (`sendManualNotification` - `targetType: token`):** Admin panelinden belirli bir cihaz token'ına atılan tekil test/servis push'ları.
+
+---
+
+### 2.2 📋 Uçtan Uca Bildirim Davranış ve Yaşam Döngüsü Matrisi (PROD-READY)
+
+Aşağıdaki tablo; projedeki tüm bildirim türlerini, tetikleyen eylemleri, dağıtım türünü, **uygulama kapalıyken**, **arka plandayken** ve özellikle **uygulama içindeyken (ön planda)** nasıl davrandığını eksiksiz olarak listeler:
+
+| Senaryo ID | Bildirim Türü (`type` / `reason`) | Tetikleyici Eylem (Hangi Durumda Gelir?) | Dağıtım Kanalı | Uygulama Kapalıyken (Cold Start) | Uygulama Arka Plandayken (Background) | 📱 Uygulama İÇİNDEYKEN BİLE (Ön Plan / Foreground) (PROD-READY) | Tıklama Hedefi (Deep Link) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **NOTIF-01** | `deal`<br>(reason: `category`) | Abone olunan bir kategoriye ait fırsat onaylanıp yayına alındığında | **Hem Push Hem Bildirim Merkezi** | Sistem tepsisinde push kartı çıkar; tıklandığında soğuk açılış kuyruğu (`_startPendingNotificationCheck`) ile Splash sonrasında fırsat detayını açar. | Sistem bildirim çubuğunda push kartı çıkar; tıklandığında anında fırsat detayını açar. | 🌟 **Evrensel In-App Banner:** Ekrana üstten kayarak inen şık, turuncu rozetli `InAppMessageBanner(badge: 'Sıcak Fırsat')` açılır. Tıklandığında anında fırsat detayına gider. | **`DealDetailScreen(dealId)`** |
+| **NOTIF-02** | `deal`<br>(reason: `author`) | Takip edilen bir avcı/yazar yeni fırsat paylaşıp onaylandığında | **Hem Push Hem Bildirim Merkezi** | Sistem tepsisinde kilit ekranı kartı çıkar (`follow_channel`). Tıklandığında fırsat detayına yönlendirir. | Bildirim çubuğunda yeşil renkli bildirim kartı görünür. | 🌟 **Evrensel In-App Banner:** Camgöbeği rozetli `InAppMessageBanner(badge: 'Yazar Takip')` açılır. Tıklandığında fırsat detayına yönlendirir. | **`DealDetailScreen(dealId)`** |
+| **NOTIF-03** | `deal`<br>(reason: `author` & detail: `botkolik`) | Botkolik otonom botu web'den sıcak bir fırsat yakalayıp onaylandığında | **Hem Push Hem Bildirim Merkezi** | "⚡ Botkolik Radarı!" başlığıyla sistem kilit ekranında gösterilir. | Bildirim çubuğunda "⚡ Botkolik Radarı!" kartı görünür. | 🌟 **Evrensel In-App Banner:** Botkolik avatarı ve rozetiyle `InAppMessageBanner(badge: 'Yazar Takip')` açılır. Tıklandığında doğrudan yakalanan fırsata gider. | **`DealDetailScreen(dealId)`** |
+| **NOTIF-04** | `deal`<br>(reason: `keyword`) | Abone olunan anahtar kelimeyi (Örn: "iphone", "dyson") içeren fırsat onaylandığında | **Hem Push Hem Bildirim Merkezi** | "🎯 İlginizi Çeken Kelime!" başlığıyla çıkar. Tıklandığında Chat-Hijacking koruması sayesinde sohbete DEĞİL doğrudan fırsata gider. | Turuncu renkli (`keyword_alerts_channel`) kilit ekranı kartı olarak iletilir. | 🌟 **Evrensel In-App Banner:** Mor rozetli `InAppMessageBanner(badge: 'Kelime Radarı')` açılır. Chat-Hijacking korumasıyla tıklandığında doğrudan fırsat detayına gider. | **`DealDetailScreen(dealId)`** |
+| **NOTIF-05** | `comment_reply` | Bir kullanıcının yorumuna başka bir kullanıcı cevap yazdığında | **Hem Push Hem Bildirim Merkezi** | Sistem bildirim çubuğunda yorum metniyle çıkar. Tıklandığında fırsat detayında doğrudan ilgili yoruma odaklanır. | Bildirim kartı çıkar (`comment_replies_channel`). Sessiz saatlerden muaftır (24 saat anlık iletilir). | 🛡️ **Kullanıcı Zaten O Fırsattaysa (`activeDealId == dealId`):** Yorumlar canlı aktığı için BASTIRILIR (Spam Engeli).<br>🌟 **Başka Ekrandaysa:** Eflatun rozetli `InAppMessageBanner(badge: 'Yorum Cevabı')` açılır. Tıklandığında yoruma odaklanır. | **`DealDetailScreen(dealId, scrollToCommentId: commentId)`** |
+| **NOTIF-06** | `comment` (Kök Yorum) | Paylaşılan fırsata ilk seviye ana yorum yapıldığında (fırsat sahibine) | **Hem Push Hem Bildirim Merkezi** | Fırsat sahibinin kilit ekranına "💬 [Kullanıcı] fırsatınıza yorum yaptı" push'u düşer. | Fırsat sahibine bildirim çubuğunda gösterilir. Sessiz saatlerden muaftır. | 🛡️ **Fırsat Sahibi O Fırsattaysa (`activeDealId == dealId`):** Canlı aktığı için BASTIRILIR (Spam Engeli).<br>🌟 **Başka Ekrandaysa:** Mavi rozetli `InAppMessageBanner(badge: 'Yeni Yorum')` açılır. Tıklandığında ilgili yoruma gider. | **`DealDetailScreen(dealId, scrollToCommentId: commentId)`** |
+| **NOTIF-07** | `submission_status`<br>(status: `approved`) | Kullanıcının paylaştığı fırsat admin tarafından onaylanıp yayına alındığında | **Hem Push Hem Bildirim Merkezi** (Gerçek Kullanıcılar İçin) / **Sessiz Mod** (Otomasyon & Eski Testler) | Kilit ekranında yeşil vurgulu (`#10B981`), BigPicture fırsat görselli ve kutlama başlıklı push kartı çıkar. Tıklandığında doğrudan canlı fırsat detayını açar. | Bildirim çubuğunda "🎉 Fırsatınız Onaylandı!" push kartı görünür. | 🌟 **Evrensel In-App Banner:** Kutlama ikonlu yeşil rozetli `InAppMessageBanner(badge: 'Onaylandı')` açılır. Tıklandığında onaylanan canlı fırsata gider. | **`DealDetailScreen(dealId)`** |
+| **NOTIF-08** | `submission_status`<br>(status: `rejected`) | Kullanıcının paylaştığı fırsat kurallara uymadığı için admin tarafından reddedildiğinde | **Hem Push Hem Bildirim Merkezi** (Gerçek Kullanıcılar İçin) / **Sessiz Mod** (Otomasyon & Eski Testler) | Kilit ekranında kehribar/kırmızı vurgulu (`#F44336`) ve açıklayıcı push kartı çıkar. Tıklandığında kullanıcıyı red gerekçesi modalına götürür. | Bildirim çubuğunda açıklayıcı push kartı görünür. | 🌟 **Evrensel In-App Banner:** Kırmızı rozetli `InAppMessageBanner(badge: 'Reddedildi')` açılır. Tıklandığında moderasyon red açıklamasını gösteren modern modal açılır. | **Bildirim Merkezi & Modern Red Nedeni Modalı** (`_showModernNotificationDetailDialog`) |
+| **NOTIF-09** | `admin_message` | Web Admin panelinden kullanıcıya resmi duyuru veya uyarı gönderildiğinde | **Hem Push Hem Bildirim Merkezi** | "🛡️ FırsatKolik Yönetim" başlığıyla yüksek öncelikli (`time-sensitive`) push kartı çıkar. Sessiz saatlerden muaftır. | Bildirim çubuğunda kırmızı renkli (`admin_messages_channel_v3`) kart görünür. | 🛡️ **Kullanıcı Admin Sohbetindeyse:** Bildirim sessizce bastırılır.<br>🌟 **Başka Ekrandaysa:** Kırmızı rozetli `InAppMessageBanner(badge: 'Yönetici Mesajı')` açılır. Tıklandığında Admin sohbetine gider. | **`MessageScreen(otherUserId: 'admin')`** |
+| **NOTIF-10** | `message`<br>(P2P Sohbet) | Kullanıcılar arası birebir sohbette yeni mesaj gönderildiğinde | **SADECE Push & In-App Banner (BM Dokümanı Yok)** | Data-Only push iletilir. `firebaseMessagingBackgroundHandler` Android'de tek kart günceller (`tag: msg_$senderId`). iOS kilit ekranında alert kartı gösterir. | Bildirim çubuğunda gönderici bazlı tek kart güncellenir (`onlyAlertOnce: true`). Tıklandığında sıfır gecikmeyle sohbet açılır. | 🛡️ **Aynı Kişiyle Sohbetteyse:** TAMAMEN BASTIRILIR (mesaj ekranda canlı akar).<br>🔕 **Sohbet Sessizdeyse:** BASTIRILIR.<br>🌟 **Başka Ekrandaysa:** Mavi rozetli `InAppMessageBanner(badge: 'Yeni Mesaj')` açılır. Tıklandığında odaya gider. | **`MessageScreen(otherUserId: senderId)`** |
+| **NOTIF-11** | `admin_deal`<br>(Onay Bekleyen) | Kullanıcı veya bot tarafından sisteme onaysız (`isApproved: false`) yeni fırsat eklendiğinde | **SADECE Push (Yöneticiler / BM Yok)** | Yalnızca `admin_deals` konusuna abone yöneticilerin kilit ekranına "👮‍♂️ Yeni Onay Bekleyen Fırsat" bildirimi düşer. | Admin bildirim çubuğunda mavi kart olarak gösterilir. | 🛡️ **Yönetici Admin Panelindeyse (`isAdminScreenActive == true`):** Sekmelerde canlı aktığı için BASTIRILIR.<br>🌟 **Admin Başka Ekrandaysa:** Kırmızı rozetli `InAppMessageBanner(badge: 'Onay Bekliyor')` açılır. | **`AdminScreen(initialDealId: dealId, initialTabIndex: 0)`** |
+| **NOTIF-12** | `admin_deal`<br>(Moderasyona Takılan) | Paylaşılan fırsat küfür/uygunsuz içerik tespitine takıldığında | **SADECE Push (Yöneticiler / BM Yok)** | Admin kilit ekranına kırmızı renkli "🛡️ Fırsat Moderasyona Takıldı" bildirimi düşer. | Admin bildirim çubuğunda acil moderasyon kartı görünür. | 🛡️ **Admin Panelindeyse:** BASTIRILIR.<br>🌟 **Başka Ekrandaysa:** Acil uyarı rozetli `InAppMessageBanner(badge: 'Onay Bekliyor')` açılır. Tıklandığında admin paneli onay sekmesine gider. | **`AdminScreen(initialDealId: dealId, initialTabIndex: 0)`** |
+| **NOTIF-13** | `marketing` / `manual_notification` | Admin panelinden Tüm Kullanıcılara (`targetType: all`) veya Belirli UID'ye kampanya gönderildiğinde | **Hem Push Hem Bildirim Merkezi** | Kullanıcının kilit ekranına kampanya push'u düşer (`sicak_firsatlar_general_v2`). Günde max 2 pazarlama limitine tabidir. | Bildirim çubuğunda kampanya kartı gösterilir. | 🌟 **Evrensel In-App Banner:** Turuncu/kırmızı rozetli `InAppMessageBanner(badge: 'FırsatKolik')` açılır. Tıklandığında kampanya detayına veya fırsata yönlendirir. | `dealId` varsa **`DealDetailScreen`**, yoksa **`HomeScreen`** / Kampanya Detayı |
+| **NOTIF-14** | `manual_notification`<br>(targetType: `token`) | Admin panelinden doğrudan tek bir cihaz FCM token'ına test bildirimi gönderildiğinde | **SADECE Push (BM Dokümanı Yok)** | Yalnızca ilgili hedef cihazın kilit ekranına anlık push düşer. | Bildirim çubuğunda test bildirimi görünür. | 🌟 **Evrensel In-App Banner:** Test payload'una göre dinamik In-App afişi gösterilir. Tıklandığında ilgili ekrana yönlendirir. | Payload verisine göre ilgili ekran |
+| **NOTIF-15** | `coupon` / `community_coupon`<br>(reason: `community`) | Topluluk üyesi `KuponFormPage` üzerinden `kaynakTipi: 'topluluk'` olarak yeni bir indirim kuponu paylaştığında (`onCouponCreated` tetikleyicisi). Web kazıma (`kaynakTipi: 'web'`) ve geçersiz (`durum: 'gecersiz'`) kuponlar için bildirim oluşturulmaz. Kuponu paylaşan kullanıcıya da bildirim gitmez (self-notification koruması). | **Hem Push Hem Bildirim Merkezi** | Kilit ekranında "🎟️ [Mağaza] Kuponu!" başlıklı mor renkli (`#8E24AA`) push kartı çıkar. Tıklandığında `KuponlarPage(initialTabIndex: 1)` ile doğrudan "Topluluk Kuponları" sekmesi açılır. | Bildirim çubuğunda mor renkli kupon kartı gösterilir (`sicak_firsatlar_general_v2` kanalı). | 🛡️ **Kullanıcı Kuponlar Sayfasındaysa (`isCouponsScreenActive == true`):** Canlı aktığı için BASTIRILIR (Spam Engeli).<br>🌟 **Başka Ekrandaysa:** Mor rozetli `InAppMessageBanner(badge: 'Topluluk Kuponu', icon: Icons.confirmation_number_rounded)` açılır. Tıklandığında Topluluk Kuponları sekmesine gider. | **`KuponlarPage(initialTabIndex: 1, highlightKuponId: kuponId)`** |
+
+---
+
+### 2.3 📱 Uygulama İçi (Foreground) Bildirim Afişi ve Akıllı Bastırma (Suppression) Kuralları
+
+Kullanıcı uygulamanın içindeyken (foreground) bildirim deneyimi, kullanıcının o anki bağlamını (context) bozmayacak şekilde **3 seviyeli akıllı bağlam koruma katmanı (Self-Screen Spam Protection)** ve **Evrensel Markalı Afiş (Universal InAppMessageBanner)** mimarisiyle yönetilir:
+
+```mermaid
+graph TD
+    InAppEvent[Uygulama Açıkken Bildirim Gelmesi: FCM onMessage veya Firestore Realtime] --> TypeCheck{Bildirim Türü ve Konumu}
+    
+    TypeCheck -->|Fırsat İle İlgili: Yorum, Cevap, Fırsat Güncellemesi| DealCheck{Kullanıcı İlgili Fırsat Detayında mı?<br>activeDealId == dealId}
+    DealCheck -->|Evet: Zaten O Fırsat Sayfasında| SuppressDeal[🔇 TAMAMEN BASTIR: Yorumlar Ekranda Canlı Akıyor]
+    DealCheck -->|Hayır: Başka Sayfada| DealBanner[🌟 InAppMessageBanner: Yorum / Fırsat Afişi]
+
+    TypeCheck -->|Admin Onay Bildirimi: admin_deal| AdminCheck{Yönetici Admin Panelinde mi?<br>isAdminScreenActive == true}
+    AdminCheck -->|Evet: Zaten Onay Kuyruğunda| SuppressAdmin[🔇 TAMAMEN BASTIR: Sekmelerde Canlı Listeleniyor]
+    AdminCheck -->|Hayır: Başka Sayfada| AdminBanner[👮 InAppMessageBanner: Onay Bekleyen Fırsat Afişi]
+    
+    TypeCheck -->|Birebir Sohbet: message| ChatCheck{Kullanıcı Gönderenle Sohbette mi?<br>activeChatUserId == senderId}
+    ChatCheck -->|Evet: Aynı Odada| SuppressChat[🔇 TAMAMEN BASTIR: Mesajlar Canlı Akıyor]
+    ChatCheck -->|Sohbet Sessizdeyse: mutedConversations| SuppressMuted[🔕 BASTIR: Kullanıcı Sessize Almış]
+    ChatCheck -->|Hayır: Başka Sayfada| ChatBanner[💬 InAppMessageBanner: Yeni Mesaj Afişi]
+    
+    TypeCheck -->|Fırsat Onay / Red: submission_status| SubStatusBanner[🎉 InAppMessageBanner: Onaylandı / Reddedildi Rozetli Afiş]
+    TypeCheck -->|Yönetici Duyurusu / Kampanya: admin_message, marketing| GeneralBanner[📢 InAppMessageBanner: Branded Üstten Kayan Afiş]
+
+    DealBanner --> UnifiedBanner[✨ Dokununca Deep-Link İle Doğrudan Hedefe Yönlendiren Şık Banner]
+    AdminBanner --> UnifiedBanner
+    ChatBanner --> UnifiedBanner
+    SubStatusBanner --> UnifiedBanner
+    GeneralBanner --> UnifiedBanner
+```
+
+#### 🛡️ Ön Plan Kurallarının Teknik Ayrıntıları (PROD-READY Standartları):
+1. **İlgili Fırsat Ekranı Tespiti (`NotificationService.activeDealId`):**
+   * Kullanıcı bir fırsata tıkladığında `DealDetailScreen.initState` içinde `NotificationService.activeDealId = widget.dealId` atanır; sayfadan çıkıldığında (`dispose`) `null` yapılır.
+   * Kullanıcı o fırsatı incelerken veya yorumları okurken gelen yeni yorumlar ve yanıtlar Firestore StreamBuilder ile ekranda canlı güncellenir. Bu esnada ekrana tekrar popup basarak kullanıcının görüşünü kapatmak engellenir.
+2. **Admin Paneli Ekran Tespiti (`NotificationService.isAdminScreenActive`):**
+   * Yönetici `AdminScreen` sekmesini açtığında `NotificationService.isAdminScreenActive = true` bayrağı aktifleşir; sayfadan çıkıldığında `false` yapılır.
+   * Yönetici zaten onay bekleyen fırsatlar sekmesini incelerken yukarıdan tekrar tekrar `admin_deal` afişi düşmesi engellenir.
+3. **Aktif Sohbet Odası Tespiti (`NotificationService.activeChatUserId`):**
+   * Kullanıcı `MessageScreen` açtığında `NotificationService.activeChatUserId = widget.otherUserId` atanır; sayfadan çıkıldığında `null` yapılır.
+   * Aktif sohbetteyken gelen mesajlar canlı aktığı için afiş bastırılır.
+4. **Evrensel ve Markalı In-App Banner (`InAppMessageBanner`):**
+   * Android'in kaba Heads-Up sistem pencereleri ve iOS'un native üst bildirimleri ön plandayken bastırılır (`ios/Runner/AppDelegate.swift` -> `willPresent: completionHandler([])`).
+   * Bunun yerine ekranın tepesinden yumuşak animasyonla (`CurvedAnimation`) kayarak inen, haptik titreşim (`HapticFeedback.lightImpact`) veren, yukarı kaydırılarak (`Dismissible`) kapatılabilen veya 4.2 saniye sonra kaybolan, tıklanınca `handleNotificationTapPublic(rawData)` üzerinden doğrudan doğru ekrana deep link yapan FırsatKolik özel afişi gösterilir.
+
+---
+
+### 2.4 🔕 Bildirim Merkezi (Kullanıcı Bildirim Kutusu) ve Push Filtreleme Dinamikleri
+
+Kullanıcının profilindeki **"Bildirimler"** ekranı (`AdminNotificationsScreen`), push bildirimleri gitmese bile sistemdeki tüm hareketleri saklayan **kalıcı bir gelen kutusu (Inbox)** olarak çalışır:
+
+* **Push Gitmeyip Bildirim Kutusunda Saklanan Durumlar:**
+  * Kullanıcı paylaştığı fırsatın onaylandığını veya reddedildiğini push olarak almaz; ancak Bildirim Merkezi'ne girdiğinde en üstte durum kartını görür.
+  * Kullanıcı gece 02:00'de sessiz saatlerindeyken bir fırsat paylaşılırsa, telefona push gitmez (`skipped_quiet_hours`); ancak sabah Bildirim Merkezi'ni açtığında o fırsat kutusunda hazır bekler.
+  * Kullanıcının saatlik kategori kotası (3) dolduktan sonra gelen 4. kategori fırsatı push atmaz (`skipped_category_limit`); ancak Bildirim Merkezi'nde saklanır.
+  * Kullanıcı "Telefon Bildirimleri" master anahtarını kapatsa bile (`disabled_by_user_master_switch`), uygulama içi Bildirim Merkezi güncellenmeye devam eder.
+* **30 Günlük Yaşam Döngüsü (Auto-Purge):**
+  * Kullanıcı bildirim kutularının şişmesini ve veritabanı maliyetini önlemek için, oluşturulma tarihi üzerinden 30 gün geçen bildirimler PubSub zamanlanmış cron görevi (`purgeOldDeals`) veya Admin paneli derin temizliği ile kalıcı olarak silinir.
+
+---
+
+### 2.5 🎯 Bildirim Tıklama ve Yönlendirme Sözleşmesi (Routing & Deep Link Contract)
+Tüm bildirim tıklamaları (`onMessageOpenedApp`, `getInitialMessage`, yerel bildirim `onDidReceiveNotificationResponse` ve In-App Banner tıklamaları), yan etkisiz (pure) **`NotificationService.resolveRouting(data)`** karar motoru üzerinden yürütülür:
+
+1. **Chat-Hijacking Mutlak Koruması:** `userId` veya `user_id` alanı yalnızca `type == 'message' || type == 'user_message' || type == 'chat'` durumunda sohbet göndericisi kabul edilir. Fırsat, kelime veya yazar bildirimlerindeki kullanıcı kimlikleri asla sohbet olarak yorumlanamaz.
+2. **Fırsat Önceliği:** `dealId` içeren tüm bildirimler (`keyword`, `author`, `category`, `comment`, `comment_reply`, `deal`, `marketing`) istisnasız fırsat detayına yönlendirilir.
+3. **Cold Start Dayanıklılığı:** Navigator henüz hazır değilken gelen tıklamalar `_startPendingNotificationCheck` kuyruğuna alınır ve `WidgetsBinding.instance.addPostFrameCallback` ile navigator hazır olduğu an tek seferde açılır.
+4. **Birim Test Güvencesi:** Tüm senaryolar [`test/notification_routing_test.dart`](file:///d:/firsatkolik/test/notification_routing_test.dart) test paketi ile doğrulanmıştır.
 
 ---
 
@@ -95,7 +216,7 @@ Cloud Functions `onNotificationCreated` motoru her bildirim için kararı verip 
 
 2. **Kanal Bazlı Switch'ler:**
    - `dealNotificationsEnabled`: Yazar bildirimlerini kontrol eder (`disabled_by_user_group_deal`).
-   - `communityNotificationsEnabled`: Yorum yanıt bildirimlerini kontrol eder (`disabled_by_user_group_comment_reply`).
+   - `communityNotificationsEnabled`: Topluluk tarafından paylaşılan yeni indirim kuponları (NOTIF-15, `type: coupon` / `community_coupon`) ve yoruma yapılan cevap bildirimlerini kontrol eder (`disabled_by_user_group_community`).
    - `marketingNotificationsEnabled`: Kampanya bildirimlerini kontrol eder (`disabled_by_user_group_marketing`).
    - `categoryNotificationsEnabled`: Kategori bildirimlerini kontrol eder (`disabled_by_user_group_category`).
    - `keywordNotificationsEnabled`: Anahtar kelime bildirimlerini kontrol eder (`disabled_by_user_group_keyword`).
@@ -105,7 +226,7 @@ Cloud Functions `onNotificationCreated` motoru her bildirim için kararı verip 
    - `Anahtar Kelimeler >`: Master Switch AÇIK VE `keywordNotificationsEnabled == true` ise açılır. Kapalıysa dinamik uyarı: *"Bu ayarı değiştirmek için önce Anahtar Kelime Takibi Bildirimleri'ni açmalısınız."*.
 
 4. **Sessiz Saatler (`quietHoursEnabled`, `quietHoursStart`, `quietHoursEnd`, `timezone`):**
-   - Belirlenen saat aralığında (Varsayılan: 23:00 - 08:00, `Europe/Istanbul`) `deal`, `keyword` ve `marketing` push'ları `skipped_quiet_hours` ile atlanır.
+   - Belirlenen saat aralığında (Varsayılan: 23:00 - 08:00, `Europe/Istanbul`) `deal`, `keyword`, `marketing`, `coupon` ve `community_coupon` push'ları `skipped_quiet_hours` ile atlanır.
    - `comment_reply` ve `admin_message` sessiz saatlerden etkilenmeden iletilir.
 
 5. **Kategori Hız Limitleri (Rate Limiting):**
@@ -139,6 +260,64 @@ Tüm bildirim sistemi ve senaryoları tam kapsamlı (%100) doğrulanmaktadır:
 | :--- | :--- | :--- |
 | **`test/messaging_and_anti_spam_test.dart`** | Anti-spam (5s/max 3 msg), deterministik notifId & tag, payload parser, instant seeding & dedup birim testleri (11 Test) | `flutter test test/messaging_and_anti_spam_test.dart` |
 | **`test/notification_logic_test.dart`** | Flutter birim testleri, serileştirme (toMap/fromFirestore), Master Switch State Preservation (3 Test) | `flutter test test/notification_logic_test.dart` |
+| **`test/app_badge_service_test.dart`** | Uygulama Rozet Servisi (AppBadgeService) birim testleri, setBadge, clearBadge, native method channel çağrıları ve abonelik sonlandırma testleri (6 Test) | `flutter test test/app_badge_service_test.dart` |
+| **`test/notification_routing_test.dart`** | 19 Senaryoluk Bildirim Yönlendirme ve Chat-Hijacking Koruma Testleri (19 Test) | `flutter test test/notification_routing_test.dart` |
 | **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
 | **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |
 | **`functions/tests/test_all_notification_scenarios.js`** | 21 Senaryoluk Çaprazlama Uçtan Uca Bütünleşik Test Süiti: 10 Senaryo + varyasyonlarını canlı veritabanı üzerinde çapraz kontrol eder | `node functions/tests/test_all_notification_scenarios.js` |
+
+---
+
+## 🏷️ 7. Uygulama İkonu Bildirim Rozeti (App Icon Badge) Mimarisi (iOS & Android)
+
+### Karşılaşılan Sorun ve Kök Neden Analizi:
+- **Sorun:** Kullanıcı tüm bildirimleri silse veya mesajları okusa dahi iOS ve Android üzerinde uygulama ikonu üzerindeki kırmızı bildirim rozeti ("1") takılı kalıyor ve kaybolmuyordu.
+- **Kök Neden:**
+  1. Backend (`functions/index.js`), APNs bildirimlerinde `aps: { badge: 1 }` payload'ı gönderiyordu.
+  2. Apple iOS mimarisinde, uygulama açıldığında veya bildirimler okunduğunda sistem rozeti **asla kendiliğinden sıfırlamaz**. Uygulamanın native `UIApplication.shared.applicationIconBadgeNumber = 0` veya `UNUserNotificationCenter.setBadgeCount(0)` çağırması zorunludur.
+  3. İstemci tarafında hiçbir badge yönetim servisi ve native MethodChannel köprüsü bulunmuyordu.
+  4. Android tarafında ise durum çubuğunda kalan bildirimler başlatıcı (launcher) simgesi üzerinde bildirim noktası tutmaya devam ediyordu; bildirimler uygulama içinden okunduğunda native bildirim çekmecesi temizlenmiyordu.
+
+### Dünya Standartlarında (PROD-READY) Çözüm Mimarisi:
+
+```
+                                  ┌──────────────────────────────────────────────┐
+                                  │  Firestore: Realtime Snapshots & Aggregates   │
+                                  │  - users/{uid}/notifications (read: false)   │
+                                  │  - messages (receiverId: uid, isRead: false)  │
+                                  │  - adminToUserMessages (isRead: false)       │
+                                  └──────────────────────┬───────────────────────┘
+                                                         │
+                                                         ▼
+                                          ┌─────────────────────────────┐
+                                          │      AppBadgeService        │
+                                          │ (lib/services/app_badge.dart)│
+                                          └──────────────┬──────────────┘
+                                                         │
+                        ┌────────────────────────────────┴────────────────────────────────┐
+                        ▼                                                                 ▼
+      ┌────────────────────────────────────┐                           ┌────────────────────────────────────┐
+      │          iOS Native Channel        │                           │        Android Native Channel      │
+      │    (com.sicakfirsatlar.app/badge)   │                           │    (com.sicakfirsatlar.app/badge)   │
+      │  UIApplication.applicationIconBadge │                           │  NotificationManager.cancelAll()   │
+      │  UNUserNotificationCenter.setBadge │                           │  Launcher Dot anında söner         │
+      └────────────────────────────────────┘                           └────────────────────────────────────┘
+```
+
+### Rozet Sayısı Formülü:
+$$\text{Toplam Rozet Sayısı} = \text{Okunmamış Bildirimler} + \text{Okunmamış Birebir Mesajlar} + \text{Okunmamış Yönetici Mesajları}$$
+
+### Rozet Güncelleme ve Sıfırlama Tetikleyicileri (Triggers):
+1. **Canlı Firestore Dinleyicisi (`startRealtimeBadgeSync`):** Kullanıcı oturum açtığında bildirim ve mesaj koleksiyonlarındaki okunmamış kayıtları anlık dinler. Sayı azaldığında veya arttığında rozeti otomatik günceller.
+2. **Uygulama Ön Plana Geldiğinde (`AppLifecycleState.resumed`):** Kullanıcı uygulamayı her açtığında veya arka plandan ön plana getirdiğinde `syncBadgeWithFirestore` çağrılır.
+3. **Bildirim Merkezi Etkileşimleri (`AdminNotificationsScreen`):**
+   - Sayfa ilk açıldığında `syncBadgeWithFirestore()` çağrılır.
+   - Bildirime tıklandığında okunma durumu (`read: true`) kaydedilip rozet güncellenir.
+   - "Tümünü Okundu İşaretle" butonuna basıldığında tüm bildirimler okunur ve rozet sıfırlanır.
+   - Bildirim tek tek sağa/sola kaydırılarak silindiğinde veya "Tüm Bildirimleri Temizle" dendiğinde rozet anında senkronize edilir.
+4. **Mesajlaşma Ekranları (`MessageScreen` & `MessagesListScreen`):**
+   - Mesajlaşma gelen kutusu açıldığında ve kapatıldığında rozet güncellenir.
+   - Bir sohbet penceresi açılıp mesajlar okunduğunda ve sohbetten çıkıldığında `syncBadgeWithFirestore()` tetiklenir.
+5. **Oturum Kapatma (`signOut`):**
+   - Kullanıcı çıkış yaptığında tüm canlı dinleyiciler durdurulur (`stopRealtimeBadgeSync`) ve rozet derhal **0**'a çekilerek native kanallarla temizlenir (`clearBadge`).
+

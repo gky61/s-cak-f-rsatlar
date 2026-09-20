@@ -57,10 +57,14 @@ void main() {
       expect(StoreAssetHelper.getStoreAsset('MR.DIY'), 'assets/mrdiy.webp');
       expect(StoreAssetHelper.getStoreAsset('Mr DIY'), 'assets/mrdiy.webp');
 
-      // İdefix & İncehesap & İtopya
+      // İdefix & İncehesap & İtopya & Gamer Gen & Gaming Gen
       expect(StoreAssetHelper.getStoreAsset('İdefix'), 'assets/idefix.webp');
       expect(StoreAssetHelper.getStoreAsset('İncehesap'), 'assets/incehesap.webp');
       expect(StoreAssetHelper.getStoreAsset('İtopya'), 'assets/itopya.webp');
+      expect(StoreAssetHelper.getStoreAsset('Gamer Gen'), 'assets/gamergen.webp');
+      expect(StoreAssetHelper.getStoreAsset('gamergen'), 'assets/gamergen.webp');
+      expect(StoreAssetHelper.getStoreAsset('Gaming Gen'), 'assets/gaminggen.webp');
+      expect(StoreAssetHelper.getStoreAsset('gaminggen'), 'assets/gaminggen.webp');
 
       // Fallback durumunda fallbackStoreName veya store-icon
       expect(StoreAssetHelper.getStoreAsset(null, 'ŞOK'), 'assets/sok.webp');
@@ -74,6 +78,7 @@ void main() {
         'hakmarexpress', 'cagri', 'kooperatifmarket', 'watsons', 'gratis',
         'rossmann', 'cetinkaya', 'civil', 'evkur', 'mrdiy', 'teknosa',
         'vatan', 'vestel', 'mediamarkt', 'incehesap', 'itopya', 'havit',
+        'gamergen', 'gaminggen',
         'trendyol', 'hepsiburada', 'amazon', 'n11', 'pazarama', 'pttavm',
         'idefix', 'boyner', 'beymen', 'mavi', 'defacto', 'zara', 'mango'
       ];

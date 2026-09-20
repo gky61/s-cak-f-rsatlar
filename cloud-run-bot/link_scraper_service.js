@@ -34,6 +34,8 @@ function getHeadersForUrl(url) {
     lowerUrl.includes('trendyol.com') ||
     lowerUrl.includes('ty.gl') ||
     lowerUrl.includes('pttavm.com') ||
+    lowerUrl.includes('gamer.gen.tr') ||
+    lowerUrl.includes('gaming.gen.tr') ||
     lowerUrl.includes('incehesap.com')) {
     userAgent = 'WhatsApp/2.23.4.15 A';
   } else if (lowerUrl.includes('vatanbilgisayar.com') || lowerUrl.includes('pazarama.com')) {

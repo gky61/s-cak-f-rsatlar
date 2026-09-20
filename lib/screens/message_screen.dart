@@ -11,6 +11,7 @@ import '../models/deal.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
+import '../services/app_badge_service.dart';
 import '../services/link_preview_service.dart';
 import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
@@ -46,6 +47,7 @@ class MessageScreen extends StatefulWidget {
   final String? initialText;
   final String? initialIncomingMessageText;
   final String? initialIncomingMessageId;
+  final DateTime? initialIncomingMessageTime;
   final String? initialDealTitle;
   final String? initialDealId;
   final String? initialDealImageUrl;
@@ -61,6 +63,7 @@ class MessageScreen extends StatefulWidget {
     this.initialText,
     this.initialIncomingMessageText,
     this.initialIncomingMessageId,
+    this.initialIncomingMessageTime,
     this.initialDealTitle,
     this.initialDealId,
     this.initialDealImageUrl,
@@ -155,7 +158,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         receiverName: '',
         receiverImageUrl: '',
         text: incomingText,
-        createdAt: DateTime.now(),
+        createdAt: widget.initialIncomingMessageTime ?? DateTime.now(),
         isRead: true,
         dealId: widget.initialDealId,
         dealTitle: widget.initialDealTitle,
@@ -373,6 +376,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         isTyping: false,
       );
       _firestoreService.markConversationAsRead(currentUserId, widget.otherUserId);
+      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
     }
     _otherUserSubscription?.cancel();
     _typingTimer?.cancel();
@@ -400,6 +404,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         }
       }
     }
+    AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
   }
 
   void _scrollToBottom({bool animated = true}) {
@@ -966,6 +971,11 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     }
 
                     final serverMessages = snapshot.data ?? [];
+                    if (_lastKnownMessageCount > 0 &&
+                        serverMessages.length > _lastKnownMessageCount &&
+                        _showScrollToBottomBtn) {
+                      _newIncomingCount += (serverMessages.length - _lastKnownMessageCount);
+                    }
                     _lastKnownMessageCount = serverMessages.length;
 
                     // Okundu olarak işaretle (Post Frame Callback ile güvenli)
@@ -975,21 +985,63 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                       });
                     }
 
-                    // Optimistic mesajları server mesajları ile birleştir
-                    // Dedup: 'sending' veya 'incoming' durumundaki optimistic mesajı, aynı içerikte server mesajı zaten varsa ekleme
+                    // PROD-READY OPTIMISTIC RECONCILIATION & EVICTION:
+                    // 1. Gelen tohum (seed) mesajları: Sunucudan o konuşmaya ait veriler geldiğinde,
+                    // sunucudaki mesajlar arasında bu gelen tohum mesajı (ID veya gönderici+metin eşleşmesi)
+                    // bulunuyorsa tohum mesaj _optimisticMessages listesinden derhal tahliye edilir (eviction).
+                    _optimisticMessages.removeWhere((om) {
+                      final isIncomingSeed = om.senderId == widget.otherUserId || om.id.startsWith('incoming_');
+                      if (!isIncomingSeed) return false;
+
+                      return serverMessages.any((sm) {
+                        if (sm.id == om.id) return true;
+                        if (sm.senderId == om.senderId) {
+                          final smText = sm.text.trim();
+                          final omText = om.text.trim();
+                          if (smText == omText) return true;
+                          // Bildirim gövdesi 100 karaktere kesilmişse ('...')
+                          if (omText.endsWith('...') && smText.startsWith(omText.substring(0, omText.length - 3).trim())) {
+                            return true;
+                          }
+                        }
+                        return false;
+                      });
+                    });
+
+                    // 2. Birleştirme (Merging) ve İkincil Tekilleştirme Koruması:
                     final Map<String, Message> mergedMap = {};
                     for (var m in serverMessages) {
                       mergedMap[m.id] = m;
                     }
                     for (var m in _optimisticMessages) {
-                      final hasDuplicate = serverMessages.any((sm) =>
-                        sm.id == m.id ||
-                        (sm.senderId == m.senderId &&
-                         sm.text.trim() == m.text.trim() &&
-                         sm.createdAt.difference(m.createdAt).inSeconds.abs() < 120)
-                      );
-                      if (!hasDuplicate) {
-                        mergedMap[m.id] = m;
+                      final isIncomingSeed = m.senderId == widget.otherUserId || m.id.startsWith('incoming_');
+                      if (isIncomingSeed) {
+                        final hasDuplicate = serverMessages.any((sm) {
+                          if (sm.id == m.id) return true;
+                          if (sm.senderId == m.senderId) {
+                            final smText = sm.text.trim();
+                            final mText = m.text.trim();
+                            if (smText == mText) return true;
+                            if (mText.endsWith('...') && smText.startsWith(mText.substring(0, mText.length - 3).trim())) {
+                              return true;
+                            }
+                          }
+                          return false;
+                        });
+                        if (!hasDuplicate) {
+                          mergedMap[m.id] = m;
+                        }
+                      } else {
+                        // Giden (outgoing) mesajlar: Kullanıcının henüz gönderdiği mesajlar
+                        final hasDuplicate = serverMessages.any((sm) =>
+                          sm.id == m.id ||
+                          (sm.senderId == m.senderId &&
+                           sm.text.trim() == m.text.trim() &&
+                           sm.createdAt.difference(m.createdAt).inSeconds.abs() < 120)
+                        );
+                        if (!hasDuplicate) {
+                          mergedMap[m.id] = m;
+                        }
                       }
                     }
                     // reverse: true için YENİDEN ESKİYE (Descending) sıralama

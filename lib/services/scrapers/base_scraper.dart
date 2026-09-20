@@ -147,9 +147,13 @@ abstract class BaseProductScraper {
     if (offers is Map) {
       final priceVal = offers['price'] ?? offers['lowPrice'] ?? offers['highPrice'];
       if (priceVal != null) {
-        final parsed = double.tryParse(priceVal.toString());
+        final str = priceVal.toString();
+        if (str.contains(',')) {
+          return parsePriceText(str);
+        }
+        final parsed = double.tryParse(str);
         if (parsed != null) return parsed;
-        return parsePriceText(priceVal.toString());
+        return parsePriceText(str);
       }
     } else if (offers is List && offers.isNotEmpty) {
       double? lowest;

@@ -243,7 +243,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   ),
                   _buildBullet(
                     'Web Talebi & Destek:',
-                    'Uygulama erişiminiz yoksa kolikfirsat@gmail.com adresine yazarak veya web sayfamızdan silme talebi gönderebilirsiniz.',
+                    'Uygulama erişiminiz yoksa destek@firsatkolik.app adresine yazarak veya web sayfamızdan silme talebi gönderebilirsiniz.',
                     textMain,
                     textSub,
                   ),
@@ -290,7 +290,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       Icon(Icons.email_outlined, size: 18, color: isDark ? accentBlue : primaryColor),
                       const SizedBox(width: 8),
                       Text(
-                        'kolikfirsat@gmail.com',
+                        'destek@firsatkolik.app',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,

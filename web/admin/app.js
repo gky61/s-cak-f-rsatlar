@@ -13218,7 +13218,7 @@ function initCouponsListeners() {
             const durum = document.getElementById('couponStatusSelect').value;
             const baslik = document.getElementById('couponTitleInput').value.trim();
             const aciklama = document.getElementById('couponDescriptionInput').value.trim();
-            const kuponKodu = document.getElementById('couponCodeInput').value.trim().toUpperCase();
+            const kuponKodu = document.getElementById('couponCodeInput').value.trim();
             const expiryStr = document.getElementById('couponExpiryInput').value;
             const usernameStr = document.getElementById('couponUsernameInput').value.trim();
 

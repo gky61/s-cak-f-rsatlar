@@ -84,7 +84,7 @@ Her kupon kartı 3 ana bölümden oluşur:
    - **Mağaza Rozeti:** Marka adını taşıyan açık renkli çip.
    - **Başlık ve Dinamik Açıklama:** Uzun açıklamalar için 250ms animasyonlu "Devamını Göster / Daha Az Göster" (`_expandedKuponIds`) açılır kapanır metin alanı.
    - **Kupon Kodu Kutusu:** Tıklandığında kodu panoya kopyalar (`Clipboard.setData`), 2 saniye yeşil `Kopyalandı! ✅` geri bildirimi verir.
-   - **Mağazaya Git Butonu:** `_openStore()` fonksiyonu ile kullanıcının telefonunda doğrudan ilgili e-ticaret sitesini veya uygulamasını açar.
+   - **Mağazaya Git Butonu:** Belirli bir mağazası olan kuponlar için `_openStore()` fonksiyonu ile kullanıcının telefonunda doğrudan ilgili e-ticaret sitesini veya uygulamasını açar. "Diğer" veya genel/belirtilmemiş mağazalı kuponlarda anlamsız Google arama yönlendirmesini önlemek amacıyla bu buton profesyonelce gizlenir (`_canOpenStore`).
 2. **Alt Bölüm (Oylama, Güven Rozeti ve Kişiselleştirme):**
    - **Sıcak (🔥) / Soğuk (❄️) Butonları:** Canlı sayaçlı, renk geçişli tıklanabilir oylama bileşenleri.
    - **Güvenilirlik Rozeti (`_buildTrustBadge`):** Toplam oy >= 3 olduğunda başarı oranını renkli olarak gösterir:
@@ -97,31 +97,34 @@ Her kupon kartı 3 ana bölümden oluşur:
 ### 2.4. Çentikli Form Tasarımı ([KuponFormPage](file:///d:/firsatkolik/lib/screens/kupon_form_page.dart))
 Resmi FırsatKolik tasarım sistemine uygun çentikli kutu (Notched / Fieldset Box) mimarisiyle 3 bölümden oluşur:
 1. *Mağaza ve Kupon Bilgileri:* 20 popüler mağaza seçici dropdown, başlık metin kutusu.
-2. *Kupon Kodu ve Geçerlilik:* Büyük harfe zorlanan kupon kodu kutusu, isteğe bağlı `DatePicker` son kullanma tarihi seçicisi.
+2. *Kupon Kodu ve Geçerlilik:* Büyük/küçük harf duyarlılığı (case-sensitivity) korunan kupon kodu kutusu (`TextCapitalization.none`), isteğe bağlı `DatePicker` son kullanma tarihi seçicisi. Kodlar büyük harfe zorlanmaz, e-ticaret sitelerindeki orijinal yazım biçimi korunur.
 3. *Kupon Koşulları & Notlar:* Alt limit ve sepet şartlarını içeren çok satırlı metin alanı.
 4. *Sticky Alt Gönderim Çubuğu:* Yükleme animasyonlu ve çift tıklama korumalı onay butonu.
 
 ---
 
-## 3. 🔥 Wilson Score ve 3 Kademeli Akıllı Sıralama Algoritması
+## 3. 🔥 Wilson Score ve Dünya Standartlarında (PROD-READY) Akıllı Sıralama Mimarisi
 
-Kuponların listelenmesinde basit oy farkı yerine istatistiksel güvenirlik sağlayan **Wilson Güven Skoru (Wilson Score Interval)** ve 3 kademeli grup sıralaması ([Kupon.compareKuponlar](file:///d:/firsatkolik/lib/models/kupon.dart)) kullanılır:
+Kuponların listelenmesinde basit oy farkı yerine istatistiksel güvenirlik sağlayan **Wilson Güven Skoru (Wilson Score Interval)** ve sekme bazlı (Topluluk vs Kupon Radarı) 3 kademeli grup sıralaması ([Kupon.compareKuponlar](file:///d:/firsatkolik/lib/models/kupon.dart)) kullanılır:
 
 ```mermaid
 graph TD
     Kupon[🎟️ Kupon Değerlendirmesi] --> GroupCheck{Sıralama Grubu Tespiti}
     
-    GroupCheck -->|Toplam Oy >= 3 & Başarı Oranı >= %70| G1[🔥 Grup 1: Sıcak Kuponlar]
-    GroupCheck -->|Normal / Yeni / Oylanmamış| G2[✨ Grup 2: Normal & Yeni Kuponlar]
-    GroupCheck -->|durum=='gecersiz' veya Net Skor <= -5| G3[🗑️ Grup 3: Çöp & Geçersiz Kuponlar]
+    GroupCheck -->|Süresi Dolmamış & Toplam Oy >= 3 & Başarı >= %70| G1[🔥 Grup 1: Sıcak Kuponlar]
+    GroupCheck -->|Süresi Dolmamış & Normal / Yeni / Oylanmamış| G2[✨ Grup 2: Normal & Yeni Kuponlar]
+    GroupCheck -->|Süresi Dolan / durum=='gecersiz' / Net Skor <= -5| G3[🗑️ Grup 3: Çöp, Geçersiz & Süresi Dolan]
     
-    G1 -->|1. Wilson Score Azalan| Sort1[En Üst Sıralar]
-    G1 -->|2. Mağaza Popülerlik Sırası| Sort1
+    G1 --> Mode1{Sekme Tipi}
+    Mode1 -->|Topluluk Kuponları| S1_Comm[1. Wilson Score Azalan<br/>2. Net Skor Azalan<br/>3. Tarih En Yeni<br/>4. Mağaza Ranki]
+    Mode1 -->|Kupon Radarı| S1_Radar[1. Wilson Score Azalan<br/>2. Net Skor Azalan<br/>3. Mağaza Popülerliği<br/>4. Tarih En Yeni]
     
-    G2 -->|1. Mağaza Popülerlik Sırası| Sort2[Orta Sıralar]
-    G2 -->|2. Oluşturulma Tarihi En Yeni| Sort2
+    G2 --> G2_Tier[Oylama Katmanı: Pozitif > Nötr > Negatif]
+    G2_Tier --> Mode2{Sekme Tipi}
+    Mode2 -->|Topluluk Kuponları| S2_Comm[1. Net Skor Azalan<br/>2. Tarih En Yeni<br/>3. Mağaza Popülerliği]
+    Mode2 -->|Kupon Radarı| S2_Radar[1. Mağaza Popülerliği<br/>2. Net Skor Azalan<br/>3. Tarih En Yeni]
     
-    G3 -->|%50 Opaklık + Listenin En Sonu| Sort3[En Alt Sıralar]
+    G3 --> S3[1. Süresi Dolmayanlar Üstte<br/>2. %55 Opaklık + 'Süresi Doldu' Rozeti<br/>3. Listenin En Sonu]
 ```
 
 ### 3.1. Wilson Score Formülü:
@@ -131,7 +134,16 @@ $$\text{Wilson Score} = \frac{p + \frac{z^2}{2n} - z \sqrt{\frac{p(1-p)}{n} + \f
 
 Bu formül, 1 oy alıp %100 görünen kuponların, 50 oy alıp %90 başarı sağlayan güvenilir kuponların önüne geçmesini matematiksel olarak engeller.
 
-### 3.2. Mağaza Popülerlik Sıralaması (`getStoreRank`):
+### 3.2. Topluluk Kuponları vs Kupon Radarı Sıralama Farkı:
+* **Topluluk Kuponları (`isCommunity: true`):** Sosyal topluluk akışı olduğu için **tazelik (oluşturulma tarihi)** ve **kullanıcı oyları (net skor)** en üst önceliğe sahiptir. Kullanıcının paylaştığı yeni bir kupon, mağaza popülerlik sırasına takılmadan akışın üstünde yer alır.
+* **Kupon Radarı (`isCommunity: false`):** Otomatik taranan e-ticaret kupon dizini olduğu için kullanıcıların mağaza bazlı arama beklentisi gözetilerek **mağaza popülerlik sıralaması (`getStoreRank`)** önceliklendirilir.
+* **Grup 2 Oylama Katmanı (Voting Tiers):** Henüz Grup 1 (Sıcak) eşiğine (3 oy & %70 başarı) ulaşmamış kuponlar arasında:
+  1. *Pozitif Net Skorlu Kuponlar (`netScore > 0`):* Çalıştığı doğrulanmış kuponlar ilk sırada.
+  2. *Nötr Kuponlar (`netScore == 0`):* Yeni paylaşılmış oylanmamış kuponlar ikinci sırada.
+  3. *Negatif Net Skorlu Kuponlar (`netScore < 0`):* Soğuk oy almış kuponlar üçüncü sırada.
+* **Süresi Dolan Kuponlar (`isExpired`):** Son kullanma tarihi geçmiş olan kuponlar, kaç sıcak oy almış olursa olsun asla Grup 1 veya Grup 2'de listelenmez; doğrudan Grup 3'e düşürülür, %55 opaklığa çekilir ve `Süresi Doldu` rozeti ile işaretlenir.
+
+### 3.3. Mağaza Popülerlik Sıralaması (`getStoreRank`):
 1. Trendyol (1) ➔ 2. Hepsiburada (2) ➔ 3. Amazon (3) ➔ 4. N11 (4) ➔ 5. Pazarama (5) ➔ 6. Teknosa (6) ➔ 7. MediaMarkt (7) ...
 
 ---
@@ -275,6 +287,17 @@ Kupon kazıma ve senkronizasyon motoru iki Cloud Function ile yönetilir ([funct
 * **Kaynak Yapılandırması:** `timeoutSeconds: 540`, `memory: '1GB'`.
 * **Kullanım:** Web Admin panelinde "Kupon Scrape Et" butonuna basıldığında tetiklenir.
 
+### 8.3. Topluluk Kuponları Bildirim Motoru (`onCouponCreated` & NOTIF-15)
+* **Tetikleyici:** Firestore `kuponlar/{kuponId}` (onCreate).
+* **Filtreler:**
+  - `kaynakTipi === 'topluluk'` (Web kazıma kaynaklı kuponlar için bildirim üretilmez).
+  - `durum !== 'gecersiz'` (Geçersiz durumdaki kuponlar elenir).
+  - `userId !== paylasanKullaniciId` (Kendi paylaştığı kupon için kullanıcıya bildirim gönderilmez).
+* **Dağıtım:**
+  - Tüm kullanıcılara 400'lük batch parçalarıyla `users/{userId}/notifications/coupon_{kuponId}_{userId}` dokümanları yazılır (`type: 'coupon'`, `reason: 'community'`).
+  - Merkezi push motoru (`onNotificationCreated`) devreye girerek; `communityNotificationsEnabled` kontrolü, sessiz saatler denetimi ve `sicak_firsatlar_general_v2` kanalı (#8E24AA) üzerinden FCM Push bildirimini iletir.
+  - Bildirime tıklandığında `KuponlarPage(initialTabIndex: 1, highlightKuponId: kuponId)` ile doğrudan **Topluluk Kuponları** sekmesi açılır. Kullanıcı zaten kuponlar ekranındaysa (`isCouponsScreenActive == true`) ön plan afişi spam korumasıyla bastırılır.
+
 ---
 
 ## 9. 🤖 Multi-Source Kupon Kazıma Hattı (Scraping Pipeline)
@@ -329,6 +352,52 @@ Web Admin panelinde [couponsView](file:///d:/firsatkolik/web/admin/app.js) üzer
 
 ---
 
+## 10.5. 🔔 Topluluk Kuponları Bildirim Entegrasyonu (NOTIF-15)
+
+Topluluk üyeleri tarafından `KuponFormPage` üzerinden paylaşılan kuponlar, platform genelindeki bildirim motoruna entegre edilmiştir.
+
+### Mimari Akış:
+```
+[Kullanıcı Kupon Paylaştı] (kuponlar/{kuponId}, kaynakTipi: 'topluluk')
+        │
+        ▼
+[Cloud Functions: onCouponCreated]
+  ├─ kaynakTipi === 'topluluk' ve durum !== 'gecersiz' filtresi
+  ├─ Paylaşan kullanıcı hariç (self-notification koruması)
+  └─ users/{userId}/notifications/coupon_{kuponId}_{userId} batch yazımı
+        │
+        ▼
+[Merkezi Push Motoru: onNotificationCreated]
+  ├─ communityNotificationsEnabled kontrolü
+  ├─ Sessiz saatler filtresi
+  └─ FCM Push: 🎟️ [Mağaza] Kuponu! (channelId: sicak_firsatlar_general_v2, renk: #8E24AA)
+        │
+        ▼
+[Mobil İstemci Yönlendirme]
+  ├─ Ön Planda: isCouponsScreenActive ise BASTIRILIR, değilse mor InAppMessageBanner
+  └─ Tıklandığında: KuponlarPage(initialTabIndex: 1, highlightKuponId: kuponId)
+```
+
+### Bildirim Payload Yapısı:
+| Alan | Değer |
+| :--- | :--- |
+| `type` | `coupon` |
+| `reason` | `community` |
+| `kuponId` | Kupon doküman ID'si |
+| `magazaAdi` | Mağaza adı |
+| `kuponKodu` | İndirim kodu |
+| `authorName` | Paylaşan kullanıcı adı |
+| `authorId` | Paylaşan kullanıcı ID'si |
+
+### Kullanıcı Tercih Kontrolü:
+- **`communityNotificationsEnabled: true`** → Push gönderilir
+- **`communityNotificationsEnabled: false`** → Push engellenir (`disabled_by_user_group_community`), Bildirim Merkezinde kalır
+- **`pushMasterEnabled: false`** → Tüm push'lar engellenir (`disabled_by_user_master_switch`)
+
+> 🔗 **Detaylı bildirim senaryosu:** [NOTIF-15 — Bildirim Senaryoları Rehberi](file:///d:/firsatkolik/documentation/bildirimler/notification_scenarios.md)
+
+---
+
 ## 11. 🧪 Test, Doğrulama ve Operasyonel İzleme
 
 Modülün çalışabilirliği [functions/tests/](file:///d:/firsatkolik/functions/tests/) altındaki test betikleriyle doğrulanır:
@@ -337,6 +406,7 @@ Modülün çalışabilirliği [functions/tests/](file:///d:/firsatkolik/function
 | :--- | :--- |
 | [test_kuponlar.js](file:///d:/firsatkolik/functions/tests/test_kuponlar.js) | Kupon ekleme, okuma, güncelleme ve silme Firestore entegrasyon testi. |
 | [test_coupon_scraper_flow.js](file:///d:/firsatkolik/functions/tests/test_coupon_scraper_flow.js) | 3 kaynaklı kupon kazıma motorunun uçtan uca çalışması ve Firestore'a yazımı. |
+| [test_coupon_notifications.js](file:///d:/firsatkolik/functions/tests/test_coupon_notifications.js) | Topluluk kuponu bildirim sistemi (NOTIF-15): tetikleyici, self-notification koruması, web/geçersiz filtreler, tercih kontrolleri ve payload doğrulaması. |
 | [test_kuponburada_new.js](file:///d:/firsatkolik/functions/test_kuponburada_new.js) | Kuponburada LD+JSON ve AJAX sayfa 2 ayrıştırma testi. |
 
 ---
@@ -352,6 +422,7 @@ Modülün çalışabilirliği [functions/tests/](file:///d:/firsatkolik/function
 | **Mağaza Yardımcısı** | [store_asset_helper.dart](file:///d:/firsatkolik/lib/utils/store_asset_helper.dart) | 20+ e-ticaret mağazası logo ve renk eşleme motoru. |
 | **Giriş Noktası & Şalter** | [home_screen.dart](file:///d:/firsatkolik/lib/screens/home_screen.dart) | Anasayfa Kuponlar butonu ve `couponsEnabledStream` kontrolü. |
 | **Backend Kazıyıcı** | [coupon_scraper.js](file:///d:/firsatkolik/functions/coupon_scraper.js) | DH, Kuponla, Kuponburada kazıma motoru ve mükerrer filtreleme. |
-| **Cloud Functions** | [index.js](file:///d:/firsatkolik/functions/index.js) | `scrapeCouponsScheduled` (04:00) ve `scrapeCouponsManual` callable trigger'ları. |
+| **Cloud Functions** | [index.js](file:///d:/firsatkolik/functions/index.js) | `scrapeCouponsScheduled` (04:00), `scrapeCouponsManual` callable ve `onCouponCreated` bildirim tetikleyicileri. |
+| **Bildirim Servisi** | [notification_service.dart](file:///d:/firsatkolik/lib/services/notification_service.dart) | Kupon bildirim yönlendirmesi (`resolveRouting`), selves-screen bastırma ve `InAppMessageBanner` entegrasyonu. |
 | **Veritabanı Güvenliği** | [firestore.rules](file:///d:/firsatkolik/firestore.rules) | `kuponlar` koleksiyonu ve `votes` alt koleksiyonu güvenlik kuralları. |
 | **Web Yönetim Paneli** | [app.js](file:///d:/firsatkolik/web/admin/app.js) & [index.html](file:///d:/firsatkolik/web/admin/index.html) | `couponsView` kupon yönetimi, arama, ekleme, düzenleme ve şalter. |

@@ -77,7 +77,7 @@ gantt
 ### 3.1 Geliştirici Hesabı Türü ve Kimlik Doğrulama
 * **Hesap Türü:** Bireysel (Personal) Google Play Console hesabı.
 * **Geliştirici E-postası:** `muratcan.gokyokus@gmail.com`
-* **Destek E-postası:** `kolikfirsat@gmail.com`
+* **Destek E-postası:** `destek@firsatkolik.app`
 * **Kayıt Ücreti:** 25 USD (tek seferlik ödendi).
 * **Kimlik Doğrulama:** 2 Adımlı Doğrulama ve resmi kimlik doğrulaması tamamlandı.
 

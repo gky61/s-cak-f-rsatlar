@@ -715,7 +715,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
                 iconColor: isDark ? const Color(0xFFFB923C) : Colors.orange,
                 trailing: Icon(Icons.chevron_right_rounded, color: textSub),
                 onTap: () async {
-                  const email = 'kolikfirsat@gmail.com';
+                  const email = 'destek@firsatkolik.app';
                   final uri = Uri.parse('mailto:$email');
                   try {
                     if (await canLaunchUrl(uri)) {

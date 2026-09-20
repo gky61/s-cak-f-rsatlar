@@ -157,9 +157,13 @@ class BaseProductScraper {
     if (offers && typeof offers === 'object' && !Array.isArray(offers)) {
       const priceVal = offers['price'] || offers['lowPrice'] || offers['highPrice'];
       if (priceVal != null) {
-        const parsed = parseFloat(priceVal.toString());
+        const str = priceVal.toString();
+        if (str.includes(',')) {
+          return this.parsePriceText(str);
+        }
+        const parsed = parseFloat(str);
         if (!isNaN(parsed)) return parsed;
-        return this.parsePriceText(priceVal.toString());
+        return this.parsePriceText(str);
       }
     } else if (Array.isArray(offers) && offers.length > 0) {
       let lowest = null;

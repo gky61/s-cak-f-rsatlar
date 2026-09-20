@@ -48,6 +48,8 @@ class _KuponFormPageState extends State<KuponFormPage> {
     'Migros',
     'Getir',
     'Boyner',
+    'Gamer Gen',
+    'Gaming Gen',
     'Diğer',
   ];
 
@@ -136,7 +138,7 @@ class _KuponFormPageState extends State<KuponFormPage> {
           magazaAdi: _secilenMagaza,
           baslik: _baslikController.text.trim(),
           aciklama: _aciklamaController.text.trim(),
-          kuponKodu: _kodController.text.trim().toUpperCase(),
+          kuponKodu: _kodController.text.trim(),
           bitisTarihi: _secilenBitisTarihi,
         );
       } else {
@@ -156,7 +158,7 @@ class _KuponFormPageState extends State<KuponFormPage> {
           magazaAdi: _secilenMagaza,
           baslik: _baslikController.text.trim(),
           aciklama: _aciklamaController.text.trim(),
-          kuponKodu: _kodController.text.trim().toUpperCase(),
+          kuponKodu: _kodController.text.trim(),
           paylasanKullaniciId: widget.userId,
           paylasanKullaniciAdi: kullaniciAdi,
           bitisTarihi: _secilenBitisTarihi,
@@ -349,7 +351,7 @@ class _KuponFormPageState extends State<KuponFormPage> {
                 // Kupon Kodu
                 TextFormField(
                   controller: _kodController,
-                  textCapitalization: TextCapitalization.characters,
+                  textCapitalization: TextCapitalization.none,
                   style: TextStyle(
                     color: textColor,
                     fontWeight: FontWeight.w800,

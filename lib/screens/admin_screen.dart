@@ -33,7 +33,14 @@ void _log(String message) {
 
 
 class AdminScreen extends StatefulWidget {
-  const AdminScreen({super.key});
+  final String? initialDealId;
+  final int? initialTabIndex;
+
+  const AdminScreen({
+    super.key,
+    this.initialDealId,
+    this.initialTabIndex,
+  });
 
   @override
   State<AdminScreen> createState() => _AdminScreenState();
@@ -126,7 +133,11 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    NotificationService.isAdminScreenActive = true;
+    final initialIndex = (widget.initialTabIndex != null && widget.initialTabIndex! >= 0 && widget.initialTabIndex! < 5)
+        ? widget.initialTabIndex!
+        : 0;
+    _tabController = TabController(length: 5, vsync: this, initialIndex: initialIndex);
     _loadTabCounts();
     _loadReportCounts();
     // Admin paneli her açıldığında admin_deals topic'ine abone ol (bildirimlerin gelmesi için)
@@ -166,6 +177,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   
   @override
   void dispose() {
+    NotificationService.isAdminScreenActive = false;
     // Tüm stream subscription'ları iptal et
     _pendingSubscription?.cancel();
     _userSubmittedSubscription?.cancel();

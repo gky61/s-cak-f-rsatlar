@@ -1,16 +1,16 @@
 # 🕷️ FırsatKolik — Scraping Mimarisi ve Otonom Botlar Master Rehberi
 
 > [!IMPORTANT]
-> **Base Doküman & Scraping Kontratı:** Bu doküman, FırsatKolik platformunun mobil istemci (Flutter/Dart) ve sunucu (Compute Engine VM / Node.js) katmanlarındaki tüm e-ticaret veri kazıma (scraping) mekanizmasını, 21 mağaza çözümleme stratejilerini, WAF/TLS bypass motorlarını, canlı API entegrasyonlarını, Telegram botunu ve metadata katmanını yöneten **ana orkestratör (Base Contract)** dokümandır. Her bir alt mimarinin ayrıntılı teknik referansları ilgili bölümlerde doğrudan bağlantılanmıştır.
+> **Base Doküman & Scraping Kontratı:** Bu doküman, FırsatKolik platformunun mobil istemci (Flutter/Dart) ve sunucu (Compute Engine VM / Node.js) katmanlarındaki tüm e-ticaret veri kazıma (scraping) mekanizmasını, 23 mağaza çözümleme stratejilerini, WAF/TLS bypass motorlarını, canlı API entegrasyonlarını, Telegram botunu ve metadata katmanını yöneten **ana orkestratör (Base Contract)** dokümandır. Her bir alt mimarinin ayrıntılı teknik referansları ilgili bölümlerde doğrudan bağlantılanmıştır.
 
-Bu doküman; **FırsatKolik** platformunun mobil istemci (Flutter/Dart), sunucu (Google Cloud Run / Compute Engine VM / Node.js) ve bot katmanlarındaki tüm scraping (veri kazıma) mekanizmasını, 21 entegre mağaza için bypass stratejilerini, URL doğrulama zincirini, canlı API ve tersine mühendislik çözümlerini, metadata katmanını (`originalPrice`, `ratingValue`, `priceLabel`), kategori tespit motorunu ve deployment süreçlerini tanımlayan **resmi mimari sözleşmedir (Documentation Contract)**.
+Bu doküman; **FırsatKolik** platformunun mobil istemci (Flutter/Dart), sunucu (Google Cloud Run / Compute Engine VM / Node.js) ve bot katmanlarındaki tüm scraping (veri kazıma) mekanizmasını, 23 entegre mağaza için bypass stratejilerini, URL doğrulama zincirini, canlı API ve tersine mühendislik çözümlerini, metadata katmanını (`originalPrice`, `ratingValue`, `priceLabel`), kategori tespit motorunu ve deployment süreçlerini tanımlayan **resmi mimari sözleşmedir (Documentation Contract)**.
 
 ---
 
 ## 📑 İçindekiler
 1. [🌟 Genel Mimari ve İki Motorlu İstek Akışı](#1--genel-mimari-ve-i̇ki-motorlu-i̇stek-akışı)
 2. [🔍 URL Kontrol ve Doğrulama Zinciri (4 Aşamalı Filtre)](#2--url-kontrol-ve-doğrulama-zinciri-4-aşamalı-filtre)
-3. [🏪 21 Entegre Mağaza ve Detaylı Çözümleme Stratejileri](#3--21-entegre-mağaza-ve-detaylı-çözümleme-stratejileri)
+3. [🏪 23 Entegre Mağaza ve Detaylı Çözümleme Stratejileri](#3--23-entegre-mağaza-ve-detaylı-çözümleme-stratejileri)
 4. [🛡️ Bot Koruması ve WAF Bypass Yöntemleri (6 Katmanlı)](#4-️-bot-koruması-ve-waf-bypass-yöntemleri-6-katmanlı)
 5. [📱 İstemci Tarafı Platform-Native HTTP Bypass (MethodChannel)](#5--i̇stemci-tarafı-platform-native-http-bypass-methodchannel)
 6. [🏷️ Özel Üyelik ve Fiyat Etiketi Mekanizması (priceLabel)](#6-️-özel-üyelik-ve-fiyat-etiketi-mekanizması-pricelabel)
@@ -19,7 +19,7 @@ Bu doküman; **FırsatKolik** platformunun mobil istemci (Flutter/Dart), sunucu 
 9. [🤖 Telegram Botu ve Canlı Kanal Dinleyici Mimarisi](#9--telegram-botu-ve-canlı-kanal-dinleyici-mimarisi)
 10. [🧠 Kategori Tespit Motoru ve Reklam Mevzuatı Uyumu](#10--kategori-tespit-motoru-ve-reklam-mevzuatı-uyumu)
 11. [🚀 Bulut Altyapısı, Docker ve Deployment (deploy_to_vm.py)](#11--bulut-altyapısı-docker-ve-deployment-deploy_to_vmpy)
-12. [📊 21 Mağaza İçin Kapsamlı Özet Karar Matrisi](#12--21-mağaza-için-kapsamlı-özet-karar-matrisi)
+12. [📊 23 Mağaza İçin Kapsamlı Özet Karar Matrisi](#12--23-mağaza-için-kapsamlı-özet-karar-matrisi)
 13. [🧪 Birim Testleri ve Doğrulama Süitleri](#13--birim-testleri-ve-doğrulama-süitleri)
 14. [🔧 Sorun Giderme ve Hata Ayıklama (Troubleshooting)](#14--sorun-giderme-ve-hata-ayıklama-troubleshooting)
 15. [📂 İlgili Kaynak Kod Dosyaları ve Referanslar](#15--ilgili-kaynak-kod-dosyaları-ve-referanslar)
@@ -59,7 +59,7 @@ graph TD
     G -- Evet --> H{Çalışma Ortamı}
     
     %% İstemci Motoru
-    H -->|Mobil: Dart / Flutter| I[21 Dart Scraper Sınıfı]
+    H -->|Mobil: Dart / Flutter| I[23 Dart Scraper Sınıfı]
     I --> J{Akamai/WAF Engeli Var mı?}
     J -- Evet (Zara, Mango, vb.) --> K[Platform-Native MethodChannel\nAndroid: HttpURLConnection / iOS: URLSession]
     J -- Hayır --> L[Standart HTTP Client + WhatsApp/Chrome UA]
@@ -67,7 +67,7 @@ graph TD
     L --> M
     
     %% Sunucu Motoru
-    H -->|Sunucu: Node.js / Cloud Run VM| N[21 Node.js Scraper Sınıfı]
+    H -->|Sunucu: Node.js / Cloud Run VM| N[23 Node.js Scraper Sınıfı]
     N --> O{WAF Koruma Tipi?}
     O -->|Akamai / Cloudflare TLS| P[Sistem curl spawnSync + WhatsApp UA + TR Cookies]
     O -->|Datacenter IP Blok| Q[Google Translate Proxy: translate.goog]
@@ -103,7 +103,7 @@ Sisteme giren her URL, scraping yapılmadan önce şu 4 aşamalı sıkı filtred
                  │
                  ▼
  2. 🏪 İZİNLİ MAĞAZA KONTROLÜ (Domain Allowlist)
-    - 21 entegre mağaza alan adı kontrol edilir (assets/data/domain_allowlist_extended.json)
+    - 23 entegre mağaza alan adı kontrol edilir (assets/data/domain_allowlist_extended.json)
                  │
                  ▼
  3. 🎯 ÜRÜN SAYFASI REGEX KONTROLÜ (Product Path Verification)
@@ -118,12 +118,12 @@ Sisteme giren her URL, scraping yapılmadan önce şu 4 aşamalı sıkı filtred
 
 ---
 
-## 3. 🏪 21 Entegre Mağaza ve Detaylı Çözümleme Stratejileri
+## 3. 🏪 23 Entegre Mağaza ve Detaylı Çözümleme Stratejileri
 
 > 🔗 **Detaylı Referans Dokümanı:**
-> - [Scraping Kuralları ve Stratejileri Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_rules_and_strategies.md) — 21 mağazanın DOM seçicileri, regex desenleri ve özel çerez ayarları.
+> - [Scraping Kuralları ve Stratejileri Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_rules_and_strategies.md) — 23 mağazanın DOM seçicileri, regex desenleri ve özel çerez ayarları.
 
-Platform bünyesinde tam desteklenen 21 e-ticaret mağazası ve uygulanan özel teknikler:
+Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel teknikler:
 
 ### 1. Amazon (`amazon.com.tr`, `amzn.to`, `amzn.eu`, `link.amazon`)
 - **Kısa Linkler:** `amzn.to`, `amzn.eu` ve `link.amazon` kısa linkleri yönlendirme zinciri takibiyle asıl ürün sayfasına çözülür.
@@ -227,6 +227,20 @@ Platform bünyesinde tam desteklenen 21 e-ticaret mağazası ve uygulanan özel 
 ### 21. Boyner (`boyner.com.tr`)
 - **JSON-LD & DOM:** Ürün başlığı, görseli, satış fiyatı ve indirimsiz liste fiyatı JSON-LD `Product` ve DOM seçicileriyle çekilir.
 
+### 22. Gamer Gen (`gamer.gen.tr`)
+- **Altyapı:** İtopya ile aynı ASP.NET mimarisi (`provider: ITOPYA`) ve Cloudflare koruması. Ürün sayfaları `_u\d+`, hazır sistem sayfaları `_h\d+` regex desenleriyle doğrulanır.
+- **Sepette İndirim & Normal İndirim:** Sepette indirimli ürünlerde nihai fiyat `.text-price` içindeki `"Sepette"` metni temizlenerek ayıklanır; liste fiyatı ise `.product-price`'dan okunur. Normal indirimli ürünlerde satış fiyatı `.product-price`, liste fiyatı ise `.product-old-price` seçicisinden çekilir.
+- **Hazır Sistem Fallback'i:** Bileşenleri tükenen hazır sistemlerde DOM fiyatı yerine JSON-LD (`offers.price`), `var toplamFiyat` ve `gtag` script nesneleri taranır.
+- **Görsel:** `https://img.yenieera22.com/cdn/1000/...` CDN deseni ve JSON-LD `image` alanı taranarak logo/banner görselleri elenir.
+- **Değerlendirme Politikası:** Gamer Gen üzerinde puanlama ve değerlendirme sistemi bulunmadığı için `ratingValue` ve `ratingCount` her zaman `null` döner.
+
+### 23. Gaming Gen (`gaming.gen.tr`)
+- **Altyapı:** WooCommerce (WordPress) e-ticaret altyapısı. Ürün sayfaları `\/urun\/\d+\/.+\/?$` regex deseniyle doğrulanır.
+- **Fiyat Çözümleme:** Ana ürün satış fiyatı `.summary > .price, .entry-summary > .price, .summary > p.price, .entry-summary > p.price` seçicilerinden okunur. Sayfadaki opsiyonel bileşen/eklenti paket fiyatları (`.bundled_product_optional_checkbox .price`) elenerek ana ürünün tekil satış fiyatı garanti altına alınır.
+- **Değerlendirme & Yorum Skoru:** Üründe değerlendirme varsa schema.org `aggregateRating` (`ratingValue`, `reviewCount`) veya WooCommerce `.woocommerce-product-rating` (`.star-rating`, `.woocommerce-review-link`) elemanlarından okunur. Puan 1 ondalıklı basamağa yuvarlanır (örn: `4.89` ➔ `4.9`). Değerlendirme sayısı 0 veya yok ise `ratingValue: null, ratingCount: null` döner.
+- **Görsel & Marka:** WooCommerce `woocommerce-product-gallery__image` veya JSON-LD `image` alanı taranır; marka ise JSON-LD `brand.name` veya breadcrumbs hiyerarşisinden (`Powered by ASUS`, `Thermalright` vb.) çıkarılır.
+- **Breadcrumbs:** WooCommerce breadcrumbs yapısı (`.woocommerce-breadcrumb`) taranarak kategori hiyerarşisi oluşturulur (`"gaming.gen.tr"` kök mağaza adı elenir, `"Gaming Laptop"` gibi kategori adları korunur).
+
 ---
 
 ## 4. 🛡️ Bot Koruması ve WAF Bypass Yöntemleri (6 Katmanlı)
@@ -281,7 +295,7 @@ Platformda hem istemci hem de sunucu scraper'larında özel kulüp ve üyelik fi
 ## 7. 📉 İndirimsiz Liste Fiyatı (originalPrice) ve İndirim Oranı
 
 > 🔗 **Detaylı Referans Dokümanı:**
-> - [İndirimsiz Liste Fiyatı Kazıma ve Entegrasyon Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/original_price_scraper_integration_guide.md) — 21 mağazanın eski liste fiyatı seçicileri, en küçük aday algoritması ve indirim yüzdesi formülleri.
+> - [İndirimsiz Liste Fiyatı Kazıma ve Entegrasyon Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/original_price_scraper_integration_guide.md) — 22 mağazanın eski liste fiyatı seçicileri, en küçük aday algoritması ve indirim yüzdesi formülleri.
 
 Bir fırsatın gerçek indirimini hesaplayabilmek için **İndirimsiz Liste Fiyatı (`originalPrice`)** 3 katmanda aranır:
 1. **JSON-LD:** `offers.highPrice`, `offers.listPrice`, `offers.priceSpecification`.
@@ -363,7 +377,7 @@ python cloud-run-bot/deploy_to_vm.py prod
 
 ---
 
-## 12. 📊 21 Mağaza İçin Kapsamlı Özet Karar Matrisi
+## 12. 📊 22 Mağaza İçin Kapsamlı Özet Karar Matrisi
 
 | Mağaza | İstemci (Dart) Yöntemi | Sunucu (Node.js) Yöntemi | Özel Fiyat / Rozet / Canlı Servis |
 | :--- | :--- | :--- | :--- |
@@ -388,6 +402,8 @@ python cloud-run-bot/deploy_to_vm.py prod
 | **Havit** | Standart Fetch | Standart Fetch | E-Ticaret DOM ve JSON-LD Şeması |
 | **Migros** | Standart Fetch | curl spawnSync | Money ile (`priceLabel`), Money Kulüp İndirimleri |
 | **Boyner** | Standart Fetch | curl spawnSync | JSON-LD `Product` Şeması ve DOM İndirimleri |
+| **Gamer Gen** | DOM (`.text-price`/`.product-price`) | curl spawnSync / Cheerio | Sepette İndirim, Hazır Sistemler (`_h...`), Değerlendirme Yok (`null`) |
+| **Gaming Gen**| DOM (`.summary .price`) & JSON-LD | WhatsApp UA / curl spawnSync | WooCommerce Altyapısı, Bundle Fiyat Filtreleme, Yıldız Puanı (1 ondalık) & Yorum Sayısı |
 
 ---
 
@@ -397,7 +413,7 @@ Her mağazanın scraper doğruluğu bağımsız unit testler ile garanti altına
 
 | Test Dosyası | Katman | Açıklama | Komut |
 | :--- | :--- | :--- | :--- |
-| **`test/*_scraper_test.dart`** | Flutter / Dart | 21 mağazanın fiyat, başlık, görsel ve metadata birim testleri | `flutter test` |
+| **`test/*_scraper_test.dart`** | Flutter / Dart | 23 mağazanın fiyat, başlık, görsel ve metadata birim testleri | `flutter test` |
 | **`cloud-run-bot/tests/*.test.js`** | Node.js | Sunucu tarafı scraper'ların Cheerio DOM ve regex doğrulama testleri | `node cloud-run-bot/tests/...` |
 | **`cloud-run-bot/test_simulate_bot.js`**| Node.js | Canlı Telegram mesaj simülasyonu ve uçtan uca akış testi | `node cloud-run-bot/test_simulate_bot.js` |
 
@@ -424,10 +440,10 @@ Her mağazanın scraper doğruluğu bağımsız unit testler ile garanti altına
 | Rol / Katman | Dosya Yolu | Açıklama |
 | :--- | :--- | :--- |
 | **Mobil Link Önizleme Servisi** | [link_preview_service.dart](file:///d:/firsatkolik/lib/services/link_preview_service.dart) | İstemci scraper koordinatörü, redirect çözücü ve native HTTP tüneli. |
-| **Dart Mağaza Scraper'ları (21 Adet)**| [lib/services/scrapers/](file:///d:/firsatkolik/lib/services/scrapers/) | 21 mağazaya ait Dart scraper sınıfları. |
-| **Domain Allowlist & Regex Kuralları**| [domain_allowlist_extended.json](file:///d:/firsatkolik/assets/data/domain_allowlist_extended.json) | 21 mağazanın izinli alan adları ve ürün sayfası regex desenleri. |
+| **Dart Mağaza Scraper'ları (23 Adet)**| [lib/services/scrapers/](file:///d:/firsatkolik/lib/services/scrapers/) | 23 mağazaya ait Dart scraper sınıfları. |
+| **Domain Allowlist & Regex Kuralları**| [domain_allowlist_extended.json](file:///d:/firsatkolik/assets/data/domain_allowlist_extended.json) | 23 mağazanın izinli alan adları ve ürün sayfası regex desenleri. |
 | **Sunucu Link Scraper Servisi** | [link_scraper_service.js](file:///d:/firsatkolik/cloud-run-bot/link_scraper_service.js) | Node.js scraper koordinatörü, curl, Translate Proxy ve Microlink motoru. |
-| **Node.js Mağaza Scraper'ları (21 Adet)**| [cloud-run-bot/scrapers/](file:///d:/firsatkolik/cloud-run-bot/scrapers/) | 21 mağazaya ait Node.js scraper sınıfları. |
+| **Node.js Mağaza Scraper'ları (23 Adet)**| [cloud-run-bot/scrapers/](file:///d:/firsatkolik/cloud-run-bot/scrapers/) | 23 mağazaya ait Node.js scraper sınıfları. |
 | **Telegram Canlı Botu** | [telegram_bot.js](file:///d:/firsatkolik/cloud-run-bot/telegram_bot.js) | Telegram kanallarını dinleyen ve fırsatları Firestore'a kaydeden ana bot. |
 | **Kategori Tespit Servisi** | [category_detection_service.js](file:///d:/firsatkolik/cloud-run-bot/category_detection_service.js) | NLP tabanlı otomatik kategori sınıflandırma motoru. |
 | **Reklam Uyum Servisi** | [advertising_compliance_service.js](file:///d:/firsatkolik/cloud-run-bot/advertising_compliance_service.js) | Yasal reklam ibaresi (#işbirliği) entegrasyonu. |

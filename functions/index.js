@@ -432,26 +432,37 @@ async function matchAndCreateDealNotifications(deal, dealId) {
       .collection('notifications')
       .doc(notifId);
 
+    const formattedPrice = (deal.price === 0 || deal.price === '0') ? 'ÜCRETSİZ' : `${deal.price || 0} TL`;
     let notifTitle = '🎯 Yeni Fırsat!';
-    let notifBody = `${deal.title}\n💰 ${deal.price} TL`;
+    let notifBody = `${deal.title}\n💰 ${formattedPrice}`;
 
     if (match.reason === 'keyword') {
       notifTitle = '🎯 İlginizi Çeken Kelime!';
-      notifBody = `"${match.detail}" içeren yeni fırsat: ${deal.title}`;
+      notifBody = `"${match.detail}" radarınıza takıldı: ${deal.title}\n💰 ${formattedPrice}`;
     } else if (match.reason === 'author') {
       if (match.detail === 'botkolik') {
-        notifTitle = '⚡ Botkolik Radarı!';
-        notifBody = `Botkolik yeni bir fırsat yakaladı: ${deal.title}`;
+        const merchantTag = deal.merchant ? ` (${deal.merchant})` : '';
+        const discountTag = (deal.discountRate && Number(deal.discountRate) > 0) ? ` • %${deal.discountRate} İndirim` : '';
+        notifTitle = `⚡ Botkolik Radarı${merchantTag}!`;
+        notifBody = `${deal.title}\n💰 ${formattedPrice}${discountTag}`;
       } else {
-        notifTitle = '👤 Takip Ettiğiniz Kişi!';
-        notifBody = `Takip ettiğiniz yazar yeni fırsat paylaştı: ${deal.title}`;
+        const authorName = deal.postedByName || deal.authorName || 'Takip ettiğiniz avcı';
+        notifTitle = `👤 ${authorName} yeni bir fırsat paylaştı!`;
+        notifBody = `${deal.title}\n💰 ${formattedPrice}`;
       }
+    } else if (match.reason === 'category') {
+      const catTitle = match.detail ? (match.detail.charAt(0).toUpperCase() + match.detail.slice(1)) : '';
+      notifTitle = catTitle ? `🎯 ${catTitle} Fırsatı!` : '🎯 Yeni Fırsat!';
+      notifBody = `${deal.title}\n💰 ${formattedPrice}`;
     }
 
     batch.set(notifRef, {
       type: 'deal',
       dealId: dealId,
       dealTitle: deal.title,
+      imageUrl: deal.imageUrl || deal.mainImage || '',
+      merchant: deal.merchant || '',
+      price: deal.price !== undefined ? deal.price : null,
       title: notifTitle,
       body: notifBody,
       reason: match.reason,
@@ -688,9 +699,12 @@ exports.onDealUpdated = functions.firestore
           type: 'submission_status',
           dealId: dealId,
           dealTitle: newData.title || 'Fırsatınız',
+          imageUrl: newData.imageUrl || newData.mainImage || '',
           title: '🎉 Fırsatınız Onaylandı!',
-          body: `Paylaştığınız "${newData.title}" başlıklı fırsat onaylandı ve yayına alındı.`,
+          body: `Paylaştığınız "${newData.title}" onaylandı ve yayına alındı.`,
           status: 'approved',
+          isUserSubmitted: true,
+          sendPush: true,
           read: false,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
@@ -705,13 +719,22 @@ exports.onDealUpdated = functions.firestore
           .collection('notifications')
           .doc(notifId);
 
+        const modReason = newData.moderationReason || newData.rejectionReason || '';
+        const bodyText = modReason
+          ? `Paylaştığınız "${newData.title}" "${modReason}" gerekçesiyle reddedildi.`
+          : `Paylaştığınız "${newData.title}" kurallarımıza uymadığı için reddedildi.`;
+
         await notifRef.set({
           type: 'submission_status',
           dealId: dealId,
           dealTitle: newData.title || 'Fırsatınız',
+          imageUrl: newData.imageUrl || newData.mainImage || '',
+          moderationReason: modReason,
           title: '❌ Fırsatınız Reddedildi',
-          body: `Paylaştığınız "${newData.title}" başlıklı fırsat kurallarımıza uymadığı için reddedildi.`,
+          body: bodyText,
           status: 'rejected',
+          isUserSubmitted: true,
+          sendPush: true,
           read: false,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
@@ -897,12 +920,16 @@ exports.onCommentCreated = functions.firestore
             const replyUserName = comment.userName || 'Bir kullanıcı';
             const replyText = commentText;
 
+            const replyBody = `"${dealTitle}" fırsatında: ${replyText.length > 80 ? `${replyText.substring(0, 80)}...` : replyText}`;
+            const dealImageUrl = (dealDoc.exists && dealDoc.data().imageUrl) ? dealDoc.data().imageUrl : '';
+
             await notificationRef.set({
               type: 'comment_reply',
               title: `${replyUserName} yorumunuza cevap verdi`,
-              body: replyText.length > 100 ? `${replyText.substring(0, 100)}...` : replyText,
+              body: replyBody,
               dealId: dealId,
               dealTitle: dealTitle,
+              imageUrl: dealImageUrl,
               commentId: commentId,
               parentCommentId: parentCommentId,
               replyUserName: replyUserName,
@@ -930,6 +957,7 @@ exports.onCommentCreated = functions.firestore
         // Fırsat sahibi var, kendi kendine yorum yapmamış ve üstte yoruma cevap bildirimi alıcısı olmamışsa
         if (dealOwnerId && dealOwnerId !== replierUserId && (!parentCommentId)) {
           const dealTitle = dealData.title || 'Fırsat';
+          const dealImageUrl = dealData.imageUrl || '';
           const notificationId = `deal_comment_${commentId}_${dealOwnerId}`;
           const notificationRef = admin.firestore()
             .collection('users')
@@ -938,13 +966,16 @@ exports.onCommentCreated = functions.firestore
             .doc(notificationId);
 
           const commentUserName = comment.userName || 'Bir kullanıcı';
+          const rootCommentBody = `"${dealTitle}": ${commentText.length > 80 ? `${commentText.substring(0, 80)}...` : commentText}`;
+
           await notificationRef.set({
             type: 'comment',
             reason: 'comment',
             title: `${commentUserName} fırsatınıza yorum yaptı`,
-            body: commentText.length > 100 ? `${commentText.substring(0, 100)}...` : commentText,
+            body: rootCommentBody,
             dealId: dealId,
             dealTitle: dealTitle,
+            imageUrl: dealImageUrl,
             commentId: commentId,
             commentUserName: commentUserName,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1070,15 +1101,20 @@ exports.onUserMessageCreated = functions.firestore
     try {
       const receiverDoc = await admin.firestore().collection('users').doc(receiverId).get();
       if (receiverDoc.exists) {
-        const receiverData = receiverDoc.data();
-        const blockedUsers = receiverData?.blockedUsers || [];
+        const receiverData = receiverDoc.data() || {};
+        const blockedUsers = receiverData.blockedUsers || [];
         if (Array.isArray(blockedUsers) && blockedUsers.includes(senderId)) {
           functions.logger.info(`🚫 Alıcı (${receiverId}) göndereni (${senderId}) engellemiş, push bildirim iptal edildi.`);
           return null;
         }
+        const mutedConversations = receiverData.mutedConversations || [];
+        if (Array.isArray(mutedConversations) && mutedConversations.includes(senderId)) {
+          functions.logger.info(`🔕 Alıcı (${receiverId}) bu sohbeti (${senderId}) sessize almış, push bildirim iptal edildi.`);
+          return null;
+        }
       }
     } catch (blockErr) {
-      functions.logger.warn('⚠️ Alıcı blok listesi kontrolü sırasında hata:', blockErr);
+      functions.logger.warn('⚠️ Alıcı blok/sessize alma kontrolü sırasında hata:', blockErr);
     }
 
     try {
@@ -1090,8 +1126,14 @@ exports.onUserMessageCreated = functions.firestore
         return null;
       }
 
-      // Bildirim içeriği
-      const notificationBody = content.length > 100 ? content.substring(0, 100) + '...' : content;
+      // Bildirim içeriği (Fırsat ekli ise özel zengin metin)
+      let resolvedBody = content;
+      if (message.dealTitle || message.dealId) {
+        resolvedBody = message.dealTitle
+          ? `"${message.dealTitle}" fırsatını paylaştı`
+          : 'Bir fırsat paylaştı';
+      }
+      const notificationBody = resolvedBody.length > 100 ? resolvedBody.substring(0, 100) + '...' : resolvedBody;
 
       functions.logger.info(`📤 Mesaj bildirimi ${devices.length} cihaza gönderiliyor...`);
 
@@ -1110,6 +1152,7 @@ exports.onUserMessageCreated = functions.firestore
             senderImageUrl: senderImageUrl,
             messageText: notificationBody,
             receiverId: receiverId,
+            createdAt: message.createdAt && message.createdAt.toDate ? message.createdAt.toDate().toISOString() : new Date().toISOString(),
             notification_title: `💬 ${resolvedSenderName}`,
             notification_body: notificationBody,
             click_action: 'FLUTTER_NOTIFICATION_CLICK',
@@ -1165,6 +1208,88 @@ exports.onUserMessageCreated = functions.firestore
   }));
 
 /**
+ * 5.1. TOPLULUK KUPONU PAYLAŞILDIĞINDA (NOTIF-15)
+ * kuponlar/{kuponId} koleksiyonunda yeni belge oluşturulduğunda tetiklenir
+ */
+exports.onCouponCreated = functions.firestore
+  .document('kuponlar/{kuponId}')
+  .onCreate(wrapTrigger('onCouponCreated', async (snap, context) => {
+    const kupon = snap.data();
+    const kuponId = context.params.kuponId;
+
+    if (!kupon) return null;
+
+    // Sadece 'topluluk' kaynaklı ve aktif kuponlar için bildirim gönder
+    if (kupon.kaynakTipi !== 'topluluk') {
+      functions.logger.info(`ℹ️ Kupon (${kuponId}) kaynakTipi='${kupon.kaynakTipi}', bildirim atlanıyor.`);
+      return null;
+    }
+
+    if (kupon.durum === 'gecersiz') {
+      functions.logger.info(`ℹ️ Kupon (${kuponId}) durumu geçersiz, bildirim atlanıyor.`);
+      return null;
+    }
+
+    const paylasanId = kupon.paylasanKullaniciId || '';
+    const paylasanAdi = kupon.paylasanKullaniciAdi || 'Bir avcı';
+    const magazaAdi = kupon.magazaAdi || 'Mağaza';
+    const baslik = kupon.baslik || 'Yeni İndirim Kuponu';
+    const kuponKodu = kupon.kuponKodu || '';
+
+    functions.logger.info(`🎟️ Yeni topluluk kuponu bildirimi oluşturuluyor: ${kuponId} (${magazaAdi} - ${paylasanAdi})`);
+
+    try {
+      const usersSnap = await admin.firestore().collection('users').get();
+      let batch = admin.firestore().batch();
+      let opCount = 0;
+
+      for (const userDoc of usersSnap.docs) {
+        const userId = userDoc.id;
+        // Kuponu paylaşan kullanıcının kendisine bildirim gönderme
+        if (userId === paylasanId) continue;
+
+        const notifId = `coupon_${kuponId}_${userId}`;
+        const notifRef = admin.firestore()
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .doc(notifId);
+
+        batch.set(notifRef, {
+          type: 'coupon',
+          reason: 'community',
+          title: `🎟️ ${magazaAdi} Kuponu!`,
+          body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`,
+          kuponId: kuponId,
+          magazaAdi: magazaAdi,
+          kuponKodu: kuponKodu,
+          authorName: paylasanAdi,
+          authorId: paylasanId,
+          read: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        opCount++;
+        if (opCount >= 400) {
+          await batch.commit();
+          batch = admin.firestore().batch();
+          opCount = 0;
+        }
+      }
+
+      if (opCount > 0) {
+        await batch.commit();
+      }
+
+      functions.logger.info(`✅ ${usersSnap.size - (paylasanId ? 1 : 0)} kullanıcı için topluluk kuponu bildirimleri oluşturuldu.`);
+    } catch (err) {
+      functions.logger.error('❌ Topluluk kuponu bildirimleri oluşturulurken hata:', err);
+    }
+
+    return null;
+  }));
+
+/**
  * 6. BİRLEŞİK BİLDİRİM TETİKLEYİCİSİ - Push Notification Gönder
  * users/{userId}/notifications/{notificationId} koleksiyonunu dinler
  */
@@ -1193,6 +1318,8 @@ exports.onNotificationCreated = functions.firestore
         title = '🛡️ FırsatKolik Yönetim';
       } else if (notifType === 'marketing') {
         title = '🔥 Özel Fırsat Duyurusu';
+      } else if (notifType === 'coupon' || notifType === 'community_coupon') {
+        title = `🎟️ ${notification.magazaAdi ? `${notification.magazaAdi} Kuponu!` : 'Yeni Kupon!'}`;
       } else if (dealTitle) {
         title = `🎯 ${dealTitle}`;
       } else {
@@ -1210,6 +1337,8 @@ exports.onNotificationCreated = functions.firestore
         body = 'Yorum detaylarını incelemek için dokunun.';
       } else if (notifType === 'admin_message') {
         body = 'Yeni bir yönetici bildiriminiz var.';
+      } else if (notifType === 'coupon' || notifType === 'community_coupon') {
+        body = 'Toplulukta yeni bir indirim kuponu paylaşıldı.';
       } else {
         body = 'Detayları görüntülemek için dokunun.';
       }
@@ -1217,16 +1346,18 @@ exports.onNotificationCreated = functions.firestore
 
     functions.logger.info('🔔 onNotificationCreated tetiklendi:', { userId, notificationId, type: notification.type, title, body: body.substring(0, 30) });
 
-    // 00. submission_status bildirimleri için push gönderilmez (sadece bildirim merkezinde saklanır)
-    // NOT: admin_message artık bu motordan geçerek push gönderilir (Tek Sorumluluk Prensibi)
+    // 00. submission_status bildirimleri:
+    // Eğer isUserSubmitted veya sendPush bayrağı yoksa (örneğin eski test suite senaryoları) sessiz bildirim olarak işaretle
     if (notification.type === 'submission_status') {
-      functions.logger.info(`🚫 ${notification.type} için push gönderilmez (sadece bildirim merkezinde saklanır).`);
-      await snap.ref.set({
-        pushEligible: false,
-        pushStatus: 'disabled_permanently_for_submission_status',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-      return null;
+      if (!notification.isUserSubmitted && !notification.sendPush) {
+        functions.logger.info(`🚫 ${notification.type} için push gönderilmez (sadece bildirim merkezinde saklanır).`);
+        await snap.ref.set({
+          pushEligible: false,
+          pushStatus: 'disabled_permanently_for_submission_status',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        return null;
+      }
     }
 
     // 0. Check global Master Switch for push notifications
@@ -1281,7 +1412,7 @@ exports.onNotificationCreated = functions.firestore
     const type = notification.type || '';
 
     // Admin mesajları sessiz saatlere tabi değildir (resmi/acil bildirimler)
-    if (prefs.quietHoursEnabled && (type === 'deal' || type === 'keyword' || type === 'marketing')) {
+    if (prefs.quietHoursEnabled && (type === 'deal' || type === 'keyword' || type === 'marketing' || type === 'coupon' || type === 'community_coupon')) {
       const userTime = new Date().toLocaleTimeString('tr-TR', { timeZone: prefs.timezone, hour12: false });
       const currentHm = userTime.substring(0, 5); // "HH:MM"
 
@@ -1684,6 +1815,9 @@ exports.onNotificationCreated = functions.firestore
       } else if (type === 'comment_reply' || type === 'comment') {
         groupName = 'comment_reply';
         groupEnabled = isCommunityPrefEnabled;
+      } else if (type === 'coupon' || type === 'community_coupon') {
+        groupName = 'community';
+        groupEnabled = isCommunityPrefEnabled;
       } else if (type === 'submission_status') {
         groupName = 'submission_status';
         groupEnabled = isSubmissionStatusPrefEnabled;
@@ -1744,10 +1878,15 @@ exports.onNotificationCreated = functions.firestore
     } else if (type === 'comment_reply' || type === 'comment') {
       channelId = 'comment_replies_channel';
       color = '#2196F3';
+    } else if (type === 'coupon' || type === 'community_coupon') {
+      channelId = 'sicak_firsatlar_general_v2';
+      color = '#8E24AA';
     } else if (type === 'submission_status') {
       channelId = 'sicak_firsatlar_general_v2';
-      color = '#4CAF50';
+      color = notification.status === 'rejected' ? '#F44336' : '#10B981';
     }
+
+    const imageUrl = (notification.imageUrl && String(notification.imageUrl).trim()) || '';
 
     functions.logger.info(`📤 Push ${devices.length} cihaza gönderiliyor...`);
 
@@ -1772,6 +1911,17 @@ exports.onNotificationCreated = functions.firestore
         notification_body: String(body || '')
       };
 
+      if (imageUrl) {
+        safeData.imageUrl = imageUrl;
+      }
+
+      // Kupon bildirimleri için ek meta veriler
+      if (type === 'coupon' || type === 'community_coupon') {
+        safeData.kuponId = String(notification.kuponId || '');
+        safeData.magazaAdi = String(notification.magazaAdi || '');
+        safeData.kuponKodu = String(notification.kuponKodu || '');
+      }
+
       // Admin mesajları için Flutter tarafının doğru yönlendirme yapabilmesi için ek alanlar
       if (type === 'admin_message') {
         safeData.messageId = String(notification.messageId || notificationId || '');
@@ -1779,12 +1929,14 @@ exports.onNotificationCreated = functions.firestore
         safeData.senderName = String(notification.senderName || 'FırsatKolik Yönetim');
       }
 
-      // Android notification tag: admin mesajları için messageId bazlı, yorumlar için commentId, diğerleri için type_dealId
+      // Android notification tag: admin mesajları için messageId bazlı, kuponlar için coupon_kuponId, yorumlar için commentId, diğerleri için type_dealId
       const androidTag = type === 'admin_message'
         ? `admin_msg_${notification.messageId || notificationId}`
         : ((type === 'comment' || type === 'comment_reply') && notification.commentId
             ? `comment_${notification.commentId}`
-            : (reason === 'keyword' ? `keyword_${dealId}` : `${type}_${dealId}`));
+            : ((type === 'coupon' || type === 'community_coupon')
+                ? `coupon_${notification.kuponId || notificationId}`
+                : (reason === 'keyword' ? `keyword_${dealId}` : `${type}_${dealId}`)));
 
       // APNs kategori: admin mesajları için ADMIN_MESSAGE, diğerleri için yok
       const apnsCategory = type === 'admin_message' ? 'ADMIN_MESSAGE' : undefined;
@@ -1792,7 +1944,11 @@ exports.onNotificationCreated = functions.firestore
 
       const payload = {
         token: device.token,
-        notification: { title, body },
+        notification: {
+          title,
+          body,
+          ...(imageUrl ? { imageUrl } : {})
+        },
         data: safeData,
         android: {
           priority: 'high',
@@ -1806,6 +1962,7 @@ exports.onNotificationCreated = functions.firestore
             tag: androidTag,
             defaultSound: true,
             defaultVibrateTimings: true,
+            ...(imageUrl ? { imageUrl } : {})
           }
         },
         apns: {
@@ -1826,7 +1983,8 @@ exports.onNotificationCreated = functions.firestore
               ...(apnsInterruptionLevel ? { 'interruption-level': apnsInterruptionLevel } : {}),
               ...(apnsCategory ? { category: apnsCategory } : {}),
             }
-          }
+          },
+          ...(imageUrl ? { fcm_options: { image: imageUrl } } : {})
         }
       };
 

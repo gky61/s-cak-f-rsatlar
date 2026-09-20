@@ -164,5 +164,156 @@ void main() {
       expect(list[2].id, 'normal_mavi');
       expect(list[3].id, 'trash');
     });
+
+    test('Kupon kodu büyük-küçük harf duyarlılığını korumalı', () {
+      final now = DateTime.now();
+      const rawCode = 'IndiRim_50off';
+      final kupon = Kupon(
+        id: 'case_test',
+        magazaAdi: 'Trendyol',
+        baslik: 'Özel Kupon',
+        kuponKodu: rawCode,
+        olusturulmaTarihi: now,
+        paylasanKullaniciId: 'user1',
+      );
+
+      expect(kupon.kuponKodu, rawCode);
+      final map = kupon.toFirestore();
+      expect(map['kuponKodu'], rawCode);
+    });
+
+    test('isExpired ve sortingGroup: Süresi dolmuş kuponlar Grup 3 (Çöp/Geçersiz) olmalı', () {
+      final now = DateTime.now();
+
+      // Süresi henüz dolmamış aktif kupon (Grup 1)
+      final activeFutureKupon = Kupon(
+        id: 'future',
+        magazaAdi: 'Trendyol',
+        baslik: 'Gelecek Kupon',
+        kuponKodu: 'TEST1',
+        olusturulmaTarihi: now,
+        paylasanKullaniciId: 'user1',
+        bitisTarihi: now.add(const Duration(days: 2)),
+        sicakOySayisi: 5,
+        sogukOySayisi: 0,
+        durum: 'aktif',
+      );
+      expect(activeFutureKupon.isExpired, false);
+      expect(activeFutureKupon.sortingGroup, 1);
+
+      // 5 sıcak oy alsa bile süresi dün dolmuş kupon Grup 3 olmalı!
+      final expiredHotKupon = Kupon(
+        id: 'expired_hot',
+        magazaAdi: 'Trendyol',
+        baslik: 'Süresi Dolmuş Sıcak Kupon',
+        kuponKodu: 'TEST2',
+        olusturulmaTarihi: now.subtract(const Duration(days: 5)),
+        paylasanKullaniciId: 'user1',
+        bitisTarihi: now.subtract(const Duration(days: 1)),
+        sicakOySayisi: 10,
+        sogukOySayisi: 0,
+        durum: 'aktif',
+      );
+      expect(expiredHotKupon.isExpired, true);
+      expect(expiredHotKupon.sortingGroup, 3);
+    });
+
+    test('Grup 2 oylama katmanı: Pozitif net skorlu kuponlar nötr ve negatiflerin önüne geçmeli', () {
+      final now = DateTime.now();
+      int mockGetStoreRank(String name) => 1; // Aynı mağaza
+
+      // 2 sıcak oy almış kupon (netScore: +2, henüz Grup 1 eşiği olan 3 oya ulaşmamış)
+      final positiveKupon = Kupon(
+        id: 'positive',
+        magazaAdi: 'Trendyol',
+        baslik: '2 Sıcak Oy',
+        kuponKodu: 'POS2',
+        olusturulmaTarihi: now.subtract(const Duration(hours: 3)),
+        paylasanKullaniciId: 'user1',
+        sicakOySayisi: 2,
+        sogukOySayisi: 0,
+      );
+
+      // Hiç oy almamış yeni kupon (netScore: 0)
+      final neutralKupon = Kupon(
+        id: 'neutral',
+        magazaAdi: 'Trendyol',
+        baslik: '0 Oy Yeni',
+        kuponKodu: 'ZERO',
+        olusturulmaTarihi: now.subtract(const Duration(minutes: 5)),
+        paylasanKullaniciId: 'user2',
+        sicakOySayisi: 0,
+        sogukOySayisi: 0,
+      );
+
+      // 1 soğuk oy almış kupon (netScore: -1)
+      final negativeKupon = Kupon(
+        id: 'negative',
+        magazaAdi: 'Trendyol',
+        baslik: '1 Soğuk Oy',
+        kuponKodu: 'NEG1',
+        olusturulmaTarihi: now.subtract(const Duration(hours: 1)),
+        paylasanKullaniciId: 'user3',
+        sicakOySayisi: 0,
+        sogukOySayisi: 1,
+      );
+
+      final list = [negativeKupon, neutralKupon, positiveKupon];
+      list.sort((a, b) => Kupon.compareKuponlar(a, b, mockGetStoreRank));
+
+      expect(list[0].id, 'positive');
+      expect(list[1].id, 'neutral');
+      expect(list[2].id, 'negative');
+    });
+
+    test('Topluluk Kuponları vs Kupon Radarı: Toplulukta tarih ve net skor, Radarda mağaza ranki öncelikli olmalı', () {
+      final now = DateTime.now();
+
+      int mockGetStoreRank(String name) {
+        if (name == 'Trendyol') return 1;
+        if (name == 'Boyner') return 50;
+        return 99;
+      }
+
+      // Boyner Kuponu: 10 dakika önce paylaşıldı (yeni!), netScore: 0
+      final newBoyner = Kupon(
+        id: 'new_boyner',
+        magazaAdi: 'Boyner',
+        baslik: 'Yeni Boyner Kuponu',
+        kuponKodu: 'BOYNER10',
+        olusturulmaTarihi: now.subtract(const Duration(minutes: 10)),
+        paylasanKullaniciId: 'user1',
+        kaynakTipi: 'topluluk',
+        sicakOySayisi: 0,
+        sogukOySayisi: 0,
+      );
+
+      // Trendyol Kuponu: 3 saat önce paylaşıldı (eski), netScore: 0
+      final oldTrendyol = Kupon(
+        id: 'old_trendyol',
+        magazaAdi: 'Trendyol',
+        baslik: 'Eski Trendyol Kuponu',
+        kuponKodu: 'TRENDYOL3H',
+        olusturulmaTarihi: now.subtract(const Duration(hours: 3)),
+        paylasanKullaniciId: 'user2',
+        kaynakTipi: 'topluluk',
+        sicakOySayisi: 0,
+        sogukOySayisi: 0,
+      );
+
+      // 1. TOPLULUK SIRALAMASI (isCommunity: true):
+      // Topluluk feed'inde taze paylaşılan Boyner kuponu, eski Trendyol kuponunun önüne geçmeli!
+      final communityList = [oldTrendyol, newBoyner];
+      communityList.sort((a, b) => Kupon.compareKuponlar(a, b, mockGetStoreRank, isCommunity: true));
+      expect(communityList[0].id, 'new_boyner');
+      expect(communityList[1].id, 'old_trendyol');
+
+      // 2. RADAR SIRALAMASI (isCommunity: false):
+      // Kupon radarında mağaza dizini öncelikli olduğu için popüler Trendyol mağazası Boyner'in önüne geçmeli!
+      final radarList = [newBoyner, oldTrendyol];
+      radarList.sort((a, b) => Kupon.compareKuponlar(a, b, mockGetStoreRank, isCommunity: false));
+      expect(radarList[0].id, 'old_trendyol');
+      expect(radarList[1].id, 'new_boyner');
+    });
   });
 }

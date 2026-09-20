@@ -2,8 +2,8 @@
     "version": "7.0.0",
     "verified_at": "2026-07-29",
     "match_mode": "exact_host_or_subdomain_of_allowed_host",
-    "store_count": 292,
-    "domain_count": 295,
+    "store_count": 294,
+    "domain_count": 297,
     "stores": {
         "trendyol": [
             "trendyol.com"
@@ -172,7 +172,7 @@
         "casper": [
             "casper.com.tr"
         ],
-        "gaming_gen_tr": [
+        "gaming_gen": [
             "gaming.gen.tr"
         ],
         "sinerji": [
@@ -859,6 +859,9 @@
         ],
         "hobium": [
             "hobium.com"
+        ],
+        "gamer_gen": [
+            "gamer.gen.tr"
         ]
     },
     "product_path_rules": {
@@ -921,6 +924,12 @@
         "getir": [
             "\\/(?:buyuk\\/)?urun\\/.+-[a-z0-9]+\\/?$"
         ],
-        "havit_turkiye": []
+        "havit_turkiye": [],
+        "gamer_gen": [
+            "_(?:u|h)\\d+\\/?$"
+        ],
+        "gaming_gen": [
+            "\\/urun\\/\\d+\\/.+\\/?$"
+        ]
     }
 }

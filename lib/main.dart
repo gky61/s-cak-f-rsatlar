@@ -12,6 +12,7 @@ import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/analytics_service.dart';
 import 'services/notification_service.dart';
+import 'services/app_badge_service.dart';
 import 'services/theme_service.dart';
 import 'services/connectivity_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -66,6 +67,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     title = data['notification_title'] ?? '👮‍♂️ Yeni Onay Bekleyen Fırsat';
     body = data['notification_body'] ?? 'Onay için bekleyen bir fırsat var. Dokunun.';
     payload = 'admin_deal:${data['dealId']}';
+  } else if (type == 'submission_status') {
+    final status = (data['status'] ?? '').toString().toLowerCase();
+    title = data['notification_title'] ?? (status == 'approved' ? '🎉 Fırsatınız Onaylandı!' : 'ℹ️ Fırsatınız Reddedildi');
+    body = data['notification_body'] ?? (status == 'approved' ? 'Gönderdiğiniz fırsat onaylandı ve yayınlandı.' : 'Gönderdiğiniz fırsat maalesef onaylanamadı.');
+    payload = 'submission_status:${data['dealId']}:$status';
+    channelId = 'sicak_firsatlar_general_v2';
   } else if (type == 'admin_message') {
     title = data['notification_title'] ?? data['title'] ?? '📩 Yeni Admin Mesajı';
     body = data['notification_body'] ?? 'Bir mesajınız var. Dokunun.';
@@ -315,15 +322,16 @@ void main() async {
     _log('❌ Firebase başlatma hatası: $e');
   }
 
-  // Kanalları uygulamanın en başında (giriş yapmadan önce) oluşturmayı dene
+  // Kanalları ve bildirim dinleyicilerini uygulamanın en başında önyükle
   try {
     if (!kIsWeb) {
       final notifService = NotificationService();
       await notifService.initializeLocalNotifications();
-      _log('✅ Bildirim kanalları önyüklendi');
+      notifService.setupNotificationListeners();
+      _log('✅ Bildirim kanalları ve dinleyicileri önyüklendi');
     }
   } catch (e) {
-    _log('⚠️ Kanal önyükleme hatası: $e');
+    _log('⚠️ Kanal ve dinleyici önyükleme hatası: $e');
   }
 
   runApp(const MyApp());
@@ -373,6 +381,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // Uygulama ön plana geldiğinde admin ise admin bildirim topic'ine yeniden abone ol
       NotificationService().ensureAdminTopicSubscriptionIfAdmin();
+      // Uygulama ön plana geldiğinde uygulama ikonu rozetini senkronize et
+      AppBadgeService.instance.syncBadgeWithFirestore();
     }
   }
 
@@ -627,6 +637,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       await _notificationService.initializeForUser(userId: userId, isAdmin: isAdmin);
       
+      // Canlı rozet senkronizasyonunu başlat ve mevcut durumu çek
+      AppBadgeService.instance.startRealtimeBadgeSync(userId);
+      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId);
+      
       // Admin ise, aboneliği doğrula
       if (isAdmin) {
         // Kısa bir gecikme sonrası admin topic'ine abone olduğundan emin ol
@@ -743,6 +757,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
           _blockedUserListener?.cancel();
           _blockedUserListener = null;
           AnalyticsService.instance.setUser(null);
+          AppBadgeService.instance.stopRealtimeBadgeSync();
+          AppBadgeService.instance.clearBadge();
         }
         _lastUserId = null;
         _log('No user logged in (Guest Mode Active)');

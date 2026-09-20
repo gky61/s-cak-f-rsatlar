@@ -69,6 +69,32 @@ class MainActivity: FlutterActivity() {
                 result.notImplemented()
             }
         }
+
+        // Android Uygulama İkonu ve Bildirim Çubuğu Rozet Kanalı (Notification Dot & Badge Channel)
+        io.flutter.plugin.common.MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.sicakfirsatlar.app/badge").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "clearBadge" -> {
+                    try {
+                        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        manager.cancelAll()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "setBadge" -> {
+                    val count = call.argument<Int>("count") ?: 0
+                    if (count == 0) {
+                        try {
+                            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            manager.cancelAll()
+                        } catch (_: Exception) {}
+                    }
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     /**

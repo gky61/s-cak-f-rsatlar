@@ -176,6 +176,8 @@ class _StoreRedirectDialogState extends State<StoreRedirectDialog>
     if (lower.contains('trendyol')) return const Color(0xFFF27A1A);
     if (lower.contains('amazon')) return const Color(0xFFFF9900);
     if (lower.contains('n11')) return const Color(0xFF5E17EB);
+    if (lower.contains('gaming')) return const Color(0xFFE30613);
+    if (lower.contains('gamer')) return const Color(0xFFF3D51B);
     return AppTheme.primary;
   }
 

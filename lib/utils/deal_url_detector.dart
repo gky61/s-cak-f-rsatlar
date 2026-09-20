@@ -65,6 +65,12 @@ class DealUrlDetector {
     if (lower.contains('boyner.com.tr')) {
       return 'Boyner';
     }
+    if (lower.contains('gamer.gen.tr')) {
+      return 'Gamer Gen';
+    }
+    if (lower.contains('gaming.gen.tr')) {
+      return 'Gaming Gen';
+    }
     if (lower.contains('beymen.com')) {
       return 'Beymen';
     }
