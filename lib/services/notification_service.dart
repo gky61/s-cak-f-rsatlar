@@ -2090,6 +2090,14 @@ class NotificationService {
         if (body.isEmpty) body = dealTitle.isNotEmpty ? dealTitle : 'İlginizi çekebilecek yeni bir indirim var.';
       }
 
+      // Diğer bildirimler için (fırsat, yorum, anahtar kelime vb.):
+      // iOS tarafında AppDelegate willPresent bu bildirimleri native banner ([.banner, .sound]) olarak
+      // işletim sistemi seviyesinde doğrudan sunar. Bu nedenle iOS'ta yerel bildirim tetiklenmez (çift afiş önleyici).
+      // Android'de ise ön planda sistem afişi düşmediğinden FlutterLocalNotificationsPlugin şarttır.
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        _showLocalNotification(message);
+      }
+
       InAppMessageBanner.show(
         context: null,
         senderId: senderId.isNotEmpty ? senderId : (dealId.isNotEmpty ? dealId : 'firsatkolik'),
@@ -2121,6 +2129,8 @@ class NotificationService {
   }
 
   // Yerel bildirim gösterme yardımcısı (Boş/başlıksız bildirim korumalı & deterministik ID)
+  Future<void> _showLocalNotification(RemoteMessage message) => showLocalNotification(message);
+
   Future<void> showLocalNotification(RemoteMessage message) async {
     try {
       final data = message.data;
