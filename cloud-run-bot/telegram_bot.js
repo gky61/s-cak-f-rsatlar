@@ -1384,19 +1384,43 @@ async function handleTelegramMessageEvent(event) {
     if (cleanUrl) {
       const querySnapshot = await db.collection('deals')
         .where('cleanUrl', '==', cleanUrl)
-        .where('isApproved', '==', true)
         .get();
 
       if (!querySnapshot.empty) {
+        const now = new Date();
         for (const doc of querySnapshot.docs) {
           const dealData = doc.data();
 
-          const isExpired = dealData.isExpired === true;
+          // 1. Reddedilmiş fırsat kontrolü (Reddedilenler yeni paylaşımı engellemez)
+          const isRejected = dealData.isRejected === true || dealData.status === 'rejected';
+          if (isRejected) {
+            continue;
+          }
+
+          // 2. Yaş Kontrolü (48 saatlik aktif pencere - Cron beklenmeden anında tespit)
+          const createdAtRaw = dealData.createdAt || dealData.timestamp;
+          let dealCreatedAt = null;
+          if (createdAtRaw && typeof createdAtRaw.toDate === 'function') {
+            dealCreatedAt = createdAtRaw.toDate();
+          } else if (createdAtRaw instanceof Date) {
+            dealCreatedAt = createdAtRaw;
+          } else if (typeof createdAtRaw === 'string') {
+            dealCreatedAt = new Date(createdAtRaw);
+          }
+
+          const isOlderThan48Hours = dealCreatedAt && (now - dealCreatedAt) > (48 * 60 * 60 * 1000);
+          if (isOlderThan48Hours) {
+            continue; // 48 saati geçmiş, arşiv fırsat, mükerrer sayılmaz!
+          }
+
+          // 3. Pasif/Biten Kontrolleri
+          const isExpired = dealData.isExpired === true || dealData.status === 'expired';
           const expiredVotes = dealData.expiredVotes || 0;
           if (isExpired || expiredVotes >= 15) {
             continue;
           }
 
+          // 4. Soğuk oylama kontrolü (Topluluk tarafından reddedilenler yeni paylaşımı engellemez)
           const hotVotes = dealData.hotVotes || 0;
           const coldVotes = dealData.coldVotes || 0;
           const totalVotes = hotVotes + coldVotes;
@@ -1407,6 +1431,16 @@ async function handleTelegramMessageEvent(event) {
             }
           }
           if (hotVotes - coldVotes <= -5) {
+            continue;
+          }
+
+          // 5. Fiyat Düşüşü (Price Drop) Toleransı:
+          // Eğer Telegram mesajında çıkarılan fiyat mevcut fırsatın fiyatından en az %5 daha ucuzsa yeni fırsat olarak izin ver
+          const messageText = message.message || '';
+          const messagePrice = extractPrice(messageText);
+          const existingPrice = Number(dealData.price) || 0;
+          if (messagePrice && messagePrice > 0 && existingPrice > 0 && messagePrice <= (existingPrice * 0.95)) {
+            console.log(`🏷️ [${matchedChannel.title}] Fiyat düşüşü tespit edildi (Eski: ${existingPrice}, Yeni: ${messagePrice}). Paylaşıma izin veriliyor.`);
             continue;
           }
 

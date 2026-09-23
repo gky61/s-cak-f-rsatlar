@@ -1102,6 +1102,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           if (errorMsg.contains('already_shared:')) {
             final dealId = errorMsg.split('already_shared:')[1].trim();
             _showAlreadySharedDialog(context, dealId);
+          } else if (errorMsg.contains('pending_approval:')) {
+            _showPendingApprovalDialog(context);
           } else if (errorMsg.contains('permission-denied') ||
                      errorMsg.contains('yetkiniz kaldırılmış') ||
                      errorMsg.contains('paylaşım izniniz kısıtlanmış') ||
@@ -1181,7 +1183,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             ],
           ),
           content: const Text(
-            'Paylaşmaya çalıştığınız ürünün aktif bir paylaşımı zaten mevcut. '
+            'Paylaşmaya çalıştığınız ürün son 48 saat içinde paylaşıldı ve halen yayında. '
             'Yeni bir mükerrer konu açmak yerine, mevcut fırsata giderek oy verebilir veya yorum yazabilirsiniz.',
             style: TextStyle(fontSize: 13.5, height: 1.4),
           ),
@@ -1218,6 +1220,59 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 );
               },
               child: const Text('Fırsata Git ↗', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showPendingApprovalDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(
+                Icons.hourglass_top_rounded,
+                color: Color(0xFFF59E0B),
+                size: 26,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Fırsat İnceleniyor',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Bu ürün kısa süre önce bir başka avcı tarafından paylaşıldı ve şu anda moderatör onayında bekliyor. '
+            'İnceleme tamamlandığında uygun görülürse ana sayfada yerini alacaktır.',
+            style: TextStyle(fontSize: 13.5, height: 1.4),
+          ),
+          actionsPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF59E0B),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Anladım', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         );

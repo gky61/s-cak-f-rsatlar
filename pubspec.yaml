@@ -58,13 +58,13 @@ dependencies:
   google_mobile_ads: ^5.0.0
   firebase_performance: ^0.9.4+7
   app_settings: ^7.0.0
+  flutter_native_splash: ^2.3.10
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.13.1
-  flutter_native_splash: ^2.3.10
 
 dependency_overrides:
   google_sign_in_ios: 5.7.8
@@ -86,15 +86,15 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/foreground.png"
 
 flutter_native_splash:
-  color: "#FF6B35"
-  image: "assets/foreground.png"
-  color_dark: "#1A1A1A"
-  image_dark: "assets/foreground.png"
+  color: "#FFFFFF"
+  image: "assets/branding_flame_light.png"
+  color_dark: "#000000"
+  image_dark: "assets/branding_flame_dark.png"
   android_12:
-    color: "#FF6B35"
-    image: "assets/foreground.png"
-    color_dark: "#1A1A1A"
-    image_dark: "assets/foreground.png"
+    color: "#FFFFFF"
+    image: "assets/branding_flame_light.png"
+    color_dark: "#000000"
+    image_dark: "assets/branding_flame_dark.png"
   android: true
   ios: true
   web: false

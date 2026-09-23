@@ -49,22 +49,18 @@
 		<false/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
-
 		<!-- App Store İhracat Uyumluluğu (Şifreleme Muafiyeti) -->
 		<key>ITSAppUsesNonExemptEncryption</key>
 		<false/>
-
 		<!-- iOS Universal Links / Deep Linking -->
 		<key>FlutterDeepLinkingEnabled</key>
 		<true/>
-
 		<!-- Arka planda FCM bildirimleri ve veri eşitleme -->
 		<key>UIBackgroundModes</key>
 		<array>
 			<string>fetch</string>
 			<string>remote-notification</string>
 		</array>
-
 		<!-- Dış Uygulama ve Mağaza URL Şemaları (iOS 9+ canLaunchUrl Whitelist) -->
 		<key>LSApplicationQueriesSchemes</key>
 		<array>
@@ -82,7 +78,6 @@
 			<string>tel</string>
 			<string>itms-apps</string>
 		</array>
-
 		<!-- URL Schemes & Google Sign-In Redirect -->
 		<key>CFBundleURLTypes</key>
 		<array>
@@ -104,15 +99,12 @@
 				</array>
 			</dict>
 		</array>
-
 		<!-- receive_sharing_intent App Group Identifier -->
 		<key>AppGroupId</key>
 		<string>group.com.firsatkolik.app</string>
-
 		<!-- Google Mobile Ads (AdMob) iOS Application ID -->
 		<key>GADApplicationIdentifier</key>
 		<string>ca-app-pub-3940256099942544~1458002511</string>
-
 		<!-- AdMob SKAdNetwork Identifier Listesi -->
 		<key>SKAdNetworkItems</key>
 		<array>
@@ -225,11 +217,9 @@
 				<string>488r3q3dtq.skadnetwork</string>
 			</dict>
 		</array>
-
 		<!-- App Tracking Transparency (ATT) İzni -->
 		<key>NSUserTrackingUsageDescription</key>
 		<string>Size özel indirim ve fırsat bildirimleri ile kişiselleştirilmiş reklam deneyimi sunabilmemiz için izin vermenizi rica ederiz.</string>
-
 		<!-- Fotoğraf Galerisi Erişimi (Profil fotoğrafı seçimi) -->
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Profil fotoğrafınızı seçmek ve profilinizi özelleştirmek için fotoğraf galerinize erişim izni gereklidir.</string>

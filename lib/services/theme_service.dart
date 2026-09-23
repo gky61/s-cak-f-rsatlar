@@ -16,11 +16,16 @@ class ThemeService extends ChangeNotifier {
   static const String _viewModeKey = 'view_mode';
   static ThemeService? _instance;
   
-  ThemeMode _themeMode = ThemeMode.light;
+  ThemeMode _themeMode = ThemeMode.system;
   CardViewMode _viewMode = CardViewMode.vertical;
 
   ThemeMode get themeMode => _themeMode;
-  bool get isDarkMode => _themeMode == ThemeMode.dark;
+  bool get isDarkMode {
+    if (_themeMode == ThemeMode.system) {
+      return WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    }
+    return _themeMode == ThemeMode.dark;
+  }
   CardViewMode get viewMode => _viewMode;
 
   // Singleton pattern
@@ -42,7 +47,7 @@ class ThemeService extends ChangeNotifier {
       if (themeModeString != null) {
         _themeMode = ThemeMode.values.firstWhere(
           (mode) => mode.toString() == themeModeString,
-          orElse: () => ThemeMode.light,
+          orElse: () => ThemeMode.system,
         );
       }
 
@@ -76,7 +81,8 @@ class ThemeService extends ChangeNotifier {
   }
 
   Future<void> toggleTheme() async {
-    final newMode = _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    final currentIsDark = isDarkMode;
+    final newMode = currentIsDark ? ThemeMode.light : ThemeMode.dark;
     await setThemeMode(newMode);
   }
 

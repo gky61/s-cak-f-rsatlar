@@ -227,16 +227,15 @@ Platformda aynı ürünün mükerrer şekilde üst üste paylaşılarak spam olu
 - Bu yalın URL, veritabanındaki fırsat dokümanlarında **`cleanUrl`** alanında saklanır. Mükerrerlik sorguları doğrudan bu alan üzerinden yürütülür.
 - Kullanıcıların yönlendirileceği asıl `link`/`url` alanlarındaki affiliate parametreleri **asla temizlenmez/değiştirilmez**; böylece affiliate komisyon gelirleri tam koruma altındadır.
 
-### Mükerrerlik Karar Kuralları:
-Sistemde yeni bir link paylaşıldığında veritabanı taranır:
-1.  **Durum A (Eşleşme Yoksa):** Link sistemde aktif olarak bulunmuyorsa paylaşıma izin verilir.
-2.  **Durum B (Aktif Eşleşme Varsa):** Eşleşen link veritabanında varsa ve fırsat hala **Aktif/Sıcak** durumdaysa paylaşım **engellenir**.
-    - *Aktif/Sıcak Koşulu:* Fırsatın yönetici tarafından onaylanmış olması (`isApproved: true`), el ile bitti olarak işaretlenmemiş olması (`isExpired: false`), toplulukça bitti oylanmaması (`expiredVotes < 15`), oylama puanının eksiye düşmemiş olması (`hotVotes - coldVotes > -5`) ve topluluk oylarıyla soğutulmamış olması (`totalVotes >= 5` ise sıcaklık yüzdesi `%20` üzerinde). Onay bekleyen (draft/pending) fırsatlar mükerrer engeline takılmaz.
-3.  **Durum C (Pasif/Biten Eşleşme Varsa):** Eşleşen link var ancak fırsat **Pasif/Biten** (expired, stok bitti veya soğuk) durumdaysa, ürünün yeniden indirime girdiği varsayılarak **yeni paylaşıma izin verilir**.
-
-### UX Davranışı (Mobil):
-- Mobil uygulamadan mükerrer aktif paylaşım yapılmaya çalışıldığında kullanıcı engellenir ve ekranda özel bir diyalog penceresi açılır. Kullanıcıya **"Fırsata Git"** butonu sunularak doğrudan mevcut aktif fırsatın detay sayfasına yönlendirilmesi sağlanır.
-- Telegram botu ise aktif mükerrer linkleri sessizce konsola loglayarak atlar.
+### Mükerrerlik Karar Kuralları (Dünya Standartları & Prod-Ready Mimari):
+Sistemde yeni bir link paylaşıldığında (mobil veya bot) veritabanı taranır ve aşağıdaki 6 katmanlı filtre uygulanır:
+1.  **Reddedilmiş Fırsat Muafiyeti:** Eşleşen doküman admin tarafından reddedilmişse (`isRejected: true` veya `status: 'rejected'`), yeni paylaşıma kesinlikle **izin verilir**.
+2.  **48 Saatlik Dinamik Yaş Penceresi (Active Deal Window):** Eşleşen dokümanın oluşturulma tarihi (`createdAt` / `timestamp`) 48 saati geçmişse (`createdAt < now - 48h`), veritabanında gece cron'u henüz çalışmamış olsa dahi doküman arşiv kabul edilir ve **yeni paylaşıma izin verilir** (Böylece anasayfada olmayan eski fırsatların yeni paylaşımları engellemesi kökten önlenir).
+3.  **Pasif/Biten Muafiyeti:** Eşleşen fırsat `isExpired: true`, `status: 'expired'` veya `expiredVotes >= 15` durumundaysa, ürünün yeniden indirime girdiği kabul edilerek **yeni paylaşıma izin verilir**.
+4.  **Topluluk Reddi (Soğuk Oy) Muafiyeti:** Eşleşen fırsat topluluk tarafından soğutulmuşsa (`totalVotes >= 5` ve sıcaklık oranı `%20` altındaysa veya `hotVotes - coldVotes <= -5`), **yeni paylaşıma izin verilir**.
+5.  **Fiyat Düşüşü İstisnası (Price Drop / Better Offer Exception):** Eşleşen aktif bir fırsat olsa dahi; eğer yeni paylaşılan ürünün fiyatı mevcut fırsatın fiyatından **en az %5 daha ucuzsa** (`newPrice <= existingPrice * 0.95`), bu durum spam değil "Fiyat Kırılması (Price Drop)" kabul edilir ve **yeni paylaşıma izin verilir**.
+6.  **Onay Kuyruğu Koruması (Pending Queue Protection):** Eşleşen doküman henüz onaylanmamışsa (`isApproved: false`), iki farklı kullanıcının aynı ürünü peş peşe onay kuyruğuna sokup spam oluşturması engellenir; mobil kullanıcıya "Fırsat İnceleniyor" modalı gösterilir.
+7.  **Aktif Eşleşme (Mükerrerlik Engeli):** Yukarıdaki 6 durumun dışındaki (yani son 48 saatte onaylanmış, aktif, fiyatı düşmemiş) paylaşımlar engellenir; kullanıcıya "Bu Ürün Zaten Paylaşıldı" diyaloğu açılarak "Fırsata Git ↗" butonuyla mevcut aktif konuya yönlendirilir. Telegram botu ise mükerrer mesajı sessizce loglayarak atlar.
 
 ---
 

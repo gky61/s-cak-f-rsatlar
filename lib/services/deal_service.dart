@@ -273,21 +273,42 @@ class DealService {
         final querySnapshot = await _firestore
             .collection('deals')
             .where('cleanUrl', isEqualTo: cleanUrl)
-            .where('isApproved', isEqualTo: true)
             .get();
         
         if (querySnapshot.docs.isNotEmpty) {
+          final now = DateTime.now();
           for (var doc in querySnapshot.docs) {
             final dealData = doc.data();
             
-            // Pasif/Biten Kontrolleri:
-            final isExpired = dealData['isExpired'] == true;
+            // 1. Reddedilmiş fırsat kontrolü (Reddedilenler yeni paylaşımı engellemez)
+            final isRejected = dealData['isRejected'] == true || dealData['status'] == 'rejected';
+            if (isRejected) {
+              continue;
+            }
+
+            // 2. Yaş Kontrolü (48 saatlik aktif pencere - Cron beklenmeden anında tespit)
+            final createdAtRaw = dealData['createdAt'] ?? dealData['timestamp'];
+            DateTime? dealCreatedAt;
+            if (createdAtRaw is Timestamp) {
+              dealCreatedAt = createdAtRaw.toDate();
+            } else if (createdAtRaw is DateTime) {
+              dealCreatedAt = createdAtRaw;
+            } else if (createdAtRaw is String) {
+              dealCreatedAt = DateTime.tryParse(createdAtRaw);
+            }
+
+            if (dealCreatedAt != null && dealCreatedAt.isBefore(now.subtract(const Duration(hours: 48)))) {
+              continue; // 48 saati geçmiş, arşiv fırsat, mükerrer sayılmaz!
+            }
+            
+            // 3. Pasif/Biten Kontrolleri
+            final isExpired = dealData['isExpired'] == true || dealData['status'] == 'expired';
             final expiredVotes = dealData['expiredVotes'] ?? 0;
             if (isExpired || expiredVotes >= 15) {
               continue;
             }
             
-            // Soğuk oylama kontrolü:
+            // 4. Soğuk oylama kontrolü (Topluluk tarafından reddedilenler yeni paylaşımı engellemez)
             final hotVotes = dealData['hotVotes'] ?? 0;
             final coldVotes = dealData['coldVotes'] ?? 0;
             final totalVotes = hotVotes + coldVotes;
@@ -300,8 +321,30 @@ class DealService {
             if (hotVotes - coldVotes <= -5) {
               continue;
             }
+
+            // 5. Fiyat Düşüşü (Price Drop) Toleransı
+            // Eğer yeni girilen fiyat, mevcut aktif fırsatın fiyatından en az %5 daha ucuzsa yeni fırsat olarak izin ver
+            double existingPrice = 0.0;
+            final rawPrice = dealData['price'];
+            if (rawPrice is num) {
+              existingPrice = rawPrice.toDouble();
+            } else if (rawPrice is String) {
+              final cleaned = rawPrice.replaceAll(',', '.').replaceAll(' ', '').replaceAll('₺', '').replaceAll('TL', '');
+              existingPrice = double.tryParse(cleaned) ?? 0.0;
+            }
+
+            if (price > 0 && existingPrice > 0 && price <= (existingPrice * 0.95)) {
+              _log('🏷️ [DEDUPLICATION] Fiyat düşüşü tespit edildi (Eski: $existingPrice, Yeni: $price). Paylaşıma izin veriliyor.');
+              continue;
+            }
+
+            // 6. Onay Durumu Kontrolü (Onay bekleyen fırsat kuyrukta spam olmasın)
+            final isDocApproved = dealData['isApproved'] == true;
+            if (!isDocApproved) {
+              throw Exception('pending_approval:${doc.id}');
+            }
             
-            // Aktif fırsat eşleşti -> paylaşımı engelle
+            // 7. Aktif onaylı fırsat eşleşti -> paylaşımı engelle
             throw Exception('already_shared:${doc.id}');
           }
         }

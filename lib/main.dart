@@ -25,6 +25,7 @@ import 'services/affiliate/affiliate_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/circular_theme_transition.dart';
 import 'services/system_log_service.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -185,7 +186,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   // Yakalanmamış hatalar uygulamanın kapanmasını engelle (logla, çökme)
   runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
+    final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+    FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   FlutterError.onError = (details) {
     if (kDebugMode) {
       print('FlutterError: ${details.exception}');
@@ -206,135 +208,16 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-
-    // Affiliate şalterlerini Firestore settings/app belgesinden gerçek zamanlı dinle
-    AffiliateService.initSettingsListener();
-
-    // App Check Aktivasyonu
-    try {
-      await FirebaseAppCheck.instance.activate(
-        androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-        appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
-      );
-      _log('🛡️ Firebase App Check başarıyla başlatıldı');
-    } catch (e) {
-      _log('⚠️ Firebase App Check başlatma hatası: $e');
-    }
-    
-    // Background message handler'ı sadece web dışı platformlarda kaydet
-    if (!kIsWeb) {
-      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    }
-    
-    _log('🔥 FIRSATKOLİK başlatılıyor...');
-    
-    // Firebase Performance Monitoring'i başlat
-    try {
-      await FirebasePerformance.instance.setPerformanceCollectionEnabled(true);
-      _log('✅ Firebase Performance Monitoring aktifleştirildi');
-    } catch (e) {
-      _log('⚠️ Firebase Performance Monitoring başlatma hatası: $e');
-    }
-
-    // Crashlytics ve Observability Ortam Parametreleri
-    try {
-      final envFlavor = isProductionFlavor ? 'prod' : 'dev';
-      final platformName = kIsWeb ? 'web' : defaultTargetPlatform.name;
-      await FirebaseCrashlytics.instance.setCustomKey('flavor', envFlavor);
-      await FirebaseCrashlytics.instance.setCustomKey('platform', platformName);
-      _log('✅ Crashlytics ortam parametreleri aktifleştirildi: flavor=$envFlavor, platform=$platformName');
-    } catch (e) {
-      _log('⚠️ Crashlytics setCustomKey hatası: $e');
-    }
-    
-    // AdMob Başlatıcı Yardımcı Fonksiyonu
-    Future<void> initAdMob() async {
-      try {
-        if (kDebugMode) {
-          final configuration = RequestConfiguration(
-            testDeviceIds: const <String>[
-              '7dc74815-ecce-4731-b631-27ab9c0cbd15', // Test telefonu
-            ],
-          );
-          await MobileAds.instance.updateRequestConfiguration(configuration);
-          _log('✅ Test cihazı yapılandırması eklendi (sadece debug mod)');
-        }
-        
-        await MobileAds.instance.initialize();
-        _log('✅ AdMob SDK başlatıldı');
-        
-        if (kDebugMode) {
-          _log('   Test modu: ... (debug build)');
-        } else {
-          _log('   Production modu: Gerçek reklamlar gösterilecek');
-        }
-      } catch (e) {
-        _log('⚠️ AdMob başlatma hatası: $e');
-      }
-    }
-
-    // UMP Consent Information ve AdMob Başlatma
-    try {
-      final params = ConsentRequestParameters();
-      ConsentInformation.instance.requestConsentInfoUpdate(
-        params,
-        () async {
-          if (await ConsentInformation.instance.isConsentFormAvailable()) {
-            ConsentForm.loadAndShowConsentFormIfRequired((FormError? error) async {
-              if (error != null) {
-                _log('⚠️ UMP ConsentForm hatası: ${error.message}');
-              }
-              await initAdMob();
-            });
-          } else {
-            await initAdMob();
-          }
-        },
-        (FormError error) async {
-          _log('⚠️ UMP Consent request hatası: ${error.message}');
-          await initAdMob(); // Hata durumunda yine de reklamları başlat (fallback)
-        },
-      );
-    } catch (e) {
-      _log('⚠️ AdMob/UMP başlatma genel hatası: $e');
-    }
-    
-    // Connectivity service'i başlat
-    await ConnectivityService().initialize();
-    
-    // Gemini API bağlantısını test et (arka planda, bloklamadan)
-    if (kDebugMode) {
-      _log('🤖 Gemini API bağlantısı test ediliyor...');
-      // Biraz gecikme ile test et (diğer servisler başlasın)
-      Future.delayed(const Duration(seconds: 2), () {
-        AIService.testConnection().then((success) {
-          if (success) {
-            _log('✅ Gemini API çalışıyor!');
-          } else {
-            _log('⚠️ Gemini API bağlantı hatası - Fırsat paylaşımında AI özellikleri çalışmayabilir');
-          }
-        }).catchError((e) {
-          _log('⚠️ Gemini API test hatası: $e');
-        });
-      });
-    }
+    _log('🔥 Firebase çekirdeği başarıyla başlatıldı');
   } catch (e) {
     _log('❌ Firebase başlatma hatası: $e');
   }
 
-  // Kanalları ve bildirim dinleyicilerini uygulamanın en başında önyükle
-  try {
-    if (!kIsWeb) {
-      final notifService = NotificationService();
-      await notifService.initializeLocalNotifications();
-      notifService.setupNotificationListeners();
-      _log('✅ Bildirim kanalları ve dinleyicileri önyüklendi');
-    }
-  } catch (e) {
-    _log('⚠️ Kanal ve dinleyici önyükleme hatası: $e');
-  }
+  // Kritik olmayan servisleri arka planda, ilk kare çizimini (runApp) bloklamadan başlat
+  _initializeBackgroundServices();
 
   runApp(const MyApp());
+
   }, (error, stack) {
     // Çıkış sırasında oluşan permission-denied hataları beklenen durumlardır
     if (error.toString().contains('permission-denied')) {
@@ -356,6 +239,127 @@ void main() async {
       severity: SystemErrorSeverity.fatal,
     );
   });
+}
+
+/// Kritik olmayan arka plan servislerini ve başlangıç konfigürasyonlarını
+/// ana UI thread'ini ve açılış çizimini (runApp) BLOKLAMADAN asenkron başlatır.
+void _initializeBackgroundServices() {
+  // Background message handler'ı sadece web dışı platformlarda kaydet
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  }
+
+  // Affiliate şalterlerini Firestore settings/app belgesinden gerçek zamanlı dinle
+  AffiliateService.initSettingsListener();
+
+  // App Check Aktivasyonu (arka planda - Play Integrity ağ gecikmesini açılış ekranından soyutlar)
+  FirebaseAppCheck.instance.activate(
+    androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+    appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
+  ).then((_) {
+    _log('🛡️ Firebase App Check başarıyla başlatıldı');
+  }).catchError((e) {
+    _log('⚠️ Firebase App Check başlatma hatası: $e');
+  });
+
+  // Firebase Performance Monitoring'i başlat
+  FirebasePerformance.instance.setPerformanceCollectionEnabled(true).then((_) {
+    _log('✅ Firebase Performance Monitoring aktifleştirildi');
+  }).catchError((e) {
+    _log('⚠️ Firebase Performance Monitoring başlatma hatası: $e');
+  });
+
+  // Crashlytics ve Observability Ortam Parametreleri
+  try {
+    final envFlavor = isProductionFlavor ? 'prod' : 'dev';
+    final platformName = kIsWeb ? 'web' : defaultTargetPlatform.name;
+    FirebaseCrashlytics.instance.setCustomKey('flavor', envFlavor);
+    FirebaseCrashlytics.instance.setCustomKey('platform', platformName);
+    _log('✅ Crashlytics ortam parametreleri aktifleştirildi: flavor=$envFlavor, platform=$platformName');
+  } catch (e) {
+    _log('⚠️ Crashlytics setCustomKey hatası: $e');
+  }
+
+  // AdMob ve UMP Consent Başlatma
+  _initAdMobAndUmp();
+
+  // Connectivity service'i başlat
+  ConnectivityService().initialize().catchError((e) {
+    _log('⚠️ ConnectivityService başlatma hatası: $e');
+  });
+
+  // Kanalları ve bildirim dinleyicilerini arka planda önyükle
+  if (!kIsWeb) {
+    final notifService = NotificationService();
+    notifService.initializeLocalNotifications().then((_) {
+      notifService.setupNotificationListeners();
+      _log('✅ Bildirim kanalları ve dinleyicileri önyüklendi');
+    }).catchError((e) {
+      _log('⚠️ Kanal ve dinleyici önyükleme hatası: $e');
+    });
+  }
+
+  // Gemini API bağlantısını test et (arka planda, 2 saniye sonra)
+  if (kDebugMode) {
+    Future.delayed(const Duration(seconds: 2), () {
+      AIService.testConnection().then((success) {
+        if (success) {
+          _log('✅ Gemini API çalışıyor!');
+        } else {
+          _log('⚠️ Gemini API bağlantı hatası - Fırsat paylaşımında AI özellikleri çalışmayabilir');
+        }
+      }).catchError((e) {
+        _log('⚠️ Gemini API test hatası: $e');
+      });
+    });
+  }
+}
+
+/// AdMob ve UMP Consent akışını asenkron başlatır
+void _initAdMobAndUmp() {
+  Future<void> initAdMob() async {
+    try {
+      if (kDebugMode) {
+        final configuration = RequestConfiguration(
+          testDeviceIds: const <String>[
+            '7dc74815-ecce-4731-b631-27ab9c0cbd15', // Test telefonu
+          ],
+        );
+        await MobileAds.instance.updateRequestConfiguration(configuration);
+        _log('✅ Test cihazı yapılandırması eklendi (sadece debug mod)');
+      }
+      
+      await MobileAds.instance.initialize();
+      _log('✅ AdMob SDK başlatıldı');
+    } catch (e) {
+      _log('⚠️ AdMob başlatma hatası: $e');
+    }
+  }
+
+  try {
+    final params = ConsentRequestParameters();
+    ConsentInformation.instance.requestConsentInfoUpdate(
+      params,
+      () async {
+        if (await ConsentInformation.instance.isConsentFormAvailable()) {
+          ConsentForm.loadAndShowConsentFormIfRequired((FormError? error) async {
+            if (error != null) {
+              _log('⚠️ UMP ConsentForm hatası: ${error.message}');
+            }
+            await initAdMob();
+          });
+        } else {
+          await initAdMob();
+        }
+      },
+      (FormError error) async {
+        _log('⚠️ UMP Consent request hatası: ${error.message}');
+        await initAdMob();
+      },
+    );
+  } catch (e) {
+    _log('⚠️ AdMob/UMP başlatma genel hatası: $e');
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -403,10 +407,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final lightTheme = AppTheme.getLightTheme();
     final darkTheme = AppTheme.getDarkTheme();
+    final isDark = _themeService.isDarkMode;
+    final activeTheme = isDark ? darkTheme : lightTheme;
     
     return AnimatedTheme(
       duration: Duration.zero,
-      data: _themeService.themeMode == ThemeMode.dark ? darkTheme : lightTheme,
+      data: activeTheme,
       child: MaterialApp(
         title: 'FIRSATKOLİK',
         debugShowCheckedModeBanner: false,
@@ -682,12 +688,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
             }
             return const HomeScreen();
           }
-          // Kullanıcı yoksa loading göster
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
+          // Kullanıcı henüz tespit edilmediyse de doğrudan HomeScreen gösterilir (loading noktası ve flicker engellenir)
+          return const HomeScreen();
         }
         
         // Hata durumu

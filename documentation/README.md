@@ -329,6 +329,7 @@ Aşağıdaki liste, `documentation/` dizini altındaki **tüm rehberlerin ve tek
 ```
 documentation/
 ├── 📄 README.md                                             # Bu ana dokümantasyon indeksi
+├── 📄 firsatkolik_tum_uygulama_ozellikleri_katalogu.md       # [YENİ] Lansman, Reklam & Sunum İçin Tüm Uygulama Özellikleri Master Kataloğu (JSON)
 │
 ├── 📁 mimari-ve-sistem/                                      # Mimari, Algoritmalar, Moderasyon ve Genel Sistem
 │   ├── 📄 mimari_ve_sistem_rehberi.md                        # [MASTER KONTRAT] Sistem Mimarisi, Wilson Sıralama, Gamification, Moderasyon & Web Admin Rehberi

@@ -2750,15 +2750,23 @@ exports.cleanupExpiredDeals = functions
       // 1. 48 saatten eski olup henüz isExpired=true yapılmamış fırsatları bul
       const snap1 = await db.collection('deals')
         .where('createdAt', '<', fortyEightHoursAgo)
-        .where('isExpired', '==', false)
         .get();
-      snap1.forEach(doc => targetDocs.set(doc.id, doc));
+      snap1.forEach(doc => {
+        const data = doc.data();
+        if (data.isExpired !== true && data.status !== 'expired') {
+          targetDocs.set(doc.id, doc);
+        }
+      });
 
       const snap2 = await db.collection('deals')
         .where('timestamp', '<', fortyEightHoursAgo)
-        .where('isExpired', '==', false)
         .get();
-      snap2.forEach(doc => targetDocs.set(doc.id, doc));
+      snap2.forEach(doc => {
+        const data = doc.data();
+        if (data.isExpired !== true && data.status !== 'expired') {
+          targetDocs.set(doc.id, doc);
+        }
+      });
 
       functions.logger.info(`🔍 Toplam süresi doldu işaretlenecek ${targetDocs.size} eski fırsat bulundu.`);
 
@@ -2770,6 +2778,7 @@ exports.cleanupExpiredDeals = functions
         try {
           batch.update(doc.ref, {
             isExpired: true,
+            status: 'expired',
             expiredAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
@@ -2821,15 +2830,23 @@ exports.cleanupExpiredDealsManual = functions
 
       const snap1 = await db.collection('deals')
         .where('createdAt', '<', fortyEightHoursAgo)
-        .where('isExpired', '==', false)
         .get();
-      snap1.forEach(doc => targetDocs.set(doc.id, doc));
+      snap1.forEach(doc => {
+        const data = doc.data();
+        if (data.isExpired !== true && data.status !== 'expired') {
+          targetDocs.set(doc.id, doc);
+        }
+      });
 
       const snap2 = await db.collection('deals')
         .where('timestamp', '<', fortyEightHoursAgo)
-        .where('isExpired', '==', false)
         .get();
-      snap2.forEach(doc => targetDocs.set(doc.id, doc));
+      snap2.forEach(doc => {
+        const data = doc.data();
+        if (data.isExpired !== true && data.status !== 'expired') {
+          targetDocs.set(doc.id, doc);
+        }
+      });
 
       const batchSize = 400;
       let batch = db.batch();
