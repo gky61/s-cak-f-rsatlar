@@ -580,38 +580,38 @@
                             </button>
                         </div>
 
-                        <!-- Gemini AI Sağlığı -->
+                        <!-- Otonom Kazıma & Ayrıştırma Sağlığı -->
                         <div class="bg-white dark:bg-surface-dark p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between gap-4">
                             <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
                                 <div class="flex items-center gap-2.5">
-                                    <span class="material-symbols-outlined text-purple-500 text-2xl">psychology</span>
-                                    <h3 class="text-base font-bold text-slate-900 dark:text-white">Yapay Zeka (Gemini)</h3>
+                                    <span class="material-symbols-outlined text-purple-500 text-2xl">hub</span>
+                                    <h3 class="text-base font-bold text-slate-900 dark:text-white">Otonom Kazıma & Ayrıştırma</h3>
                                 </div>
-                                <span id="geminiStatusBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
                                     <span class="w-2 h-2 rounded-full bg-emerald-500"></span>Çevrimiçi
                                 </span>
                             </div>
                             <div class="grid grid-cols-2 gap-3 text-xs">
                                 <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-xl flex flex-col border border-slate-100 dark:border-slate-800/60">
-                                    <span class="text-slate-400 text-[11px]">Bugün İstek</span>
-                                    <span class="text-slate-900 dark:text-white text-base font-bold" id="geminiRequests">0</span>
+                                    <span class="text-slate-400 text-[11px]">Desteklenen Mağaza</span>
+                                    <span class="text-slate-900 dark:text-white text-base font-bold">21 Mağaza</span>
                                 </div>
                                 <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-xl flex flex-col border border-slate-100 dark:border-slate-800/60">
-                                    <span class="text-slate-400 text-[11px]">Oluşan Hatalar</span>
-                                    <span class="text-slate-900 dark:text-white text-base font-bold" id="geminiErrors">0</span>
+                                    <span class="text-slate-400 text-[11px]">WAF & TLS Katmanı</span>
+                                    <span class="text-slate-900 dark:text-white text-base font-bold text-emerald-500">Bypass Aktif</span>
                                 </div>
                                 <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-xl flex flex-col border border-slate-100 dark:border-slate-800/60">
-                                    <span class="text-slate-400 text-[11px]">JSON Hataları</span>
-                                    <span class="text-slate-900 dark:text-white text-base font-bold" id="geminiJsonErrors">0</span>
+                                    <span class="text-slate-400 text-[11px]">Kategori Taksonomisi</span>
+                                    <span class="text-slate-900 dark:text-white text-base font-bold">11 Kategori / 50+ Alt</span>
                                 </div>
                                 <div class="bg-slate-50 dark:bg-surface-darker p-3 rounded-xl flex flex-col border border-slate-100 dark:border-slate-800/60">
-                                    <span class="text-slate-400 text-[11px]">Tahmini Maliyet</span>
-                                    <span class="text-slate-900 dark:text-white text-base font-bold text-emerald-500" id="geminiCost">$0.00</span>
+                                    <span class="text-slate-400 text-[11px]">AI / Token Maliyeti</span>
+                                    <span class="text-slate-900 dark:text-white text-base font-bold text-emerald-500">$0.00 (Sıfır Maliyet)</span>
                                 </div>
                             </div>
                             <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/60 pt-3">
-                                <span>Son Analiz: <strong id="geminiLastRequest" class="text-slate-700 dark:text-slate-300 font-mono text-[11px]">-</strong></span>
-                                <span>Model: <strong id="geminiModel" class="text-slate-700 dark:text-slate-300 font-bold">Gemini 2.5 Flash</strong></span>
+                                <span>Ayrıştırma: <strong class="text-slate-700 dark:text-slate-300 font-mono text-[11px]">DOM / JSON-LD / Microdata</strong></span>
+                                <span>Mimari: <strong class="text-slate-700 dark:text-slate-300 font-bold">Yerel Node.js Motoru</strong></span>
                             </div>
                         </div>
 
@@ -2494,7 +2494,7 @@
                             <span id="logTabBadge-catalogs_coupons" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">0</span>
                         </button>
                         <button onclick="window.switchLogCategoryTab('ai')" id="logTab-ai" class="log-tab-btn flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
-                            <span>🧠 AI / Gemini</span>
+                            <span>🤖 Otonom / Bot</span>
                             <span id="logTabBadge-ai" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">0</span>
                         </button>
                         <button onclick="window.switchLogCategoryTab('notifications')" id="logTab-notifications" class="log-tab-btn flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">
@@ -2574,7 +2574,7 @@
                                     <option value="bot">Telegram Botu (MTProto)</option>
                                     <option value="scraper">Mağaza Kazıyıcılar</option>
                                     <option value="catalogs_coupons">Katalog & Kupon</option>
-                                    <option value="ai">AI / Gemini</option>
+                                    <option value="ai">Otonom / Bot</option>
                                     <option value="notifications">Bildirim Motoru</option>
                                     <option value="backend">Cloud Functions</option>
                                     <option value="admin">Web Admin Paneli</option>

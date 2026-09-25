@@ -8,7 +8,6 @@ import 'package:shimmer/shimmer.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/category_detection_service.dart';
-import '../services/ai_service.dart';
 import '../services/link_preview_service.dart';
 import '../services/domain_allowlist_service.dart';
 import '../services/advertising_compliance_service.dart';
@@ -648,48 +647,6 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         setState(() {
           _isLoadingImage = false;
         });
-      }
-
-      // 3. GEMINI AI ANALİZİ
-      try {
-        _log('🤖 Gemini AI ürün analizi başlatılıyor...');
-        final aiResult = await AIService.analyzeProduct(
-          url: url,
-          title: _titleController.text.trim(),
-          description: _descriptionController.text.trim(),
-        );
-
-        if (aiResult['success'] == true && mounted) {
-          final aiTitle = _cleanScrapedString(aiResult['title']?.toString());
-          if (_titleController.text.trim().isEmpty && aiTitle != null) {
-            _titleController.text = aiTitle;
-            hasTitle = true;
-          }
-
-          if (_priceController.text.trim().isEmpty && aiResult['price'] != null && aiResult['price'] > 0) {
-            _priceController.text = aiResult['price'].toString();
-            hasPrice = true;
-          }
-
-          final aiStore = _cleanScrapedString(aiResult['store']?.toString());
-          if (_storeController.text.trim().isEmpty && aiStore != null) {
-            _updateStoreSelection(aiStore);
-            hasStore = true;
-          }
-
-          final isGetirOrMigros = url.contains('getir') || url.contains('migros') ||
-              (_selectedStore != null && (_selectedStore! == 'Getir' || _selectedStore! == 'Migros'));
-
-          if (aiResult['category'] != null && !_isCategoryLockedByScraper && !isGetirOrMigros) {
-            setState(() {
-              _selectedCategory = aiResult['category'];
-              _selectedSubCategory = null;
-            });
-            hasCategory = true;
-          }
-        }
-      } catch (e) {
-        _log('❌ AI Analiz sırasında hata: $e');
       }
 
       if (mounted) {

@@ -118,19 +118,19 @@ Bu repo içinde hazır olarak bulunan Node.js scriptleri iki ortamı saniyeler i
 ### 1. Hızlı Tablo Karşılaştırması (`show_table.js`)
 Tüm Firestore kök koleksiyonlarını ve doküman sayılarını yan yana tablo olarak basar:
 ```bash
-node C:\Users\murat\.gemini\antigravity-ide\brain\44ca3c44-06fc-4fa1-b2ba-f813f16e189a\scratch\show_table.js
+node scripts/show_table.js
 ```
 
 ### 2. Derinlemesine Ayar Karşılaştırması (`inspect_special_collections.js`)
 `settings`, `system` ve `systemConfig` koleksiyonlarındaki tüm dokümanların JSON içeriklerini yan yana listeler:
 ```bash
-node C:\Users\murat\.gemini\antigravity-ide\brain\44ca3c44-06fc-4fa1-b2ba-f813f16e189a\scratch\inspect_special_collections.js
+node scripts/inspect_special_collections.js
 ```
 
 ### 3. PROD Veritabanı Otomatik Eşitleyici (`sync_prod_firestore.js`)
 PROD veritabanında hız limitlerini (`systemConfig/notifications`), bot kanallarını (`settings/telegramBot`) ve admin yetkisini (`users/k1lzOiOUiwXX60Sfrtv2uFekfDr2`) tek işlemle eşitler:
 ```bash
-node C:\Users\murat\.gemini\antigravity-ide\brain\44ca3c44-06fc-4fa1-b2ba-f813f16e189a\scratch\sync_prod_firestore.js
+node scripts/sync_prod_firestore.js
 ```
 
 ---
@@ -147,7 +147,7 @@ firebase deploy --only firestore:rules,storage --project prod
 firebase deploy --only firestore:indexes --project prod
 
 # -------------------------------------------------------------
-# ADIM 2: CLOUD FUNCTIONS 26 SERVİSİ DAĞIT
+# ADIM 2: CLOUD FUNCTIONS SERVİSLERİNİ DAĞIT
 # -------------------------------------------------------------
 firebase deploy --only functions --project prod
 
@@ -159,7 +159,7 @@ firebase deploy --only hosting --project prod
 # -------------------------------------------------------------
 # ADIM 4: PROD VERİTABANI AYARLARINI DOĞRULA (Gerektiğinde)
 # -------------------------------------------------------------
-node C:\Users\murat\.gemini\antigravity-ide\brain\44ca3c44-06fc-4fa1-b2ba-f813f16e189a\scratch\sync_prod_firestore.js
+node scripts/sync_prod_firestore.js
 
 # -------------------------------------------------------------
 # ADIM 5: TELEGRAM BOTUNU GÜNCELLE (Bot kodunda değişiklik varsa)

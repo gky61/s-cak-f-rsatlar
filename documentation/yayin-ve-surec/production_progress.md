@@ -66,8 +66,8 @@ Bu doküman, FırsatKolik uygulamasının Google Play Store'da production-ready 
 | 15 | **firebase_app_check (pubspec)** | ✅ | `^0.2.1+15` |
 | 16 | **App Check Aktivasyonu (main.dart)** | ✅ | Debug: `debug`, Release: `playIntegrity` |
 | 17 | **App Check Middleware (functions)** | ✅ | `resolveShortLink` + `cleanupOldImagesManual` korumalı |
-| 18 | **Gemini Proxy (analyzeProductProxy)** | ✅ Deploy Edildi | Secret Manager'dan key çekiyor — DEV + PROD |
-| 19 | **ai_service.dart — Proxy Geçişi** | ✅ | Hardcoded API key kaldırıldı |
+| 18 | **Otonom Kazıma & Ayrıştırma Motoru** | ✅ Aktif | Harici AI kaldırıldı; $0 maliyetli 21 mağaza kazıma |
+| 19 | **ai_service.dart Temizliği** | ✅ Tamamlandı | Eski yapay zeka servisi ve bağımlılıkları tamamen kaldırıldı |
 | 20 | **notification_debug_screen — orderBy** | ✅ | Composite index sonrası restore edildi |
 
 ### 🍕 Flavor-Aware Firebase & Çevre Konfigürasyonu (YENİ — 4 Temmuz 2026)
@@ -76,7 +76,7 @@ Bu doküman, FırsatKolik uygulamasının Google Play Store'da production-ready 
 |---|---|---|---|
 | 39 | **firebase_options.dart — Flavor Desteği** | ✅ | `androidDev` (sicak-firsatlar-e6eae) + `androidProd` (firsatkolik-prod-e6eae); `--dart-define=FLAVOR=prod` ile seçim |
 | 40 | **flavorProjectId getter** | ✅ | `DefaultFirebaseOptions.flavorProjectId` — Cloud Function URL'leri için merkezi kaynak |
-| 41 | **ai_service.dart — flavorProjectId** | ✅ | Proxy URL artık flavor'a göre doğru projeyi hedefliyor |
+| 41 | **Otonom Link & Kategori Ayrıştırma** | ✅ | Yerel Regex/JSON-LD ve 1.280+ satır kural motoruna geçildi |
 | 42 | **deal_detail_screen.dart — flavorProjectId** | ✅ | `resolveShortLink` URL artık flavor-aware |
 | 43 | **admin_screen.dart — flavorProjectId** | ✅ | `resolveShortLink` URL artık flavor-aware |
 | 44 | **telegram_bot.js — Default Bucket** | ✅ | `admin.storage().bucket()` — deploy edilen projenin bucket'ını otomatik kullanır |

@@ -20,7 +20,7 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **27 
 | 7 | **`onUserUpdated`** | Firestore Trigger | `users/{userId}` (Update) | 🟢 Aktif Canlı Sistem |
 | 8 | **`onUserDeleted`** | Firebase Auth Trigger | `auth.user().onDelete` | 🟢 Aktif Canlı Sistem |
 | 9 | **`resolveShortLink`** | HTTPS Request | Flutter App & Web Admin | 🟢 Aktif Canlı Sistem |
-| 10 | **`analyzeProductProxy`** | HTTPS Request / Proxy | Flutter App (`ai_service.dart`) | 🟢 Aktif Canlı Sistem |
+| 10 | **`onCouponCreated`** | Firestore Trigger | `coupons/{couponId}` (Create) | 🟢 Aktif Canlı Sistem |
 | 11 | **`sendManualNotification`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
 | 12 | **`cleanupInvalidTokens`** | HTTPS Callable | Web Admin Paneli (`app.js`) | 🟢 Aktif Canlı Sistem |
 | 13 | **`cleanupExpiredDeals`** | Scheduled (Cron 03:00) | GCP Cloud Scheduler | 🟢 Aktif Canlı Sistem |
@@ -128,9 +128,11 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **27 
 
 ---
 
-### 10. `analyzeProductProxy`
-* **Tetikleyici Türü:** HTTPS Request / Proxy
-* **Kullanım Amacı:** Firebase App Check ve Secret Manager korumalı olarak Google Gemini API'ye güvenli proxy sağlar.
+### 10. `onCouponCreated`
+* **Tetikleyici Türü:** Firestore Trigger (`onCreate` - `coupons/{couponId}`)
+* **Kullanım Amacı:** Kullanıcılar veya botlar tarafından yeni bir indirim kuponu eklendiğinde doğrular ve kupon alarmı kurmuş kullanıcılara anlık bildirim tetikler.
+* **Çağrıldığı / Tetiklendiği Yer:** Firestore `coupons/{couponId}` koleksiyonunda yeni doküman oluştuğunda.
+* **Somut Senaryo:** Botkolik veya bir kullanıcı yeni bir Trendyol kuponu eklediğinde Firestore tetiklenir ve kuponu takibe alan avcılara push bildirimi sıraya alınır.
 
 ---
 
@@ -305,7 +307,7 @@ graph TD
    * DEV ortamında yapılan yoğun stres ve yük testleri, PROD ortamının kotalarını veya cold-start performansını asla etkilemez.
 
 4. **Gizli Değişkenler ve API Anahtarları (Secret Manager):**
-   * Gemini AI API anahtarları, Telegram Bot token'ları ve FCM servis hesapları her projenin kendi Secret Manager / ortam yapılandırmasında (`functions.config()` veya GCP Secret Manager) ayrı ayrı saklanır.
+   * Telegram Bot token'ları, FCM servis hesapları ve özel anahtarlar her projenin kendi Secret Manager / ortam yapılandırmasında (`functions.config()` veya GCP Secret Manager) ayrı ayrı saklanır.
 
 5. **Dağıtım (Deployment) Sözleşmesi:**
    * Bir fonksiyon güncellendiğinde, geliştirici `firebase-tools` CLI üzerinden ilgili projeyi açıkça hedefleyerek dağıtır:

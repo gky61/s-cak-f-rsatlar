@@ -319,6 +319,74 @@ void main() {
       NotificationService.isCouponsScreenActive = false;
       expect(NotificationService.isCouponsScreenActive, isFalse);
     });
+
+    test('24. Fırsat Onayı (Status eksik, Başlıkta Onaylandı var) -> Fırsat Detayına gitmeli (Hatalı Red Yönlendirmesini Önler)', () {
+      final data = {
+        'type': 'submission_status',
+        'status': '', // FCM payload'ında eksik gelmiş
+        'dealId': 'deal_user_sub_approved_101',
+        'title': '🎉 Fırsatınız Onaylandı!',
+        'body': 'Tebrikler! Gönderdiğiniz fırsat onaylandı ve yayınlandı.',
+      };
+
+      final decision = NotificationService.resolveRouting(data);
+
+      expect(decision.destination, equals(NotificationDestinationType.deal));
+      expect(decision.dealId, equals('deal_user_sub_approved_101'));
+      expect(decision.destination, isNot(equals(NotificationDestinationType.adminNotifications)));
+    });
+
+    test('25. Fırsat Reddi (Status eksik, Başlıkta Reddedildi var) -> Admin Bildirimleri Sekmesine gitmeli', () {
+      final data = {
+        'type': 'submission_status',
+        'status': '',
+        'dealId': 'deal_user_sub_rejected_202',
+        'title': 'ℹ️ Fırsatınız Reddedildi',
+        'body': 'Gönderdiğiniz fırsat maalesef onaylanamadı.',
+        'notificationId': 'notif_rej_789',
+      };
+
+      final decision = NotificationService.resolveRouting(data);
+
+      expect(decision.destination, equals(NotificationDestinationType.adminNotifications));
+      expect(decision.dealId, equals('deal_user_sub_rejected_202'));
+      expect(decision.initialTabIndex, equals(1)); // 'admin' tab index
+      expect(decision.notificationId, equals('notif_rej_789'));
+    });
+
+    test('26. Fırsat Onayı Açık status=approved -> Karşılıklı dışlayıcı (Mutually Exclusive) Onay olmalı', () {
+      final data = {
+        'type': 'submission_status',
+        'status': 'approved',
+        'dealId': 'deal_user_sub_clean_303',
+        'title': '🎉 Fırsatınız Onaylandı!',
+        'body': 'Fırsatınız incelendi ve yayına alındı.',
+      };
+
+      final decision = NotificationService.resolveRouting(data);
+
+      expect(decision.destination, equals(NotificationDestinationType.deal));
+      expect(decision.dealId, equals('deal_user_sub_clean_303'));
+    });
+
+    test('27. Fırsat Reddi Açık status=rejected -> Bildirim Merkezine notificationId ile gitmeli', () {
+      final data = {
+        'type': 'submission_status',
+        'status': 'rejected',
+        'dealId': 'deal_user_sub_mod_404',
+        'title': 'ℹ️ Fırsatınız Reddedildi',
+        'moderationReason': 'Mükerrer paylaşım tespit edildi.',
+        'notificationId': 'notif_mod_999',
+      };
+
+      final decision = NotificationService.resolveRouting(data);
+
+      expect(decision.destination, equals(NotificationDestinationType.adminNotifications));
+      expect(decision.dealId, equals('deal_user_sub_mod_404'));
+      expect(decision.initialTabIndex, equals(1));
+      expect(decision.notificationId, equals('notif_mod_999'));
+    });
   });
 }
+
 

@@ -29,12 +29,12 @@ firebase deploy --only functions --force
 
 ---
 
-## 🔔 26 Cloud Function Özeti
+## 🔔 27 Cloud Function Özeti
 
-1. **Fırsat & Yorum:** `onDealCreated`, `onDealUpdated`, `onCommentCreated`
+1. **Fırsat, Kupon & Yorum:** `onDealCreated`, `onDealUpdated`, `onCommentCreated`, `onCouponCreated`
 2. **Mesajlaşma & Bildirim:** `onNotificationCreated` (Merkezi FCM V1 push motoru), `onUserMessageCreated`, `onAdminMessageCreated`
 3. **Kullanıcı & Profil:** `onUserUpdated` (Denormalize avatar/isim sync), `onUserDeleted`, `adminDeleteUser`
-4. **API & Güvenli Proxy:** `resolveShortLink`, `analyzeProductProxy` (App Check & Secret Manager korumalı Gemini AI proxy), `sendManualNotification`
+4. **API & Güvenli Endpoint'ler:** `resolveShortLink`, `sendManualNotification`, `getObservabilityMetrics`
 5. **Temizlik & Arşiv Cron:** `cleanupExpiredDeals` (48h soft-expire), `purgeOldDeals` (30 gün hard-purge: fırsatlar + eski bildirimler), `purgeOldDealsManual`, `purgeOldNotificationsManual`, `cleanupOldImages` (Storage garbage collector), `cleanupInvalidTokens`
 6. **Kupon & Katalog Kazıyıcılar:** `scrapeCouponsScheduled` / `scrapeCouponsManual`, `scrapeCatalogsScheduled` / `scrapeCatalogsManual`
 7. **Test & Geliştirici:** `generateTestData`, `cleanupTestData`

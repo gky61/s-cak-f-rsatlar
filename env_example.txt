@@ -8,8 +8,3 @@ TELEGRAM_CHANNELS=@indirimkaplani
 
 # Firebase
 FIREBASE_CREDENTIALS_PATH=firebase_key.json
-
-# Gemini
-GEMINI_API_KEY=your_api_key_here
-
-

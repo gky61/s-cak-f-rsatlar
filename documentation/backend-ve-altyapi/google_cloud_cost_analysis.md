@@ -141,7 +141,7 @@ pm2 status
 ```
 
 #### 3. Bot Loglarını (Çıktı ve Hataları) İzleme:
-Botların Telegram'dan yakaladığı mesajları, Gemini analizlerini veya olası hataları görmek için:
+Botların Telegram'dan yakaladığı mesajları, otonom web kazıma çıktılarını veya olası hataları görmek için:
 ```bash
 # Her iki botun da loglarını canlı olarak akıt
 pm2 logs

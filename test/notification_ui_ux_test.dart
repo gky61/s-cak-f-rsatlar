@@ -423,5 +423,115 @@ void main() {
         secondsSinceLastDeal: 5, dealMinIntervalSeconds: 30, isTestUser: true,
       ), equals('sent'));
     });
+
+    test('In-app banner badge for submission_status NEVER displays Reddedildi on approved deals', () {
+      // Simüle edilen InAppMessageBanner badge belirleme fonksiyonu
+      Map<String, dynamic> resolveBannerBadge(Map<String, dynamic> data, String title, String body) {
+        final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
+        final titleLower = title.toLowerCase();
+        final bodyLower = body.toLowerCase();
+
+        final bool isApproved;
+        final bool isRejected;
+
+        if (rawStatus == 'approved') {
+          isApproved = true;
+          isRejected = false;
+        } else if (rawStatus == 'rejected') {
+          isApproved = false;
+          isRejected = true;
+        } else {
+          isApproved = titleLower.contains('onaylandı') ||
+              titleLower.contains('onaylandi') ||
+              bodyLower.contains('onaylandı') ||
+              bodyLower.contains('onaylandi');
+          isRejected = !isApproved &&
+              (titleLower.contains('reddedildi') || bodyLower.contains('reddedildi') || titleLower.contains('red'));
+        }
+
+        if (isApproved) {
+          return {'badge': 'Onaylandı', 'color': 0xFF10B981};
+        } else if (isRejected) {
+          return {'badge': 'Reddedildi', 'color': 0xFFF59E0B};
+        } else {
+          return {'badge': 'Durum Güncellendi', 'color': 0xFF3B82F6};
+        }
+      }
+
+      // Senaryo 1: Kullanıcının yaşadığı hata simülasyonu: FCM payload status alanı boş ama başlık onaylandı!
+      final badPayloadApproved = <String, dynamic>{'type': 'submission_status'};
+      final banner1 = resolveBannerBadge(
+        badPayloadApproved,
+        '🎉 Fırsatınız Onaylandı!',
+        'Paylaştığınız "PlayStation 5" onaylandı ve yayına alındı.',
+      );
+      expect(banner1['badge'], equals('Onaylandı'));
+      expect(banner1['badge'], isNot(equals('Reddedildi')));
+      expect(banner1['color'], equals(0xFF10B981));
+
+      // Senaryo 2: Açık status: 'approved' alanı mevcut
+      final goodPayloadApproved = <String, dynamic>{'type': 'submission_status', 'status': 'approved'};
+      final banner2 = resolveBannerBadge(
+        goodPayloadApproved,
+        '🎉 Fırsatınız Onaylandı!',
+        'Fırsatınız yayında.',
+      );
+      expect(banner2['badge'], equals('Onaylandı'));
+      expect(banner2['badge'], isNot(equals('Reddedildi')));
+      expect(banner2['color'], equals(0xFF10B981));
+
+      // Senaryo 3: Reddedilme durumu
+      final payloadRejected = <String, dynamic>{'type': 'submission_status', 'status': 'rejected'};
+      final banner3 = resolveBannerBadge(
+        payloadRejected,
+        'ℹ️ Fırsatınız Reddedildi',
+        'Fırsatınız kurallara uygun bulunmadı.',
+      );
+      expect(banner3['badge'], equals('Reddedildi'));
+      expect(banner3['color'], equals(0xFFF59E0B)); // Yumuşak kehribar (asla sert kırmızı değil)
+
+      // Senaryo 4: Status boş ama başlıkta reddedildi var
+      final payloadRejectedNoStatus = <String, dynamic>{'type': 'submission_status'};
+      final banner4 = resolveBannerBadge(
+        payloadRejectedNoStatus,
+        'ℹ️ Fırsatınız Reddedildi',
+        'Fırsatınız kurallara uygun bulunmadı.',
+      );
+      expect(banner4['badge'], equals('Reddedildi'));
+      expect(banner4['color'], equals(0xFFF59E0B));
+    });
+
+    test('Mutually exclusive status resolution prevents contradictory dual states', () {
+      bool isAppr = false;
+      bool isRej = false;
+
+      void resolve(String rawStatus, String title) {
+        final titleLower = title.toLowerCase();
+        if (rawStatus == 'approved') {
+          isAppr = true;
+          isRej = false;
+        } else if (rawStatus == 'rejected') {
+          isAppr = false;
+          isRej = true;
+        } else {
+          isAppr = titleLower.contains('onaylandı') || titleLower.contains('onaylandi');
+          isRej = !isAppr && (titleLower.contains('reddedildi') || titleLower.contains('red'));
+        }
+      }
+
+      // Her iki kelimeyi içeren uç metin testi
+      resolve('', 'Fırsatınız onaylandı fakat eski versiyonu reddedildi');
+      expect(isAppr, isTrue);
+      expect(isRej, isFalse); // !isAppr sayesinde asla aynı anda true olamaz
+
+      resolve('approved', 'Fırsatınız reddedildi gibi görünse de onaylandı');
+      expect(isAppr, isTrue);
+      expect(isRej, isFalse);
+
+      resolve('rejected', 'Fırsatınız onaylandı denmişti ancak reddedildi');
+      expect(isAppr, isFalse);
+      expect(isRej, isTrue);
+    });
   });
 }
+

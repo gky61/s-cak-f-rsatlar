@@ -328,7 +328,7 @@ Kullanıcıların fırsat kalitesini anında değerlendirebilmesi için 3 kritik
 ## 9. 🤖 Telegram Botu ve Canlı Kanal Dinleyici Mimarisi
 
 > 🔗 **Detaylı Referans Dokümanı:**
-> - [Bot Kazıma Kuralları ve Stratejileri](file:///d:/firsatkolik/documentation/scraping-ve-botlar/bot_scraping_rules_and_strategies.md) — GramJS MTProto canlı dinleyici, OCR görsel analizi, Gemini 2.0 Flash entegrasyonu ve onay süreçleri.
+> - [Bot Kazıma Kuralları ve Stratejileri](file:///d:/firsatkolik/documentation/scraping-ve-botlar/bot_scraping_rules_and_strategies.md) — GramJS MTProto canlı dinleyici, 5 seviyeli WAF bypass motoru, Google Translate proxy, curl spawnSync ve onay süreçleri.
 
 Google Cloud VM üzerinde Docker container olarak çalışan `telegram_bot.js` servisi:
 - **Canlı Dinleyici (`TelegramClient` + `NewMessage`):** Çevre değişkenlerinde (`TELEGRAM_CHANNELS`) tanımlı tüm popüler indirim kanallarını dinler.

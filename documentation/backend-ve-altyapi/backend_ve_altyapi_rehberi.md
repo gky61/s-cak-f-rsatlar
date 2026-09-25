@@ -82,7 +82,7 @@ Tüm backend fonksiyonları [functions/index.js](file:///d:/firsatkolik/function
 | 7 | **`onUserUpdated`** | Firestore `users/{userId}` (onUpdate) | Profil Düzenleme | Kullanıcı profil resmi veya kullanıcı adı değiştiğinde yorumlar ve mesajlardaki denormalize verileri senkronize eder. |
 | 8 | **`onUserDeleted`** | Auth `user().onDelete` | Kullanıcı Hesabı Silme | Kullanıcı silindiğinde `userDevices`, `notificationSubscriptions`, `notifications` ve `notificationPreferences` verilerini kalıcı temizler. |
 | 9 | **`resolveShortLink`** | HTTPS Request (`onRequest`) | Flutter App & Web Admin | Kısa linkleri ve yönlendirmeleri (redirect) takip ederek gerçek son URL'yi çözer. |
-| 10 | **`analyzeProductProxy`** | HTTPS Request (`onRequest`) | Flutter App AI Servisi | Firebase App Check ve Secret Manager korumalı olarak Google Gemini API'ye güvenli proxy sağlar. |
+| 10 | **`onCouponCreated`** | Firestore `coupons/{couponId}` (onCreate) | Kupon Paylaşımı & Bot | Yeni indirim kuponu oluşturulduğunda doğrular ve ilgili kullanıcılara kupon bildirimi tetikler. |
 | 11 | **`sendManualNotification`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Admin panelinden tüm kullanıcılara, belirli bir kullanıcıya veya cihaza anlık push gönderir; log ve istatistik üretir. |
 | 12 | **`cleanupInvalidTokens`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | `userDevices` içerisindeki aktif FCM token'ları `dryRun: true` ile test ederek geçersiz olanları `active: false` yapar. |
 | 13 | **`cleanupExpiredDeals`** | Scheduled Cron (`0 3 * * *` - Gece 03:00) | GCP Cloud Scheduler | 48 saati dolduran fırsatları bulur; dokümanı **SİLMEZ**, sadece `isExpired: true` olarak işaretler (Soft-Expire). |
@@ -226,7 +226,7 @@ Veritabanı şişmesini ve maliyet artışını engellemek amacıyla 3 aşamalı
 
 ## 8. 🛡️ Firebase App Check ve Play Integrity Güvenliği
 
-Backend API'lerinin (özellikle Gemini API Proxy ve Cloud Functions) yetkisiz üçüncü şahıslar tarafından suistimal edilmesini engellemek için **Firebase App Check** zorunludur:
+Backend API'lerinin (özellikle Cloud Functions ve HTTPS Endpoint'leri) yetkisiz üçüncü şahıslar tarafından suistimal edilmesini engellemek için **Firebase App Check** zorunludur:
 - **Geliştirme Ortamı (DEV):** Debug token'lar (`DebugAppCheckProvider`) kullanılarak emülatör ve test cihazlarına izin verilir.
 - **Canlı Ortam (PROD):** Google Play Console üzerinden **Play Integrity API** aktif edilerek yalnızca resmi Google Play Store'dan yüklenmiş orijinal uygulamalara geçiş izni verilir.
 

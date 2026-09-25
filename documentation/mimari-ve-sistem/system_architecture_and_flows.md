@@ -3,7 +3,7 @@
 > [!NOTE]
 > Bu doküman uçtan uca sistem akışları ve sequence diyagramları kılavuzudur. 4 ana menü sıralama algoritmaları, gamification, mesajlaşma, moderasyon ve Web Admin entegrasyonu için lütfen **[Sistem Mimarisi, Yaşam Döngüsü ve Sosyal Etkileşim Master Rehberi](file:///d:/firsatkolik/documentation/mimari-ve-sistem/mimari_ve_sistem_rehberi.md)** dokümanını inceleyiniz.
 
-Bu doküman, FırsatKolik platformunun (Telegram Userbot, Gemini Yapay Zeka Servisleri, Firebase Altyapısı, Web Yönetim Paneli ve Flutter Mobil Uygulaması) uçtan uca teknik mimarisini, veri modellerini, iletişim protokollerini ve barındırma ortamlarını detaylandırmak amacıyla hazırlanmıştır.
+Bu doküman, FırsatKolik platformunun (Telegram Userbot, Otonom Kazıma & Ayrıştırma Motoru, Firebase Altyapısı, Web Yönetim Paneli ve Flutter Mobil Uygulaması) uçtan uca teknik mimarisini, veri modellerini, iletişim protokollerini ve barındırma ortamlarını detaylandırmak amacıyla hazırlanmıştır.
 
 ---
 
@@ -23,10 +23,10 @@ graph TD
             Bot["Telegram Userbot Container<br>(Node.js / GramJS / Always-on Docker)"]
         end
         subgraph Secret_Manager [Google Secret Manager]
-            Secrets["API Anahtarları & Session String<br>(GEMINI_API_KEY, TELEGRAM_STRING_SESSION)"]
+            Secrets["API Anahtarları & Session String<br>(TELEGRAM_API_ID, TELEGRAM_SESSION_STRING)"]
         end
-        subgraph Gemini_API [Google Generative AI]
-            Gemini["Gemini-2.5 / 2.0 Flash API<br>(Fırsat Analizi / Görsel & Metin Okuma)"]
+        subgraph Scraper_Engine [Otonom Kazıma Motoru]
+            Scraper["21+ Mağaza Özel Scraper & JSON-LD<br>(link_scraper_service.js / Cheerio / WAF Bypass)"]
         end
     end
 
@@ -57,7 +57,7 @@ graph TD
     %% İletişim Akışları (Veri Yolları)
     Channels -->|MTProto Protokolü - Canlı Akış| Bot
     Secrets -.->|GCP IAM Güvenli Bağlantı| Bot
-    Bot -->|Görsel/Metin Analiz İstekleri - JSON| Gemini
+    Bot -->|Otonom Link Kazıma & Ayrıştırma| Scraper
     Bot -->|Görsel JPEG Yükleme| Images
     Bot -->|Fırsat Belgesi Ekleme (isApproved: false)| DealsCol
 
@@ -110,8 +110,8 @@ sequenceDiagram
     autonumber
     actor Admin as Yönetici (Telegram)
     participant Channel as Telegram Kanalı
-    participant Bot as Cloud Run Userbot
-    participant Gemini as Gemini AI API
+    participant Bot as Cloud Run / VM Userbot
+    participant Scraper as Scraper Engine (Cheerio/JSON-LD)
     participant Storage as Firebase Storage
     participant Firestore as Cloud Firestore
     participant WebPanel as Web Admin Panel
@@ -122,18 +122,15 @@ sequenceDiagram
     Admin->>Channel: Fırsat Linki Gönderir (Örn: Trendyol Linki + Fotoğraf)
     Channel->>Bot: MTProto Event (NewMessage) tetiklenir
     Note over Bot: cloud-run-bot/telegram_bot.js<br>Metin/buton linkleri taranır
-    Bot->>Bot: downloadMedia() ile görseli sunucu hafızasına (Buffer) indirir
+    Bot->>Bot: resolveUrlRedirects() ile yönlendirmeleri çözer
     
     rect rgb(230, 245, 255)
-        Note right of Bot: HIZLANDIRILMIŞ PARALEL İŞLEM (Promise.all)
-        Bot->>Storage: Görseli yükler (deals/{chatId}_{msgId}.jpg)
-        Bot->>Gemini: Görsel + Mesaj Metnini gönderir (analyzeImageWithGemini)
+        Note right of Bot: OTONOM KAZIMA & AYRIŞTIRMA ($0 Maliyet)
+        Bot->>Scraper: scrapeProductFromUrl(mainLink)
+        Scraper-->>Bot: Ayrıştırılmış Ürün Verisi (Başlık, Fiyat, originalPrice, Görsel, Rozetler)
     end
     
-    Gemini-->>Bot: JSON Sonucu Döner (Ürün Adı, Fiyat, Kategori, Mağaza)
-    Storage-->>Bot: Yükleme Tamam (ImageUrl oluşturulur)
-    
-    Bot->>Bot: cleanFallbackTitle() ve detectCategoryFromText() ile temizleme/kategori mapping yapar
+    Bot->>Bot: categoryDetectionService ile 1.280+ satırlık kurallardan kategori tespiti yapar
     Bot->>Firestore: 'deals' koleksiyonuna yeni doküman yazar (isApproved: false)
     
     Note over WebPanel: Real-time Listener (db.collection('deals').where('isApproved','==',false))
@@ -161,11 +158,10 @@ sequenceDiagram
 2.  **Mesaj Yakalama ve Doğrulama ([telegram_bot.js:L872](file:///d:/firsatkolik/cloud-run-bot/telegram_bot.js#L872)):**
     *   `GramJS` kütüphanesi kullanılarak Telegram oturumu `StringSession` aracılığıyla açılır (Session string'i Google Secret Manager'dan güvenli bir şekilde çekilir).
     *   `client.addEventHandler` ile belirtilen kanallardan gelen yeni mesajlar anlık yakalanır. Mesajda en az bir adet link (`getAllLinks`) yoksa işlem iptal edilir.
-3.  **Hızlı Paralel İşlem Yapısı ([telegram_bot.js:L712](file:///d:/firsatkolik/cloud-run-bot/telegram_bot.js#L712)):**
-    *   Sunucunun yanıt hızını artırmak ve veritabanı yazma süresini en aza indirmek için **Firebase Storage'a görsel yükleme** işlem ile **Gemini Vision modeline görsel analiz isteği gönderme** işlemi `Promise.all` yapısıyla asenkron olarak paralel koşturulur.
-4.  **Gemini AI Analizi ve Normalizasyon ([telegram_bot.js:L160](file:///d:/firsatkolik/cloud-run-bot/telegram_bot.js#L160)):**
-    *   Gemini API'sine (`gemini-1.5-flash`) görsel ve metin verilerek çıktının kesinlikle JSON formatında (`responseSchema`) dönmesi zorlanır.
-    *   Yapay zekanın döndürdüğü kategori metni (`Kozmetik & Bakım` vb.) sistemin veri şemasındaki kategori ID'si ile (`kozmetik`) otomatik eşleştirilir (`categoryMap`).
+3.  **Otonom Kazıma Motoru ([link_scraper_service.js](file:///d:/firsatkolik/cloud-run-bot/link_scraper_service.js)):**
+    *   21 mağaza için özelleştirilmiş kazıma kuralları, Google Translate proxy, native curl ve Cheerio DOM parser ile e-ticaret sitelerinden başlık, resim, anlık fiyat, indirimsiz liste fiyatı (`originalPrice`) ve sepet indirim rozetleri 1 saniyenin altında çekilir.
+4.  **Kural Tabanlı Deterministik Kategori Sınıflandırma ([category_detection_service.js](file:///d:/firsatkolik/cloud-run-bot/category_detection_service.js)):**
+    *   1.280+ satırdan oluşan Türkçe anahtar kelime ve mağaza ağırlıklandırma kurallarıyla yapay zeka maliyetine ve gecikmesine gerek kalmadan %100 deterministik kategori eşleştirmesi yapılır.
 5.  **Veritabanı Şeması ([telegram_bot.js:L821](file:///d:/firsatkolik/cloud-run-bot/telegram_bot.js#L821)):**
     *   Oluşturulan doküman Firestore'a `deals` koleksiyonuna şu ID formatı ile kaydedilir: `telegram_{chatInfo.id}_{messageId}`. Bu ID formatı, aynı Telegram mesajının mükerrer (duplicate) olarak tekrar kaydedilmesini engeller.
     *   Belgenin `isApproved` alanı `false` olarak ayarlanır.

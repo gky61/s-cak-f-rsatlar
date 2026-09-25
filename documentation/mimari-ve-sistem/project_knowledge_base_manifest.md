@@ -14,7 +14,7 @@ FırsatKolik; Telegram kanallarından paylaşılan indirimli ürün linklerini y
 ```mermaid
 graph TD
     Telegram[Telegram Kanalları] -->|Canlı MTProto Soket Akışı| BotServer[GCP VM: Telegram Bot Server]
-    BotServer -->|Görsel + Metin Analizi| Gemini[Gemini-2.5 / 2.0 Flash API]
+    BotServer -->|21 Mağaza Otonom Kazıma & Ayrıştırma| LinkScraper[Link Scraper Engine: Cheerio & JSON-LD]
     BotServer -->|Ürün Görseli Yükleme| Storage[Firebase Storage]
     BotServer -->|Taslak Fırsat Ekleme| Firestore[Cloud Firestore]
     
@@ -34,7 +34,7 @@ graph TD
     *   `lib/`: Flutter Dart kodlarının bulunduğu dizin.
         *   `services/scrapers/`: Kullanıcıların uygulama içinden link paylaşırken kullandığı **Dart tabanlı tarayıcı (Scraper)** sınıfları (Örn: `hepsiburada_scraper.dart`).
 *   **`cloud-run-bot/`**: Telegram kanallarını dinleyen Node.js uygulamasının dizini.
-    *   `telegram_bot.js`: Botun ana giriş noktası. Kanalları dinler, görselleri indirir, Gemini ve Firestore entegrasyonunu yönetir.
+    *   `telegram_bot.js`: Botun ana giriş noktası. Kanalları dinler, ürün bağlantılarını çıkarır, 21 mağaza kazıma motoru ve Firestore entegrasyonunu yönetir.
     *   `link_scraper_service.js`: Gelen bağlantıların yönlendirmelerini takip eden ve bypass stratejilerini yöneten katman.
     *   `category_detection_service.js`: Ürün başlığı ve açıklamasına göre kategoriyi otomatik saptayan servis.
     *   `scrapers/`: Botun kullandığı **JS tabanlı tarayıcı (Scraper)** sınıfları (Örn: `hepsiburada_scraper.js`).

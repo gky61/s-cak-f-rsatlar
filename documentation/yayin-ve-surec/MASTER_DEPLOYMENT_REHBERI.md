@@ -43,7 +43,7 @@ FırsatKolik ekosistemi birbirine sıkı sıkıya bağlı 10 temel teknoloji kat
 | **Medya & CDN** | **Firebase Storage** | WebP Compression Pipeline, Bucket Rules | Fırsat ve kullanıcı görsellerini barındırma, sahipsiz çöp dosya temizliği (`cleanupOldImages`). |
 | **Web & Alan Adı** | **Firebase Hosting** | Static Rewrites, Custom Domain, Anycast CDN | `https://firsatkolik.app` vitrini, Web Admin Vanilla SPA paneli, Apple Universal Links (`apple-app-site-association`). |
 | **DNS & SSL** | **Cloudflare Registrar** | 1.1.1.1 DNS (DNS Only / Gri Bulut ☁️) | Global DNS yönlendirmesi, Google Trust Services SSL sertifikasyonu, HSTS Preload. |
-| **Otonom Botlar** | **GramJS (MTProto) & Node.js** | Node.js 22, Cheerio, `@google/generative-ai` | 7/24 Telegram kanallarını dinleme, 21 e-ticaret mağazası WAF bypass kazıma motoru, Gemini Flash AI OCR. |
+| **Otonom Botlar** | **GramJS (MTProto) & Node.js** | Node.js 22, Cheerio, Regex & JSON-LD | 7/24 Telegram kanallarını dinleme, 21 e-ticaret mağazası WAF bypass kazıma ve deterministik metadata motoru. |
 | **Konteyner & VM** | **Docker & GCP Compute Engine** | `e2-micro` (Free Tier), Cloud Build, GCR | Sıfır maliyetle DEV (`port 8081`) ve PROD (`port 8082`) bot konteynerlerini izole çalıştırma. |
 | **Bildirim Dağıtımı** | **FCM HTTP v1 & Apple APNs** | Data-only (Android), `aps.alert` (iOS), .p8 | 7 kanallı akıllı push, sessiz saatler, kategori hız limitleri, çift bildirim bastırma. |
 | **CI/CD Otomasyonu** | **GitHub Actions & Fastlane** | `macos-latest` (M2), Fastlane v1 App Store API | Sıfır Mac ile iOS TestFlight otomatik derleme, imzalama ve mağazaya yükleme pipeline'ı. |
@@ -123,7 +123,6 @@ Sanal makinede (`/home/murat/app/{env}-bot/.env`) tanımlanan değişkenler:
 * `TELEGRAM_API_HASH`: `35c8bc7cd010dd61eb5a123e2722be41`
 * `TELEGRAM_SESSION_STRING`: Canlı MTProto String oturumu.
 * `TELEGRAM_CHANNELS`: DEV için `@indirimkaplani`, PROD için `@firsatkolik_canli`.
-* `GEMINI_API_KEY`: Google AI Studio Gemini API anahtarı.
 * `PORT`: `8080` (Konteyner içi port; Host tarafında DEV için `8081`, PROD için `8082` eşlenir).
 * `FIREBASE_KEY`: Konteyner içine `-v .../{env}_firebase_key.json:/app/firebase_key.json` ile mount edilir.
 
@@ -342,7 +341,7 @@ FırsatKolik backend sisteminde (`functions/index.js`) yer alan **27 adet Cloud 
 | 7 | **`onUserUpdated`** | Firestore Trigger | `users/{userId}` (Update) | Profil resmi/adı değiştiğinde fırsat, yorum ve mesajlardaki denormalize verileri senkronize etme. |
 | 8 | **`onUserDeleted`** | Auth Trigger | `auth.user().onDelete` | Kullanıcı silindiğinde cihaz, bildirim aboneliği ve alt koleksiyonları kalıcı temizleme. |
 | 9 | **`resolveShortLink`** | HTTPS Request | `onRequest` | Kısa linkleri ve yönlendirmeleri (redirect) takip ederek gerçek son ürün URL'sini çözme. |
-| 10 | **`analyzeProductProxy`** | HTTPS Request | `onRequest` (512MB) | Google Gemini API'ye Firebase App Check ve Secret Manager korumalı güvenli proxy sağlama. |
+| 10 | **`onCouponCreated`** | Firestore Trigger | `coupons/{couponId}` (Create) | Yeni kupon paylaşıldığında doğrular ve kupon alarmı kurmuş avcılara anlık push bildirimi iletir. |
 | 11 | **`sendManualNotification`** | HTTPS Callable | `onCall` (Admin Only) | Admin panelinden tüm kullanıcılara veya tekil hedeflere manuel anlık bildirim gönderme. |
 | 12 | **`cleanupInvalidTokens`** | HTTPS Callable | `onCall` (Admin Only) | Aktif cihazların FCM geçerliliğini `dryRun: true` ile test edip bayat olanları pasife alma. |
 | 13 | **`cleanupExpiredDeals`** | Scheduled Cron | `0 3 * * *` (Gece 03:00 - `Europe/Istanbul`) | 48 saati dolan fırsatları dokümanı silmeden `isExpired: true` işaretleme (Soft-Expire). |

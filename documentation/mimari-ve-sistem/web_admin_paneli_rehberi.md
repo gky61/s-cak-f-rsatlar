@@ -81,7 +81,7 @@ Web Admin Paneli
   - **6. Moderasyon & Sistem Radarı:** İncelenmeyi bekleyen kullanıcı şikayetleri (`reports`) ve açık sistem hataları (`systemErrors`).
 * **3 Katmanlı Operasyonel Sistem Sağlık Merkezi:**
   - **Telegram Scraping Bot:** Son kalp atışı (`lastHeartbeatAt`), bot çevrimiçi durumu, fırsat, mükerrer, hata ve mesaj istatistikleri.
-  - **Gemini AI Flash Motoru:** Günlük istek sayısı, JSON/servis hataları, maliyet ve aktif model (`Gemini 2.5/2.0 Flash`).
+  - **Otonom Kazıma & Ayrıştırma:** 21 mağaza kazıma kapsamı, WAF/TLS bypass motoru, 11 kategori taksonomisi ve $0.00 sıfır maliyet mimarisi.
   - **Push Engine & Hız Limitleri:** Canlı durum rozeti, kategori saatlik/günlük hız sınırları ve son 7 günlük gönderim hacmi.
 * **Grafiksel ve Aksiyon Odaklı Analiz:**
   - **7 Günlük Fırsat Dağılımı Çubuk Grafiği (`dealsTrendChart`)** ve **13 Kategori Dağılımı Halka Grafiği (`categoriesDistributionChart`)**.

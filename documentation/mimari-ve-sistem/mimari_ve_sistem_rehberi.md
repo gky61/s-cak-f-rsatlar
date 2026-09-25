@@ -33,7 +33,7 @@ FırsatKolik mimarisi; istemci (Flutter), otonom botlar (Node.js GramJS VM), sun
 graph TD
     %% Giriş Noktaları
     Telegram[Telegram Kanalları: @firsatkolik_canli] -->|MTProto Canlı Dinleme| BotVM[GCP Compute Engine Free Tier VM: e2-micro]
-    BotVM -->|Görsel & Metin Analizi| Gemini[Gemini-2.5 / 2.0 Flash API]
+    BotVM -->|21 Mağaza Otonom Kazıma & JSON-LD| LinkScraper[Link Scraper Engine: Cheerio / DOM]
     BotVM -->|Görsel Yükleme| Storage[Firebase Storage: deals/]
     BotVM -->|Fırsat Kaydı: isApproved: false| Firestore[(Cloud Firestore)]
     
@@ -43,7 +43,7 @@ graph TD
     
     %% Web Admin Paneli
     WebAdmin[Web Admin Paneli: Vanilla JS SPA] -->|Onay / Red / Düzenleme / Ban / Duyuru| Firestore
-    WebAdmin -->|Callable Fonksiyonlar| CloudFunctions[Firebase Cloud Functions: 26 Servis]
+    WebAdmin -->|Callable Fonksiyonlar| CloudFunctions[Firebase Cloud Functions: 27 Servis]
     
     %% Backend & Push
     Firestore -->|onCreate / onUpdate Triggers| CloudFunctions

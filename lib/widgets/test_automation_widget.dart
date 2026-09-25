@@ -9,7 +9,6 @@ import '../models/category.dart';
 import '../services/firestore_service.dart';
 import '../services/link_preview_service.dart';
 import '../services/category_detection_service.dart';
-import '../services/ai_service.dart';
 import '../utils/test_logger.dart';
 import '../firebase_options.dart';
 
@@ -183,40 +182,9 @@ class _TestAutomationWidgetState extends State<TestAutomationWidget> {
         }
       }
 
-      // 3. Gemini AI Analysis
-      _addTerminalLog("🤖 Gemini AI analizi başlatılıyor...", level: 'info');
-      final aiResult = await AIService.analyzeProduct(
-        url: url,
-        title: preview.title ?? "",
-        description: preview.description ?? "",
-      );
-
       String finalTitle = preview.title ?? "Fırsat Ürünü";
       double finalPrice = preview.price ?? 0.0;
       String finalStore = preview.provider ?? "Diğer";
-
-      if (aiResult['success'] == true) {
-        _addTerminalLog("✅ Gemini AI analizi başarılı!", level: 'success');
-        if (aiResult.containsKey('title') && aiResult['title'] != null) {
-          finalTitle = aiResult['title'];
-          _addTerminalLog("   ↳ AI Başlık: '$finalTitle'", level: 'info');
-        }
-        if (aiResult.containsKey('price') && aiResult['price'] != null) {
-          finalPrice = double.tryParse(aiResult['price'].toString()) ?? finalPrice;
-          _addTerminalLog("   ↳ AI Fiyat: $finalPrice TL", level: 'info');
-        }
-        if (aiResult.containsKey('store') && aiResult['store'] != null) {
-          finalStore = aiResult['store'];
-          _addTerminalLog("   ↳ AI Mağaza: $finalStore", level: 'info');
-        }
-        if (aiResult.containsKey('category') && aiResult['category'] != null) {
-          category = aiResult['category'];
-          subCategory = null; // AI root kategori döner
-          _addTerminalLog("   ↳ AI Kategori: $category", level: 'info');
-        }
-      } else {
-        _addTerminalLog("⚠️ Gemini AI analizi başarısız oldu (Proxy hatası veya limit). Scraper verileri kullanılacak.", level: 'warn');
-      }
 
       // 4. Save test deal to Firestore
       _addTerminalLog("💾 Test verisi Firestore'a kaydediliyor...", level: 'info');

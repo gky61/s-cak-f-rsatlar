@@ -104,3 +104,44 @@ cloud-run-bot/scratch/
 assets/new_avatar/
 cloud-run-bot/*.html
 cloud-run-bot/*_dump.json
+
+# Pazarlama, Sunum ve Ağır Medya Dosyaları (Marketing & Presentation Assets)
+presentation/
+marketing-assets/
+*.pdf
+*.mp4
+*.mov
+*.avi
+*.webm
+*.mkv
+
+# Python runtime and caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+
+# Android & Kotlin build caches
+android/.kotlin/
+**/.gradle/
+
+# Test coverage and reports
+coverage/
+
+# Firebase & NPM debug logs
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS specific files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/

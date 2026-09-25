@@ -48,7 +48,7 @@ try:
     print("\n[INFO] Deploying Cloud Run service...")
     
     # Filter out secrets from env vars if they are in env.yaml to prevent plain text exposure
-    filtered_env = {k: v for k, v in env_vars.items() if k not in ['GEMINI_API_KEY', 'TELEGRAM_SESSION_STRING', 'TELEGRAM_STRING_SESSION']}
+    filtered_env = {k: v for k, v in env_vars.items() if k not in ['TELEGRAM_SESSION_STRING', 'TELEGRAM_STRING_SESSION']}
     # Add PROJECT_ID environment variable
     filtered_env['PROJECT_ID'] = project_id
     
@@ -59,7 +59,7 @@ try:
             f.write(f"{k}: \"{v}\"\n")
             
     # Secrets bindings configuration
-    secrets_str = "GEMINI_API_KEY=GEMINI_API_KEY:latest,TELEGRAM_SESSION_STRING=TELEGRAM_STRING_SESSION:latest"
+    secrets_str = "TELEGRAM_SESSION_STRING=TELEGRAM_STRING_SESSION:latest"
     
     cmd = (
         f"gcloud run deploy {service_name} "

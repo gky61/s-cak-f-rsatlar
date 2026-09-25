@@ -9259,12 +9259,6 @@ function initCardLinks() {
         { title: 'Firestore "telegramBot" Ayarı', url: `${firebaseBaseUrl}/firestore/databases/-default-/data/~2Fsettings~2FtelegramBot`, icon: 'settings' }
     ];
 
-    // 5. AI Links
-    const aiLinks = [
-        { title: 'GCP Credentials (API Key)', url: `${gcpBaseUrl}/apis/credentials?project=${projectId}`, icon: 'vpn_key' },
-        { title: 'Google AI Studio', url: 'https://aistudio.google.com/app/apikey', icon: 'psychology' },
-        { title: 'Firestore "geminiStatus" Ayarı', url: `${firebaseBaseUrl}/firestore/databases/-default-/data/~2Fsettings~2FgeminiStatus`, icon: 'settings' }
-    ];
 
     // 6. Messages Links
     const messageLinks = [
@@ -9286,11 +9280,9 @@ function initCardLinks() {
         { title: 'Cloud Functions Listesi', url: `${firebaseBaseUrl}/functions/list`, icon: 'settings_input_component' }
     ];
 
-    // 9. Ayarlar Links
     const settingsLinks = [
         { title: 'Firestore "app" Ayarı', url: `${firebaseBaseUrl}/firestore/databases/-default-/data/~2Fsettings~2Fapp`, icon: 'settings' },
-        { title: 'Firestore "telegramBot" Ayarı', url: `${firebaseBaseUrl}/firestore/databases/-default-/data/~2Fsettings~2FtelegramBot`, icon: 'settings' },
-        { title: 'Firestore "geminiStatus" Ayarı', url: `${firebaseBaseUrl}/firestore/databases/-default-/data/~2Fsettings~2FgeminiStatus`, icon: 'settings' }
+        { title: 'Firestore "telegramBot" Ayarı', url: `${firebaseBaseUrl}/firestore/databases/-default-/data/~2Fsettings~2FtelegramBot`, icon: 'settings' }
     ];
 
     // -------------------------------------------------------------
@@ -10009,7 +10001,6 @@ window.showDealDetailFromDashboard = async function (dealId) {
 // Faz 2: Sistem Sağlığı & Ayarlar Entegrasyonu
 
 let botHeartbeatUnsubscribe = null;
-let geminiStatusUnsubscribe = null;
 
 function formatLastHeartbeat(date) {
     if (!date) return '-';
@@ -10025,7 +10016,6 @@ function initRealtimeSystemHealth() {
     console.log('📡 Initializing Real-time System Health listeners...');
     
     if (botHeartbeatUnsubscribe) botHeartbeatUnsubscribe();
-    if (geminiStatusUnsubscribe) geminiStatusUnsubscribe();
     
     // 1. Bot status snapshot
     botHeartbeatUnsubscribe = db.collection('settings').doc('telegramBot').onSnapshot(snapshot => {
@@ -10073,48 +10063,6 @@ function initRealtimeSystemHealth() {
         }
     }, err => {
         console.error('❌ Bot health listener error:', err);
-    });
-    
-    // 2. Gemini status snapshot
-    geminiStatusUnsubscribe = db.collection('settings').doc('geminiStatus').onSnapshot(snapshot => {
-        if (snapshot.exists) {
-            const data = snapshot.data();
-            const lastReq = data.lastRequestAt?.toDate ? data.lastRequestAt.toDate() : (data.lastRequestAt ? new Date(data.lastRequestAt) : null);
-            const isOnline = data.status === 'online';
-            
-            // Update Badge
-            const badge = document.getElementById('geminiStatusBadge');
-            if (badge) {
-                if (isOnline) {
-                    badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400';
-                    badge.innerHTML = '<span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Çevrimiçi';
-                } else {
-                    badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
-                    badge.innerHTML = '<span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>Hata';
-                }
-            }
-            
-            // Update fields
-            const elReq = document.getElementById('geminiRequests');
-            if (elReq) elReq.textContent = data.dailyRequests || 0;
-            
-            const elErr = document.getElementById('geminiErrors');
-            if (elErr) elErr.textContent = data.dailyErrors || 0;
-            
-            const elJson = document.getElementById('geminiJsonErrors');
-            if (elJson) elJson.textContent = data.dailyJsonErrors || 0;
-            
-            const elCost = document.getElementById('geminiCost');
-            if (elCost) elCost.textContent = data.dailyCost ? '$' + parseFloat(data.dailyCost).toFixed(4) : '$0.0000';
-            
-            const elLast = document.getElementById('geminiLastRequest');
-            if (elLast) elLast.textContent = lastReq ? formatLastHeartbeat(lastReq) : 'Bilinmiyor';
-            
-            const elModel = document.getElementById('geminiModel');
-            if (elModel) elModel.textContent = data.model || 'Gemini 2.5 Flash';
-        }
-    }, err => {
-        console.error('❌ Gemini status listener error:', err);
     });
 }
 
@@ -12038,7 +11986,7 @@ function getCategoryDisplayName(cat) {
         case 'bot': return 'Telegram Botu';
         case 'scraper': return 'Mağaza Kazıyıcılar';
         case 'catalogs_coupons': return 'Katalog & Kupon';
-        case 'ai': return 'AI / Gemini';
+        case 'ai': return 'Otonom / Bot';
         case 'notifications': return 'Bildirim Motoru';
         case 'backend':
         case 'functions': return 'Cloud Functions';

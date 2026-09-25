@@ -730,7 +730,7 @@ exports.onDealUpdated = functions.firestore
           dealTitle: newData.title || 'Fırsatınız',
           imageUrl: newData.imageUrl || newData.mainImage || '',
           moderationReason: modReason,
-          title: '❌ Fırsatınız Reddedildi',
+          title: 'ℹ️ Fırsatınız Reddedildi',
           body: bodyText,
           status: 'rejected',
           isUserSubmitted: true,
@@ -933,6 +933,8 @@ exports.onCommentCreated = functions.firestore
               commentId: commentId,
               parentCommentId: parentCommentId,
               replyUserName: replyUserName,
+              senderName: replyUserName,
+              senderId: replierUserId,
               replyText: replyText.length > 100 ? `${replyText.substring(0, 100)}...` : replyText,
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
               read: false
@@ -978,6 +980,8 @@ exports.onCommentCreated = functions.firestore
             imageUrl: dealImageUrl,
             commentId: commentId,
             commentUserName: commentUserName,
+            senderName: commentUserName,
+            senderId: replierUserId,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             read: false
           });
@@ -1883,7 +1887,7 @@ exports.onNotificationCreated = functions.firestore
       color = '#8E24AA';
     } else if (type === 'submission_status') {
       channelId = 'sicak_firsatlar_general_v2';
-      color = notification.status === 'rejected' ? '#F44336' : '#10B981';
+      color = notification.status === 'rejected' ? '#F59E0B' : '#10B981';
     }
 
     const imageUrl = (notification.imageUrl && String(notification.imageUrl).trim()) || '';
@@ -1908,7 +1912,14 @@ exports.onNotificationCreated = functions.firestore
         createdAt: notification.createdAt ? String(notification.createdAt) : '',
         reasons: JSON.stringify(notification.reasons || {}),
         notification_title: String(title || ''),
-        notification_body: String(body || '')
+        notification_body: String(body || ''),
+        status: String(notification.status || ''),
+        moderationReason: String(notification.moderationReason || notification.rejectionReason || ''),
+        isUserSubmitted: String(notification.isUserSubmitted ?? ''),
+        merchant: String(notification.merchant || ''),
+        price: String(notification.price !== undefined && notification.price !== null ? notification.price : ''),
+        senderId: String(notification.senderId || notification.authorId || notification.postedBy || notification.replierUserId || ''),
+        senderName: String(notification.senderName || notification.authorName || notification.postedByName || notification.replyUserName || notification.commentUserName || '')
       };
 
       if (imageUrl) {
@@ -2316,133 +2327,7 @@ exports.cleanupOldImagesManual = functions
     }
   }));
 
-// Gemini AI Proxy Cloud Function
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-exports.analyzeProductProxy = functions
-  .runWith({ secrets: ['GEMINI_API_KEY'], timeoutSeconds: 60, memory: '256MB' })
-  .https.onRequest(wrapRequest('analyzeProductProxy', async (req, res) => {
-    // CORS headers
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, X-Firebase-AppCheck');
-
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('');
-      return;
-    }
-
-    // App Check doğrulaması
-    const appCheckToken = req.header('X-Firebase-AppCheck');
-    if (!appCheckToken) {
-      functions.logger.warn('⚠️ Missing App Check token');
-      res.status(401).json({ error: 'Unauthorized: Missing App Check token', success: false });
-      return;
-    }
-    try {
-      await admin.appCheck().verifyToken(appCheckToken);
-    } catch (err) {
-      functions.logger.error('❌ App Check verification failed:', err.message);
-      res.status(401).json({ error: 'Unauthorized: Invalid App Check token', success: false });
-      return;
-    }
-
-    let isError = false;
-    let isJsonError = false;
-    let estimatedCost = 0.0001; // default fallback cost
-    let responseText = '';
-
-    try {
-      const { contents, generationConfig } = req.body;
-      if (!contents) {
-        res.status(400).json({ error: 'Missing contents in request body', success: false });
-        return;
-      }
-
-      const geminiApiKey = process.env.GEMINI_API_KEY;
-      if (!geminiApiKey) {
-        res.status(500).json({ error: 'Gemini API Key is not configured on the server', success: false });
-        return;
-      }
-
-      functions.logger.info('🤖 Calling Gemini API via proxy...');
-      const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-      const result = await model.generateContent({
-        contents: contents,
-        generationConfig: generationConfig
-      });
-
-      const response = await result.response;
-      responseText = response.text();
-
-      // Estimate cost based on usageMetadata if available
-      try {
-        const usage = response.usageMetadata;
-        if (usage) {
-          const inputTokens = usage.promptTokenCount || 0;
-          const outputTokens = usage.candidatesTokenCount || 0;
-          estimatedCost = (inputTokens * 0.075 / 1000000) + (outputTokens * 0.30 / 1000000);
-        }
-      } catch (useErr) {
-        functions.logger.warn('⚠️ Usage estimation error:', useErr.message);
-      }
-
-      // Check if valid JSON (if output format is JSON)
-      if (generationConfig && generationConfig.responseMimeType === 'application/json') {
-        try {
-          JSON.parse(responseText.replace(/```json/g, '').replace(/```/g, '').trim());
-        } catch (jsonErr) {
-          isJsonError = true;
-          functions.logger.warn('⚠️ Gemini output was not valid JSON:', jsonErr.message);
-        }
-      }
-
-      res.status(200).json({
-        success: true,
-        text: responseText
-      });
-    } catch (error) {
-      isError = true;
-      throw error; // Re-throw to let wrapRequest log it to systemErrors!
-    } finally {
-      // Update FireStore settings/geminiStatus
-      try {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const statusRef = admin.firestore().collection('settings').doc('geminiStatus');
-
-        await admin.firestore().runTransaction(async (transaction) => {
-          const doc = await transaction.get(statusRef);
-          if (doc.exists && doc.data().date === todayStr) {
-            transaction.update(statusRef, {
-              dailyRequests: admin.firestore.FieldValue.increment(1),
-              dailyErrors: admin.firestore.FieldValue.increment(isError ? 1 : 0),
-              dailyJsonErrors: admin.firestore.FieldValue.increment(isJsonError ? 1 : 0),
-              dailyCost: admin.firestore.FieldValue.increment(isError ? 0 : estimatedCost),
-              lastRequestAt: admin.firestore.FieldValue.serverTimestamp(),
-              status: isError ? 'error' : 'online',
-              model: 'Gemini 2.5/2.0 Flash'
-            });
-          } else {
-            transaction.set(statusRef, {
-              date: todayStr,
-              dailyRequests: 1,
-              dailyErrors: isError ? 1 : 0,
-              dailyJsonErrors: isJsonError ? 1 : 0,
-              dailyCost: isError ? 0 : estimatedCost,
-              lastRequestAt: admin.firestore.FieldValue.serverTimestamp(),
-              status: isError ? 'error' : 'online',
-              model: 'Gemini 2.5/2.0 Flash'
-            });
-          }
-        });
-        functions.logger.info('🤖 Gemini Status updated successfully.');
-      } catch (dbErr) {
-        functions.logger.error('❌ Failed to update Gemini Status:', dbErr.message);
-      }
-    }
-  }));
 
 /**
  * 11. Manuel Bildirim Gönderimi (Callable) - FAZ 3

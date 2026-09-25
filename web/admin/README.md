@@ -52,14 +52,14 @@ firebase deploy --only hosting
 
 ## ✨ 3. 10 Temel Yönetim Modülü
 
-1. 📊 **Dashboard Görünümü:** Canlı sistem sağlığı (Telegram Bot Heartbeat, Gemini AI maliyet ve hız limitleri), 6 sütunlu Bento metrikleri, 7 günlük trend grafikleri ve onay bekleyen hızlı işlem kuyruğu.
+1. 📊 **Dashboard Görünümü:** Canlı sistem sağlığı (Telegram Bot Heartbeat, Otonom Kazıma & Ayrıştırma motoru, $0 maliyet mimarisi ve hız limitleri), 6 sütunlu Bento metrikleri, 7 günlük trend grafikleri ve onay bekleyen hızlı işlem kuyruğu.
 2. 🏷️ **Fırsatlar Görünümü:** Onay bekleyen fırsatları onaylama/reddetme, fiyat & indirim oranı düzeltme modalı, resim lightbox önizleme ve affiliate link dönüştürücü.
 3. 👥 **Kullanıcılar Görünümü:** Üye profilleri, avcı rozetleri, ban durumu, özel admin mesajı gönderme ve `adminDeleteUser` ile kullanıcıyı Auth + Firestore'dan kalıcı silme.
-4. 💬 **Mesajlar & Simülatör:** İki kullanıcı arası canlı mesajlaşma simülatörü, gerçek zamanlı sohbet akışı ve Botkolik AI sohbetleri.
+4. 💬 **Mesajlar & Simülatör:** İki kullanıcı arası canlı mesajlaşma simülatörü, gerçek zamanlı sohbet akışı ve Botkolik simülatörü.
 5. 🚩 **Şikayetler & Raporlar:** Kullanıcıların ilettiği içerik şikayet havuzu, tek tıkla ilanı silme, şikayeti kapatma ve kullanıcıyı yasaklama.
 6. ⚙️ **Sistem & Bot Ayarları:** Dinamik Telegram kanalları yönetimi (`monitoredChannels`), bot durdurma/başlatma, fırsat/yorum/kupon şalterleri ve 30+ günlük eski verileri temizleme (`purgeOldDealsWeb`).
 7. 🔔 **Bildirimler Merkezi:** Kayıtlı ve aktif FCM cihaz istatistikleri, Android/iOS dağılımı, saatlik/günlük hız sınırları, manuel push gönderme ve geçersiz token temizliği (`cleanupInvalidTokens`).
-8. 📜 **Sistem Logları (Kibana / Datadog APM):** Uçtan uca hata havuzu (`systemErrors`), 8 kategori sekmesi (Mobil, Bot, Kazıyıcı, Katalog, Kupon, AI, Bildirim, Cloud, Web), **kullanıcı adı/UID bazlı arama ve filtreleme**, derin geçmiş taraması (`deepSearchUserLogs`), önem derecesi ve platform filtreleri, stack trace panosu ve tek tıkla çözüldü işaretleme.
+8. 📜 **Sistem Logları (Kibana / Datadog APM):** Uçtan uca hata havuzu (`systemErrors`), 8 kategori sekmesi (Mobil, Bot, Kazıyıcı, Katalog, Kupon, Otonom/Bot, Bildirim, Cloud, Web), **kullanıcı adı/UID bazlı arama ve filtreleme**, derin geçmiş taraması (`deepSearchUserLogs`), önem derecesi ve platform filtreleri, stack trace panosu ve tek tıkla çözüldü işaretleme.
 9. 🎟️ **Kuponlar Yönetimi:** Topluluk vs Botkolik Radarı sekmeleri, kupon ekleme/düzenleme/silme, tek tıkla kod kopyalama ve Cloud Functions ile çok kaynaklı otomatik kupon kazıma.
 10. 📰 **Aktüel Kataloglar:** 36 mağazanın süpermarket broşürlerini inceleme (Lightbox sayfa galerisi), düzenleme/silme ve Cloud Functions ile otomatik aktüel kazıma motoru.
 

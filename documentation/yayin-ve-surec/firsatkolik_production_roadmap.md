@@ -83,7 +83,7 @@ gantt
 
 ### 3.2 KVKK ve Veri İşleme Uyum Standartları
 Uygulama; e-posta/Google OAuth ile kimlik doğrulama, yorum, oylama, cihaz FCM token'ı ve hata logları işlemektedir.
-* **Aydınlatma Metni:** İşlenen kişisel veriler (e-posta, FCM token, IP, reklam kimliği vb.) ve üçüncü taraf servisler (Firebase, Google AdMob, Google Gemini API) açıkça tanımlanmıştır.
+* **Aydınlatma Metni:** İşlenen kişisel veriler (e-posta, FCM token, IP, reklam kimliği vb.) ve üçüncü taraf servisler (Firebase, Google AdMob) açıkça tanımlanmıştır.
 * **Kullanıcı Onayı:** İlk girişte ve profil ekranında gizlilik politikası bağlantısı sunulmaktadır.
 
 ### 3.3 Herkese Açık Yasal Web Sayfaları (Firebase Hosting)
@@ -176,7 +176,7 @@ Backend tarafında `functions/index.js` dosyasında yer alan 26 fonksiyon PROD o
 | 7 | **`onUserUpdated`** | Firestore `users/{userId}` (onUpdate) | Profil/avatar değiştiğinde fırsat, yorum ve mesajlardaki denormalize verileri batch senkronizasyonu. |
 | 8 | **`onUserDeleted`** | Auth `user().onDelete` | Kullanıcı silindiğinde cihaz, bildirim aboneliği ve alt koleksiyonları kalıcı temizleme. |
 | 9 | **`resolveShortLink`** | HTTPS Request (`onRequest`) | Kısa linkleri ve yönlendirmeleri App Check korumalı olarak çözme. |
-| 10 | **`analyzeProductProxy`** | HTTPS Request (`onRequest`) | Gemini API'ye Secret Manager ve App Check korumalı güvenli proxy sağlama. |
+| 10 | **`onCouponCreated`** | Firestore `coupons/{couponId}` (onCreate) | Yeni indirim kuponu eklendiğinde doğrulama ve ilgili kullanıcılara bildirim tetikleme. |
 | 11 | **`sendManualNotification`** | HTTPS Callable (`onCall`) | Admin panelinden tüm kullanıcılara veya tekil hedeflere anlık push gönderme. |
 | 12 | **`cleanupInvalidTokens`** | HTTPS Callable (`onCall`) | Aktif cihazların FCM geçerliliğini `dryRun: true` ile test edip bayat olanları pasife alma. |
 | 13 | **`cleanupExpiredDeals`** | Scheduled Cron (`0 3 * * *` - Gece 03:00) | 48 saati dolan fırsatları `isExpired: true` işaretleme (Soft-Expire). |
@@ -414,10 +414,10 @@ Her aşamada Crashlytics çökme oranları ve Android Vitals ANR değerleri izle
 | Servis / Kaynak | Maliyet | Tasarruf Stratejisi & Açıklama |
 | :--- | :---: | :--- |
 | **Telegram Bot Sunucusu (Compute Engine VM)** | **0 TL ($0.00)** | **GCP Free Tier `e2-micro` makinesi (`telegram-bot-server`) kullanılarak 130$/ay faturadan tamamen kurtulunmuştur.** |
-| **Firebase Cloud Functions (26 Fonksiyon)** | **0 TL - ~50 TL** | Blaze Plan ücretsiz kotaları dahilindedir (Ayda 2 milyon çağrı ücretsiz). |
+| **Firebase Cloud Functions (27 Fonksiyon)** | **0 TL - ~50 TL** | Blaze Plan ücretsiz kotaları dahilindedir (Ayda 2 milyon çağrı ücretsiz). |
 | **Cloud Firestore & Storage** | **0 TL - ~30 TL** | 30 günlük hard-purge ve WebP sıkıştırması sayesinde minimal depolama. |
 | **FCM Push Bildirimleri** | **0 TL ($0.00)** | Firebase Cloud Messaging sınırsız ve tamamen ücretsizdir. |
-| **Google Gemini API (`gemini-2.0-flash`)** | **~50 - 200 TL** | Sadece Telegram mesajı ve görseli geldikçe token bazlı cüzi ücretlendirme. |
+| **Otonom Kazıma & Ayrıştırma (Cheerio / JSON-LD)** | **0 TL ($0.00)** | Harici AI/LLM API'leri tamamen kaldırılmış, sıfır token maliyetli yerel ayrıştırma motoruna geçilmiştir. |
 | **Shorebird Code-Push** | **0 TL ($0.00)** | Ayda 5.000 yama indirmesine kadar tamamen ücretsizdir. |
 | **Pazarlama / Reklam Bütçesi** | **3.000 - 15.000 TL** | İsteğe bağlı Google UAC ve Meta Ads büyüme bütçesi. |
 

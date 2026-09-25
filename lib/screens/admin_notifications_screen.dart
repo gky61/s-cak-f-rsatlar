@@ -12,7 +12,16 @@ import 'message_screen.dart';
 import 'kuponlar_page.dart';
 
 class AdminNotificationsScreen extends StatefulWidget {
-  const AdminNotificationsScreen({super.key});
+  final String? initialTab; // 'all', 'admin', 'replies'
+  final String? highlightNotificationId;
+  final String? highlightDealId;
+
+  const AdminNotificationsScreen({
+    super.key,
+    this.initialTab,
+    this.highlightNotificationId,
+    this.highlightDealId,
+  });
 
   @override
   State<AdminNotificationsScreen> createState() => _AdminNotificationsScreenState();
@@ -21,11 +30,13 @@ class AdminNotificationsScreen extends StatefulWidget {
 class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
-  String _selectedTab = 'all'; // 'all', 'admin', 'replies'
+  late String _selectedTab; // 'all', 'admin', 'replies'
+  bool _hasAutoOpened = false;
 
   @override
   void initState() {
     super.initState();
+    _selectedTab = widget.initialTab ?? 'all';
     AppBadgeService.instance.syncBadgeWithFirestore();
   }
 
@@ -77,13 +88,21 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     final dealId = (item['dealId'] ?? '').toString().trim();
     final commentId = (item['commentId'] ?? '').toString().trim();
 
-    // Akıllı durum tespiti (Dokümanda status eksik olsa dahi başlıktan çıkarım yapılır)
+    // Akıllı ve karşılıklı dışlayan (mutually exclusive) durum tespiti
     final rawStatus = (item['status'] as String? ?? '').toLowerCase();
     final titleLower = (item['title'] as String? ?? '').toLowerCase();
-    final isApproved = rawStatus == 'approved' ||
-        titleLower.contains('onaylandı') ||
-        titleLower.contains('onaylandi');
-    final isRejected = rawStatus == 'rejected' || titleLower.contains('reddedildi');
+    final bool isApproved;
+    final bool isRejected;
+    if (rawStatus == 'approved') {
+      isApproved = true;
+      isRejected = false;
+    } else if (rawStatus == 'rejected') {
+      isApproved = false;
+      isRejected = true;
+    } else {
+      isApproved = titleLower.contains('onaylandı') || titleLower.contains('onaylandi');
+      isRejected = !isApproved && (titleLower.contains('reddedildi') || titleLower.contains('red'));
+    }
 
     if (type == 'deal') {
       if (dealId.isNotEmpty && mounted) {
@@ -415,15 +434,17 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DealDetailScreen(
-                              dealId: dealId,
-                              scrollToCommentId: commentId.isNotEmpty ? commentId : null,
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DealDetailScreen(
+                                dealId: dealId,
+                                scrollToCommentId: commentId.isNotEmpty ? commentId : null,
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        }
                       },
                       icon: Icon(
                         (type == 'comment' || type == 'comment_reply')
@@ -454,17 +475,19 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const MessageScreen(
-                              otherUserId: 'admin',
-                              otherUserName: 'FırsatKolik Yönetim',
-                              otherUserImageUrl: 'assets/logo.webp',
-                              isAdminMessage: true,
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const MessageScreen(
+                                otherUserId: 'admin',
+                                otherUserName: 'FırsatKolik Yönetim',
+                                otherUserImageUrl: 'assets/logo.webp',
+                                isAdminMessage: true,
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        }
                       },
                       icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
                       label: const Text('Mesajlara Git'),
@@ -486,16 +509,18 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        final kId = (item['kuponId'] ?? item['kupon_id'] ?? '').toString().trim();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => KuponlarPage(
-                              initialTabIndex: 1,
-                              highlightKuponId: kId.isNotEmpty ? kId : null,
+                        if (context.mounted) {
+                          final kId = (item['kuponId'] ?? item['kupon_id'] ?? '').toString().trim();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => KuponlarPage(
+                                initialTabIndex: 1,
+                                highlightKuponId: kId.isNotEmpty ? kId : null,
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        }
                       },
                       icon: const Icon(Icons.confirmation_number_rounded, size: 18),
                       label: const Text('Kuponu Gör'),
@@ -796,6 +821,24 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       return Center(child: Text('Hata: $error'));
     }
 
+    // Otomatik odaklama / detay açma (Push veya in-app bildirimine tıklanıp gelindiyse)
+    if (!_hasAutoOpened && (widget.highlightNotificationId != null || widget.highlightDealId != null)) {
+      final target = allItems.cast<Map<String, dynamic>?>().firstWhere(
+        (it) =>
+            (widget.highlightNotificationId != null && it?['id'] == widget.highlightNotificationId) ||
+            (widget.highlightDealId != null && it?['dealId'] == widget.highlightDealId),
+        orElse: () => null,
+      );
+      if (target != null) {
+        _hasAutoOpened = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _openNotification(target);
+          }
+        });
+      }
+    }
+
     // Tab filtrelemesi
     final items = allItems.where((item) {
       final type = item['type'] as String? ?? '';
@@ -871,13 +914,21 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         final isUnread = !(item['read'] as bool? ?? false);
         final type = (item['type'] ?? 'deal').toString();
 
-        // Akıllı durum tespiti
+        // Akıllı ve karşılıklı dışlayan (mutually exclusive) durum tespiti
         final rawStatus = (item['status'] as String? ?? '').toLowerCase();
         final titleLower = (item['title'] as String? ?? '').toLowerCase();
-        final isAppr = rawStatus == 'approved' ||
-            titleLower.contains('onaylandı') ||
-            titleLower.contains('onaylandi');
-        final isRej = rawStatus == 'rejected' || titleLower.contains('reddedildi');
+        final bool isAppr;
+        final bool isRej;
+        if (rawStatus == 'approved') {
+          isAppr = true;
+          isRej = false;
+        } else if (rawStatus == 'rejected') {
+          isAppr = false;
+          isRej = true;
+        } else {
+          isAppr = titleLower.contains('onaylandı') || titleLower.contains('onaylandi');
+          isRej = !isAppr && (titleLower.contains('reddedildi') || titleLower.contains('red'));
+        }
 
         // İkon ve renk belirleme (Profesyonel, pozitif ve bağlamsal)
         IconData icon = Icons.local_fire_department_rounded;
@@ -966,22 +1017,20 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         String displayBody = rawBody;
         final itemDealTitle = (item['dealTitle'] ?? '').toString().trim();
 
-        if (itemDealTitle.isNotEmpty) {
-          if (displayBody.startsWith(itemDealTitle)) {
-            displayBody = displayBody.substring(itemDealTitle.length).trim();
-            if (displayBody.startsWith(':') || displayBody.startsWith('-')) {
-              displayBody = displayBody.substring(1).trim();
-            }
+        if (itemDealTitle.isNotEmpty && displayBody.startsWith(itemDealTitle)) {
+          displayBody = displayBody.substring(itemDealTitle.length).trim();
+          if (displayBody.startsWith(':') || displayBody.startsWith('-')) {
+            displayBody = displayBody.substring(1).trim();
           }
-          if (type == 'submission_status') {
-            if (isAppr) {
-              displayBody = 'Fırsatınız başarıyla onaylandı ve yayına alındı.';
-            } else if (isRej) {
-              final modReason = (item['moderationReason'] as String? ?? '').trim();
-              displayBody = modReason.isNotEmpty
-                  ? 'Red sebebi: $modReason'
-                  : 'Fırsatınız topluluk kurallarımıza uymadığı için reddedildi.';
-            }
+        }
+        if (type == 'submission_status') {
+          if (isAppr) {
+            displayBody = 'Fırsatınız başarıyla onaylandı ve yayına alındı.';
+          } else if (isRej) {
+            final modReason = (item['moderationReason'] as String? ?? '').trim();
+            displayBody = modReason.isNotEmpty
+                ? 'Red sebebi: $modReason'
+                : 'Fırsatınız topluluk kurallarımıza uymadığı için reddedildi.';
           }
         }
 
@@ -1094,6 +1143,36 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            if (type == 'submission_status' && (isAppr || isRej)) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isAppr
+                                      ? (isDark
+                                          ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                                          : const Color(0xFFECFDF5))
+                                      : (isDark
+                                          ? const Color(0xFFF59E0B).withValues(alpha: 0.2)
+                                          : const Color(0xFFFFFBEB)),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: isAppr
+                                        ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                                        : const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: Text(
+                                  isAppr ? 'Onaylandı' : 'Reddedildi',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: isAppr ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(width: 8),
                             if (item['createdAt'] != null)
                               Text(

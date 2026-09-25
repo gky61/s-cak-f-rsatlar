@@ -20,7 +20,6 @@ import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/firestore_service.dart';
-import 'services/ai_service.dart';
 import 'services/affiliate/affiliate_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/circular_theme_transition.dart';
@@ -69,9 +68,20 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     body = data['notification_body'] ?? 'Onay için bekleyen bir fırsat var. Dokunun.';
     payload = 'admin_deal:${data['dealId']}';
   } else if (type == 'submission_status') {
-    final status = (data['status'] ?? '').toString().toLowerCase();
-    title = data['notification_title'] ?? (status == 'approved' ? '🎉 Fırsatınız Onaylandı!' : 'ℹ️ Fırsatınız Reddedildi');
-    body = data['notification_body'] ?? (status == 'approved' ? 'Gönderdiğiniz fırsat onaylandı ve yayınlandı.' : 'Gönderdiğiniz fırsat maalesef onaylanamadı.');
+    final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
+    final notifTitle = data['notification_title'] ?? data['title'] ?? '';
+    final titleLower = notifTitle.toString().toLowerCase();
+    final notifBody = data['notification_body'] ?? data['body'] ?? '';
+    final bodyLower = notifBody.toString().toLowerCase();
+
+    final isAppr = rawStatus == 'approved' ||
+        (rawStatus.isEmpty && (titleLower.contains('onaylandı') || titleLower.contains('onaylandi') || bodyLower.contains('onaylandı') || bodyLower.contains('onaylandi')));
+    final isRej = rawStatus == 'rejected' ||
+        (rawStatus.isEmpty && (titleLower.contains('reddedildi') || bodyLower.contains('reddedildi')));
+    final status = isAppr ? 'approved' : (isRej ? 'rejected' : rawStatus);
+
+    title = data['notification_title'] ?? (isAppr ? '🎉 Fırsatınız Onaylandı!' : (isRej ? 'ℹ️ Fırsatınız Reddedildi' : '📋 Fırsat Durumu'));
+    body = data['notification_body'] ?? (isAppr ? 'Gönderdiğiniz fırsat onaylandı ve yayınlandı.' : (isRej ? 'Gönderdiğiniz fırsat maalesef onaylanamadı.' : 'Fırsatınızın gönderim durumu güncellendi.'));
     payload = 'submission_status:${data['dealId']}:$status';
     channelId = 'sicak_firsatlar_general_v2';
   } else if (type == 'admin_message') {
@@ -296,21 +306,6 @@ void _initializeBackgroundServices() {
       _log('✅ Bildirim kanalları ve dinleyicileri önyüklendi');
     }).catchError((e) {
       _log('⚠️ Kanal ve dinleyici önyükleme hatası: $e');
-    });
-  }
-
-  // Gemini API bağlantısını test et (arka planda, 2 saniye sonra)
-  if (kDebugMode) {
-    Future.delayed(const Duration(seconds: 2), () {
-      AIService.testConnection().then((success) {
-        if (success) {
-          _log('✅ Gemini API çalışıyor!');
-        } else {
-          _log('⚠️ Gemini API bağlantı hatası - Fırsat paylaşımında AI özellikleri çalışmayabilir');
-        }
-      }).catchError((e) {
-        _log('⚠️ Gemini API test hatası: $e');
-      });
     });
   }
 }

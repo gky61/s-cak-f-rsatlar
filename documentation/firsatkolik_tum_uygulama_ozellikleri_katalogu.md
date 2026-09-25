@@ -95,11 +95,11 @@ Aşağıdaki JSON verisi, FırsatKolik platformunun 19 ana kategoride toplanmı�
     ]
   },
   {
-    "category": "2. Yapay Zeka Destekli Fırsat Paylaşımı & Link Analizi",
+    "category": "2. Otonom Akıllı Fırsat Paylaşımı & Link Analizi",
     "features": [
       {
-        "title": "Tek Linkle Yapay Zeka Destekli Otomatik Doldurma (Gemini AI)",
-        "desc": "Kullanıcı herhangi bir e-ticaret linkini yapıştırdığı anda Google Gemini multimodal yapay zeka ve akıllı kazıyıcılar devreye girer. Ürün başlığı, görseli, güncel fiyatı ve kategorisi 1 saniye içinde sıfır çabayla otomatik doldurulur."
+        "title": "Tek Linkle Otonom Otomatik Doldurma (Akıllı DOM & Metadata Motoru)",
+        "desc": "Kullanıcı herhangi bir e-ticaret linkini yapıştırdığı anda 21+ mağaza özel kazıyıcıları, JSON-LD, microdata ve OpenGraph motoru devreye girer. Ürün başlığı, görseli, güncel fiyatı, orijinal liste fiyatı ve kategorisi 1 saniye içinde sıfır çabayla ve sıfır API maliyetiyle otomatik doldurulur."
       },
       {
         "title": "Gerçek Liste Fiyatı ve İndirim Oranı Tespiti (originalPrice Scraper)",
