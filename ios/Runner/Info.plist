@@ -104,7 +104,7 @@
 		<string>group.com.firsatkolik.app</string>
 		<!-- Google Mobile Ads (AdMob) iOS Application ID -->
 		<key>GADApplicationIdentifier</key>
-		<string>ca-app-pub-3940256099942544~1458002511</string>
+		<string>ca-app-pub-6853997017739651~7339420575</string>
 		<!-- AdMob SKAdNetwork Identifier Listesi -->
 		<key>SKAdNetworkItems</key>
 		<array>

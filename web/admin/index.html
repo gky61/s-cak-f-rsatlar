@@ -77,6 +77,338 @@
         .hidden {
             display: none !important;
         }
+        /* =========================================================================
+           AdMob & Yönetim Paneli Açıklayıcı İnfo Tooltip Bileşeni
+           ========================================================================= */
+        .admob-tip-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 4px;
+            vertical-align: middle;
+            cursor: pointer !important;
+            border-radius: 6px;
+            padding: 2px 3px;
+            transition: all 0.15s ease;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .admob-tip-btn * {
+            cursor: pointer !important;
+        }
+        .admob-tip-btn:hover,
+        .admob-tip-btn.is-active {
+            background-color: rgba(16, 185, 129, 0.15);
+        }
+        .admob-tip-btn .admob-tip-icon {
+            font-size: 15px !important;
+            line-height: 1 !important;
+            color: #94a3b8;
+            transition: color 0.15s ease, transform 0.15s ease;
+            cursor: pointer !important;
+        }
+        .admob-tip-btn:hover .admob-tip-icon,
+        .admob-tip-btn.is-active .admob-tip-icon {
+            color: #10b981;
+            transform: scale(1.18);
+        }
+        .admob-tip-popup {
+            display: none;
+            position: absolute;
+            width: 270px;
+            max-width: 85vw;
+            padding: 12px 14px;
+            background: #090d16;
+            color: #f8fafc;
+            border: 1px solid rgba(71, 85, 105, 0.85);
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            font-size: 11px;
+            line-height: 1.5;
+            z-index: 9999999;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            text-align: left;
+            text-transform: none;
+            font-weight: normal;
+            pointer-events: auto;
+            cursor: default !important;
+        }
+        .admob-tip-popup * {
+            cursor: default !important;
+        }
+        /* Hover Köprüsü (Mouse butondan popup'a geçerken kapanmayı engeller) */
+        .admob-tip-popup::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 12px;
+            pointer-events: auto;
+        }
+        .admob-tip-popup.pos-top-center::before,
+        .admob-tip-popup.pos-top-left::before,
+        .admob-tip-popup.pos-top-right::before {
+            bottom: -10px;
+        }
+        .admob-tip-popup.pos-bottom-center::before,
+        .admob-tip-popup.pos-bottom-left::before,
+        .admob-tip-popup.pos-bottom-right::before {
+            top: -10px;
+        }
+        /* Hover, Focus veya is-active tıklandığında açılır */
+        .admob-tip-btn:hover > .admob-tip-popup,
+        .admob-tip-btn:focus > .admob-tip-popup,
+        .admob-tip-btn:focus-within > .admob-tip-popup,
+        .admob-tip-btn.is-active > .admob-tip-popup {
+            display: flex !important;
+            flex-direction: column;
+            animation: admobTipFade 0.15s ease-out forwards;
+        }
+
+        @keyframes admobTipFade {
+            from {
+                opacity: 0;
+                transform: translateY(3px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Konumlandırma sınıfları */
+        .admob-tip-popup.pos-top-center {
+            bottom: calc(100% + 8px);
+            left: 50%;
+            margin-left: -135px;
+        }
+        .admob-tip-popup.pos-top-left {
+            bottom: calc(100% + 8px);
+            left: 0;
+        }
+        .admob-tip-popup.pos-top-right {
+            bottom: calc(100% + 8px);
+            right: 0;
+        }
+        .admob-tip-popup.pos-bottom-center {
+            top: calc(100% + 8px);
+            left: 50%;
+            margin-left: -135px;
+        }
+        .admob-tip-popup.pos-bottom-left {
+            top: calc(100% + 8px);
+            left: 0;
+        }
+        .admob-tip-popup.pos-bottom-right {
+            top: calc(100% + 8px);
+            right: 0;
+        }
+
+        .admob-tip-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-weight: 800;
+            font-size: 12px;
+            color: #34d399;
+        }
+        .admob-tip-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .admob-tip-header .material-symbols-outlined {
+            font-size: 16px !important;
+            color: #34d399;
+            cursor: default !important;
+        }
+        .admob-tip-close {
+            font-size: 16px;
+            line-height: 1;
+            color: #64748b;
+            cursor: pointer !important;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: color 0.15s ease;
+        }
+        .admob-tip-close:hover {
+            color: #f43f5e;
+        }
+        .admob-tip-desc {
+            color: #cbd5e1;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+        .admob-tip-hint {
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(51, 65, 85, 0.8);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 10px;
+            color: #6ee7b7;
+        }
+
+        /* =========================================================================
+           Marketing & Reklam Büyüme Merkezi Açıklayıcı İnfo Tooltip Bileşeni
+           ========================================================================= */
+        .mkt-tip-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 4px;
+            vertical-align: middle;
+            cursor: pointer !important;
+            border-radius: 6px;
+            padding: 2px 3px;
+            transition: all 0.15s ease;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .mkt-tip-btn * {
+            cursor: pointer !important;
+        }
+        .mkt-tip-btn:hover,
+        .mkt-tip-btn.is-active {
+            background-color: rgba(245, 158, 11, 0.15);
+        }
+        .mkt-tip-btn .mkt-tip-icon {
+            font-size: 15px !important;
+            line-height: 1 !important;
+            color: #94a3b8;
+            transition: color 0.15s ease, transform 0.15s ease;
+            cursor: pointer !important;
+        }
+        .mkt-tip-btn:hover .mkt-tip-icon,
+        .mkt-tip-btn.is-active .mkt-tip-icon {
+            color: #f59e0b;
+            transform: scale(1.18);
+        }
+        .mkt-tip-popup {
+            display: none;
+            position: absolute;
+            width: 275px;
+            max-width: 85vw;
+            padding: 12px 14px;
+            background: #090d16;
+            color: #f8fafc;
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 8px 10px -6px rgba(0, 0, 0, 0.7);
+            font-size: 11px;
+            line-height: 1.5;
+            z-index: 9999999;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            text-align: left;
+            text-transform: none;
+            font-weight: normal;
+            pointer-events: auto;
+            cursor: default !important;
+        }
+        .mkt-tip-popup * {
+            cursor: default !important;
+        }
+        /* Hover Köprüsü (Mouse butondan popup'a geçerken kapanmayı engeller) */
+        .mkt-tip-popup::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 12px;
+            pointer-events: auto;
+        }
+        .mkt-tip-popup.pos-top-center::before,
+        .mkt-tip-popup.pos-top-left::before,
+        .mkt-tip-popup.pos-top-right::before {
+            bottom: -10px;
+        }
+        .mkt-tip-popup.pos-bottom-center::before,
+        .mkt-tip-popup.pos-bottom-left::before,
+        .mkt-tip-popup.pos-bottom-right::before {
+            top: -10px;
+        }
+        .mkt-tip-btn:hover > .mkt-tip-popup,
+        .mkt-tip-btn:focus > .mkt-tip-popup,
+        .mkt-tip-btn:focus-within > .mkt-tip-popup,
+        .mkt-tip-btn.is-active > .mkt-tip-popup {
+            display: flex !important;
+            flex-direction: column;
+            animation: admobTipFade 0.15s ease-out forwards;
+        }
+        .mkt-tip-popup.pos-top-center {
+            bottom: calc(100% + 8px);
+            left: 50%;
+            margin-left: -137px;
+        }
+        .mkt-tip-popup.pos-top-left {
+            bottom: calc(100% + 8px);
+            left: 0;
+        }
+        .mkt-tip-popup.pos-top-right {
+            bottom: calc(100% + 8px);
+            right: 0;
+        }
+        .mkt-tip-popup.pos-bottom-center {
+            top: calc(100% + 8px);
+            left: 50%;
+            margin-left: -137px;
+        }
+        .mkt-tip-popup.pos-bottom-left {
+            top: calc(100% + 8px);
+            left: 0;
+        }
+        .mkt-tip-popup.pos-bottom-right {
+            top: calc(100% + 8px);
+            right: 0;
+        }
+        .mkt-tip-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-weight: 800;
+            font-size: 12px;
+            color: #f59e0b;
+        }
+        .mkt-tip-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .mkt-tip-header .material-symbols-outlined {
+            font-size: 16px !important;
+            color: #f59e0b;
+            cursor: default !important;
+        }
+        .mkt-tip-close {
+            font-size: 16px;
+            line-height: 1;
+            color: #64748b;
+            cursor: pointer !important;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: color 0.15s ease;
+        }
+        .mkt-tip-close:hover {
+            color: #f43f5e;
+        }
+        .mkt-tip-desc {
+            color: #cbd5e1;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+        .mkt-tip-hint {
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(51, 65, 85, 0.8);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 10px;
+            color: #34d399;
+        }
     </style>
     
     <!-- Firebase SDK -->
@@ -232,6 +564,20 @@
                     <div class="flex items-center justify-between flex-1">
                         <p class="text-sm font-medium">Telegram Botu</p>
                         <span id="sidebarBotPulse" class="size-2 rounded-full bg-emerald-500 animate-pulse" title="Bot Çevrimiçi"></span>
+                    </div>
+                </a>
+                <a id="marketingMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
+                    <span class="material-symbols-outlined">campaign</span>
+                    <div class="flex items-center justify-between flex-1">
+                        <p class="text-sm font-medium">Reklam & Büyüme</p>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">AGENT</span>
+                    </div>
+                </a>
+                <a id="admobMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
+                    <span class="material-symbols-outlined text-emerald-400">monetization_on</span>
+                    <div class="flex items-center justify-between flex-1">
+                        <p class="text-sm font-medium">AdMob Monetizasyon</p>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">GELİR</span>
                     </div>
                 </a>
                 <div class="h-px bg-slate-800 my-2 mx-2"></div>
@@ -3020,6 +3366,12 @@
                 <!-- Observability & Telemetri Hub (Modül 11) View -->
                 <div id="observabilityView" class="hidden max-w-7xl mx-auto flex flex-col gap-6"></div>
 
+                <!-- Reklam & Büyüme Komuta Merkezi (Marketing Hub) View -->
+                <div id="marketingView" class="hidden max-w-7xl mx-auto flex flex-col gap-6"></div>
+
+                <!-- AdMob Monetizasyon & Gelir Merkezi View -->
+                <div id="admobView" class="hidden max-w-7xl mx-auto flex flex-col gap-6"></div>
+
                 <!-- Settings (Ayarlar) View -->
                 <div id="settingsView" class="hidden max-w-7xl mx-auto flex flex-col gap-6">
                     <!-- Page Heading -->
@@ -4042,9 +4394,11 @@
     <script src="config.js?v=3.1"></script>
     <script src="affiliate_manager.js?v=1.0"></script>
     <script src="observability_manager.js?v=1.1"></script>
+    <script src="marketing_manager.js?v=1.3"></script>
+    <script src="admob_manager.js?v=1.7"></script>
     <script>
         // Version check - Force cache refresh
-        console.log('Admin Panel v9.01 - ' + new Date().toISOString());
+        console.log('Admin Panel v9.04 - ' + new Date().toISOString());
         
         // Debug: Check if Firebase is loaded
         window.addEventListener('DOMContentLoaded', () => {

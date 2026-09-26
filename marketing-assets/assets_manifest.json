@@ -1,11 +1,144 @@
 {
-  "version": "1.0.0",
-  "last_updated": "2026-09-21T13:20:00+03:00",
-  "description": "FırsatKolik Reklam & Pazarlama Varlıkları Envanter Kataloğu",
+  "version": "1.1.0",
+  "last_updated": "2026-09-25T16:05:00+03:00",
+  "description": "FırsatKolik Reklam, Pazarlama, Mağaza ve Kreatif Varlıkları Master Kataloğu",
   "summary": {
-    "total_videos": 0,
-    "total_images": 0,
-    "active_in_campaigns": 0
+    "total_videos": 3,
+    "total_images": 48,
+    "total_branding_assets": 11,
+    "total_meta_banners": 25,
+    "total_store_assets": 22,
+    "total_google_display": 3,
+    "status": "ready_for_campaigns"
   },
-  "assets": []
+  "asset_categories": {
+    "videos": [
+      {
+        "id": "vid_9x16_tanitim",
+        "filename": "videos/vertical_9_16/9-16_tanitim.mp4",
+        "aspect_ratio": "9:16",
+        "resolution": "1080x1920 (Tahmini)",
+        "duration_sec": 27,
+        "size_mb": 6.17,
+        "type": "video",
+        "theme": "genel_tanitim_hizli_kanca",
+        "primary_use": "Instagram Reels, TikTok Ads, YouTube Shorts, Meta Stories",
+        "target_platforms": ["meta_ads", "tiktok_ads", "google_uac"],
+        "recommended_hook": "Sepetteki 1.200 TL'yi 450 TL'ye düşüren o gizli formül...",
+        "quality_score": 9.5,
+        "status": "ready"
+      },
+      {
+        "id": "vid_1x1_tanitim",
+        "filename": "videos/square_1_1/1-1_tanitim.mp4",
+        "aspect_ratio": "1:1",
+        "resolution": "1080x1080 (Tahmini)",
+        "duration_sec": 45,
+        "size_mb": 24.92,
+        "type": "video",
+        "theme": "detayli_uygulama_turu",
+        "primary_use": "Instagram Akış (Feed), Facebook Feed, Keşfet Video Reklamları",
+        "target_platforms": ["meta_ads"],
+        "recommended_hook": "İnternetten alışveriş yapıp kupon kodu aramayan kaldı mı gerçekten?",
+        "quality_score": 9.2,
+        "status": "ready"
+      },
+      {
+        "id": "vid_16x9_tanitim",
+        "filename": "videos/horizontal_16_9/16-9_tanitim.mp4",
+        "aspect_ratio": "16:9",
+        "resolution": "1920x1080 (Tahmini)",
+        "duration_sec": 45,
+        "size_mb": 33.40,
+        "type": "video",
+        "theme": "lansman_ve_ekran_videolari",
+        "primary_use": "YouTube Skippable Ads, Google Display Network (GDN) Video",
+        "target_platforms": ["google_uac", "youtube_ads"],
+        "recommended_hook": "Yapay zeka Türkiye'deki tüm indirimleri 7/24 tarıyor, sadece gerçek indirimleri bildiriyor.",
+        "quality_score": 9.0,
+        "status": "ready"
+      }
+    ],
+    "store_assets": {
+      "store_images_framed": [
+        { "id": "store_img_01", "filename": "images/store_assets/store-images/anasayfa.png", "resolution": "1520x2688", "label": "Anasayfa & Canlı Sıcaklık Akışı", "is_primary_store_mockup": true },
+        { "id": "store_img_02", "filename": "images/store_assets/store-images/firsat_detay.png", "resolution": "1520x2688", "label": "Fırsat Detayı, Oylama ve Mağaza Linki", "is_primary_store_mockup": true },
+        { "id": "store_img_03", "filename": "images/store_assets/store-images/kupon.png", "resolution": "1520x2688", "label": "Kupon Radarı ve Topluluk İndirim Kodları", "is_primary_store_mockup": true },
+        { "id": "store_img_04", "filename": "images/store_assets/store-images/aktuel.png", "resolution": "1520x2688", "label": "36 Süpermarket Aktüel Broşürleri", "is_primary_store_mockup": true },
+        { "id": "store_img_05", "filename": "images/store_assets/store-images/firsat_paylas.png", "resolution": "1520x2688", "label": "Yapay Zeka Destekli Fırsat Paylaşımı", "is_primary_store_mockup": true },
+        { "id": "store_img_06", "filename": "images/store_assets/store-images/profilim.png", "resolution": "1520x2688", "label": "Avcı Rozetleri, Bildirim Ayarları ve Seviye", "is_primary_store_mockup": true }
+      ],
+      "store_identity": [
+        { "id": "store_feature_graphic_1024x500", "filename": "images/store_assets/store-images/feature_graphic_1024x500.png", "resolution": "1024x500", "purpose": "Google Play Store Resmi Feature Graphic (Zorunlu)", "status": "approved_store_ready" },
+        { "id": "store_feature_graphic_raw", "filename": "images/store_assets/store-images/feature_graphic.png", "resolution": "1793x877", "purpose": "Yüksek Çözünürlüklü Feature Graphic Kaynağı" },
+        { "id": "store_icon_512", "filename": "images/store_assets/store-images/store-icon.png", "resolution": "512x512", "purpose": "Google Play Store Resmi 512x512 İkonu (Zorunlu)", "status": "approved_store_ready" },
+        { "id": "store_foreground_512", "filename": "images/store_assets/store-images/foreground.png", "resolution": "512x512", "purpose": "Adaptive Icon Ön Plan Katmanı" }
+      ],
+      "raw_screenshots": [
+        { "id": "raw_screen_anasayfa", "filename": "images/store_assets/app-screenshot/anasayfa.png", "resolution": "941x1672" },
+        { "id": "raw_screen_firsat_detay", "filename": "images/store_assets/app-screenshot/firsat_detay.png", "resolution": "941x1672" },
+        { "id": "raw_screen_kupon", "filename": "images/store_assets/app-screenshot/kupon.png", "resolution": "941x1672" },
+        { "id": "raw_screen_aktuel", "filename": "images/store_assets/app-screenshot/aktuel.png", "resolution": "941x1672" },
+        { "id": "raw_screen_aktuel_brosur", "filename": "images/store_assets/app-screenshot/aktuel_brosur.png", "resolution": "941x1672" },
+        { "id": "raw_screen_aktuel_detay", "filename": "images/store_assets/app-screenshot/aktuel_detay.png", "resolution": "941x1672" },
+        { "id": "raw_screen_favori_kategorilerim", "filename": "images/store_assets/app-screenshot/favori_kategorilerim.png", "resolution": "941x1672" },
+        { "id": "raw_screen_firsat_paylas", "filename": "images/store_assets/app-screenshot/firsat_paylas.png", "resolution": "941x1672" },
+        { "id": "raw_screen_kategori_takibi", "filename": "images/store_assets/app-screenshot/kategori_takibi.png", "resolution": "941x1672" },
+        { "id": "raw_screen_kelime_takibi", "filename": "images/store_assets/app-screenshot/kelime_takibi.png", "resolution": "941x1672" },
+        { "id": "raw_screen_kaydettiklerim", "filename": "images/store_assets/app-screenshot/kaydettiklerim.png", "resolution": "941x1672" },
+        { "id": "raw_screen_profil", "filename": "images/store_assets/app-screenshot/profil.png", "resolution": "941x1672" }
+      ]
+    },
+    "meta_banners": {
+      "stories_and_reels_9_16": [
+        { "id": "meta_9x16_01", "filename": "images/meta_banners/9-16/01_Firsatlari_Kesfet_1080x1920.png", "resolution": "1080x1920", "concept": "Fırsatları Keşfet" },
+        { "id": "meta_9x16_02", "filename": "images/meta_banners/9-16/02_Kupon_Radari_1080x1920.png", "resolution": "1080x1920", "concept": "Kupon Radarı" },
+        { "id": "meta_9x16_03", "filename": "images/meta_banners/9-16/03_Aktuel_Kataloglar_1080x1920.png", "resolution": "1080x1920", "concept": "Aktüel Kataloglar" },
+        { "id": "meta_9x16_04", "filename": "images/meta_banners/9-16/04_Kelime_Radari_1080x1920.png", "resolution": "1080x1920", "concept": "Kelime Radarı & Alarm" },
+        { "id": "meta_9x16_05", "filename": "images/meta_banners/9-16/05_Favori_Kategoriler_1080x1920.png", "resolution": "1080x1920", "concept": "Kişiselleştirilmiş Favori Kategoriler" },
+        { "id": "meta_9x16_06", "filename": "images/meta_banners/9-16/06_Akilli_Paylasim_1080x1920.png", "resolution": "1080x1920", "concept": "Akıllı Fırsat Paylaşımı" }
+      ],
+      "feed_square_1_1": [
+        { "id": "meta_1x1_aktuel", "filename": "images/meta_banners/1-1/aktuel.png", "resolution": "2048x2048", "concept": "Market Broşürleri & Aktüel" },
+        { "id": "meta_1x1_alisveris", "filename": "images/meta_banners/1-1/alisveris.png", "resolution": "2048x2048", "concept": "Online Alışveriş Tasarrufu" },
+        { "id": "meta_1x1_anasayfa", "filename": "images/meta_banners/1-1/anasayfa.png", "resolution": "1254x1254", "concept": "Canlı İndirim Akışı" },
+        { "id": "meta_1x1_firsat_paylas", "filename": "images/meta_banners/1-1/firsat_paylas.png", "resolution": "1254x1254", "concept": "Toplulukla Fırsat Paylaşımı" },
+        { "id": "meta_1x1_kupon", "filename": "images/meta_banners/1-1/kupon.png", "resolution": "2048x2048", "concept": "Aktif Kupon Kodları" },
+        { "id": "meta_1x1_populer", "filename": "images/meta_banners/1-1/populer.png", "resolution": "2048x2048", "concept": "En Çok Alevlenen Popüler Ürünler" }
+      ],
+      "presentation_screens_9_16": [
+        { "id": "pres_aktuel", "filename": "images/meta_banners/9-16_presentation/aktuel.png", "resolution": "1520x2688" },
+        { "id": "pres_aktuel_detay", "filename": "images/meta_banners/9-16_presentation/aktuel_detay.png", "resolution": "1520x2688" },
+        { "id": "pres_anasayfa", "filename": "images/meta_banners/9-16_presentation/anasayfa.png", "resolution": "1520x2688" },
+        { "id": "pres_brosur", "filename": "images/meta_banners/9-16_presentation/brosur.png", "resolution": "1520x2688" },
+        { "id": "pres_favori_kategorilerim", "filename": "images/meta_banners/9-16_presentation/favori_kategorilerim.png", "resolution": "1520x2688" },
+        { "id": "pres_firsat_detay", "filename": "images/meta_banners/9-16_presentation/firsat_detay.png", "resolution": "1520x2688" },
+        { "id": "pres_firsat_paylas", "filename": "images/meta_banners/9-16_presentation/firsat_paylas.png", "resolution": "1520x2688" },
+        { "id": "pres_kategori_takibi", "filename": "images/meta_banners/9-16_presentation/kategori_takibi.png", "resolution": "1520x2688" },
+        { "id": "pres_kaydettiklerim", "filename": "images/meta_banners/9-16_presentation/kaydettiklerim.png", "resolution": "1520x2688" },
+        { "id": "pres_kelime_takibi", "filename": "images/meta_banners/9-16_presentation/kelime_takibi.png", "resolution": "1520x2688" },
+        { "id": "pres_kupon", "filename": "images/meta_banners/9-16_presentation/kupon.png", "resolution": "1520x2688" },
+        { "id": "pres_populer", "filename": "images/meta_banners/9-16_presentation/populer.png", "resolution": "1520x2688" },
+        { "id": "pres_profilim", "filename": "images/meta_banners/9-16_presentation/profilim.png", "resolution": "1520x2688" }
+      ]
+    },
+    "branding_and_badges": [
+      { "id": "brand_logo_main", "filename": "images/branding/firsat_logo.png", "resolution": "1254x1254", "label": "Resmi FırsatKolik Logo" },
+      { "id": "brand_logo_horizontal", "filename": "images/branding/horizontal_logo.png", "resolution": "2880x2880", "label": "Yatay Marka Logosu" },
+      { "id": "brand_logo_3d", "filename": "images/branding/3D.png", "resolution": "2880x2880", "label": "3D İkon / Maskot Tasarımı" },
+      { "id": "brand_logo_dark", "filename": "images/branding/dark.png", "resolution": "2880x2880", "label": "Karanlık Tema Logo" },
+      { "id": "brand_logo_glossy", "filename": "images/branding/glossy.png", "resolution": "2880x2880", "label": "Parlak 3D Logo" },
+      { "id": "brand_logo_monochrome", "filename": "images/branding/monochrome_logo.png", "resolution": "2880x2880", "label": "Tek Renk Vektörel Logo" },
+      { "id": "brand_foreground", "filename": "images/branding/foreground.png", "resolution": "2880x2880", "label": "İkon Ön Planı" },
+      { "id": "brand_profile_avatar", "filename": "images/branding/profile_avatar.png", "resolution": "2880x2880", "label": "Sosyal Medya Profil Avatarı" },
+      { "id": "badge_playstore", "filename": "images/branding/playstore.png", "resolution": "10459x3424", "label": "Google Play Rozeti" },
+      { "id": "badge_appstore", "filename": "images/branding/appstore.png", "resolution": "10459x3424", "label": "App Store Rozeti" },
+      { "id": "badge_combined", "filename": "images/branding/playstore_appstore_combined.png", "resolution": "4263x670", "label": "Çift Mağaza Rozeti" }
+    ],
+    "google_display": [
+      { "id": "gdn_square_1x1", "filename": "images/google_display/1-1.png", "resolution": "1254x1254", "label": "Kare Display Banner" },
+      { "id": "gdn_feature_graphic_1", "filename": "images/google_display/feature_graphic.png", "resolution": "1793x877", "label": "Yatay Display Banner (V1)" },
+      { "id": "gdn_feature_graphic_2", "filename": "images/google_display/feature-graphic-2.png", "resolution": "2688x1152", "label": "Geniş Yatay Display Banner (V2)" }
+    ]
+  }
 }

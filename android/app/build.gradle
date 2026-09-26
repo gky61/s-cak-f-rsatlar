@@ -58,6 +58,10 @@ android {
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        manifestPlaceholders += [
+            applicationName: "android.app.Application",
+            admob_app_id: "ca-app-pub-3940256099942544~3347511713" // Google Official Test App ID (Fallback)
+        ]
     }
 
     flavorDimensions "default"
@@ -67,11 +71,19 @@ android {
             dimension "default"
             applicationId "com.sicakfirsatlar.sicak_firsatlar"
             resValue "string", "app_name", "FırsatKolik Dev"
+            manifestPlaceholders += [
+                applicationName: "android.app.Application",
+                admob_app_id: "ca-app-pub-3940256099942544~3347511713" // Google Official Android Sample App ID
+            ]
         }
         prod {
             dimension "default"
             applicationId "com.firsatkolik.app"
             resValue "string", "app_name", "FırsatKolik"
+            manifestPlaceholders += [
+                applicationName: "android.app.Application",
+                admob_app_id: "ca-app-pub-6853997017739651~8861215767" // Real FırsatKolik Android App ID
+            ]
         }
     }
 

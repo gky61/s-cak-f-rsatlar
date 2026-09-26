@@ -17,7 +17,7 @@ import '../widgets/ad_deal_card.dart';
 import '../models/category.dart';
 import '../models/deal.dart';
 import '../theme/app_theme.dart';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import '../services/share_intent_service.dart';
 import '../services/connectivity_service.dart';
 import 'deal_detail_screen.dart';
 import 'submit_deal_screen.dart';
@@ -36,7 +36,6 @@ import '../utils/asset_path_migration.dart';
 import '../utils/badge_helper.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/deal_restriction_bottom_sheet.dart';
-import '../utils/deal_url_detector.dart';
 import '../services/in_app_tutorial_service.dart';
 import '../widgets/in_app_tutorial/tutorial_spotlight_overlay.dart';
 
@@ -119,7 +118,6 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription? _messageCountSubscription;
   StreamSubscription? _adminMessageCountSubscription;
   StreamSubscription? _unreadNotificationsSubscription;
-  StreamSubscription? _intentSub;
   StreamSubscription? _authSub;
 
   @override
@@ -233,7 +231,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _messageCountSubscription?.cancel();
     _adminMessageCountSubscription?.cancel();
     _unreadNotificationsSubscription?.cancel();
-    _intentSub?.cancel();
     _themeService.removeListener(_onThemeChanged);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -245,90 +242,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _initShareIntentListener() {
     if (kIsWeb) return;
-    try {
-      // 1. Uygulama açık veya arka plandayken gelen paylaşımları dinle
-      _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
-        if (value.isNotEmpty) {
-          _handleSharedMedia(value);
-          ReceiveSharingIntent.instance.reset();
-        }
-      }, onError: (err) {
-        _log("getIntentSharingTextList Error: $err");
-      });
-
-      // 2. Uygulama tamamen kapalıyken paylaşımla açılırsa ilk paylaşımı al
-      ReceiveSharingIntent.instance.getInitialMedia().then((value) {
-        if (value.isNotEmpty) {
-          _handleSharedMedia(value);
-          ReceiveSharingIntent.instance.reset();
-        }
-      }).catchError((err) {
-        _log("getInitialMedia Error: $err");
-      });
-    } catch (e) {
-      _log("ReceiveSharingIntent init error: $e");
-    }
+    ShareIntentService.instance.initialize();
   }
 
-  Future<void> _navigateToSubmitDealWithUrl(String url) async {
-    if (!mounted) return;
-    final user = _authService.currentUser;
-    if (user == null) {
-      showGuestLoginBottomSheet(
-        context,
-        title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
-        message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
-        primaryButtonText: '🚀 Google ile Giriş Yap',
-      );
-      return;
-    }
 
-    final results = await Future.wait([
-      _firestoreService.isDealSharingEnabled(),
-      _firestoreService.isUserDealBanned(user.uid),
-    ]);
-
-    if (!mounted) return;
-
-    final isSharingEnabled = results[0];
-    final isDealBanned = results[1];
-
-    if (!isSharingEnabled) {
-      showDealSharingDisabledBottomSheet(context);
-      return;
-    }
-
-    if (isDealBanned) {
-      showDealBannedBottomSheet(context);
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SubmitDealScreen(initialUrl: url),
-      ),
-    );
-  }
-
-  Future<void> _handleSharedMedia(List<SharedMediaFile> files) async {
-    if (files.isEmpty) return;
-    
-    final sharedText = files.first.path;
-    _log('📥 Paylaşılan veri alındı: $sharedText');
-    
-    final url = DealUrlDetector.extractUrl(sharedText) ?? _extractUrl(sharedText);
-    if (url != null) {
-      _log('🎯 Ayıklanan URL: $url');
-      _navigateToSubmitDealWithUrl(url);
-    } else {
-      _log('⚠️ Paylaşılan metinde geçerli bir link bulunamadı.');
-    }
-  }
-
-  String? _extractUrl(String text) {
-    return DealUrlDetector.extractUrl(text);
-  }
 
   void _startInitialLoadingTimeout() {
     _initialLoadingTimeoutTimer?.cancel();

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shimmer/shimmer.dart';
@@ -14,6 +15,8 @@ import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import '../services/notification_service.dart';
+import '../services/coupon_credit_service.dart';
+import '../services/ad_manager_service.dart';
 import 'kupon_form_page.dart';
 
 class KuponlarPage extends StatefulWidget {
@@ -37,6 +40,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   final Set<String> _hiddenKuponIds = {};
   final Set<String> _animatingOutKuponIds = {};
   final Set<String> _recentlyRestoredKuponIds = {};
+  final Set<String> _recentlyUnlockedKuponIds = {};
+  final Map<String, Timer> _unlockedEffectTimers = {};
   final Map<String, Timer> _hideTimers = {};
   final Map<String, String?> _userVotes = {};
   final Map<String, int> _localHotCounts = {};
@@ -92,10 +97,15 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     _kuponlarStream = _kuponService.getKuponlarStream();
     _checkAdminStatus();
     _loadHiddenCoupons();
+    CouponCreditService.instance.initialize();
+    CouponCreditService.instance.creditsNotifier.addListener(_onCreditsChanged);
+    CouponCreditService.instance.addListener(_onCreditsChanged);
+    AdManagerService.instance.preloadRewardedAd();
     _authSub = AuthService().authStateChanges.listen((user) {
       if (mounted) {
         _checkAdminStatus();
         _loadHiddenCoupons();
+        CouponCreditService.instance.initialize();
         _userVotes.clear();
         _localHotCounts.clear();
         _localColdCounts.clear();
@@ -104,15 +114,25 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     });
   }
 
+  void _onCreditsChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     NotificationService.isCouponsScreenActive = false;
+    CouponCreditService.instance.creditsNotifier.removeListener(_onCreditsChanged);
+    CouponCreditService.instance.removeListener(_onCreditsChanged);
     _highlightTimer?.cancel();
     _toastTimer?.cancel();
     for (final timer in _hideTimers.values) {
       timer.cancel();
     }
     _hideTimers.clear();
+    for (final timer in _unlockedEffectTimers.values) {
+      timer.cancel();
+    }
+    _unlockedEffectTimers.clear();
     for (final timer in _couponVoteDebounceTimers.values) {
       timer.cancel();
     }
@@ -120,6 +140,23 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     _tabController.dispose();
     _authSub?.cancel();
     super.dispose();
+  }
+
+  /// Yeni açılan kuponu Botkolik çerçeve ışıma efekti için 3.5 saniye boyunca işaretler
+  void _markCouponRecentlyUnlocked(String kuponId) {
+    _unlockedEffectTimers[kuponId]?.cancel();
+    if (mounted) {
+      setState(() {
+        _recentlyUnlockedKuponIds.add(kuponId);
+      });
+    }
+    _unlockedEffectTimers[kuponId] = Timer(const Duration(milliseconds: 3500), () {
+      if (mounted) {
+        setState(() {
+          _recentlyUnlockedKuponIds.remove(kuponId);
+        });
+      }
+    });
   }
 
   void _showToast({
@@ -469,7 +506,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     }
   }
 
-  void _copyToClipboard(String kuponId, String code, {String? storeName, String? source}) {
+  void _copyToClipboard(String kuponId, String code, {String? storeName, String? source, int? remainingCredits}) {
     HapticFeedback.selectionClick();
     Clipboard.setData(ClipboardData(text: code));
 
@@ -492,15 +529,1145 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       }
     });
 
+    final creditMsg = remainingCredits != null ? ' (Kalan: $remainingCredits hak)' : '';
     _showToast(
-      message: '"$code" kodu panoya kopyalandı! 🎉',
+      message: '"$code" kodu panoya kopyalandı! 🎉$creditMsg',
       icon: Icons.check_circle_rounded,
       backgroundColor: const Color(0xFF15803D),
       duration: const Duration(milliseconds: 1800),
     );
   }
 
-  void _handleVote(String kuponId, dynamic currentUser, String voteType) {
+  /// Kupon kopyalama isteğini kredi kontrolünden geçirir
+  Future<void> _handleCouponCopyAction(Kupon kupon) async {
+    final creditService = CouponCreditService.instance;
+    final currentUser = AuthService().currentUser;
+    final isOwner = currentUser != null && kupon.kaynakTipi == 'topluluk' && kupon.paylasanKullaniciId == currentUser.uid;
+    final isAlreadyUnlocked = creditService.isUnlockedToday(kupon.id) || isOwner;
+
+    if (isAlreadyUnlocked) {
+      _copyToClipboard(
+        kupon.id,
+        kupon.kuponKodu,
+        storeName: kupon.magazaAdi,
+        source: kupon.kaynakTipi,
+      );
+      return;
+    }
+
+    if (creditService.remainingCredits > 0) {
+      final success = await creditService.useCreditForCoupon(kupon.id);
+      if (success) {
+        _markCouponRecentlyUnlocked(kupon.id);
+        _copyToClipboard(
+          kupon.id,
+          kupon.kuponKodu,
+          storeName: kupon.magazaAdi,
+          source: kupon.kaynakTipi,
+          remainingCredits: creditService.remainingCredits,
+        );
+      }
+    } else {
+      _showCreditDepletedBottomSheet(context, kupon);
+    }
+  }
+
+  /// Misafir kullanıcılar için Akıllı Hibrit Kapı Bottom Sheet'i
+  /// 1. Seçenek (Vurgulu): Google / Apple ile giriş yap -> Günlük 2 kuponu ÜCRETSİZ aç
+  /// 2. Seçenek (Alternatif): Giriş yapmadan 1 sponsor videosu izle -> Yalnızca bu kuponu aç
+  void _showGuestCouponHybridBottomSheet(BuildContext context, Kupon kupon) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isApple = defaultTargetPlatform == TargetPlatform.iOS;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        bool isLoadingGoogle = false;
+        bool isLoadingApple = false;
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? AppTheme.darkSurface : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
+                    blurRadius: 20,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                12,
+                20,
+                MediaQuery.of(sheetContext).padding.bottom + 16,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Drag Handle
+                    Container(
+                      width: 38,
+                      height: 4.5,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Top Gradient Icon
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF7A00), Color(0xFFFF9E00)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF7A00).withValues(alpha: 0.35),
+                            blurRadius: 14,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.lock_open_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Title
+                    Text(
+                      'Kupon Kodunu Aç! 🎟️',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.3,
+                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Subtitle
+                    Text(
+                      '${kupon.magazaAdi} kuponunu açmak için dilediğin yöntemi seç:',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // SEÇENEK 1: EN AVANTAJLI - GİRİŞ YAP (HEDİYE 2 HAK)
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isDark
+                              ? [
+                                  AppTheme.primary.withValues(alpha: 0.18),
+                                  const Color(0xFF1E293B),
+                                ]
+                              : [
+                                  const Color(0xFFFFF7ED),
+                                  Colors.white,
+                                ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppTheme.primary.withValues(alpha: 0.45),
+                          width: 1.3,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primary.withValues(alpha: isDark ? 0.15 : 0.08),
+                            blurRadius: 12,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.star_rounded, size: 12, color: Colors.white),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'ÖNERİLEN • EN AVANTAJLI',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.white,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Giriş Yap, Günlük 2 Kuponu Ücretsiz Aç 🎁',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          _buildGuestBenefitRow(
+                            icon: Icons.check_circle_rounded,
+                            text: 'Her gün ${CouponCreditService.instance.dailyFreeCredits} kuponu tamamen ÜCRETSİZ aç',
+                            isDark: isDark,
+                          ),
+                          const SizedBox(height: 4),
+                          _buildGuestBenefitRow(
+                            icon: Icons.check_circle_rounded,
+                            text: 'Hakların bittiğinde kısa bir video ile +${CouponCreditService.instance.rewardCreditsPerVideo} hak kazan',
+                            isDark: isDark,
+                          ),
+                          const SizedBox(height: 4),
+                          _buildGuestBenefitRow(
+                            icon: Icons.check_circle_rounded,
+                            text: 'Flaş indirim ve kupon bildirimlerinden haberdar ol',
+                            isDark: isDark,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Google Sign-In Button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 44,
+                            child: ElevatedButton(
+                              onPressed: (isLoadingGoogle || isLoadingApple)
+                                  ? null
+                                  : () async {
+                                      setSheetState(() => isLoadingGoogle = true);
+                                      try {
+                                        final user = await AuthService().signInWithGoogle();
+                                        if (user != null && sheetContext.mounted) {
+                                          Navigator.of(sheetContext).pop();
+                                        }
+                                        if (user != null && mounted) {
+                                          _checkAdminStatus();
+                                          await CouponCreditService.instance.initialize();
+                                          final freeCredits = CouponCreditService.instance.dailyFreeCredits;
+                                          _showToast(
+                                            message: '🎉 Giriş yapıldı! $freeCredits ücretsiz kupon hakkın tanımlandı. Açmak istediğin kuponda "Aç" butonuna dokunabilirsin.',
+                                            icon: Icons.check_circle_rounded,
+                                            backgroundColor: const Color(0xFF15803D),
+                                            duration: const Duration(seconds: 3),
+                                          );
+                                          if (mounted) setState(() {});
+                                        }
+                                      } catch (e) {
+                                        // Error handled
+                                      } finally {
+                                        if (mounted) {
+                                          setSheetState(() => isLoadingGoogle = false);
+                                        }
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: isLoadingGoogle
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : const Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.login_rounded, size: 18),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Google ile Giriş Yap & Kuponu Aç',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+
+                          // Apple Sign-In (Sadece iOS)
+                          if (isApple) ...[
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 44,
+                              child: OutlinedButton(
+                                onPressed: (isLoadingGoogle || isLoadingApple)
+                                    ? null
+                                    : () async {
+                                        setSheetState(() => isLoadingApple = true);
+                                        try {
+                                          final user = await AuthService().signInWithApple();
+                                          if (user != null && sheetContext.mounted) {
+                                            Navigator.of(sheetContext).pop();
+                                          }
+                                          if (user != null && mounted) {
+                                            _checkAdminStatus();
+                                            await CouponCreditService.instance.initialize();
+                                            final freeCredits = CouponCreditService.instance.dailyFreeCredits;
+                                            _showToast(
+                                              message: '🎉 Giriş yapıldı! $freeCredits ücretsiz kupon hakkın tanımlandı. Açmak istediğin kuponda "Aç" butonuna dokunabilirsin.',
+                                              icon: Icons.check_circle_rounded,
+                                              backgroundColor: const Color(0xFF15803D),
+                                              duration: const Duration(seconds: 3),
+                                            );
+                                            if (mounted) setState(() {});
+                                          }
+                                        } catch (e) {
+                                          // Error handled
+                                        } finally {
+                                          if (mounted) {
+                                            setSheetState(() => isLoadingApple = false);
+                                          }
+                                        }
+                                      },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: isDark ? Colors.white : Colors.black,
+                                  side: BorderSide(
+                                    color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: isLoadingApple
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.apple, size: 20),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            'Apple ile Giriş Yap & Kuponu Aç',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Divider with "VEYA GİRİŞ YAPMADAN"
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Divider(
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                            thickness: 1,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Text(
+                            'VEYA GİRİŞ YAPMADAN',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Divider(
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                            thickness: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // SEÇENEK 2: GİRİŞSİZ 1 SPONSOR VİDEOSU İZLE
+                    Container(
+                      padding: const EdgeInsets.all(13),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFFFF6D00).withValues(alpha: 0.35),
+                          width: 1.1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 28,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF6D00).withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.videocam_rounded,
+                                    size: 16,
+                                    color: Color(0xFFFF6D00),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '1 Sponsor Videosu İzle',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Hesap açmak istemiyorsan kısa bir sponsor videosu izleyerek yalnızca bu kupon kodunu anında görüntüle ve kopyala.',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              height: 1.35,
+                              color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+
+                          // Watch Video Button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 42,
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                Navigator.of(sheetContext).pop();
+                                HapticFeedback.mediumImpact();
+
+                                bool userEarnedReward = false;
+                                final adShown = await AdManagerService.instance.showRewardedAd(
+                                  onUserEarnedReward: (reward) {
+                                    userEarnedReward = true;
+                                  },
+                                  onDismissed: () async {
+                                    if (userEarnedReward && mounted) {
+                                      await CouponCreditService.instance.unlockCouponForGuest(kupon.id);
+                                      _markCouponRecentlyUnlocked(kupon.id);
+                                      _showToast(
+                                        message: '🎉 Kupon açıldı! Kodu kopyalamak için üzerine dokunabilirsin.',
+                                        icon: Icons.lock_open_rounded,
+                                        backgroundColor: const Color(0xFF15803D),
+                                        duration: const Duration(seconds: 3),
+                                      );
+                                      if (mounted) setState(() {});
+                                    }
+                                  },
+                                );
+
+                                // Fail-Safe Fallback: Reklam yüklenemezse veya doluluk yoksa kullanıcıyı bekletme
+                                if (!adShown && mounted) {
+                                  await CouponCreditService.instance.unlockCouponForGuest(kupon.id);
+                                  _markCouponRecentlyUnlocked(kupon.id);
+                                  _showToast(
+                                    message: '🎁 Hediye Kupon Açıldı! Kopyalamak için üzerine dokunabilirsin.',
+                                    icon: Icons.card_giftcard_rounded,
+                                    backgroundColor: AppTheme.primary,
+                                    duration: const Duration(seconds: 3),
+                                  );
+                                  if (mounted) setState(() {});
+                                }
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFFF6D00),
+                                side: const BorderSide(
+                                  color: Color(0xFFFF6D00),
+                                  width: 1.2,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.play_circle_fill_rounded, size: 17),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Videoyu İzle & Bu Kuponu Aç',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Dismiss Button
+                    TextButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
+                      ),
+                      child: const Text(
+                        'Daha Sonra / Vazgeç',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildGuestBenefitRow({
+    required IconData icon,
+    required String text,
+    required bool isDark,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 13.5,
+          color: const Color(0xFF16A34A),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Kredi bittiğinde açılan şık Rewarded Ad Bottom Sheet'i
+  void _showCreditDepletedBottomSheet(BuildContext context, Kupon kupon) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkSurface : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            MediaQuery.of(sheetContext).padding.bottom + 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag Handle
+              Container(
+                width: 38,
+                height: 4.5,
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Animated Badge Icon
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF6D00), Color(0xFFFF9100)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF6D00).withValues(alpha: 0.35),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.confirmation_number_rounded,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Title
+              Text(
+                'Günlük Kupon Hakkın Doldu! 🎟️',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.3,
+                  color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+
+              // Subtitle
+              Text(
+                'Bugünkü ${CouponCreditService.instance.dailyFreeCredits} ücretsiz kupon kopyalama hakkını kullandın. Alışverişine hız kesmeden devam etmek için 1 kısa sponsor videosu izle, anında +${CouponCreditService.instance.rewardCreditsPerVideo} YENİ KUPON HAKKI kazan!',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1.4,
+                  color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 14),
+
+              // Community Voting & Video Reward Info Box
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7).withValues(alpha: isDark ? 0.16 : 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF0284C7).withValues(alpha: isDark ? 0.35 : 0.25),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.tips_and_updates_rounded,
+                      color: Color(0xFF0284C7),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '💡 İpucu: Kuponları mağazada denedikten sonra Sıcak (🔥) veya Soğuk (❄️) oylayarak topluluğa katkı sağlayabilir, hakların bittiğinde dilediğin zaman video izleyerek yeni haklar kazanabilirsin.',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          height: 1.35,
+                          color: isDark ? const Color(0xFF7DD3FC) : const Color(0xFF0369A1),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Watch Video Button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    Navigator.of(sheetContext).pop();
+                    HapticFeedback.mediumImpact();
+
+                    bool userEarnedReward = false;
+                    final adShown = await AdManagerService.instance.showRewardedAd(
+                      onUserEarnedReward: (reward) {
+                        userEarnedReward = true;
+                      },
+                      onDismissed: () async {
+                        if (userEarnedReward && mounted) {
+                          final creditAmount = CouponCreditService.instance.rewardCreditsPerVideo;
+                          await CouponCreditService.instance.addRewardedCredits();
+                          _showToast(
+                            message: '🎉 +$creditAmount Kupon Hakkı Eklendi! Kalan: ${CouponCreditService.instance.remainingCredits} Hak. Açmak istediğin kuponda "Aç" butonuna dokunabilirsin.',
+                            icon: Icons.confirmation_number_rounded,
+                            backgroundColor: const Color(0xFF15803D),
+                            duration: const Duration(seconds: 3),
+                          );
+                          if (mounted) setState(() {});
+                        }
+                      },
+                    );
+
+                    // Ağ gecikmesi veya reklam henüz hazır değilse kullanıcıyı asla mağdur etme
+                    if (!adShown && mounted) {
+                      await CouponCreditService.instance.addRewardedCredits(1);
+                      _showToast(
+                        message: '🎁 1 Hediye Kupon Hakkı Eklendi! Kalan: ${CouponCreditService.instance.remainingCredits} Hak.',
+                        icon: Icons.card_giftcard_rounded,
+                        backgroundColor: AppTheme.primary,
+                        duration: const Duration(seconds: 3),
+                      );
+                      if (mounted) setState(() {});
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.play_circle_fill_rounded, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        '🎬 Kısa Video İzle (+${CouponCreditService.instance.rewardCreditsPerVideo} Hak Kazan)',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              // Cancel button
+              TextButton(
+                onPressed: () => Navigator.of(sheetContext).pop(),
+                child: Text(
+                  'Vazgeç / Daha Sonra',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Kupon kredisi bilgi diyaloğu
+  void _showCreditInfoDialog(BuildContext context, int currentCredits) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.confirmation_number_rounded, color: AppTheme.primary, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                'Kupon Açma Kredisi',
+                style: TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '🎟️ Kalan Kupon Hakkın: $currentCredits Adet',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.primary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '• Her gün gece yarısı ${CouponCreditService.instance.dailyFreeCredits} adet ücretsiz kupon açma hakkın yenilenir.\n'
+                '• Gün içinde açtığın kuponları tekrar kopyalarken hakkın DÜŞMEZ.\n'
+                '• Hakların bittiğinde 1 kısa video izleyerek anında +${CouponCreditService.instance.rewardCreditsPerVideo} Hak kazanabilirsin.\n'
+                '• Kuponu mağazada kullandıktan sonra oy vererek diğer fırsat avcılarına kuponun güncelliği hakkında rehberlik edebilirsin.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1.45,
+                  color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF475569),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Anladım', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Kupon kodu henüz açılmamışken oylama yapmaya çalışan kullanıcıya gösterilen bilgilendirme ve hızlı açma modalı
+  void _showUnlockToVoteBottomSheet(BuildContext context, Kupon kupon, String intendedVoteType) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final creditService = CouponCreditService.instance;
+    final hasCredits = creditService.remainingCredits > 0;
+    final voteLabel = intendedVoteType == 'hot' ? 'Sıcak (Çalışıyor 🔥)' : 'Soğuk (Çalışmıyor ❄️)';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkSurface : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            MediaQuery.of(sheetContext).padding.bottom + 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag Handle
+              Container(
+                width: 38,
+                height: 4.5,
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Top Icon (Verified Badge Gradient)
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0284C7), Color(0xFF38BDF8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0284C7).withValues(alpha: 0.35),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.verified_user_rounded,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Title
+              Text(
+                'Oylamak İçin Önce Kodu Görmelisin! 🎟️',
+                style: TextStyle(
+                  fontSize: 17.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.3,
+                  color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+
+              // Store and title
+              Text(
+                '${kupon.magazaAdi} • ${kupon.baslik}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 14),
+
+              // Community Rule Box
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0284C7).withValues(alpha: isDark ? 0.16 : 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFF0284C7).withValues(alpha: 0.30),
+                    width: 1.1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.shield_outlined,
+                          size: 16,
+                          color: Color(0xFF0284C7),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Topluluk Doğrulama İlkesi',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? const Color(0xFF7DD3FC) : const Color(0xFF0369A1),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'FırsatKolik\'te kupon oylamaları gerçek alışveriş deneyimlerine dayanır. "$voteLabel" oyu verebilmek için kuponu açıp mağazada denemiş olman gerekir.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        height: 1.35,
+                        color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Remaining Credits Info or Video Offer
+              if (hasCredits) ...[
+                // Hakkı var -> 1 hak ile aç
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.of(sheetContext).pop();
+                      HapticFeedback.mediumImpact();
+
+                      final success = await creditService.useCreditForCoupon(kupon.id);
+                      if (success && mounted) {
+                        _markCouponRecentlyUnlocked(kupon.id);
+                        _copyToClipboard(
+                          kupon.id,
+                          kupon.kuponKodu,
+                          storeName: kupon.magazaAdi,
+                          source: kupon.kaynakTipi,
+                          remainingCredits: creditService.remainingCredits,
+                        );
+                        _showToast(
+                          message: '🎉 Kupon açıldı ve kopyalandı! Kodu mağazada denedikten sonra oylayabilirsin.',
+                          icon: Icons.lock_open_rounded,
+                          backgroundColor: const Color(0xFF15803D),
+                          duration: const Duration(seconds: 4),
+                        );
+                        setState(() {});
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.confirmation_number_rounded, size: 19),
+                        const SizedBox(width: 8),
+                        Text(
+                          '🎟️ 1 Hak İle Kuponu Aç (Kalan: ${creditService.remainingCredits})',
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else ...[
+                // Hakkı bitmiş -> Reklam izleyerek +2 hak al
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(sheetContext).pop();
+                      _showCreditDepletedBottomSheet(context, kupon);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF6D00),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.videocam_rounded, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          '🎬 Video İzle (+${CouponCreditService.instance.rewardCreditsPerVideo} Hak Kazan & Kuponu Aç)',
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+
+              // Dismiss Button
+              TextButton(
+                onPressed: () => Navigator.of(sheetContext).pop(),
+                child: Text(
+                  'Vazgeç / Daha Sonra',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _handleVote(Kupon kupon, dynamic currentUser, String voteType) {
+    final kuponId = kupon.id;
+
     if (currentUser == null) {
       showGuestLoginBottomSheet(
         context,
@@ -511,15 +1678,42 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
         if (loggedIn == true && mounted) {
           final freshUser = AuthService().currentUser;
           if (freshUser != null) {
-            _handleVote(kuponId, freshUser, voteType);
+            _handleVote(kupon, freshUser, voteType);
           }
         }
       });
       return;
     }
 
-    HapticFeedback.lightImpact();
     final userId = currentUser.uid;
+
+    // 1. Kendi paylaştığı topluluk kuponunu oylama engeli (Self-vote manipulation prevention)
+    final isOwner = kupon.kaynakTipi == 'topluluk' && kupon.paylasanKullaniciId == userId;
+    if (isOwner) {
+      HapticFeedback.lightImpact();
+      _showToast(
+        message: 'Kendi paylaştığın kuponu oylayamazsın 😊',
+        icon: Icons.info_outline_rounded,
+        backgroundColor: const Color(0xFF64748B),
+      );
+      return;
+    }
+
+    // 2. Doğrulanmış Testçi Kuralı (Proof-of-Access Gate):
+    // Kullanıcının kuponu oylayabilmesi için kodu bugün açmış olması veya geçmişte verilmiş bir oyu olması gerekir.
+    final canVote = CouponCreditService.instance.canVoteOnCoupon(
+      kuponId: kuponId,
+      isOwner: isOwner,
+      hasExistingVote: _userVotes[kuponId] != null,
+    );
+
+    if (!canVote) {
+      HapticFeedback.lightImpact();
+      _showUnlockToVoteBottomSheet(context, kupon, voteType);
+      return;
+    }
+
+    HapticFeedback.lightImpact();
 
     // Observability: Kupon oylama telemetrisi
     AnalyticsService.instance.logCustomEvent('coupon_voted', {
@@ -838,36 +2032,40 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     final canManage = currentUser != null && (kupon.paylasanKullaniciId == currentUser.uid || _isAdmin);
     final hasUsername = kupon.kaynakTipi == 'topluluk' && kupon.paylasanKullaniciAdi.isNotEmpty;
     final isHighlighted = _highlightedKuponId != null && _highlightedKuponId == kupon.id;
+    final isRecentlyUnlocked = _recentlyUnlockedKuponIds.contains(kupon.id);
 
-    return Opacity(
+    final cardContent = Opacity(
       opacity: (isInvalid || isExpired) ? 0.55 : 1.0,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeOutCubic,
-        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: isHighlighted
-                  ? const Color(0xFF8E24AA).withValues(alpha: isDark ? 0.50 : 0.28)
-                  : (isRecentlyRestored
-                      ? AppTheme.primary.withValues(alpha: isDark ? 0.45 : 0.25)
-                      : Colors.black.withValues(alpha: isDark ? 0.35 : 0.03)),
-              blurRadius: isHighlighted ? 18 : (isRecentlyRestored ? 16 : 10),
-              spreadRadius: isHighlighted ? 1.8 : (isRecentlyRestored ? 1.5 : 0),
-              offset: const Offset(0, 2),
-            ),
-          ],
-          border: Border.all(
-            color: isHighlighted
-                ? const Color(0xFF8E24AA)
-                : (isRecentlyRestored
-                    ? AppTheme.primary
-                    : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0))),
-            width: isHighlighted ? 2.0 : (isRecentlyRestored ? 1.8 : 1.2),
-          ),
+          boxShadow: isRecentlyUnlocked
+              ? null
+              : [
+                  BoxShadow(
+                    color: isHighlighted
+                        ? const Color(0xFF8E24AA).withValues(alpha: isDark ? 0.50 : 0.28)
+                        : (isRecentlyRestored
+                            ? AppTheme.primary.withValues(alpha: isDark ? 0.45 : 0.25)
+                            : Colors.black.withValues(alpha: isDark ? 0.35 : 0.03)),
+                    blurRadius: isHighlighted ? 18 : (isRecentlyRestored ? 16 : 10),
+                    spreadRadius: isHighlighted ? 1.8 : (isRecentlyRestored ? 1.5 : 0),
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+          border: isRecentlyUnlocked
+              ? Border.all(color: Colors.transparent, width: 1.2)
+              : Border.all(
+                  color: isHighlighted
+                      ? const Color(0xFF8E24AA)
+                      : (isRecentlyRestored
+                          ? AppTheme.primary
+                          : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0))),
+                  width: isHighlighted ? 2.0 : (isRecentlyRestored ? 1.8 : 1.2),
+                ),
         ),
         padding: const EdgeInsets.all(13),
         child: Column(
@@ -1103,89 +2301,205 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Voucher Button Box
-                    InkWell(
-                      onTap: () async {
-                        if (currentUser == null) {
-                          final loggedIn = await showGuestLoginBottomSheet(
-                            context,
-                            title: 'Kupon Kodunu Açmak İçin Giriş Yap! 🎟️',
-                            message: 'Sana özel tanımlanan indirim kodunu kopyalamak ve hemen kullanmak için Google ile tek tıkla giriş yap.',
-                            primaryButtonText: '🚀 Google ile Giriş Yap',
-                          );
-                          if (loggedIn == true && mounted) {
-                            _checkAdminStatus();
-                            setState(() {});
-                            _copyToClipboard(kupon.id, kupon.kuponKodu, storeName: kupon.magazaAdi, source: kupon.kaynakTipi);
-                          }
+                    Builder(
+                      builder: (context) {
+                        final isOwner = currentUser != null && kupon.kaynakTipi == 'topluluk' && kupon.paylasanKullaniciId == currentUser.uid;
+                        final isUnlockedToday = CouponCreditService.instance.isUnlockedToday(kupon.id) || isOwner;
+                        final hasCredits = CouponCreditService.instance.remainingCredits > 0;
+                        final isGuest = currentUser == null;
+
+                        Color boxBgColor;
+                        Color boxBorderColor;
+
+                        if (isCopied) {
+                          boxBgColor = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.25 : 0.12);
+                          boxBorderColor = const Color(0xFF16A34A);
+                        } else if (isUnlockedToday) {
+                          boxBgColor = isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9);
+                          boxBorderColor = isDark ? AppTheme.darkBorder : const Color(0xFFCBD5E1);
+                        } else if (isGuest) {
+                          boxBgColor = isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9);
+                          boxBorderColor = isDark ? AppTheme.darkBorder : const Color(0xFFCBD5E1);
+                        } else if (hasCredits) {
+                          // Kilitli ama açma hakkı var
+                          boxBgColor = AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.08);
+                          boxBorderColor = AppTheme.primary.withValues(alpha: 0.50);
                         } else {
-                          _copyToClipboard(kupon.id, kupon.kuponKodu, storeName: kupon.magazaAdi, source: kupon.kaynakTipi);
+                          // Kilitli ve hakkı bitmiş (+2 video izleme durumu)
+                          boxBgColor = const Color(0xFFFF6D00).withValues(alpha: isDark ? 0.18 : 0.08);
+                          boxBorderColor = const Color(0xFFFF6D00).withValues(alpha: 0.60);
                         }
-                      },
-                      borderRadius: BorderRadius.circular(9),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isCopied
-                              ? const Color(0xFF16A34A).withValues(alpha: isDark ? 0.25 : 0.12)
-                              : (isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9)),
+
+                        return InkWell(
+                          onTap: () async {
+                            // 1. Bugün zaten açılmış kupon (Üye veya misafir video izlemiş)
+                            if (isUnlockedToday) {
+                              _copyToClipboard(
+                                kupon.id,
+                                kupon.kuponKodu,
+                                storeName: kupon.magazaAdi,
+                                source: kupon.kaynakTipi,
+                              );
+                              return;
+                            }
+
+                            // 2. Misafir kullanıcı kilitli kupona tıklarsa -> Akıllı Hibrit Kapı
+                            if (isGuest) {
+                              _showGuestCouponHybridBottomSheet(context, kupon);
+                            } else {
+                              // 3. Giriş yapmış kullanıcı kilitli kupona tıklarsa -> Kredi kontrolü
+                              _handleCouponCopyAction(kupon);
+                            }
+                          },
                           borderRadius: BorderRadius.circular(9),
-                          border: Border.all(
-                            color: isCopied
-                                ? const Color(0xFF16A34A)
-                                : (isDark ? AppTheme.darkBorder : const Color(0xFFCBD5E1)),
-                            width: 1.1,
-                          ),
-                        ),
-                        child: currentUser == null
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ImageFiltered(
-                                    imageFilter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
-                                    child: Text(
-                                      kupon.kuponKodu.isNotEmpty ? kupon.kuponKodu : 'KUPON100',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 11.5,
-                                        letterSpacing: 0.5,
-                                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  const Icon(Icons.lock_rounded, size: 13, color: AppTheme.primary),
-                                ],
-                              )
-                            : Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    kupon.kuponKodu,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 12,
-                                      letterSpacing: 0.5,
-                                      color: isCopied
-                                          ? const Color(0xFF16A34A)
-                                          : (isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A)),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 5),
-                                  AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 200),
-                                    child: Icon(
-                                      isCopied ? Icons.check_circle_rounded : Icons.copy_rounded,
-                                      key: ValueKey<bool>(isCopied),
-                                      size: 13,
-                                      color: isCopied
-                                          ? const Color(0xFF16A34A)
-                                          : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
-                                    ),
-                                  ),
-                                ],
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: boxBgColor,
+                              borderRadius: BorderRadius.circular(9),
+                              border: Border.all(
+                                color: boxBorderColor,
+                                width: 1.1,
                               ),
-                      ),
+                            ),
+                            child: isUnlockedToday
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        kupon.kuponKodu,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 12,
+                                          letterSpacing: 0.5,
+                                          color: isCopied
+                                              ? const Color(0xFF16A34A)
+                                              : (isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A)),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      AnimatedSwitcher(
+                                        duration: const Duration(milliseconds: 200),
+                                        child: Icon(
+                                          isCopied ? Icons.check_circle_rounded : Icons.copy_rounded,
+                                          key: ValueKey<bool>(isCopied),
+                                          size: 13,
+                                          color: isCopied
+                                              ? const Color(0xFF16A34A)
+                                              : (isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B)),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : isGuest
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          ImageFiltered(
+                                            imageFilter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
+                                            child: Text(
+                                              kupon.kuponKodu.isNotEmpty ? kupon.kuponKodu : 'KUPON100',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w900,
+                                                fontSize: 11.5,
+                                                letterSpacing: 0.5,
+                                                color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.lock_rounded, size: 13, color: AppTheme.primary),
+                                        ],
+                                      )
+                                    : hasCredits
+                                        // Kilitli ancak kullanıcının hakkı var -> Tıklayınca 1 hakla açacak
+                                        ? Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              ImageFiltered(
+                                                imageFilter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
+                                                child: Text(
+                                                  kupon.kuponKodu.isNotEmpty ? kupon.kuponKodu : 'KUPON100',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 11.5,
+                                                    letterSpacing: 0.5,
+                                                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 5),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.primary,
+                                                  borderRadius: BorderRadius.circular(4.5),
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.confirmation_number_rounded, size: 9.5, color: Colors.white),
+                                                    SizedBox(width: 2.5),
+                                                    Text(
+                                                      'Aç',
+                                                      style: TextStyle(
+                                                        fontSize: 9.5,
+                                                        fontWeight: FontWeight.w900,
+                                                        color: Colors.white,
+                                                        letterSpacing: -0.2,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        // Kilitli ve hakkı bitti -> Video izleyerek +2 hak kazanacak
+                                        : Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              ImageFiltered(
+                                                imageFilter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
+                                                child: Text(
+                                                  kupon.kuponKodu.isNotEmpty ? kupon.kuponKodu : 'KUPON100',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 11.5,
+                                                    letterSpacing: 0.5,
+                                                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 5),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFFF6D00),
+                                                  borderRadius: BorderRadius.circular(4.5),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(Icons.videocam_rounded, size: 10, color: Colors.white),
+                                                    const SizedBox(width: 2.5),
+                                                    Text(
+                                                      '+${CouponCreditService.instance.rewardCreditsPerVideo} Hak',
+                                                      style: const TextStyle(
+                                                        fontSize: 9.5,
+                                                        fontWeight: FontWeight.w900,
+                                                        color: Colors.white,
+                                                        letterSpacing: -0.2,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                          ),
+                        );
+                      },
                     ),
 
                     // "Mağazaya Git" Button (Sadece geçerli bir mağaza varsa gösterilir)
@@ -1248,14 +2562,14 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                         count: displayHot,
                         isSelected: isHotSelected,
                         isHot: true,
-                        onTap: () => _handleVote(kupon.id, currentUser, 'hot'),
+                        onTap: () => _handleVote(kupon, currentUser, 'hot'),
                         isDark: isDark,
                       ),
                       _KuponVoteButton(
                         count: displayCold,
                         isSelected: isColdSelected,
                         isHot: false,
-                        onTap: () => _handleVote(kupon.id, currentUser, 'cold'),
+                        onTap: () => _handleVote(kupon, currentUser, 'cold'),
                         isDark: isDark,
                       ),
                       if (guvenEsigineUlasti)
@@ -1370,6 +2684,21 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           ],
         ),
       ),
+    );
+
+    if (isRecentlyUnlocked) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _NewlyUnlockedCardGlowWrapper(
+          isDark: isDark,
+          child: cardContent,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: cardContent,
     );
   }
 
@@ -1628,6 +2957,104 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Geri',
         ),
+        actions: [
+          if (currentUser != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: CouponCreditService.instance.creditsNotifier,
+                  builder: (context, credits, _) {
+                    final hasCredits = credits > 0;
+                    return InkWell(
+                      onTap: () => _showCreditInfoDialog(context, credits),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                        decoration: BoxDecoration(
+                          color: hasCredits
+                              ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF))
+                              : const Color(0xFFFF6D00).withValues(alpha: isDark ? 0.20 : 0.12),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: hasCredits
+                                ? (isDark ? const Color(0xFF3B82F6) : const Color(0xFF60A5FA))
+                                : const Color(0xFFFF6D00),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              hasCredits ? '🎟️ $credits Hak' : '🎟️ +${CouponCreditService.instance.rewardCreditsPerVideo} Hak Al',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: hasCredits
+                                    ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8))
+                                    : const Color(0xFFFF6D00),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: InkWell(
+                  onTap: () {
+                    final freeCredits = CouponCreditService.instance.dailyFreeCredits;
+                    showGuestLoginBottomSheet(
+                      context,
+                      title: 'Giriş Yap, Günlük $freeCredits Kuponu Ücretsiz Aç! 🎁',
+                      message:
+                          'FırsatKolik üyelerine her gün $freeCredits adet indirim kuponu açma hakkı tamamen ücretsiz verilir. Giriş yaparak anında haklarını al!',
+                      primaryButtonText: '🚀 Giriş Yap & Haklarını Al',
+                    ).then((loggedIn) {
+                      if (loggedIn == true && mounted) {
+                        _checkAdminStatus();
+                        CouponCreditService.instance.initialize().then((_) {
+                          if (mounted) setState(() {});
+                        });
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: isDark ? 0.20 : 0.10),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: AppTheme.primary.withValues(alpha: 0.65),
+                        width: 1.1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '🎁 ${CouponCreditService.instance.dailyFreeCredits} Hediye Hak',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(46),
           child: Container(
@@ -2665,3 +4092,134 @@ class _RadarGradientBorderPainter extends CustomPainter {
         oldDelegate.settledBorderColor != settledBorderColor;
   }
 }
+
+/// Yeni açılan kupon kartını Botkolik Radar tarzı dönen degrade çerçeve ve ışıma ile 3.5 saniye canlandırır
+class _NewlyUnlockedCardGlowWrapper extends StatefulWidget {
+  final Widget child;
+  final bool isDark;
+
+  const _NewlyUnlockedCardGlowWrapper({
+    required this.child,
+    required this.isDark,
+  });
+
+  @override
+  State<_NewlyUnlockedCardGlowWrapper> createState() =>
+      _NewlyUnlockedCardGlowWrapperState();
+}
+
+class _NewlyUnlockedCardGlowWrapperState
+    extends State<_NewlyUnlockedCardGlowWrapper>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _glowAnimation;
+  late final Animation<double> _shimmerAngleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3500),
+    );
+
+    _glowAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 0.0, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 15,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween<double>(1.0),
+        weight: 45,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeInOutCubic)),
+        weight: 40,
+      ),
+    ]).animate(_controller);
+
+    _shimmerAngleAnimation = Tween<double>(begin: 0.0, end: 1.8).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
+    );
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final glow = _glowAnimation.value;
+        final angle = _shimmerAngleAnimation.value;
+
+        final gradientColors = isDark
+            ? [
+                const Color(0xFFFF6B35),
+                const Color(0xFFFBBF24),
+                const Color(0xFF38BDF8),
+                const Color(0xFFFF6B35),
+              ]
+            : [
+                const Color(0xFFFF4500),
+                const Color(0xFFF59E0B),
+                const Color(0xFF0284C7),
+                const Color(0xFFFF4500),
+              ];
+
+        final settledBorderColor = isDark
+            ? AppTheme.darkBorder
+            : const Color(0xFFE2E8F0);
+
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              if (glow > 0.01) ...[
+                BoxShadow(
+                  color: (isDark
+                          ? const Color(0xFFFF6B35)
+                          : const Color(0xFFFF5722))
+                      .withValues(alpha: (isDark ? 0.35 : 0.30) * glow),
+                  blurRadius: (isDark ? 16.0 : 18.0) * glow,
+                  spreadRadius: (isDark ? 1.5 : 2.0) * glow,
+                  offset: const Offset(0, 2),
+                ),
+                BoxShadow(
+                  color: (isDark
+                          ? const Color(0xFF38BDF8)
+                          : const Color(0xFF0284C7))
+                      .withValues(alpha: (isDark ? 0.20 : 0.22) * glow),
+                  blurRadius: 22 * glow,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ],
+          ),
+          child: CustomPaint(
+            painter: _RadarGradientBorderPainter(
+              borderRadius: 18,
+              borderWidth: 1.4 + (1.2 * glow),
+              gradientColors: gradientColors,
+              glowProgress: glow,
+              rotationTurns: angle,
+              settledBorderColor: settledBorderColor,
+            ),
+            child: widget.child,
+          ),
+        );
+      },
+    );
+  }
+}
+

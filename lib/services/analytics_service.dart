@@ -214,4 +214,48 @@ class AnalyticsService {
     };
     await logCustomEvent('filter_applied', params);
   }
+
+  // ===========================================================================
+  // ADMOB REKLAM VE MONETİZASYON METRİKLERİ (LTV & ROAS TRACKING)
+  // ===========================================================================
+
+  /// 11. AdMob Reklam Gösterimi & onPaidEvent (Gelir Değeri Takibi)
+  /// Bu metrik, Google Ads kullanıcı edinme (UAC) kampanyalarımızın tROAS (Hedef ROAS)
+  /// optimizasyonu yapabilmesi ve kullanıcı başına LTV değerini ölçebilmesi için gereklidir.
+  Future<void> logAdImpression({
+    required String adUnitId,
+    required String adFormat, // 'banner', 'native', 'interstitial', 'rewarded', 'app_open'
+    int? valueMicros,
+    String? currencyCode,
+    int? precisionType,
+    String? adNetwork,
+  }) async {
+    final valueDouble = valueMicros != null ? (valueMicros / 1000000.0) : 0.0;
+    final params = <String, Object>{
+      'ad_platform': 'AdMob',
+      'ad_unit_id': adUnitId,
+      'ad_format': adFormat,
+      if (valueMicros != null) 'value': valueDouble,
+      if (valueMicros != null) 'value_micros': valueMicros,
+      if (currencyCode != null && currencyCode.isNotEmpty) 'currency': currencyCode,
+      if (precisionType != null) 'precision_type': precisionType,
+      if (adNetwork != null) 'ad_source': adNetwork,
+    };
+
+    // Standart GA4 ad_impression olayı
+    await logCustomEvent('ad_impression', params);
+  }
+
+  /// 12. AdMob Reklam Tıklaması
+  Future<void> logAdClick({
+    required String adUnitId,
+    required String adFormat,
+  }) async {
+    final params = <String, Object>{
+      'ad_platform': 'AdMob',
+      'ad_unit_id': adUnitId,
+      'ad_format': adFormat,
+    };
+    await logCustomEvent('ad_click', params);
+  }
 }

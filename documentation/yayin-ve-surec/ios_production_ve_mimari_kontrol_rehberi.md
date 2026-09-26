@@ -107,7 +107,7 @@ Apple Developer hesabında uygulama için tanımlanacak yetkiler proje seviyesin
 
 ### 3.3 `ios/Runner/Info.plist`
 Apple Store ve iOS çalışma ortamı için tanımlanan kritik anahtarlar:
-- **`GADApplicationIdentifier`**: `ca-app-pub-3940256099942544~1458002511` (AdMob SDK açılış çökmesini önler).
+- **`GADApplicationIdentifier`**: `ca-app-pub-6853997017739651~7339420575` (FırsatKolik Prod iOS App ID).
 - **`SKAdNetworkItems`**: 27 adet sertifikalı reklam ağı takip kimliği (AdMob, AppLovin, UnityAds vb.).
 - **`LSApplicationQueriesSchemes`**: `https`, `http`, `tg`, `telegram`, `whatsapp`, `hbapp`, `trendyol`, `teknosa`, `n11`, `amazon`, `mailto`, `tel`, `itms-apps` (iOS 9+ `canLaunchUrl` whitelist'i).
 - **`FlutterDeepLinkingEnabled`**: `<true/>` (Apple Universal Links'i Flutter rota motoruna bağlar).
@@ -344,7 +344,7 @@ iOS bildirim akışı Android'den farklı olarak doğrudan Google FCM sunucular�
 - **iOS Uyumluluk Durumu:**
   1. **Dynamic Island & Notch:** `home_screen.dart`, `deal_detail_screen.dart` ve modal sayfalarda `MediaQuery.of(context).padding.top` kullanılarak ada ve çentik altına içerik taşması engellenmiştir.
   2. **Home Indicator:** Alt menü çubuklarında `SafeArea(top: false)` ve `MediaQuery.of(context).padding.bottom + 14` kullanılarak iPhone alt gezinme çubuğu ile butonların çakışması önlenmiştir.
-  3. **AdMob iOS Banner ID:** `firebase_options.dart` içine `ca-app-pub-3940256099942544/2934735716` test banner ID'si entegre edilmiştir.
+  3. **AdMob iOS App ID & Banner ID (Prod-Ready):** `ios/Runner/Info.plist` içine `ca-app-pub-6853997017739651~7339420575` (resmi iOS Prod App ID), `firebase_options.dart` içine varsayılan olarak `ca-app-pub-6853997017739651/2039078155` (resmi iOS Prod Banner ID) tanımlanmıştır. Ayrıca `--dart-define=ADMOB_IOS_BANNER_ID` desteği ve test fallback'i (`ca-app-pub-3940256099942544/2934735716`) aktiftir. `AdManagerService` ile 25s cooldown ve `onPaidEvent` telemetrisi kusursuz çalışmaktadır.
 
 ### 5.9 Web Admin Paneli & Hosting Yapılandırması
 - **İlgili Dokümanlar:**

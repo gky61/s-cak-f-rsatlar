@@ -123,10 +123,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    if (_isFinished) {
-      return widget.child;
-    }
-
     final isDark = ThemeService().isDarkMode;
     final backgroundColor = isDark ? Colors.black : Colors.white;
     final overlayStyle = SystemUiOverlayStyle(
@@ -141,17 +137,20 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       value: overlayStyle,
       child: Stack(
         children: [
-          // Alt katman: Ana sayfa (Çözünme esnasında hazır bekler)
+          // Alt katman: Ana sayfa (Sürekli ve kesintisiz stabil kalır - unmount edilmez)
           widget.child,
 
           // Üst katman: Dikişsiz Geçiş Yapan Splash Tuvali
-          FadeTransition(
-            opacity: _exitFadeAnimation,
-            child: ScaleTransition(
-              scale: _exitScaleAnimation,
-              child: Scaffold(
-                backgroundColor: backgroundColor,
-                body: SafeArea(
+          if (!_isFinished)
+            IgnorePointer(
+              ignoring: _isFinished,
+              child: FadeTransition(
+                opacity: _exitFadeAnimation,
+                child: ScaleTransition(
+                  scale: _exitScaleAnimation,
+                  child: Scaffold(
+                    backgroundColor: backgroundColor,
+                    body: SafeArea(
                   child: AnimatedBuilder(
                     animation: _entranceController,
                     builder: (context, _) {
@@ -285,6 +284,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
               ),
             ),
           ),
+        ),
         ],
       ),
     );

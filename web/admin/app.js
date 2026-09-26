@@ -693,6 +693,22 @@ function initEventListeners() {
         });
     }
 
+    const marketingMenuBtn = document.getElementById('marketingMenuBtn');
+    if (marketingMenuBtn) {
+        marketingMenuBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            showMarketingView();
+        });
+    }
+
+    const admobMenuBtn = document.getElementById('admobMenuBtn');
+    if (admobMenuBtn) {
+        admobMenuBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            showAdmobView();
+        });
+    }
+
     // Load initial global settings status
     loadDealSharingStatus();
     loadCommentSharingStatus();
@@ -3393,7 +3409,7 @@ function handleCancelDeal(event) {
 
 // View management
 function showView(viewId) {
-    const views = ['dashboardView', 'dealsView', 'couponsView', 'catalogsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'telegramBotView', 'observabilityView'];
+    const views = ['dashboardView', 'dealsView', 'couponsView', 'catalogsView', 'usersView', 'messagesView', 'reportsView', 'settingsView', 'notificationsView', 'logsView', 'telegramBotView', 'observabilityView', 'marketingView', 'admobView'];
     views.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -4824,6 +4840,22 @@ function updateMenuActiveState(activeView) {
             obsMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
             obsMenuItem.classList.remove('text-slate-400');
             const icon = obsMenuItem.querySelector('.material-symbols-outlined');
+            if (icon) icon.classList.add('icon-filled');
+        }
+    } else if (activeView === 'marketing') {
+        const mktMenuItem = document.getElementById('marketingMenuBtn');
+        if (mktMenuItem) {
+            mktMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
+            mktMenuItem.classList.remove('text-slate-400');
+            const icon = mktMenuItem.querySelector('.material-symbols-outlined');
+            if (icon) icon.classList.add('icon-filled');
+        }
+    } else if (activeView === 'admob') {
+        const admobMenuItem = document.getElementById('admobMenuBtn');
+        if (admobMenuItem) {
+            admobMenuItem.classList.add('bg-primary/10', 'text-primary', 'border-primary/20');
+            admobMenuItem.classList.remove('text-slate-400');
+            const icon = admobMenuItem.querySelector('.material-symbols-outlined');
             if (icon) icon.classList.add('icon-filled');
         }
     }
@@ -13935,6 +13967,26 @@ function showObservabilityView() {
     }
 }
 window.showObservabilityView = showObservabilityView;
+
+function showMarketingView() {
+    currentView = 'marketing';
+    showView('marketingView');
+    updateMenuActiveState('marketing');
+    if (window.MarketingManager) {
+        window.MarketingManager.init();
+    }
+}
+window.showMarketingView = showMarketingView;
+
+function showAdmobView() {
+    currentView = 'admob';
+    showView('admobView');
+    updateMenuActiveState('admob');
+    if (window.AdMobManager) {
+        window.AdMobManager.init();
+    }
+}
+window.showAdmobView = showAdmobView;
 
 // ---------- Real-time Firestore Listener for settings/telegramBot ----------
 

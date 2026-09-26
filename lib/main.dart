@@ -24,6 +24,9 @@ import 'services/affiliate/affiliate_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/circular_theme_transition.dart';
 import 'services/system_log_service.dart';
+import 'services/ad_manager_service.dart';
+import 'services/coupon_credit_service.dart';
+import 'services/share_intent_service.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 void _log(String message) {
@@ -293,6 +296,11 @@ void _initializeBackgroundServices() {
   // AdMob ve UMP Consent Başlatma
   _initAdMobAndUmp();
 
+  // Kupon açma kredisi motorunu başlat
+  CouponCreditService.instance.initialize().catchError((e) {
+    _log('⚠️ CouponCreditService başlatma hatası: $e');
+  });
+
   // Connectivity service'i başlat
   ConnectivityService().initialize().catchError((e) {
     _log('⚠️ ConnectivityService başlatma hatası: $e');
@@ -307,6 +315,9 @@ void _initializeBackgroundServices() {
     }).catchError((e) {
       _log('⚠️ Kanal ve dinleyici önyükleme hatası: $e');
     });
+
+    // Dış mağazalardan (Amazon, Trendyol) paylaşılan ürün linklerini yakala
+    ShareIntentService.instance.initialize();
   }
 }
 
@@ -314,18 +325,7 @@ void _initializeBackgroundServices() {
 void _initAdMobAndUmp() {
   Future<void> initAdMob() async {
     try {
-      if (kDebugMode) {
-        final configuration = RequestConfiguration(
-          testDeviceIds: const <String>[
-            '7dc74815-ecce-4731-b631-27ab9c0cbd15', // Test telefonu
-          ],
-        );
-        await MobileAds.instance.updateRequestConfiguration(configuration);
-        _log('✅ Test cihazı yapılandırması eklendi (sadece debug mod)');
-      }
-      
-      await MobileAds.instance.initialize();
-      _log('✅ AdMob SDK başlatıldı');
+      await AdManagerService.instance.initialize();
     } catch (e) {
       _log('⚠️ AdMob başlatma hatası: $e');
     }

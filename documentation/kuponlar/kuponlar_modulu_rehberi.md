@@ -12,7 +12,7 @@ Bu doküman; **FırsatKolik** platformunda e-ticaret indirim kodlarının (kupon
 2. [📱 Mobil İstemci ve Kullanıcı Deneyimi (UI/UX)](#2--mobil-istemci-ve-kullanıcı-deneyimi-uiux)
 3. [🔥 Wilson Score ve 3 Kademeli Akıllı Sıralama Algoritması](#3--wilson-score-ve-3-kademeli-akıllı-sıralama-algoritması)
 4. [🗳️ Oylama Motoru, İdempotent Transaction ve Otomatik Arşiv](#4-️-oylama-motoru-idempotent-transaction-ve-otomatik-arşiv)
-5. [🎛️ Dinamik Modül Şalteri ve Misafir Kilit Mimarisi](#5-️-dinamik-modül-şalteri-ve-misafir-kilit-mimarisi)
+5. [🎛️ Dinamik Modül Şalteri, Misafir Kilidi ve Rewarded Kupon Kredisi](#5-️-dinamik-modül-şalteri-ve-misafir-kilit-mimarisi)
 6. [🔥 Firestore Veri Modeli ve Şema Kontratı](#6--firestore-veri-modeli-ve-şema-kontratı)
 7. [🛡️ Güvenlik Kuralları ve İzin Matrisi (Security Rules)](#7-️-güvenlik-kuralları-ve-izin-matrisi-security-rules)
 8. [⚡ Firebase Cloud Functions ve Backend Mimarisi](#8-️-firebase-cloud-functions-ve-backend-mimarisi)
@@ -83,7 +83,11 @@ Her kupon kartı 3 ana bölümden oluşur:
    - **Mağaza Logosu:** [StoreAssetHelper](file:///d:/firsatkolik/lib/utils/store_asset_helper.dart) ile çözümlenen optimize marka logosu.
    - **Mağaza Rozeti:** Marka adını taşıyan açık renkli çip.
    - **Başlık ve Dinamik Açıklama:** Uzun açıklamalar için 250ms animasyonlu "Devamını Göster / Daha Az Göster" (`_expandedKuponIds`) açılır kapanır metin alanı.
-   - **Kupon Kodu Kutusu:** Tıklandığında kodu panoya kopyalar (`Clipboard.setData`), 2 saniye yeşil `Kopyalandı! ✅` geri bildirimi verir.
+   - **Kupon Kodu Kutusu (4 Durumlu Akıllı Kilit Mimarisi):**
+     - *Durum 1 (Açılmış Kupon):* Kupon kodu düz metin ve kopyalama butonuyla görünür (`kupon.kuponKodu`). Tıklandığında kodu panoya kopyalar (`Clipboard.setData`), 2 saniye yeşil `Kopyalandı! ✅` geri bildirimi verir.
+     - *Durum 2 (Misafir Kullanıcı):* Kod `ImageFilter.blur` ile bulanıklaştırılır ve yanında kilit ikonu (`Icons.lock_rounded`) gösterilir. Tıklandığında *Akıllı Hibrit Kapı* bottom sheet'i açılır.
+     - *Durum 3 (Hak Sahibi Giriş Yapmış Üye):* Kod bulanıklaştırılır ve yanında turuncu `🎟️ Aç` çipi gösterilir. Tıklandığında 1 hak kullanılarak kod açılır ve panoya kopyalanır.
+     - *Durum 4 (Hakkı Biten Üye):* Kod bulanıklaştırılır ve yanında `🎬 +2 Hak` çipi gösterilir. Tıklandığında 1 AdMob Rewarded Video izleyerek +2 hak kazandıran modal açılır.
    - **Mağazaya Git Butonu:** Belirli bir mağazası olan kuponlar için `_openStore()` fonksiyonu ile kullanıcının telefonunda doğrudan ilgili e-ticaret sitesini veya uygulamasını açar. "Diğer" veya genel/belirtilmemiş mağazalı kuponlarda anlamsız Google arama yönlendirmesini önlemek amacıyla bu buton profesyonelce gizlenir (`_canOpenStore`).
 2. **Alt Bölüm (Oylama, Güven Rozeti ve Kişiselleştirme):**
    - **Sıcak (🔥) / Soğuk (❄️) Butonları:** Canlı sayaçlı, renk geçişli tıklanabilir oylama bileşenleri.
@@ -93,6 +97,46 @@ Her kupon kartı 3 ana bölümden oluşur:
      - Kırmızı (`< %50`): `%X Geçersiz` (`Icons.cancel_rounded`)
    - **Kupon Gizleme Butonu (`_hideCoupon`):** Kullanıcının ilgilenmediği kuponları akıştan gizler (320ms küçülme animasyonu, 2.5s "GERİ AL" toast uyarısı).
    - **Düzenle / Sil (Yönetici & Sahip):** Kuponu paylaşan kullanıcı veya yöneticiler için kart üzerinde düzenleme (`KuponFormPage`) ve onaylı silme butonları.
+
+### 2.5. 🎟️ Kupon Monetizasyon Mimarisi ve Akıllı Hibrit Kapı (Rewarded Ads & Oylama Bütünlüğü)
+
+Kupon modülü, kullanıcı deneyimini bozmadan yüksek eCPM ve opt-in katılım sağlayan **Akıllı Hibrit Kapı (Öneri A)** ve **+2 Rewarded Video** mimarisiyle monetizasyona kavuşturulmuştur:
+
+```mermaid
+graph TD
+    UserTap[🎟️ Kullanıcı Kupon Kutusuna Dokunur] --> LockCheck{Kupon Bugün Açık mı?}
+    LockCheck -->|Evet| DirectCopy[📋 Doğrudan Kopyala - Hak/Reklam Yok]
+    LockCheck -->|Hayır| AuthCheck{Oturum Durumu}
+    
+    AuthCheck -->|Giriş Yapmamış Misafir| HybridSheet[🚪 Akıllı Hibrit Kapı Bottom Sheet]
+    HybridSheet --> OptionA[✨ Seçenek 1: Google/Apple ile Giriş Yap]
+    HybridSheet --> OptionB[🎬 Seçenek 2: 1 Sponsor Videosu İzle]
+    
+    OptionA --> GrantDaily[🎁 Günlük 2 Ücretsiz Hak Tanımla + Kuponu Aç]
+    OptionB --> RewardedGuest[🎬 AdMob Rewarded Ad İzlet]
+    RewardedGuest -->|Tamamlandı| GuestUnlock[🔓 Yalnızca Bu Kuponu Aç ve Cihaza Kaydet]
+    RewardedGuest -->|Doluluk/Ağ Hatası| FailSafeGuest[🎁 Fail-Safe Hediye Kupon Açıldı]
+    
+    AuthCheck -->|Giriş Yapmış Üye| CreditCheck{Kalan Hak > 0 mı?}
+    CreditCheck -->|Evet| UseCredit[🎟️ 1 Hak Harca - Kuponu Aç ve Kopyala]
+    CreditCheck -->|Hayır| AdSheet[🎬 +2 Hak Kazan Bottom Sheet]
+    AdSheet --> WatchAd[🎬 1 AdMob Sponsor Videosu İzle]
+    WatchAd -->|Tamamlandı| Grant2Credits[🎉 +2 Kredi Ekle - Kuponu Aç]
+    WatchAd -->|Doluluk/Ağ Hatası| FailSafeCredit[🎁 Fail-Safe 1 Hediye Kredi Tanımla]
+```
+
+#### Temel Monetizasyon İlkeleri:
+1. **Günlük Ücretsiz Kupon Hakkı (Varsayılan 2):** Her giriş yapan kullanıcı her gün (00:00 rollover) kuponları ücretsiz ve reklamsız açabilir. Bu değer Web Admin paneli "AdMob Monetizasyon" menüsünden (`dailyFreeCredits`) anlık olarak dinamik değiştirilebilir.
+2. **Akıllı Hibrit Kapı (Öneri A):** Misafir kullanıcılar kilitli kupona tıkladığında iki net seçenek sunulur:
+   - *Önerilen Seçenek:* Giriş yap, ücretsiz kupon haklarını hemen kullan ve sonraki günlerde de ücretsiz haklardan faydalan.
+   - *Alternatif Seçenek:* Kayıt olmak istemiyorsan 1 sponsor videosu izle, sadece bu kuponu anında aç.
+3. **Mükerrerlik Koruması:** Bir kupon açıldığında (giriş yapan üye veya video izleyen misafir) o gün boyunca açık kalır (`isUnlockedToday == true`). Kullanıcı kodu tekrar kopyaladığında ek hak harcanmaz veya reklam izletilmez.
+4. **Anti-Exploit ve Oylama Bütünlüğü Garantisi:** Kullanıcıların sırf yeni hak kazanmak için çalışan kuponlara sahte "❄️ Çalışmıyor" oyu vermesini ve Wilson puanını sabote etmesini engellemek için oylama karşılığı hak iadesi yapılmaz. Hak kazanımı daima şeffaf bir şekilde Rewarded Video (+2) üzerinden yürütülür.
+5. **Fail-Safe Ad Fallback:** AdMob reklam ağı doluluk (no-fill) veya ağ hatası verirse kullanıcı kilitli bırakılmaz; kupon "🎁 Hediye Kupon Açıldı" mesajıyla anında açılır.
+6. **AppBar Göstergeleri:** Giriş yapanlar için `🎟️ X Hak` / `🎟️ +X Hak Al`, misafirler içinse `🎁 X Hediye Hak` rozeti yer alır (Değerler Web Admin `dailyFreeCredits` ve `rewardCreditsPerVideo` parametrelerinden anlık beslenir).
+7. **Otonom Hak Koruması (Otomatik Kopyalama & Tüketim Yasağı):** Kullanıcı oturum açtığında veya Rewarded Video izleyerek hak kazandığında, haklar anında tüketilmez ve kod otomatik panoya kopyalanmaz. Kullanıcı kazandığı net hakları AppBar'da eksiksiz görür ve dilediği kuponda `🎟️ Aç` butonuna basarak bilinçli olarak hakkını harcar.
+8. **Botkolik Radar Geçici Çerçeve Işıma Efekti (`_NewlyUnlockedCardGlowWrapper`):** Yeni açılan bir kupon (video izleyen misafir veya hakkını kullanan üye), 3.5 saniye boyunca dönen degrade çerçeve (Turuncu -> Amber -> Mavi) ve dış ışıma efektiyle diğer kuponlardan ayrışır. Tasarım dili sade tutularak kart üzerine ekstra etiket konulmamış, yalnızca bu şık parlayan çerçeve efekti korunmuştur.
+9. **Web Admin Canlı Senkronizasyon:** Web Admin "AdMob & Gelir" sekmesinden değiştirilen `dailyFreeCredits` ve `rewardCreditsPerVideo` parametreleri, `CouponCreditService` tarafından Firestore `settings/admob` üzerinden dinlenir ve mobil uygulama açıkken bile anında güncellenir.
 
 ### 2.4. Çentikli Form Tasarımı ([KuponFormPage](file:///d:/firsatkolik/lib/screens/kupon_form_page.dart))
 Resmi FırsatKolik tasarım sistemine uygun çentikli kutu (Notched / Fieldset Box) mimarisiyle 3 bölümden oluşur:
@@ -169,6 +213,16 @@ Veritabanında her kullanıcının oyu `kuponlar/{kuponId}/votes/{userId}` yolun
 
 ---
 
+### 4.3. 🛡️ Doğrulanmış Testçi (Proof-of-Access) İlkesi ve Manipülasyon Koruması
+Kupon oylama sisteminin dürüstlüğü ve Wilson Score kalitesini korumak için katı erişim kuralları uygulanır ([CouponCreditService.canVoteOnCoupon](file:///d:/firsatkolik/lib/services/coupon_credit_service.dart)):
+1. **Kodu Görmeden Oylama Yapılamaz:** Bir kullanıcı kodunu açmadığı ve mağazada denemediği bir kupon için Sıcak (🔥) veya Soğuk (❄️) oyu veremez. Kilitli kuponda oy butonuna basıldığında `_showUnlockToVoteBottomSheet` açılır; kullanıcıya topluluk doğrulama ilkesi açıklanarak kuponu 1 hak ile (veya video izleyerek) açma seçeneği sunulur.
+2. **Kendi Kuponunu Oylama Engeli (Self-Vote Prevention):** Topluluk sekmesinde kuponu paylaşan kullanıcı (`kupon.paylasanKullaniciId == currentUser.uid`), kendi paylaştığı kupona yapay sıcak oy veremez ("Kendi paylaştığın kuponu oylayamazsın 😊" uyarısı alır).
+3. **Kupon Sahibine Ücretsiz Görüntüleme:** Kullanıcı kendi paylaştığı kuponun kodunu kilitli/bulanık görmez, kendi kodunu kopyalamak için günlük hakkından harcama yapmaz (`isOwner` kontrolü).
+4. **Mevcut Oy Değişimi İstisnası:** Daha önce doğrulanmış şekilde oy kullanmış bir avcı, oyu geri almak (toggle off) veya fikrini değiştirmek istediğinde tekrar kilit engeline takılmaz.
+5. **Oylama Bütünlüğü:** Kuponu açıp mağazada deneyen kullanıcı "Çalışmıyor (❄️)" oyu verdiğinde oyu topluluğa dürüstçe yansır; oylama üzerinden kredi avcılığı yapılmaması için hak iadesi verilmez.
+
+---
+
 ## 5. 🎛️ Dinamik Modül Şalteri ve Misafir Kilit Mimarisi
 
 ### 5.1. Dinamik Modül Şalteri (`couponsEnabled`)
@@ -181,6 +235,15 @@ Giriş yapmamış (anonim) kullanıcılar için dönüşüm ve güvenlik önleml
 * **Bulanık Kupon Kodu:** Giriş yapmamış kullanıcılara kupon kodları `ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5)` ile bulanıklaştırılmış olarak ve kilit ikonuyla (`Icons.lock_rounded`) gösterilir.
 * **Giriş Sayfası Yönlendirmesi:** Koda basıldığında [GuestLoginBottomSheet](file:///d:/firsatkolik/lib/widgets/guest_login_bottom_sheet.dart) açılır. Giriş tamamlandığı anda kod otomatik olarak kopyalanır.
 * **Oylama Kilidi:** Misafir kullanıcılar oy butonlarına bastığında yine giriş formu ile karşılanır; giriş sonrası oy anında işlenir.
+
+### 5.3. 🎟️ Kupon Açma Kredisi ve Rewarded Ad Monetizasyon Mimarisi
+Giriş yapan kullanıcılar için sürdürülebilir, etik ve yüksek eCPM üreten ödüllü reklam mimarisi ([CouponCreditService](file:///d:/firsatkolik/lib/services/coupon_credit_service.dart)):
+* **Günlük 2 Ücretsiz Kupon Açma:** Her giriş yapan kullanıcıya yerel saatle her gün 00:00'da yenilenen 2 adet ücretsiz kupon kopyalama kredisi tanımlanır.
+* **Açılan Kupon Koruması (`isUnlockedToday`):** Gün içinde bir kez kilidi açılan bir kupon tekrar görüntülendiğinde veya kopyalandığında kullanıcıdan tekrar hak düşmez.
+* **Rewarded Ad ile +2 Kredi Kazanımı:** Günlük 2 hakkını tüketen kullanıcı, kilitli bir kuponu kopyalamak istediğinde `_showCreditDepletedBottomSheet` açılır. Kullanıcı rızasıyla (opt-in) 1 AdMob Rewarded Video reklamı izlediğinde hesabına anında **+2 Kupon Açma Kredisi** tanımlanır.
+* **Fail-Safe Fallback (Kullanıcı Dostu Hediye):** Eğer reklam ağı doluluk (fill rate) veya ağ gecikmesi nedeniyle video yükleyemezse kullanıcı cezalandırılmaz/bekletilmez; kupon "Hediye Açıldı" olarak doğrudan panoya kopyalanır ve arayüzde görünür kılınır.
+* **Anti-Exploit Oylama Güvenliği:** Çalışan kuponların manipüle edilmemesi ve sonsuz bedava hak döngüsünün önlenmesi için oy verme karşılığı hak iadesi verilmez. Haklar tükendiğinde kullanıcı 1 kısa video ile dilediği zaman +2 hak alabilir.
+* **AppBar Canlı Kredi Rozeti:** Kuponlar sayfasının üst çubuğunda kullanıcının kalan hakkı dinamik bir pill badge olarak yer alır (`🎟️ 2 Hak` veya tükendiğinde `🎟️ +2 Hak Al`). Rozete tıklandığında sistemin kuralları şeffaf bir modal ile açıklanır.
 
 ---
 
@@ -415,7 +478,9 @@ Modülün çalışabilirliği [functions/tests/](file:///d:/firsatkolik/function
 
 | Rol / Katman | Dosya Yolu | Açıklama |
 | :--- | :--- | :--- |
-| **Mobil UI: Kuponlar Sayfası** | [kuponlar_page.dart](file:///d:/firsatkolik/lib/screens/kuponlar_page.dart) | 2 sekmeli kupon listesi, oylama butonları, gizleme ve arama. |
+| **Mobil UI: Kuponlar Sayfası** | [kuponlar_page.dart](file:///d:/firsatkolik/lib/screens/kuponlar_page.dart) | 2 sekmeli kupon listesi, oylama butonları, kredi pill rozeti, Rewarded Ad bottom sheet ve kopyalama akışı. |
+| **Kupon Kredi Servisi** | [coupon_credit_service.dart](file:///d:/firsatkolik/lib/services/coupon_credit_service.dart) | Günlük 2 hak takibi, Rewarded Ad kredilendirme ve anti-exploit hak motoru. |
+| **AdMob Yönetim Servisi** | [ad_manager_service.dart](file:///d:/firsatkolik/lib/services/ad_manager_service.dart) | Rewarded ad ön yükleme, gösterim, onPaidEvent telemetrisi ve otomatik yeniden yükleme. |
 | **Mobil UI: Kupon Formu** | [kupon_form_page.dart](file:///d:/firsatkolik/lib/screens/kupon_form_page.dart) | Çentikli kupon paylaşım ve düzenleme formu. |
 | **Mobil Model** | [kupon.dart](file:///d:/firsatkolik/lib/models/kupon.dart) | Kupon veri sınıfı, Wilson Score ve 3 kademeli sıralama algoritması. |
 | **Mobil Servis** | [kupon_service.dart](file:///d:/firsatkolik/lib/services/kupon_service.dart) | Kupon CRUD işlemleri, transaction ile idempotent oylama ve otomatik arşiv. |

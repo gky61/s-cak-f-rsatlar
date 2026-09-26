@@ -72,9 +72,11 @@ Projede Geliştirme (DEV) ve Canlı (PROD) ortamları hiçbir şekilde birbirine
 | **Cloud Functions Adedi** | 27 Fonksiyon (`Europe/Istanbul` Cron'ları) | 27 Fonksiyon (`Europe/Istanbul` Cron'ları) |
 | **GCP VM Konteyner Adı** | `dev-bot` (Host Port: `8081` -> `8080`) | `prod-bot` (Host Port: `8082` -> `8080`) |
 | **Dinlenen Telegram Kanalı**| `@indirimkaplani` (veya test kanalları) | `@firsatkolik_canli` |
-| **Bot Firebase Anahtarı** | `cloud-run-bot/dev_firebase_key.json` | `cloud-run-bot/prod_firebase_key.json` |
-| **AdMob Banner ID** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Gerçek)* |
-| **App Check Sağlayıcısı** | Debug Token Provider | Play Integrity API (Google Play) |
+| **AdMob Banner ID (Android)** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Gerçek)* |
+| **AdMob Banner ID (iOS)** | `ca-app-pub-3940256099942544/2934735716` *(Test)* | `ca-app-pub-6853997017739651/2039078155` *(Gerçek)* |
+| **AdMob App ID (Android)** | `ca-app-pub-3940256099942544~3347511713` *(Test)* | `ca-app-pub-6853997017739651~8861215767` *(Gerçek)* |
+| **AdMob App ID (iOS)** | `ca-app-pub-3940256099942544~1458002511` *(Test)* | `ca-app-pub-6853997017739651~7339420575` *(Gerçek)* |
+| **AdMob Yönetim Servisi** | `AdManagerService` (25s Cooldown, Kill-Switch) | `AdManagerService` (onPaidEvent Telemetrisi) |
 | **APNs Auth Key (.p8)** | `AuthKey_KJ2TZ9F8SG.p8` (Dev & Prod APNs Key) | `AuthKey_KJ2TZ9F8SG.p8` (Dev & Prod APNs Key) |
 
 ---
@@ -131,6 +133,19 @@ Sanal makinede (`/home/murat/app/{env}-bot/.env`) tanımlanan değişkenler:
 * **DNS A Kaydı:** `@` ➔ `199.36.158.100` — **Proxy Durumu: DNS Only (Gri Bulut ☁️)**
 * **DNS TXT Kaydı:** `@` ➔ `hosting-site=firsatkolik-prod-e6eae` (Sahiplik doğrulama)
 * **DNS CNAME Kaydı:** `www` ➔ `firsatkolik-prod-e6eae.web.app` (Gri Bulut)
+
+### 3.6 Google AdMob Master Kimlikleri ve Reklam Birimleri Envanteri
+* **Yayıncı (Publisher ID):** `pub-6853997017739651`
+
+| Platform & Ortam | AdMob App ID (Uygulama Kimliği) | Banner Ad Unit ID (Reklam Birimi) | Tanımlandığı Yer |
+| :--- | :--- | :--- | :--- |
+| **Android DEV** | `ca-app-pub-3940256099942544~3347511713` (Test) | `ca-app-pub-3940256099942544/6300978111` (Test) | `android/app/build.gradle` (`dev` flavor) & `firebase_options.dart` |
+| **Android PROD** | `ca-app-pub-6853997017739651~8861215767` (Gerçek) | `ca-app-pub-6853997017739651/8758625050` (Gerçek) | `android/app/build.gradle` (`prod` flavor) & `firebase_options.dart` |
+| **iOS DEV** | `ca-app-pub-3940256099942544~1458002511` (Test) | `ca-app-pub-3940256099942544/2934735716` (Test) | `firebase_options.dart` (Debug/Dev Fallback) |
+| **iOS PROD** | `ca-app-pub-6853997017739651~7339420575` (Gerçek) | `ca-app-pub-6853997017739651/2039078155` (Gerçek) | `ios/Runner/Info.plist` & `firebase_options.dart` |
+
+* **Otomasyon & CLI Kontrol:** `python monetization-assets/scripts/admob_cli.py status`
+
 
 ---
 

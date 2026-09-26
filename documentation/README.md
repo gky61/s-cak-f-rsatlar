@@ -107,11 +107,17 @@ FırsatKolik'te Geliştirme (DEV) ve Canlı (PROD) ortamları veri, bot, kimlik 
 | **Dinlenen Telegram Kanalı**| `@indirimkaplani` (veya test kanalları) | `@firsatkolik_canli` |
 | **Bot Firebase Anahtarı** | `dev_firebase_key.json` | `prod_firebase_key.json` |
 | **Web Admin Hosting URL** | `https://sicak-firsatlar-e6eae.web.app/admin/` | `https://firsatkolik-prod-e6eae.web.app/admin/` |
-| **AdMob Banner Reklam ID** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Gerçek)* |
+| **AdMob Banner ID (Android)** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Gerçek)* |
+| **AdMob Banner ID (iOS)** | `ca-app-pub-3940256099942544/2934735716` *(Test)* | `ca-app-pub-6853997017739651/2039078155` *(Gerçek)* |
+| **AdMob App ID (Android)** | `ca-app-pub-3940256099942544~3347511713` *(Test)* | `ca-app-pub-6853997017739651~8861215767` *(Gerçek)* |
+| **AdMob App ID (iOS)** | `ca-app-pub-3940256099942544~1458002511` *(Test)* | `ca-app-pub-6853997017739651~7339420575` *(Gerçek)* |
 | **App Check Sağlayıcısı** | Debug Provider (Debug Token) | Play Integrity API (Google Play Store) |
 | **Android Keystore** | Varsayılan Debug Keystore | `android/app/upload-keystore.jks` *(Alias: upload)* |
 
 ### 📚 İlgili Ortam ve Güvenlik Dokümanları:
+* 🔗 [AdMob Web Admin Komuta Merkezi Rehberi](file:///d:/firsatkolik/monetization-assets/WEB_ADMIN_ADMOB_DASHBOARD_GUIDE.md) — Gelir & eCPM dashboardu, kill-switch ve operasyonel ayarlar.
+* 🔗 [AdMob Mimari Röntgen ve Risk Değerlendirme Raporu](file:///d:/firsatkolik/monetization-assets/reklam-ve-monetization/ADMOB_MIMARI_RONTGEN_RAPORU.md) — AdMob güvenlik, politika ve mimari analiz raporu.
+* 🔗 [AdMob Master Monetizasyon Yol Haritası](file:///d:/firsatkolik/monetization-assets/ADMOB_MONETIZATION_ROADMAP.md) — Fazlar, eCPM hedefleri ve format dağılımı.
 * 🔗 [Backend ve Bulut Altyapısı Master Mimari Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/backend_ve_altyapi_rehberi.md) — 26 Cloud Function, Firestore/Storage güvenlik kuralları, DEV/PROD ortam yönetimi, Free Tier VM ve sıfır maliyet mimarisi.
 * 🔗 [Cloud Functions ve Backend Servisleri Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/cloud_functions_rehberi.md) — 26 Cloud Function detaylı tetikleme ve kullanım envanteri.
 * 🔗 [Firestore ve Storage Güvenlik Kuralları Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/firestore_ve_storage_guvenlik_kurallari_rehberi.md) — `firestore.rules` ve `storage.rules` erişim politikaları, RBAC ve alan farkı doğrulaması.
@@ -407,6 +413,13 @@ documentation/
 │
 ├── 📁 observability/                                         # Canlı Trafik, Aksiyonlar, Hata & Performans
 │   └── 📄 observability_rehberi.md                           # [MASTER KONTRAT] Canlı Trafik, Kullanıcı Aksiyonları, Hata ve Performans İzleme (Observability) Rehberi
+│
+├── 📁 monetization-assets/ (ve reklam-ve-monetization/)       # Google AdMob, Gelir & Monetizasyon Agent Mimarisi
+│   ├── 📄 WEB_ADMIN_ADMOB_DASHBOARD_GUIDE.md                 # [MASTER KONTRAT] AdMob Web Admin Gelir Dashboard'u, Kill-Switch & Yönetim Rehberi
+│   ├── 📄 ADMOB_MONETIZATION_ROADMAP.md                      # 5 Fazlık Master Monetizasyon Yol Haritası, eCPM Optimizasyonu & CLI Kataloğu
+│   └── 📁 reklam-ve-monetization/
+│       ├── 📄 ADMOB_MIMARI_RONTGEN_RAPORU.md                 # [MASTER KONTRAT] AdMob Mimari Analiz, Röntgen, Risk Değerlendirme & Prod-Ready Raporu
+│       └── 📄 admob_web_admin_komuta_merkezi_rehberi.md      # AdMob Komuta Merkezi Türkçe Dokümantasyonu
 │
 └── 📁 yayin-ve-surec/                                        # Store Yayın, iOS Uyumluluk & İlerleme
     ├── 📄 MASTER_DEPLOYMENT_REHBERI.md                       # [MASTER KONTRAT] Uçtan Uca Master Dağıtım, DEV/PROD Hiyerarşisi, CI/CD, AAB & Shorebird Rehberi

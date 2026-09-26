@@ -88,7 +88,7 @@
             android:value="sicak_firsatlar_general_v2" />
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-6853997017739651~8861215767"/>
+            android:value="${admob_app_id}"/>
         <!-- Privacy Sandbox / AdServices config conflict override (AdMob vs Firebase Analytics) -->
         <property
             android:name="android.adservices.AD_SERVICES_CONFIG"
