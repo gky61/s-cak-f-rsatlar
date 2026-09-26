@@ -21,7 +21,7 @@ class DealDetailHelpers {
     bool isSelected = false,
     bool isLoading = false,
   }) {
-    // 1. Curated Vibrant Tone System
+    // 1. Canlı ve Net Aktif Renk Sistemi
     final Color activeColor = isDark
         ? (color == const Color(0xFFF59E0B)
             ? const Color(0xFFFBBF24) // Amber 400
@@ -34,32 +34,35 @@ class DealDetailHelpers {
                 ? const Color(0xFFDC2626) // Red 600
                 : const Color(0xFF2563EB))); // Blue 600
 
-    // 2. Modern Elevated Container Styling
+    // 2. Seçili Durumda Temiz ve Ferah Zemin (Boğukluk Önleyici)
+    final Color selectedBgColor = isDark
+        ? (color == const Color(0xFFF59E0B)
+            ? const Color(0xFF241B10) // Koyu Amber Yüzey
+            : (color == const Color(0xFFEF4444)
+                ? const Color(0xFF261214) // Koyu Kırmızı Yüzey
+                : const Color(0xFF101C2E))) // Koyu Mavi Yüzey
+        : (color == const Color(0xFFF59E0B)
+            ? const Color(0xFFFFFBEB) // Ferah Bal/Krem Tint
+            : (color == const Color(0xFFEF4444)
+                ? const Color(0xFFFEF2F2) // Ferah Açık Kırmızı Tint
+                : const Color(0xFFEFF6FF))); // Ferah Açık Mavi Tint
+
+    // 3. Modern ve Minimalist Kart Dekorasyonu
     final BoxDecoration buttonDecoration = isSelected
         ? BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [
-                      color.withValues(alpha: 0.24),
-                      color.withValues(alpha: 0.16),
-                    ]
-                  : [
-                      color.withValues(alpha: 0.18),
-                      color.withValues(alpha: 0.10),
-                    ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: selectedBgColor,
             borderRadius: BorderRadius.circular(15),
             border: Border.all(
-              color: isDark ? color.withValues(alpha: 0.75) : color.withValues(alpha: 0.65),
-              width: 1.4,
+              color: isDark
+                  ? activeColor.withValues(alpha: 0.65)
+                  : activeColor.withValues(alpha: 0.75),
+              width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: activeColor.withValues(alpha: isDark ? 0.30 : 0.18),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
+                color: activeColor.withValues(alpha: isDark ? 0.25 : 0.12),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           )
@@ -81,19 +84,6 @@ class DealDetailHelpers {
             ],
           );
 
-    // 3. High Contrast Text & Icon Hierarchy
-    final Color effectiveIconColor = isSelected
-        ? activeColor
-        : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B));
-
-    final Color effectiveCountColor = isSelected
-        ? activeColor
-        : (isDark ? Colors.white : const Color(0xFF0F172A));
-
-    final Color effectiveLabelColor = isSelected
-        ? activeColor
-        : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569));
-
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -102,11 +92,11 @@ class DealDetailHelpers {
           onTap();
         },
         borderRadius: BorderRadius.circular(15),
-        splashColor: activeColor.withValues(alpha: isDark ? 0.25 : 0.14),
-        highlightColor: activeColor.withValues(alpha: isDark ? 0.12 : 0.06),
-        hoverColor: activeColor.withValues(alpha: isDark ? 0.15 : 0.08),
+        splashColor: activeColor.withValues(alpha: isDark ? 0.20 : 0.12),
+        highlightColor: activeColor.withValues(alpha: isDark ? 0.10 : 0.05),
+        hoverColor: activeColor.withValues(alpha: isDark ? 0.12 : 0.06),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
           height: 56,
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
@@ -114,7 +104,7 @@ class DealDetailHelpers {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Top Row: Icon + Count (if applicable)
+              // Üst Satır: Canlı İkon (Seçiliyse Mikro Rozet) + Sayaç
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
@@ -128,20 +118,44 @@ class DealDetailHelpers {
                         valueColor: AlwaysStoppedAnimation<Color>(activeColor),
                       ),
                     )
+                  else if (isSelected)
+                    // Seçili Durumda Canlı Mikro Rozet (Canlı & Belirgin)
+                    Container(
+                      padding: const EdgeInsets.all(3.5),
+                      decoration: BoxDecoration(
+                        color: activeColor,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: activeColor.withValues(alpha: isDark ? 0.40 : 0.30),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        icon,
+                        size: 11.5,
+                        color: Colors.white,
+                      ),
+                    )
                   else
+                    // Seçili Olmayan Durumda Minimalist İkon
                     Icon(
                       icon,
                       size: 16.5,
-                      color: effectiveIconColor,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                     ),
                   if (count >= 0) ...[
                     const SizedBox(width: 4.5),
                     Text(
                       count.toString(),
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: effectiveCountColor,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w900,
+                        color: isSelected
+                            ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                            : (isDark ? Colors.white : const Color(0xFF0F172A)),
                         height: 1.1,
                         letterSpacing: -0.2,
                       ),
@@ -150,13 +164,15 @@ class DealDetailHelpers {
                 ],
               ),
               const SizedBox(height: 3.5),
-              // Bottom Row: Label
+              // Alt Satır: Başlık / Durum Metni
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 10.5,
                   fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                  color: effectiveLabelColor,
+                  color: isSelected
+                      ? activeColor
+                      : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
                   letterSpacing: 0.1,
                   height: 1.1,
                 ),
@@ -630,4 +646,257 @@ class DealDetailHelpers {
       return '$remaining oy daha';
     }
   }
+
+  /// Fırsat Detay Sayfasında süresi dolmuş (isExpired) fırsatlar için
+  /// hafif sıcak sarı/amber dokunuşlu, arşiv hissiyatını veren ancak göz yormayan minimalist bilgi şeridi.
+  static Widget buildArchivedCampaignBanner({
+    required BuildContext context,
+    required bool isDark,
+    VoidCallback? onActionTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF221A11) // Koyu modda sıcak amber/kahve alt tonlu zemin
+            : const Color(0xFFFFFBEB), // Açık modda ferah bal/krem rengi
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? const Color(0xFFD97706).withValues(alpha: 0.38)
+              : const Color(0xFFFDE68A),
+          width: 1.0,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onActionTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(
+              children: [
+                // Arşiv İkon Kutucuğu
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFFB45309).withValues(alpha: 0.28)
+                        : const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFFF59E0B).withValues(alpha: 0.35)
+                          : const Color(0xFFFDE68A),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.history_toggle_off_rounded,
+                    size: 16,
+                    color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Metin Alanı
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Arşiv Kampanyası',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                      const SizedBox(height: 1.5),
+                      Text.rich(
+                        TextSpan(
+                          text: 'Süresi dolduğu için akıştan kaldırılmıştır. İndirim geçerliliği için ',
+                          style: TextStyle(
+                            fontSize: 11,
+                            height: 1.3,
+                            color: isDark
+                                ? const Color(0xFFE2E8F0).withValues(alpha: 0.88)
+                                : const Color(0xFF78350F).withValues(alpha: 0.88),
+                          ),
+                          children: [
+                            TextSpan(
+                              text: '"Şansını Dene"',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: isDark ? const Color(0xFFFCD34D) : const Color(0xFF92400E),
+                              ),
+                            ),
+                            const TextSpan(
+                              text: '\'yi kullanabilirsiniz.',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (onActionTap != null) ...[
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 11,
+                    color: isDark
+                        ? const Color(0xFFFBBF24).withValues(alpha: 0.7)
+                        : const Color(0xFFD97706).withValues(alpha: 0.8),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Ürün görseli üzerinde (Hero Image) sol alt köşede yer alan şık, amber cam efektli arşiv pulu / etiketi.
+  static Widget buildImageArchivalSticker({required bool isDark}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5.5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1308).withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFFF59E0B).withValues(alpha: 0.55),
+          width: 0.9,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.history_toggle_off_rounded,
+            color: Color(0xFFFBBF24),
+            size: 13.5,
+          ),
+          SizedBox(width: 4.5),
+          Text(
+            'ARŞİV',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFFFEF3C7),
+              letterSpacing: 0.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Fırsat Detay Sayfasında ürün değerlendirmesini (puan ve değerlendirme sayısı)
+  /// gösteren canlı, minimalist ve profesyonel rozet (Rating Badge).
+  static Widget buildRatingBadge({
+    required Deal deal,
+    required bool isDark,
+  }) {
+    if (deal.ratingValue == null && deal.ratingCount == null) {
+      return const SizedBox.shrink();
+    }
+
+    final hasRatingValue = deal.ratingValue != null;
+    final hasRatingCount = deal.ratingCount != null;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        hasRatingValue ? 4.5 : 8,
+        3.5,
+        hasRatingCount ? 10 : (hasRatingValue ? 4.5 : 8),
+        3.5,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E24) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? const Color(0xFF2E2E38) : const Color(0xFFE2E8F0),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (isDark ? Colors.black : const Color(0xFF0F172A)).withValues(alpha: isDark ? 0.25 : 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Canlı Altın Yıldız ve Puan Kapsülü
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.star_rounded,
+                  size: 14,
+                  color: Colors.white,
+                ),
+                if (hasRatingValue) ...[
+                  const SizedBox(width: 3.5),
+                  Text(
+                    deal.ratingValue!.toStringAsFixed(1),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -0.2,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (hasRatingCount) ...[
+            const SizedBox(width: 7.5),
+            Text(
+              '${deal.ratingCount} değerlendirme',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                letterSpacing: -0.1,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
+

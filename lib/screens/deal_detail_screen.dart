@@ -761,6 +761,13 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               ),
                             ),
                           ),
+                        // Floating Archival Sticker (Bottom Left over Image)
+                        if (deal.isExpired)
+                          Positioned(
+                            bottom: 30,
+                            left: 16,
+                            child: DealDetailHelpers.buildImageArchivalSticker(isDark: isDark),
+                          ),
                       ],
                     ),
                   ),
@@ -855,6 +862,17 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                       ),
                                     ],
                                   ),
+                                ),
+
+                              // 48 Saat Arşiv Bilgilendirme Şeridi (Informational Banner)
+                              if (deal.isExpired)
+                                DealDetailHelpers.buildArchivedCampaignBanner(
+                                  context: context,
+                                  isDark: isDark,
+                                  onActionTap: () {
+                                    HapticFeedback.lightImpact();
+                                    _openLink(context, deal.link);
+                                  },
                                 ),
 
                               // Info Section - 2 Column Layout
@@ -1094,47 +1112,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 const SizedBox(height: 12),
                                 Row(
                                   children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                      decoration: BoxDecoration(
-                                        color: isDark ? const Color(0xFF282008) : const Color(0xFFFFFBEB),
-                                        borderRadius: BorderRadius.circular(9),
-                                        border: Border.all(
-                                          color: const Color(0xFFFDE68A).withValues(alpha: isDark ? 0.35 : 0.85),
-                                          width: 1.0,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(
-                                            Icons.star_rounded,
-                                            size: 16.5,
-                                            color: Color(0xFFF59E0B),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          if (deal.ratingValue != null)
-                                            Text(
-                                              deal.ratingValue!.toStringAsFixed(1),
-                                              style: TextStyle(
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.w800,
-                                                color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
-                                              ),
-                                            ),
-                                          if (deal.ratingCount != null) ...[
-                                            const SizedBox(width: 5),
-                                            Text(
-                                              '(${deal.ratingCount} değerlendirme)',
-                                              style: TextStyle(
-                                                fontSize: 11.5,
-                                                fontWeight: FontWeight.w500,
-                                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
+                                    DealDetailHelpers.buildRatingBadge(
+                                      deal: deal,
+                                      isDark: isDark,
                                     ),
                                   ],
                                 ),

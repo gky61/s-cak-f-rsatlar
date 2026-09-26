@@ -52,6 +52,9 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   bool _hideHeroBanner = false;
   late Stream<List<Kupon>> _kuponlarStream;
   late TabController _tabController;
+  final ScrollController _radarScrollController = ScrollController();
+  final ScrollController _toplulukScrollController = ScrollController();
+  bool _hasAutoScrolledToHighlight = false;
   String _selectedStoreFilter = 'Tümü';
   String? _highlightedKuponId;
   Timer? _highlightTimer;
@@ -72,7 +75,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     NotificationService.isCouponsScreenActive = true;
     if (widget.highlightKuponId != null && widget.highlightKuponId!.trim().isNotEmpty) {
       _highlightedKuponId = widget.highlightKuponId!.trim();
-      _highlightTimer = Timer(const Duration(seconds: 4), () {
+      _highlightTimer = Timer(const Duration(milliseconds: 3600), () {
         if (mounted) {
           setState(() {
             _highlightedKuponId = null;
@@ -138,6 +141,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     }
     _couponVoteDebounceTimers.clear();
     _tabController.dispose();
+    _radarScrollController.dispose();
+    _toplulukScrollController.dispose();
     _authSub?.cancel();
     super.dispose();
   }
@@ -2033,6 +2038,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     final hasUsername = kupon.kaynakTipi == 'topluluk' && kupon.paylasanKullaniciAdi.isNotEmpty;
     final isHighlighted = _highlightedKuponId != null && _highlightedKuponId == kupon.id;
     final isRecentlyUnlocked = _recentlyUnlockedKuponIds.contains(kupon.id);
+    final isRadarGlowActive = isRecentlyUnlocked || isHighlighted;
 
     final cardContent = Opacity(
       opacity: (isInvalid || isExpired) ? 0.55 : 1.0,
@@ -2042,29 +2048,25 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(18),
-          boxShadow: isRecentlyUnlocked
+          boxShadow: isRadarGlowActive
               ? null
               : [
                   BoxShadow(
-                    color: isHighlighted
-                        ? const Color(0xFF8E24AA).withValues(alpha: isDark ? 0.50 : 0.28)
-                        : (isRecentlyRestored
-                            ? AppTheme.primary.withValues(alpha: isDark ? 0.45 : 0.25)
-                            : Colors.black.withValues(alpha: isDark ? 0.35 : 0.03)),
-                    blurRadius: isHighlighted ? 18 : (isRecentlyRestored ? 16 : 10),
-                    spreadRadius: isHighlighted ? 1.8 : (isRecentlyRestored ? 1.5 : 0),
+                    color: isRecentlyRestored
+                        ? AppTheme.primary.withValues(alpha: isDark ? 0.45 : 0.25)
+                        : Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
+                    blurRadius: isRecentlyRestored ? 16 : 10,
+                    spreadRadius: isRecentlyRestored ? 1.5 : 0,
                     offset: const Offset(0, 2),
                   ),
                 ],
-          border: isRecentlyUnlocked
+          border: isRadarGlowActive
               ? Border.all(color: Colors.transparent, width: 1.2)
               : Border.all(
-                  color: isHighlighted
-                      ? const Color(0xFF8E24AA)
-                      : (isRecentlyRestored
-                          ? AppTheme.primary
-                          : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0))),
-                  width: isHighlighted ? 2.0 : (isRecentlyRestored ? 1.8 : 1.2),
+                  color: isRecentlyRestored
+                      ? AppTheme.primary
+                      : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+                  width: isRecentlyRestored ? 1.8 : 1.2,
                 ),
         ),
         padding: const EdgeInsets.all(13),
@@ -2072,34 +2074,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (isHighlighted)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF8E24AA).withValues(alpha: isDark ? 0.22 : 0.10),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFF8E24AA).withValues(alpha: 0.35),
-                    width: 1,
-                  ),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.stars_rounded, size: 13, color: Color(0xFF8E24AA)),
-                    SizedBox(width: 4),
-                    Text(
-                      'Bildirimden Açılan Kupon',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF8E24AA),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             // TOP ROW: STORE LOGO + TITLES + VOUCHER CODE BOX
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2686,10 +2660,11 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       ),
     );
 
-    if (isRecentlyUnlocked) {
+    if (isRecentlyUnlocked || isHighlighted) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: _NewlyUnlockedCardGlowWrapper(
+          key: ValueKey('card_glow_${kupon.id}_${isHighlighted ? "highlight" : "unlocked"}'),
           isDark: isDark,
           child: cardContent,
         ),
@@ -2807,6 +2782,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     required dynamic currentUser,
     required String emptyMsg,
     bool showRadarBanner = false,
+    ScrollController? scrollController,
   }) {
     final showBanner = showRadarBanner && !_hideRadarBanner && currentUser != null;
     final hasHidden = tabHiddenIds.isNotEmpty;
@@ -2882,6 +2858,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     if (hasHidden) headerCount++;
 
     return ListView.builder(
+      controller: scrollController,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 75),
       itemCount: list.length + headerCount,
@@ -3194,6 +3171,34 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
               final currentTabCount = _tabController.index == 0 ? radarKuponlar.length : toplulukKuponlar.length;
               final currentTabTitle = _tabController.index == 0 ? 'Kupon Radarı' : 'Topluluk Kuponları';
 
+              // Hedef kupona otomatik kaydırma (Highlight Kupon ID varsa)
+              if (_highlightedKuponId != null && !_hasAutoScrolledToHighlight) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || _hasAutoScrolledToHighlight) return;
+                  final isCommunityTab = _tabController.index == 1;
+                  final targetList = isCommunityTab ? toplulukKuponlar : radarKuponlar;
+                  final targetCtrl = isCommunityTab ? _toplulukScrollController : _radarScrollController;
+                  final targetIndex = targetList.indexWhere((k) => k.id == _highlightedKuponId);
+
+                  if (targetIndex != -1 && targetCtrl.hasClients) {
+                    _hasAutoScrolledToHighlight = true;
+                    final headerOffset = (isCommunityTab
+                            ? (hiddenToplulukIds.isNotEmpty ? 1 : 0)
+                            : ((!_hideRadarBanner ? 1 : 0) + (hiddenRadarIds.isNotEmpty ? 1 : 0))) *
+                        60.0;
+                    final targetOffset = (headerOffset + (targetIndex * 155.0)).clamp(
+                      0.0,
+                      targetCtrl.position.maxScrollExtent,
+                    );
+                    targetCtrl.animateTo(
+                      targetOffset,
+                      duration: const Duration(milliseconds: 600),
+                      curve: Curves.easeInOutCubic,
+                    );
+                  }
+                });
+              }
+
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -3317,6 +3322,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           currentUser: currentUser,
                           emptyMsg: 'Kupon radarında şu an aktif kupon bulunamadı.',
                           showRadarBanner: true,
+                          scrollController: _radarScrollController,
                         ),
                         _buildTabContent(
                           list: toplulukKuponlar,
@@ -3325,6 +3331,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           isDark: isDark,
                           currentUser: currentUser,
                           emptyMsg: 'Topluluk tarafından paylaşılan kupon bulunamadı.',
+                          scrollController: _toplulukScrollController,
                         ),
                       ],
                     ),
@@ -4093,12 +4100,13 @@ class _RadarGradientBorderPainter extends CustomPainter {
   }
 }
 
-/// Yeni açılan kupon kartını Botkolik Radar tarzı dönen degrade çerçeve ve ışıma ile 3.5 saniye canlandırır
+/// Yeni açılan veya bildirimden vurgulanan kupon kartını Botkolik Radar tarzı dönen degrade çerçeve ve ışıma ile 3.5 saniye canlandırır
 class _NewlyUnlockedCardGlowWrapper extends StatefulWidget {
   final Widget child;
   final bool isDark;
 
   const _NewlyUnlockedCardGlowWrapper({
+    super.key,
     required this.child,
     required this.isDark,
   });

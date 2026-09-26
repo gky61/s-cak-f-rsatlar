@@ -2742,6 +2742,7 @@ exports.cleanupExpiredDealsManual = functions
           const deal = doc.data();
           batch.update(doc.ref, {
             isExpired: true,
+            status: 'expired',
             expiredAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
