@@ -166,6 +166,12 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
       adUnitId: widget.adUnitId,
       request: const AdRequest(),
       nativeTemplateStyle: templateStyle,
+      nativeAdOptions: NativeAdOptions(
+        mediaAspectRatio: MediaAspectRatio.landscape,
+        videoOptions: VideoOptions(
+          startMuted: true,
+        ),
+      ),
       listener: NativeAdListener(
         onAdLoaded: (ad) {
           _timeoutTimer?.cancel();
@@ -264,14 +270,14 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
     if (widget.viewMode == CardViewMode.horizontal) {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
-        height: 124,
+        height: 126,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1),
-            width: 1.5,
+            width: 1.0,
           ),
         ),
         child: const Row(
@@ -301,7 +307,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1),
-            width: 1.5,
+            width: 1.0,
           ),
         ),
         child: const Column(
@@ -336,6 +342,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
 
     // Reklam yüklenememişse veya devre dışıysa fallback builder çağrılır
     if (_isAdFailed || (!AdManagerService.instance.isAdsEnabled || !AdManagerService.instance.nativeEnabled)) {
@@ -355,11 +362,11 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
     if (widget.viewMode == CardViewMode.horizontal) {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
-        height: 124,
+        height: 126,
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+          color: surfaceColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cardBorderColor, width: 1.5),
+          border: Border.all(color: cardBorderColor, width: 1.0),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
@@ -368,24 +375,22 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            width: double.infinity,
-            height: 124,
-            child: AdWidget(
-              key: ValueKey('ad_widget_${widget.adUnitId}_${_nativeAd.hashCode}'),
-              ad: _nativeAd!,
-            ),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: double.infinity,
+          height: 124,
+          child: AdWidget(
+            key: ValueKey('ad_widget_${widget.adUnitId}_${_nativeAd.hashCode}'),
+            ad: _nativeAd!,
           ),
         ),
       );
     } else {
       return Container(
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+          color: surfaceColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cardBorderColor, width: 1.5),
+          border: Border.all(color: cardBorderColor, width: 1.0),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
@@ -394,13 +399,11 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox.expand(
-            child: AdWidget(
-              key: ValueKey('ad_widget_${widget.adUnitId}_${_nativeAd.hashCode}'),
-              ad: _nativeAd!,
-            ),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox.expand(
+          child: AdWidget(
+            key: ValueKey('ad_widget_${widget.adUnitId}_${_nativeAd.hashCode}'),
+            ad: _nativeAd!,
           ),
         ),
       );

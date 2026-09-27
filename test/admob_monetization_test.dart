@@ -150,5 +150,16 @@ void main() {
       expect(katalogCode.contains('chunkCatalogs.length == chunkSize'), isTrue,
           reason: 'Must inject ad banner only after complete chunk of 6 brochures (3 full rows)');
     });
+
+    test('13. Faz 3.3: NativeAdOptions configured and unclipped 126 framing applied in ad_native_widget', () {
+      final nativeWidgetCode = File('lib/widgets/ad_native_widget.dart').readAsStringSync();
+      expect(nativeWidgetCode.contains('NativeAdOptions('), isTrue,
+          reason: 'Must supply NativeAdOptions to prevent media & video constraints mismatch');
+      expect(nativeWidgetCode.contains('mediaAspectRatio: MediaAspectRatio.landscape'), isTrue);
+      expect(nativeWidgetCode.contains('height: 126'), isTrue,
+          reason: 'Must maintain unclipped 126 framing for platform views');
+      expect(nativeWidgetCode.contains('clipBehavior: Clip.antiAlias'), isTrue,
+          reason: 'Must use native container clipBehavior instead of invasive nested ClipRRect');
+    });
   });
 }

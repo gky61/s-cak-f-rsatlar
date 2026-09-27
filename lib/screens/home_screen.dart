@@ -1928,7 +1928,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (chunkDeals.length == chunkSize) {
         slivers.add(
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
             sliver: SliverToBoxAdapter(
               child: AdDealCard(
                 key: ValueKey('ad_card_grid_horizontal_$chunkIndex'),
