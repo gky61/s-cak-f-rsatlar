@@ -46,7 +46,7 @@ Android ve iOS işletim sistemleri arasındaki temel çekirdek farklılıkları 
 8. **iOS Yerel Bildirim Görünürlüğü:** `_localNotifications.show` ve `_firebaseMessagingBackgroundHandler` çağrılarında eksik olan `DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true)` entegre edildi.
 9. **Rozet (Badge) Temizleme Mekanizması:** Bildirim kutusu açıldığında iOS uygulama ikonu üzerindeki bildirim sayısının sıfırlanması için `clearBadgeAndNotifications()` metodu eklendi.
 10. **Native HTTP Çerez Desteği:** iOS `URLSession` katmanına (`AppDelegate.swift`) `cookie` başlığı entegre edilerek Getir/Zara gibi korumalı mağazaların ayrıştırılması sağlandı.
-11. **Platforma Özel AdMob Test ID'si:** iOS cihazlarda Android test banner ID'sinin reklam yükleme hatası (No ad config) vermesini önlemek için `firebase_options.dart` içine platform kontrolü eklenerek resmi iOS test ID'si (`ca-app-pub-3940256099942544/2934735716`) tanımlandı.
+11. **Platforma Özel AdMob ID Matrisi & Native Ads (Faz 3.3):** iOS cihazlarda Android reklam ID'lerinin reklam yükleme hatası (No ad config) vermesini önlemek için `firebase_options.dart` içine platform kontrolü eklenmiş; hem resmi iOS test ID'leri (Banner: `ca-app-pub-3940256099942544/2934735716`, Native: `ca-app-pub-3940256099942544/3986624511`) hem de resmi canlı iOS Native ID (`ca-app-pub-6853997017739651/9437070495`) tanımlanmıştır.
 
 ---
 
@@ -344,7 +344,7 @@ iOS bildirim akışı Android'den farklı olarak doğrudan Google FCM sunucular�
 - **iOS Uyumluluk Durumu:**
   1. **Dynamic Island & Notch:** `home_screen.dart`, `deal_detail_screen.dart` ve modal sayfalarda `MediaQuery.of(context).padding.top` kullanılarak ada ve çentik altına içerik taşması engellenmiştir.
   2. **Home Indicator:** Alt menü çubuklarında `SafeArea(top: false)` ve `MediaQuery.of(context).padding.bottom + 14` kullanılarak iPhone alt gezinme çubuğu ile butonların çakışması önlenmiştir.
-  3. **AdMob iOS App ID & Banner ID (Prod-Ready):** `ios/Runner/Info.plist` içine `ca-app-pub-6853997017739651~7339420575` (resmi iOS Prod App ID), `firebase_options.dart` içine varsayılan olarak `ca-app-pub-6853997017739651/2039078155` (resmi iOS Prod Banner ID) tanımlanmıştır. Ayrıca `--dart-define=ADMOB_IOS_BANNER_ID` desteği ve test fallback'i (`ca-app-pub-3940256099942544/2934735716`) aktiftir. `AdManagerService` ile 25s cooldown ve `onPaidEvent` telemetrisi kusursuz çalışmaktadır.
+  3. **AdMob iOS App ID & Native Ads (Faz 3.3 Prod-Ready):** `ios/Runner/Info.plist` içine `ca-app-pub-6853997017739651~7339420575` (resmi iOS Prod App ID), `firebase_options.dart` içine resmi canlı Native ID `ca-app-pub-6853997017739651/9437070495` ve eski banner arşivi `ca-app-pub-6853997017739651/2039078155` tanımlanmıştır. Ayrıca `--dart-define=ADMOB_IOS_NATIVE_ID` desteği ve Google test fallback'i (`ca-app-pub-3940256099942544/3986624511`) aktiftir. Hem Grid hem Liste modlarında modern Native Ad mimarisi çalışmakta; `AdManagerService` ile 25s cooldown ve `onPaidEvent` telemetrisi kusursuz yürütülmektedir.
 
 ### 5.9 Web Admin Paneli & Hosting Yapılandırması
 - **İlgili Dokümanlar:**

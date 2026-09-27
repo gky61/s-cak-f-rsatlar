@@ -9,7 +9,7 @@ birim kimlikleri ve kârlılık verilerini sorgulamak için kullanılır.
 
 Komutlar:
     python admob_cli.py status [--platform all|android|ios] [--env all|dev|prod]
-    python admob_cli.py report [--days N] [--platform all|android|ios] [--env all|dev|prod] [--format all|banner|interstitial|native]
+    python admob_cli.py report [--days N] [--platform all|android|ios] [--env all|dev|prod] [--format all|native|rewarded]
     python admob_cli.py inspect
     python admob_cli.py units [--platform all|android|ios] [--env all|dev|prod]
     python admob_cli.py net-profit --ad-spend X --admob-rev Y [--affiliate-rev Z]
@@ -40,7 +40,6 @@ REGISTRY = {
                 "is_test": True,
                 "units": {
                     "banner": "ca-app-pub-3940256099942544/6300978111",
-                    "interstitial": "ca-app-pub-3940256099942544/1033173712",
                     "native": "ca-app-pub-3940256099942544/2247696110",
                     "rewarded": "ca-app-pub-3940256099942544/5224354917"
                 }
@@ -50,9 +49,8 @@ REGISTRY = {
                 "app_id": "ca-app-pub-6853997017739651~8861215767",
                 "is_test": False,
                 "units": {
-                    "banner": "ca-app-pub-6853997017739651/8758625050",
-                    "interstitial": "ca-app-pub-6853997017739651/1033173712",
-                    "native": "ca-app-pub-6853997017739651/2247696110",
+                    "banner": "ca-app-pub-6853997017739651/8758625050 (Deprecated/Archived)",
+                    "native": "ca-app-pub-6853997017739651/4004866134",
                     "rewarded": "ca-app-pub-6853997017739651/5224354917"
                 }
             }
@@ -64,7 +62,6 @@ REGISTRY = {
                 "is_test": True,
                 "units": {
                     "banner": "ca-app-pub-3940256099942544/2934735716",
-                    "interstitial": "ca-app-pub-3940256099942544/4411468910",
                     "native": "ca-app-pub-3940256099942544/3986624511",
                     "rewarded": "ca-app-pub-3940256099942544/1712485313"
                 }
@@ -74,9 +71,8 @@ REGISTRY = {
                 "app_id": "ca-app-pub-6853997017739651~7339420575",
                 "is_test": False,
                 "units": {
-                    "banner": "ca-app-pub-6853997017739651/2039078155",
-                    "interstitial": "ca-app-pub-6853997017739651/4411468910",
-                    "native": "ca-app-pub-6853997017739651/3986624511",
+                    "banner": "ca-app-pub-6853997017739651/2039078155 (Deprecated/Archived)",
+                    "native": "ca-app-pub-6853997017739651/9437070495",
                     "rewarded": "ca-app-pub-6853997017739651/1712485313"
                 }
             }
@@ -99,7 +95,6 @@ def get_status(platform_filter="all", env_filter="all"):
                 "app_name": cfg["app_name"],
                 "app_id": f"{cfg['app_id']} ({'Official Test' if cfg['is_test'] else 'Genuine PROD'})",
                 "banner_unit_id": cfg["units"]["banner"],
-                "interstitial_unit_id": cfg["units"]["interstitial"],
                 "rewarded_unit_id": cfg["units"]["rewarded"],
                 "native_unit_id": cfg["units"]["native"],
                 "status": "HEALTHY",
@@ -118,11 +113,12 @@ def get_status(platform_filter="all", env_filter="all"):
         },
         "platforms": platforms_output,
         "active_formats": [
-            {"format": "Banner (Horizontal)", "placement": "Home Feed", "size": "320x100 / LargeBanner", "status": "ACTIVE"},
-            {"format": "Sponsored Native Card", "placement": "Home Grid (2-Col)", "size": "Responsive Card", "status": "ACTIVE (100% Policy Compliant)"},
-            {"format": "Rewarded Video", "placement": "Coupon Unlock (+2 Credits)", "size": "Fullscreen Video", "status": "ACTIVE"},
-            {"format": "Interstitial", "placement": "Outbound Store Link (3m Capped)", "size": "Fullscreen", "status": "READY"},
-            {"format": "App Open", "placement": "Cold/Warm Resume", "size": "Fullscreen", "status": "READY"}
+            {"format": "Native Ads Advanced (Anasayfa)", "placement": "Home Feed & Grid", "size": "Responsive Card (Small/Medium)", "status": "ACTIVE ($1.50 - $3.50 eCPM, 100% Compliant)"},
+            {"format": "Native Ads Advanced (Kuponlar)", "placement": "Coupons Stream (Her 4 kuponda 1 reklam)", "size": "Responsive Horizontal (Small Template)", "status": "ACTIVE ($1.50 - $3.50 eCPM)"},
+            {"format": "Native Ads Advanced (Aktüel)", "placement": "Aktüel Catalogs Grid (Her 6 broşürde 1 tam genişlik şerit)", "size": "Responsive Horizontal (Small Template)", "status": "ACTIVE ($1.50 - $3.50 eCPM)"},
+            {"format": "House Promo Fallback", "placement": "Home Feed, Kuponlar & Aktüel Stream", "size": "Responsive Card", "status": "ACTIVE (Zero-Fill Fallback)"},
+            {"format": "Rewarded Video", "placement": "Coupon Unlock (+2 Credits)", "size": "Fullscreen Video", "status": "ACTIVE ($8.00 - $18.00 eCPM)"},
+            {"format": "Legacy Banner", "placement": "Deprecated", "size": "320x100", "status": "RETIRED (Migrated to Native Ads)"}
         ]
     }
 
@@ -162,7 +158,6 @@ def generate_report(days=7, platform_filter="all", env_filter="all", format_filt
         "all": 78.50,
         "banner": 58.20,
         "native": 92.40,
-        "interstitial": 195.00,
         "rewarded": 285.00
     }
     base_ecpm_try = format_base_ecpm.get(format_filter, 78.50)
@@ -269,14 +264,14 @@ def inspect_codebase():
     if os.path.exists(options_path):
         with open(options_path, "r", encoding="utf-8") as f:
             content = f.read()
-        has_ios_banner = "ca-app-pub-6853997017739651/2039078155" in content
-        has_and_banner = "ca-app-pub-6853997017739651/8758625050" in content
-        has_fallback = "ca-app-pub-3940256099942544/2934735716" in content
+        has_ios_native = "ca-app-pub-6853997017739651/9437070495" in content
+        has_and_native = "ca-app-pub-6853997017739651/4004866134" in content
+        has_fallback = "ca-app-pub-3940256099942544/2247696110" in content
         checks.append({
             "file": "lib/firebase_options.dart",
-            "rule": "4-way AdMob Matrix (Android Dev/Prod, iOS Dev/Prod)",
-            "passed": has_ios_banner and has_and_banner and has_fallback,
-            "details": "iOS Prod Banner + Android Prod Banner + Dev Fallbacks fully mapped"
+            "rule": "4-way AdMob Matrix (Android Dev/Prod, iOS Dev/Prod Native Units)",
+            "passed": has_ios_native and has_and_native and has_fallback,
+            "details": "iOS Prod Native (9437070495) + Android Prod Native (4004866134) + Dev Fallbacks fully mapped"
         })
     else:
         checks.append({"file": "lib/firebase_options.dart", "rule": "File existence", "passed": False})
@@ -291,6 +286,54 @@ def inspect_codebase():
         "details": "Singleton service with 25s cooldown and Kill-Switch logic active"
     })
 
+    # 6. lib/screens/home_screen.dart (Faz 3.3 Akış Mimarisi)
+    home_path = os.path.join(WORKSPACE_ROOT, "lib", "screens", "home_screen.dart")
+    if os.path.exists(home_path):
+        with open(home_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        has_horizontal_grid = "_buildGridWithHorizontalAdsSlivers" in content
+        has_ad_card = "AdDealCard" in content
+        checks.append({
+            "file": "lib/screens/home_screen.dart",
+            "rule": "Faz 3.3 Akış Mimarisi (CustomScrollView & SliverGrid)",
+            "passed": has_horizontal_grid and has_ad_card,
+            "details": "Grid ve Liste akışında her 6 fırsatta bir tam genişlikli (124dp) Native Ad yatay şeritleri kusursuz entegre"
+        })
+    else:
+        checks.append({"file": "lib/screens/home_screen.dart", "rule": "File existence", "passed": False})
+
+    # 7. lib/screens/kuponlar_page.dart (Kuponlar Akış İçi Native Reklam)
+    kupon_path = os.path.join(WORKSPACE_ROOT, "lib", "screens", "kuponlar_page.dart")
+    if os.path.exists(kupon_path):
+        with open(kupon_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        has_kupon_ad = "AdDealCard" in content and "placement: 'kuponlar'" in content
+        has_freq = "nativeCouponsInterval" in content
+        checks.append({
+            "file": "lib/screens/kuponlar_page.dart",
+            "rule": "Kuponlar Akış İçi Native Ad (Her 4 kuponda 1 reklam)",
+            "passed": has_kupon_ad and has_freq,
+            "details": "Kuponlar listesinde her 4 kupondan sonra (5. sırada) 124dp yatay Small Native Ad entegre"
+        })
+    else:
+        checks.append({"file": "lib/screens/kuponlar_page.dart", "rule": "File existence", "passed": False})
+
+    # 8. lib/screens/katalog_listesi_page.dart (Aktüel Akış İçi Native Reklam)
+    aktuel_path = os.path.join(WORKSPACE_ROOT, "lib", "screens", "katalog_listesi_page.dart")
+    if os.path.exists(aktuel_path):
+        with open(aktuel_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        has_aktuel_ad = "AdDealCard" in content and "placement: 'aktuel'" in content
+        has_aktuel_freq = "nativeAktuelInterval" in content
+        checks.append({
+            "file": "lib/screens/katalog_listesi_page.dart",
+            "rule": "Aktüel Akış İçi Native Ad (Her 6 broşürde 1 reklam)",
+            "passed": has_aktuel_ad and has_aktuel_freq,
+            "details": "Aktüel 2 sütunlu gridinde her 6 broşürden sonra (3 satırda bir) 124dp yatay Small Native Ad entegre"
+        })
+    else:
+        checks.append({"file": "lib/screens/katalog_listesi_page.dart", "rule": "File existence", "passed": False})
+
     all_passed = all(c["passed"] for c in checks)
     return {
         "inspection_status": "ALL_CHECKS_PASSED ✅" if all_passed else "CHECKS_FAILED ❌",
@@ -302,7 +345,7 @@ def inspect_codebase():
 def policy_check():
     """Google AdMob politikası ve UI/UX güvenlik denetimi yapar."""
     card_path = os.path.join(WORKSPACE_ROOT, "lib", "widgets", "ad_deal_card.dart")
-    banner_path = os.path.join(WORKSPACE_ROOT, "lib", "widgets", "ad_banner_widget.dart")
+    native_path = os.path.join(WORKSPACE_ROOT, "lib", "widgets", "ad_native_widget.dart")
     
     has_violation = False
     details = []
@@ -316,13 +359,26 @@ def policy_check():
         else:
             details.append("PASS: ad_deal_card.dart does NOT scale mediumRectangle with FittedBox")
             
-    if os.path.exists(banner_path):
-        with open(banner_path, "r", encoding="utf-8") as f:
+        if "AdNativeWidget" in content:
+            details.append("PASS: ad_deal_card.dart delegates to AdNativeWidget (Faz 3.3)")
+        else:
+            has_violation = True
+            details.append("VIOLATION: ad_deal_card.dart does not use AdNativeWidget")
+            
+    if os.path.exists(native_path):
+        with open(native_path, "r", encoding="utf-8") as f:
             content = f.read()
         if "onPaidEvent" in content:
-            details.append("PASS: ad_banner_widget.dart wires onPaidEvent telemetry")
+            details.append("PASS: ad_native_widget.dart wires onPaidEvent telemetry")
         else:
-            details.append("WARNING: onPaidEvent not detected in ad_banner_widget.dart")
+            has_violation = True
+            details.append("WARNING: onPaidEvent not detected in ad_native_widget.dart")
+            
+        if "NativeTemplateStyle" in content:
+            details.append("PASS: ad_native_widget.dart uses NativeTemplateStyle for both Small and Medium views")
+        else:
+            has_violation = True
+            details.append("WARNING: NativeTemplateStyle not detected in ad_native_widget.dart")
             
     return {
         "policy_status": "COMPLIANT ✅" if not has_violation else "NON_COMPLIANT ❌",
@@ -372,7 +428,7 @@ def main():
     report_parser.add_argument("--days", type=int, default=7, help="Kaç günlük rapor çekileceği")
     report_parser.add_argument("--platform", choices=["all", "android", "ios"], default="all", help="Platform filtresi")
     report_parser.add_argument("--env", choices=["all", "dev", "prod"], default="all", help="Ortam filtresi")
-    report_parser.add_argument("--format", choices=["all", "banner", "interstitial", "native", "rewarded"], default="all", help="Reklam formatı")
+    report_parser.add_argument("--format", choices=["all", "native", "rewarded"], default="all", help="Reklam formatı")
     
     # net-profit komutu
     profit_parser = subparsers.add_parser("net-profit", help="Net kârlılık analizi")

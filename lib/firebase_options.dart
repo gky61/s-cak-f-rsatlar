@@ -120,16 +120,17 @@ class DefaultFirebaseOptions {
 
   // ─── AdMob Reklam Birimi Kimlikleri (4 Boyutlu Matris: Dev/Prod x Android/iOS) ───
 
-  /// iOS Prod Banner ID (FırsatKolik iOS Prod Reklam Birimi)
+  /// iOS Prod Banner ID (Eski/Geçişli Banner Birimi - Faz 3.3 ile Native Ads'e geçildi)
   static const String _iosProdBannerId = String.fromEnvironment(
     'ADMOB_IOS_BANNER_ID',
     defaultValue: 'ca-app-pub-6853997017739651/2039078155', // FırsatKolik Gerçek iOS Banner ID
   );
 
-  /// Android Prod Banner ID (FırsatKolik Prod Reklam Birimi)
+  /// Android Prod Banner ID (Eski/Geçişli Banner Birimi - Faz 3.3 ile Native Ads'e geçildi)
   static const String _androidProdBannerId = 'ca-app-pub-6853997017739651/8758625050';
 
-  /// Banner Reklam Birimi ID'si
+  /// Banner Reklam Birimi ID'si (DEPRECATED: Faz 3.3 kapsamında akış içi reklamlar nativeAdUnitId'ye taşınmıştır)
+  @Deprecated('Faz 3.3 kapsamında akış içi reklamlar nativeAdUnitId formatına taşınmıştır.')
   static String get bannerAdUnitId {
     final isDev = kDebugMode || !isProductionFlavor;
     if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -143,26 +144,32 @@ class DefaultFirebaseOptions {
         : _androidProdBannerId; // Gerçek Android Banner ID
   }
 
-  /// Geçiş Reklamı (Interstitial) Birimi ID'si
-  static String get interstitialAdUnitId {
-    final isDev = kDebugMode || !isProductionFlavor;
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      return 'ca-app-pub-3940256099942544/4411468910'; // Google iOS Test Interstitial ID
-    }
-    return isDev
-        ? 'ca-app-pub-3940256099942544/1033173712' // Google Android Test Interstitial ID
-        : 'ca-app-pub-6853997017739651/1033173712'; // Prod Placeholder
-  }
 
-  /// Yerel Reklam (Native Advanced) Birimi ID'si
+
+  /// iOS Prod Native Ad ID (FırsatKolik iOS Prod Yerel Akış Reklam Birimi)
+  static const String _iosProdNativeId = String.fromEnvironment(
+    'ADMOB_IOS_NATIVE_ID',
+    defaultValue: 'ca-app-pub-6853997017739651/9437070495', // FırsatKolik Prod iOS Native ID
+  );
+
+  /// Android Prod Native Ad ID (FırsatKolik Android Prod Yerel Akış Reklam Birimi)
+  static const String _androidProdNativeId = String.fromEnvironment(
+    'ADMOB_ANDROID_NATIVE_ID',
+    defaultValue: 'ca-app-pub-6853997017739651/4004866134', // FırsatKolik Prod Android Native ID
+  );
+
+  /// Yerel Reklam (Native Advanced) Birimi ID'si (Akış İçi Grid & List Birimleri)
   static String get nativeAdUnitId {
     final isDev = kDebugMode || !isProductionFlavor;
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      return 'ca-app-pub-3940256099942544/3986624511'; // Google iOS Test Native ID
+      if (isDev || _iosProdNativeId.isEmpty) {
+        return 'ca-app-pub-3940256099942544/3986624511'; // Google iOS Test Native ID
+      }
+      return _iosProdNativeId;
     }
     return isDev
         ? 'ca-app-pub-3940256099942544/2247696110' // Google Android Test Native ID
-        : 'ca-app-pub-6853997017739651/2247696110'; // Prod Placeholder
+        : _androidProdNativeId; // FırsatKolik Gerçek Android Native ID
   }
 
   /// Ödüllü Reklam (Rewarded) Birimi ID'si
@@ -176,16 +183,6 @@ class DefaultFirebaseOptions {
         : 'ca-app-pub-6853997017739651/5224354917'; // Prod Placeholder
   }
 
-  /// Uygulama Açılış Reklamı (App Open) Birimi ID'si
-  static String get appOpenAdUnitId {
-    final isDev = kDebugMode || !isProductionFlavor;
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      return 'ca-app-pub-3940256099942544/5575463023'; // Google iOS Test App Open ID
-    }
-    return isDev
-        ? 'ca-app-pub-3940256099942544/9257395921' // Google Android Test App Open ID
-        : 'ca-app-pub-6853997017739651/9257395921'; // Prod Placeholder
-  }
 }
 
 

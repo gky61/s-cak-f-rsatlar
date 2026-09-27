@@ -65,9 +65,13 @@ FırsatKolik mobil uygulamasının kaynak kodları, manifest dosyaları, plist y
   * Uygulama **PROD Release** derlendiğinde ise, en alttaki tek satır çalışır: `ca-app-pub-6853997017739651/8758625050`. Bu kimlik **Android'e ait bir Banner ID**'sidir.
   * Google AdMob platformunda Android reklam birimi kimliği iOS uygulamasından çağrılamaz.
   * **Sonuç:** iOS App Store'dan uygulamayı indiren gerçek kullanıcılar için reklam isteği her seferinde `LoadAdError(code: 3, message: "No ad config")` ile çöker ve iOS platformundan **0 TL gelir** elde edilir.
-* **✅ Giderildi (Prod-Ready):**
-  * `firebase_options.dart` içine 4'lü matris kuruldu. iOS prod için varsayılan olarak resmi `ca-app-pub-6853997017739651/2039078155` tanımlandı.
-  * `--dart-define=ADMOB_IOS_BANNER_ID` desteği eklendi. Test ve dev ortamlarında Google resmi test ID'si (`ca-app-pub-3940256099942544/2934735716`) güvenli fallback olarak çalışır.
+* **✅ Giderildi (Prod-Ready & Faz 3.3 Native Ads):**
+  * `firebase_options.dart` içine 4'lü matris kuruldu. Faz 3.3 kapsamında hem Grid hem Liste için Native Reklam mimarisine geçildi.
+  * Canlı prod ortamı için resmi Native ID'ler tanımlandı:
+    * Android PROD Native: `ca-app-pub-6853997017739651/4004866134`
+    * iOS PROD Native: `ca-app-pub-6853997017739651/9437070495`
+  * Eski Banner ID'leri (`ca-app-pub-6853997017739651/8758625050` ve `ca-app-pub-6853997017739651/2039078155`) güvenli şekilde arşive alındı.
+  * `--dart-define=ADMOB_IOS_NATIVE_ID` ve `--dart-define=ADMOB_ANDROID_NATIVE_ID` desteği eklendi. Test ve dev ortamlarında Google resmi test ID'leri güvenli fallback olarak çalışır.
 
 ---
 
@@ -140,20 +144,18 @@ FırsatKolik mobil uygulamasının kaynak kodları, manifest dosyaları, plist y
 
 ---
 
-### 2.8. Stratejik Gelir Eksikliği: Reklam Formatlarının %85'i Yok
-* **Mevcut Durum:** Uygulamada sadece ana sayfa akışında Banner/MREC reklam vardır.
-* **Masada Bırakılan Formatlar ve Gelir Potansiyelleri:**
+### 2.8. Stratejik Gelir ve Format Kararı (Monetizasyon Başyapıtı)
+* **Altın Oran Stratejisi:** E-ticaret kullanıcı deneyimini (UX), kullanıcı sadakatini (Retention) ve affiliate (gelir ortaklığı) dönüşüm oranlarını korumak adına **"Altın Oran"** reklam stratejisi benimsenmiştir. Kullanıcıları mağazaya giderken öfkelendiren **Tam Ekran Geçiş Reklamları (Interstitial)** ve açılış reklamları (**App Open**) kod tabanından ve yönetim panellerinden tamamen temizlenmiştir.
+* **Aktif ve Kusursuz Format Dağılımı:**
 
 | Reklam Formatı | Sektör Ort. eCPM (TR) | FırsatKolik Entegrasyon Noktası | Durum |
 | :--- | :--- | :--- | :--- |
-| **Banner (MREC / Inline)** | $0.20 - $0.80 | Ana sayfa listesi | 🟢 Standart 320x100 ile aktif |
-| **Native Advanced Ads** | $1.50 - $3.50 | Ana sayfa grid keşif kartı | 🟢 %100 Uyumlu Sponsorlu Kart ile aktif |
-| **Interstitial (Geçiş)** | $4.00 - $9.00 | Dış mağaza çıkışları (3 dk cap) | 🟢 AdManagerService altyapısı hazır |
+| **Native Advanced Ads** | $1.50 - $4.50 | Anasayfa (Grid & Liste), Kuponlar ve Aktüel akışları | 🟢 %100 Uyumlu Sponsorlu Kart ile aktif |
 | **Rewarded (Ödüllü Video)** | $8.00 - $18.00 | Kupon açma kredisi motoru | 🟢 Kuponlar sayfası ile aktif |
-| **App Open (Açılış)** | $3.50 - $7.00 | Cold/Warm start resume | 🟢 AdManagerService altyapısı hazır |
+| **Banner (MREC / Inline)** | $0.20 - $0.80 | Eski liste altı | ⚪ Faz 3.3 ile emekliye ayrıldı (Arşiv) |
 
 * **✅ Giderildi (Prod-Ready):**
-  * Rewarded Ad (Kupon açma & kredi kazanma), Native Sponsorlu Keşif Kartı, Interstitial (ön yüklemeli) ve App Open formatları `AdManagerService` çatısı altında sisteme entegre edildi. Kuponlar sayfasında `CouponCreditService` ile sürdürülebilir, etik bir ödüllü video mimarisi kuruldu.
+  * Rewarded Ad (Kupon açma & kredi kazanma) ve Native Sponsorlu Keşif Kartı formatları `AdManagerService` çatısı altında sisteme entegre edildi. Kuponlar sayfasında `CouponCreditService` ile sürdürülebilir, etik bir ödüllü video mimarisi kuruldu. İstenmeyen ve spam yaratan formatlar temizlendi.
 
 ---
 
@@ -172,13 +174,13 @@ Roadmap'e geçmeden önce bu profesyonel zemin üzerinde uygulamamız gereken d�
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ PAKET 2: POLİTİKA & UI/UX KURTARMA                                          │
 │   • Grid içindeki FittedBox'lı MREC skandalının derhal kaldırılması.        │
-│   • İki sütunlu grid için Native Ad veya akış içi Adaptive Banner mimarisi. │
+│   • İki sütunlu grid için Native Ad akış içi tam satır mimarisi.            │
 │   • Reklam kartlarına AdMob uyumlu net "Sponsorlu / Reklam" etiketlemesi.   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ PAKET 3: ADMOB MANAGER & BELLEK/HAVUZ MİMARİSİ                              │
 │   • Merkezi AdManagerService (Singleton) inşası.                            │
-│   • Banner ve Interstitial için bellek önbellekleme (Ad Caching / AdPool).  │
-│   • Hata durumunda 15-30s cooldown'lı güvenli retry mekanizması.            │
+│   • Native ve Rewarded için bellek yönetimi ve yaşam döngüsü kontrolü.      │
+│   • Hata durumunda 20-30s cooldown'lı güvenli retry mekanizması.            │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ PAKET 4: TELEMETRİ & MARKETING AGENT ROAS KÖPRÜSÜ                           │
 │   • onPaidEvent dinleyicisinin Firebase Analytics ad_impression'a bağlanması.│
@@ -201,3 +203,21 @@ Marketing Agent gibi, AdMob için de tamamen bağımsız ve uzman bir agent kuru
 3. **CLI & Raporlama Aracı:** Google AdMob API v1 üzerinden günlük eCPM, Fill Rate ve Tahmini Gelir sorgulayan CLI aracı.
 4. **Ortak Dashboard Analizi:**
    $$\text{Günlük Net Kâr} = (\text{AdMob Geliri} + \text{Affiliate Geliri}) - \text{Marketing Reklam Harcaması}$$
+
+---
+
+## 🧩 5. Faz 3.3 Native Ad Soğuk Başlangıç & PlatformView Kök Neden Analizi (Root Cause Analysis & Gold Standard Fix)
+
+### 5.1. Belirti (Symptom)
+Test cihazında soğuk başlangıçta (Cold-Start) Native Ad kartı 124dp çerçevesiyle boş bir kutu olarak kalmakta, liste-grid görünümü değiştirildiğinde anında gelmekte, ancak uygulama kapatılıp açıldığında tekrar boş kalmaktaydı. Reklam dolmadığında çalışan House Promo Fallback ise tetiklenmemekteydi.
+
+### 5.2. Kök Neden Zinciri (Root-Cause Chain)
+1. **UMP ve AdMob Asenkron Yarış Durumu:** `main.dart` içindeki UMP rıza sorgusu ağda beklerken Flutter UI Frame 1'i (t ~ 100ms) çizmiş ve `AdNativeWidget` AdMob SDK ilklendirilmeden reklam istemeye çalışmıştır.
+2. **PlatformView ve RepaintBoundary Donması:** `HomeScreen`, `KuponlarPage` ve `KatalogListesiPage` içerisindeki `RepaintBoundary` sarmalayıcıları, Android `SurfaceTexture` ilk karesini üretemeden önce boş/şeffaf raster katmanını GPU önbelleğine kilitlemiştir. View toggle yapıldığında sliver yeniden inşa edildiği için önbellek geçersiz kılınıp reklam görünür hale gelmekteydi.
+3. **Fallback Neden Tetiklenmedi?** Reklam açık bir hata (`onAdFailedToLoad`) almadığı için Flutter durumunda `_isAdFailed = false` kalmış ve House Promo yerine boş `AdWidget` çizilmiştir.
+
+### 5.3. Dünya Standardı Mimari Çözüm (Gold Standard Fix)
+* **SDK Asenkron Kilidi:** `AdManagerService.waitForInitialization` Completer'ı ile SDK hazır olmadan hiçbir reklam isteği atılmaz (4s emniyet timeout'lu).
+* **UMP Emniyet Zamanlayıcısı:** `main.dart` içinde 2.5s fallback zamanlayıcısı ile SDK gecikmesi önlenir.
+* **RepaintBoundary Kaldırılması:** PlatformView'ler asla `RepaintBoundary` ile sarılmaz; kararlı `ValueKey` ile doğrudan yönetilir.
+* **Post-Frame Uyandırma:** `onAdLoaded` sonrasında `addPostFrameCallback` ile Android `SurfaceTexture` ilk karesi Flutter render ağacına zorunlu olarak tanıtılır.

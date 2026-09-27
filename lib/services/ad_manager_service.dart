@@ -12,14 +12,14 @@ void _log(String message) {
   }
 }
 
-/// FırsatKolik Merkezi AdMob Monetizasyon, Havuz (AdPool) ve Yaşam Döngüsü Servisi
+/// FırsatKolik — Merkezi AdMob Monetizasyon, Havuz (AdPool) ve Yaşam Döngüsü Servisi
 /// 
 /// 1. AdMob SDK ve UMP başlatma durumunu yönetir.
-/// 2. Tüm reklam formatları (Banner, Interstitial, Native, Rewarded, App Open) için tek merkezdir.
+/// 2. Uygulamanın birincil reklam omurgası olan Akış İçi Native Ads (Anasayfa, Kuponlar, Aktüel)
+///    ve kullanıcı rızalı Ödüllü Video (Rewarded Ads - Kupon Kredisi) formatlarını yönetir.
 /// 3. onPaidEvent telemetrisi ile reklam gelirini (micro-cents) Firebase Analytics'e iletir (ROAS optimizasyonu).
-/// 4. Hata durumlarında akıllı soğuma (cooldown - 20s) uygulayarak AdMob hesap kısıtlamalarını önler.
-/// 5. Frekans sınırlaması (Frequency Capping) ile kullanıcı deneyimini korur.
-/// 6. Acil Durum Şalteri (Kill-Switch) ile reklamları anında kapatabilir.
+/// 4. Hata durumlarında akıllı soğuma (cooldown - 25s) uygulayarak AdMob hesap kısıtlamalarını önler.
+/// 5. Acil Durum Şalteri (Kill-Switch) ve format bazlı bağımsız şalterler ile uzaktan yönetilebilir.
 class AdManagerService extends ChangeNotifier {
   AdManagerService._internal();
   static final AdManagerService instance = AdManagerService._internal();
@@ -27,6 +27,10 @@ class AdManagerService extends ChangeNotifier {
 
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
+  final Completer<bool> _initCompleter = Completer<bool>();
+  Future<bool> get waitForInitialization => _initCompleter.isCompleted
+      ? Future.value(true)
+      : _initCompleter.future;
 
   /// Dinamik Reklam Şalteri (Kill-Switch) — Firestore settings/admob üzerinden güncellenir
   bool isAdsEnabled = true;
@@ -35,25 +39,18 @@ class AdManagerService extends ChangeNotifier {
   bool bannerEnabled = true;
   bool rewardedEnabled = true;
   bool nativeEnabled = true;
-  bool interstitialEnabled = true;
+  bool nativeCouponsEnabled = true; // Kuponlar sayfasında akış içi Native Ad şalteri
+  bool nativeAktuelEnabled = true; // Aktüel kataloglar sayfasında akış içi Native Ad şalteri
+  int nativeGridInterval = 6; // Anasayfa Grid'de kaç üründe bir yatay Native Ad gösterileceği
+  int nativeCouponsInterval = 5; // Kuponlar sayfasında her kaç öğede bir Native Ad gösterileceği (4 kupon + 1 reklam = 5)
+  int nativeAktuelInterval = 6; // Aktüel sayfasında kaç katalogda bir yatay Native Ad gösterileceği (varsayılan: 6)
 
   // ─── Hata Soğuma (Cooldown) Takibi ───────────────────────────────────────
   final Map<String, DateTime> _lastFailedTime = {};
   Duration _failureCooldown = const Duration(seconds: 25);
 
-  // ─── Interstitial (Geçiş Reklamı) Yönetimi ───────────────────────────────
-  InterstitialAd? _interstitialAd;
-  bool _isInterstitialLoading = false;
-  DateTime? _lastInterstitialShownTime;
-  Duration _interstitialCooldown = const Duration(minutes: 3); // 3 dakikada max 1
-
   // ─── Firestore Canlı Ayar Dinleyicisi ────────────────────────────────────
   StreamSubscription<DocumentSnapshot>? _settingsSubscription;
-
-  // ─── App Open (Açılış Reklamı) Yönetimi ─────────────────────────────────
-  AppOpenAd? _appOpenAd;
-  bool _isAppOpenLoading = false;
-  DateTime? _appOpenLoadTime;
 
   /// AdMob SDK Başlatma
   Future<void> initialize() async {
@@ -73,16 +70,24 @@ class AdManagerService extends ChangeNotifier {
 
       final initStatus = await MobileAds.instance.initialize();
       _isInitialized = true;
+      if (!_initCompleter.isCompleted) {
+        _initCompleter.complete(true);
+      }
       _log('✅ AdMob SDK başarıyla başlatıldı: ${initStatus.adapterStatuses.keys.join(", ")}');
 
-      // Arka planda geçiş ve ödüllü reklamları önyükle
-      preloadInterstitial();
+      // Arka planda ödüllü reklamları önyükle
       preloadRewardedAd();
 
       // Firestore settings/admob dinleyicisini başlat (Web Admin senkronizasyonu)
       _startFirestoreSettingsListener();
+
+      // Başlatma tamamlandığında bekleyen widget'ları uyar
+      notifyListeners();
     } catch (e) {
       _log('⚠️ AdMob başlatma hatası: $e');
+      if (!_initCompleter.isCompleted) {
+        _initCompleter.complete(false);
+      }
     }
   }
 
@@ -135,91 +140,7 @@ class AdManagerService extends ChangeNotifier {
     }
   }
 
-  // ===========================================================================
-  // INTERSTITIAL (GEÇİŞ REKLAMI) YÖNETİMİ
-  // ===========================================================================
 
-  /// Geçiş reklamını arka planda önceden yükler (Pre-load)
-  void preloadInterstitial() {
-    if (!isAdsEnabled || !interstitialEnabled || _isInterstitialLoading || _interstitialAd != null) return;
-
-    final unitId = DefaultFirebaseOptions.interstitialAdUnitId;
-    if (!canRequestAd(unitId)) return;
-
-    _isInterstitialLoading = true;
-    _log('🔄 Geçiş reklamı önyükleniyor...');
-
-    InterstitialAd.load(
-      adUnitId: unitId,
-      request: const AdRequest(),
-      adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) {
-          _isInterstitialLoading = false;
-          _interstitialAd = ad;
-          recordAdSuccess(unitId);
-          _log('✅ Geçiş reklamı belleğe yüklendi ve hazır');
-
-          ad.onPaidEvent = (Ad ad, double valueMicros, PrecisionType precision, String currencyCode) {
-            handlePaidEvent(
-              adUnitId: unitId,
-              adFormat: 'interstitial',
-              valueMicros: valueMicros,
-              precision: precision,
-              currencyCode: currencyCode,
-              responseInfo: ad.responseInfo,
-            );
-          };
-
-          ad.fullScreenContentCallback = FullScreenContentCallback(
-            onAdShowedFullScreenContent: (ad) {
-              _log('📱 Geçiş reklamı tam ekranda açıldı');
-            },
-            onAdDismissedFullScreenContent: (ad) {
-              _log('📱 Geçiş reklamı kapatıldı');
-              ad.dispose();
-              _interstitialAd = null;
-              // Bir sonraki gösterim için hemen yenisini önyükle
-              preloadInterstitial();
-            },
-            onAdFailedToShowFullScreenContent: (ad, error) {
-              _log('❌ Geçiş reklamı gösterilemedi: ${error.message}');
-              ad.dispose();
-              _interstitialAd = null;
-              preloadInterstitial();
-            },
-          );
-        },
-        onAdFailedToLoad: (error) {
-          _isInterstitialLoading = false;
-          _interstitialAd = null;
-          recordAdFailure(unitId, error);
-        },
-      ),
-    );
-  }
-
-  /// Belirli bir aksiyon sonrasında (Örn: Dış mağaza linkine tıklama) frekans uygunsa gösterir
-  bool showInterstitialIfAllowed({VoidCallback? onDismissed}) {
-    if (!isAdsEnabled || !interstitialEnabled || _interstitialAd == null) {
-      onDismissed?.call();
-      preloadInterstitial();
-      return false;
-    }
-
-    // Frekans kontrolü (cooldown)
-    if (_lastInterstitialShownTime != null) {
-      final elapsed = DateTime.now().difference(_lastInterstitialShownTime!);
-      if (elapsed < _interstitialCooldown) {
-        _log('⏱️ Interstitial frekans limiti aktif (${_interstitialCooldown.inSeconds - elapsed.inSeconds}s kaldı)');
-        onDismissed?.call();
-        return false;
-      }
-    }
-
-    _lastInterstitialShownTime = DateTime.now();
-    _interstitialAd!.show();
-    return true;
-  }
 
   // ===========================================================================
   // REWARDED (ÖDÜLLÜ REKLAM) YÖNETİMİ
@@ -262,6 +183,9 @@ class AdManagerService extends ChangeNotifier {
           ad.fullScreenContentCallback = FullScreenContentCallback(
             onAdShowedFullScreenContent: (ad) {
               _log('📱 Ödüllü reklam tam ekranda açıldı');
+            },
+            onAdClicked: (ad) {
+              AnalyticsService.instance.logAdClick(adUnitId: unitId, adFormat: 'rewarded');
             },
             onAdDismissedFullScreenContent: (ad) {
               _log('📱 Ödüllü reklam kapatıldı');
@@ -334,81 +258,7 @@ class AdManagerService extends ChangeNotifier {
     return true;
   }
 
-  // ===========================================================================
-  // APP OPEN (UYGULAMA AÇILIŞ REKLAMI) YÖNETİMİ
-  // ===========================================================================
 
-  /// Açılış reklamını önyükler
-  void preloadAppOpenAd() {
-    if (!isAdsEnabled || _isAppOpenLoading || _appOpenAd != null) return;
-
-    final unitId = DefaultFirebaseOptions.appOpenAdUnitId;
-    if (!canRequestAd(unitId)) return;
-
-    _isAppOpenLoading = true;
-    _log('🔄 App Open reklamı önyükleniyor...');
-
-    AppOpenAd.load(
-      adUnitId: unitId,
-      request: const AdRequest(),
-      adLoadCallback: AppOpenAdLoadCallback(
-        onAdLoaded: (ad) {
-          _isAppOpenLoading = false;
-          _appOpenAd = ad;
-          _appOpenLoadTime = DateTime.now();
-          recordAdSuccess(unitId);
-          _log('✅ App Open reklamı belleğe yüklendi');
-
-          ad.onPaidEvent = (Ad ad, double valueMicros, PrecisionType precision, String currencyCode) {
-            handlePaidEvent(
-              adUnitId: unitId,
-              adFormat: 'app_open',
-              valueMicros: valueMicros,
-              precision: precision,
-              currencyCode: currencyCode,
-              responseInfo: ad.responseInfo,
-            );
-          };
-
-          ad.fullScreenContentCallback = FullScreenContentCallback(
-            onAdDismissedFullScreenContent: (ad) {
-              ad.dispose();
-              _appOpenAd = null;
-              preloadAppOpenAd();
-            },
-            onAdFailedToShowFullScreenContent: (ad, error) {
-              ad.dispose();
-              _appOpenAd = null;
-              preloadAppOpenAd();
-            },
-          );
-        },
-        onAdFailedToLoad: (error) {
-          _isAppOpenLoading = false;
-          _appOpenAd = null;
-          recordAdFailure(unitId, error);
-        },
-      ),
-    );
-  }
-
-  /// Uygulama arka plandan öne geldiğinde App Open reklamını gösterir (4 saatten taze ise)
-  void showAppOpenAdIfAvailable() {
-    if (!isAdsEnabled || _appOpenAd == null || _appOpenLoadTime == null) {
-      preloadAppOpenAd();
-      return;
-    }
-
-    final isExpired = DateTime.now().difference(_appOpenLoadTime!) > const Duration(hours: 4);
-    if (isExpired) {
-      _appOpenAd?.dispose();
-      _appOpenAd = null;
-      preloadAppOpenAd();
-      return;
-    }
-
-    _appOpenAd?.show();
-  }
 
   // ===========================================================================
   // FIRESTORE SETTINGS/ADMOB CANLI SENKRONİZASYON (Web Admin ↔ Mobil Köprüsü)
@@ -448,12 +298,8 @@ class AdManagerService extends ChangeNotifier {
 
             // Eğer Kill-Switch aktif edildiyse bellekteki tüm önyüklenmiş reklamları derhal temizle!
             if (!isAdsEnabled) {
-              _interstitialAd?.dispose();
-              _interstitialAd = null;
               _rewardedAd?.dispose();
               _rewardedAd = null;
-              _appOpenAd?.dispose();
-              _appOpenAd = null;
               _log('🧹 [KILL-SWITCH] Önceden bellekte tutulan tüm reklamlar temizlendi.');
             }
           }
@@ -462,7 +308,8 @@ class AdManagerService extends ChangeNotifier {
           final newBanner = settings['bannerEnabled'] as bool? ?? true;
           final newRewarded = settings['rewardedEnabled'] as bool? ?? true;
           final newNative = settings['nativeEnabled'] as bool? ?? true;
-          final newInterstitial = settings['interstitialEnabled'] as bool? ?? true;
+          final newNativeCoupons = settings['nativeCouponsEnabled'] as bool? ?? true;
+          final newNativeAktuel = settings['nativeAktuelEnabled'] as bool? ?? true;
 
           if (bannerEnabled != newBanner) {
             bannerEnabled = newBanner;
@@ -483,23 +330,42 @@ class AdManagerService extends ChangeNotifier {
             hasChanges = true;
             _log('⚙️ [FIRESTORE-SYNC] Native şalteri: $nativeEnabled');
           }
-          if (interstitialEnabled != newInterstitial) {
-            interstitialEnabled = newInterstitial;
+          if (nativeCouponsEnabled != newNativeCoupons) {
+            nativeCouponsEnabled = newNativeCoupons;
             hasChanges = true;
-            if (!interstitialEnabled) {
-              _interstitialAd?.dispose();
-              _interstitialAd = null;
-            }
-            _log('⚙️ [FIRESTORE-SYNC] Interstitial şalteri: $interstitialEnabled');
+            _log('⚙️ [FIRESTORE-SYNC] Native Kuponlar şalteri: $nativeCouponsEnabled');
+          }
+          if (nativeAktuelEnabled != newNativeAktuel) {
+            nativeAktuelEnabled = newNativeAktuel;
+            hasChanges = true;
+            _log('⚙️ [FIRESTORE-SYNC] Native Aktüel şalteri: $nativeAktuelEnabled');
           }
 
-          // 3. Cooldown ve Frekans Sınırı
+          // 3. Cooldown Süresi
           final cooldownSec = settings['cooldownSeconds'] as int? ?? 25;
-          final freqCapMin = settings['frequencyCapMinutes'] as int? ?? 3;
           _failureCooldown = Duration(seconds: cooldownSec);
-          _interstitialCooldown = Duration(minutes: freqCapMin);
 
-          // 4. Kupon Kredi Parametreleri → CouponCreditService'e aktar
+          // 4. Native Grid, Kuponlar ve Aktüel Sıklığı (Faz 3.3)
+          final newGridInterval = settings['nativeGridInterval'] as int? ?? 6;
+          if (nativeGridInterval != newGridInterval && newGridInterval >= 4 && newGridInterval <= 20) {
+            nativeGridInterval = newGridInterval;
+            hasChanges = true;
+            _log('⚙️ [FIRESTORE-SYNC] Native grid sıklığı: $nativeGridInterval');
+          }
+          final newCouponsInterval = settings['nativeCouponsInterval'] as int? ?? 5;
+          if (nativeCouponsInterval != newCouponsInterval && newCouponsInterval >= 3 && newCouponsInterval <= 15) {
+            nativeCouponsInterval = newCouponsInterval;
+            hasChanges = true;
+            _log('⚙️ [FIRESTORE-SYNC] Native Kuponlar sıklığı: $nativeCouponsInterval');
+          }
+          final newAktuelInterval = settings['nativeAktuelInterval'] as int? ?? 6;
+          if (nativeAktuelInterval != newAktuelInterval && newAktuelInterval >= 4 && newAktuelInterval <= 20) {
+            nativeAktuelInterval = newAktuelInterval;
+            hasChanges = true;
+            _log('⚙️ [FIRESTORE-SYNC] Native Aktüel sıklığı: $nativeAktuelInterval');
+          }
+
+          // 5. Kupon Kredi Parametreleri → CouponCreditService'e aktar
           final dailyCredits = settings['dailyFreeCredits'] as int? ?? 2;
           final rewardCredits = settings['rewardCreditsPerVideo'] as int? ?? 2;
           if (CouponCreditService.instance.dailyFreeCredits != dailyCredits ||
@@ -511,8 +377,11 @@ class AdManagerService extends ChangeNotifier {
 
           _log('✅ [FIRESTORE-SYNC] settings/admob senkronize edildi → '
               'Kill:$killSwitchActive | Banner:$newBanner | Rewarded:$newRewarded | '
-              'Native:$newNative | Interstitial:$newInterstitial | '
-              'Cooldown:${cooldownSec}s | FreqCap:${freqCapMin}m | '
+              'Native:$newNative | NativeCoupons:$nativeCouponsEnabled | NativeAktuel:$nativeAktuelEnabled | '
+              'NativeGridInterval:$nativeGridInterval | '
+              'NativeCouponsInterval:$nativeCouponsInterval | '
+              'NativeAktuelInterval:$nativeAktuelInterval | '
+              'Cooldown:${cooldownSec}s | '
               'DailyCredits:$dailyCredits | RewardCredits:$rewardCredits');
 
           if (hasChanges) {
@@ -534,12 +403,8 @@ class AdManagerService extends ChangeNotifier {
   void dispose() {
     _settingsSubscription?.cancel();
     _settingsSubscription = null;
-    _interstitialAd?.dispose();
-    _interstitialAd = null;
     _rewardedAd?.dispose();
     _rewardedAd = null;
-    _appOpenAd?.dispose();
-    _appOpenAd = null;
     _log('🧹 AdManagerService temizlendi (dispose)');
     super.dispose();
   }

@@ -107,8 +107,9 @@ FırsatKolik'te Geliştirme (DEV) ve Canlı (PROD) ortamları veri, bot, kimlik 
 | **Dinlenen Telegram Kanalı**| `@indirimkaplani` (veya test kanalları) | `@firsatkolik_canli` |
 | **Bot Firebase Anahtarı** | `dev_firebase_key.json` | `prod_firebase_key.json` |
 | **Web Admin Hosting URL** | `https://sicak-firsatlar-e6eae.web.app/admin/` | `https://firsatkolik-prod-e6eae.web.app/admin/` |
-| **AdMob Banner ID (Android)** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Gerçek)* |
-| **AdMob Banner ID (iOS)** | `ca-app-pub-3940256099942544/2934735716` *(Test)* | `ca-app-pub-6853997017739651/2039078155` *(Gerçek)* |
+| **AdMob Native Ad ID (Android - Faz 3.3)** | `ca-app-pub-3940256099942544/2247696110` *(Test)* | `ca-app-pub-6853997017739651/4004866134` *(Gerçek)* |
+| **AdMob Native Ad ID (iOS - Faz 3.3)** | `ca-app-pub-3940256099942544/3986624511` *(Test)* | `ca-app-pub-6853997017739651/9437070495` *(Gerçek)* |
+| **AdMob Banner ID (Eski/Arşiv)** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Arşiv)* |
 | **AdMob App ID (Android)** | `ca-app-pub-3940256099942544~3347511713` *(Test)* | `ca-app-pub-6853997017739651~8861215767` *(Gerçek)* |
 | **AdMob App ID (iOS)** | `ca-app-pub-3940256099942544~1458002511` *(Test)* | `ca-app-pub-6853997017739651~7339420575` *(Gerçek)* |
 | **App Check Sağlayıcısı** | Debug Provider (Debug Token) | Play Integrity API (Google Play Store) |

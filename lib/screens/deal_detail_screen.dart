@@ -77,6 +77,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   void initState() {
     super.initState();
     NotificationService.activeDealId = widget.dealId;
+    AnalyticsService.instance.logScreenView(screenName: 'DealDetailScreen');
     _loadDeal();
     _checkAdminStatus();
     _checkFavoriteStatus();

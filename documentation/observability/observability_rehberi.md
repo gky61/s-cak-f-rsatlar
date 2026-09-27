@@ -444,7 +444,7 @@ Uygulamanın kaç kişi tarafından kullanıldığı, büyüme ivmesi, kullanıc
 
 | Metrik Adı & Parametresi | Toplayan Araç / SDK | Gözlem Paneli & Doğrudan URL | Takip Sıklığı | İzleme Amacı | Karar Destek Senaryosu (Ne Yapılmalı?) |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| **Anlık Aktif Kullanıcı (Realtime StreamView)** | `firebase_analytics` | [Firebase Realtime](https://console.firebase.google.com/project/firsatkolik-prod-e6eae/analytics/realtime)<br>[GA4 Realtime](https://analytics.google.com/) | Canlı / Anlık | Şu an uygulamada kaç kişi var? Hangi şehirdeler? Hangi ekrandalar? | Bildirim atıldığında trafiğin anlık sıçramasını teyit etmek. 0 kişi görünüyorsa Firebase bağlantısı kopmuş olabilir. |
+| **Anlık Aktif Kullanıcı (Realtime StreamView)** | `firebase_analytics` | [GA4 Realtime (DEV: a374649967p512542954)](https://analytics.google.com/analytics/web/#/a374649967p512542954/realtime/overview)<br>[PROD GA4 Realtime](https://analytics.google.com/analytics/web/) | Canlı / Anlık | Şu an uygulamada kaç kişi var? Hangi şehirdeler? Hangi ekrandalar? | Bildirim atıldığında trafiğin anlık sıçramasını teyit etmek. 0 kişi görünüyorsa Firebase bağlantısı kopmuş olabilir. |
 | **DAU / WAU / MAU (Günlük / Haftalık / Aylık Tekil Kullanıcı)** | `firebase_analytics` (GA4) | [Firebase Analytics Overview](https://console.firebase.google.com/project/firsatkolik-prod-e6eae/analytics/overview)<br>[GA4 Etkileşim Raporu](https://analytics.google.com/) | Günlük / Haftalık | Kullanıcı tabanının net büyüme hızını ve aktifliğini ölçmek. | DAU/MAU oranı (%20+ hedef) düşüyorsa, kullanıcılar uygulamayı unutup siliyor demektir; bildirim frekansı ve kişiselleştirme artırılmalıdır. |
 | **Oturum Başına Etkileşim Süresi (`user_engagement`)** | `firebase_analytics` | [GA4 Sayfalar ve Ekranlar](https://analytics.google.com/) | Haftalık | Kullanıcıların uygulamada ortalama kaç saniye/dakika geçirdiği. | 30 saniyenin altına düşerse ana sayfa akışı sıkıcı/yetersizdir; sıcak fırsat sıralama algoritması (Wilson) gözden geçirilmelidir. |
 | **Ekran Görüntüleme Sayıları (`screen_view`)** | `AnalyticsService.observer` (`main.dart`) | [GA4 Sayfalar ve Ekranlar](https://analytics.google.com/) | Haftalık | Hangi ekranın (Home, DealDetail, Kuponlar, Kataloglar, Profil) daha popüler olduğunu saptamak. | Kuponlar sekmesi az görüntüleniyorsa alt gezinme çubuğunda (BottomNavigationBar) tasarımı veya bildirim vurgusu öne çıkarılır. |
@@ -614,39 +614,48 @@ graph TD
     Tab4 -->|Deep Link Bridges| ExtConsoles[Crashlytics, Perf, GCP Logs, Billing, App Check]
 ```
 
-### 14.2 Dört Ana Sekmenin İşlevleri ve İzlenen Metrikler
+### 14.2 Dört Ana Sekmenin İşlevleri, Zaman Pencereleri ve Canlılık Durumları
 
 #### 1. 📊 Canlı Trafik & Gelir Analitiği (Realtime & Conversion Radar)
-* **Anlık Aktif Kullanıcılar (Son 30 Dk):** `⏱️ Zaman: Son 30 Dakika (Canlı Akış)` — Şu anda uygulamayı kullanan aktif kişi sayısıdır. Bildirim veya yeni kampanya sonrası anlık ziyaretçi patlamasını doğrular.
-* **Mağazaya Git Tıklamaları (Son 24 Saat):** `⏱️ Zaman: Son 24 Saatlik Toplam` — `deal_outbound_click` affiliate yönlendirme adedidir. Platformun komisyon geliri getiren ana ticari yönlendirme gücünü ölçer.
-* **Kupon Kopyalama (Son 24 Saat):** `⏱️ Zaman: Son 24 Saatlik Toplam` — `coupon_copied` sayısıdır. Kullanıcıların indirim kuponlarına olan ilgisini ve kullanım hacmini ölçer.
-* **Katalog Görüntüleme (Son 24 Saat):** `⏱️ Zaman: Son 24 Saatlik Toplam` — `catalog_view` sayısıdır. BİM, A101, ŞOK vb. market broşürlerinde çevrilen ve okunan toplam sayfa adedidir.
-* **Mağaza Yönlendirme Dağılımı (Son 24 Saat):** `⏱️ Zaman: Son 24 Saat` — Trendyol, Amazon, Hepsiburada vb. mağazaların tıklama yüzdelerini listeler. Affiliate anlaşmalarında hangi mağazaya ağırlık vermeniz gerektiğini söyler.
-* **Fırsat Dönüşüm Hunisi (Son 24 Saat):** `⏱️ Zaman: Son 24 Saat` — Fırsat detayını (`deal_view`) açanların yüzde kaçının gerçekten `deal_outbound_click` (Mağazaya Git) butonuna bastığını ölçer. İndirimlerin cazibesini doğrular.
-* **Popüler Arama Radarı (Son 24 Saat):** `⏱️ Zaman: Son 24 Saat` — Kullanıcıların arayıp da bulamadığı kelimeleri tespit ederek Telegram bot radarına eklemenizi sağlar.
+* **Anlık Aktif Kullanıcılar (Son 30 Dk):** `⏱️ Zaman: Son 30 Dakika` • `⚡ Canlılık: 🟢 Tam Canlı (0-5 sn)` — Uygulamayı şu an kullanan kişi sayısıdır. GA4 Realtime API son 30 dakikalık pencereli akışı gecikmesiz sunar. Cihaz kapandıktan 30 dk sonra sayaçtan düşer.
+* **Mağazaya Git Tıklamaları (Son 24 Saat):** `⏱️ Zaman: Son 24 Saat` • `⚡ Canlılık: 🟢 Hibrit Canlı (0-15 sn + 24s Veri)` — `deal_outbound_click` affiliate yönlendirme sayısıdır. Canlı tıklamalar Realtime Event Fusion ile anında sayaca eklenir; kalıcı Google raporuna 24 saatte işlenir.
+* **Kupon Kopyalama (Son 24 Saat):** `⏱️ Zaman: Son 24 Saat` • `⚡ Canlılık: 🟢 Hibrit Canlı (0-15 sn + 24s Veri)` — `coupon_copied` sayısıdır. Kullanıcıların indirim kuponlarına olan ilgisini ölçer.
+* **Katalog Görüntüleme (Son 24 Saat):** `⏱️ Zaman: Son 24 Saat` • `⚡ Canlılık: 🟢 Hibrit Canlı (0-15 sn + 24s Veri)` — `catalog_view` sayısıdır. BİM, A101 vb. aktüel broşürlerin sayfa gezinim hacmidir.
+* **Mağaza Yönlendirme Dağılımı (Son 24 Saat):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🟢 Tam Canlı (Saniyelik Veritabanı)` — Veritabanındaki aktif fırsat ve mağaza dağılımından saniyelik derlenir.
+* **Fırsat Dönüşüm Hunisi (Son 24 Saat):** `⏱️ Zaman: Canlı / Son 24 Saat` • `⚡ Canlılık: 🟢 Hibrit Canlı (Saniyelik Firestore + GA4 Realtime)` — Fırsat detayını (`deal_view`) açanların yüzde kaçının `deal_outbound_click` butonuna bastığını anlık hesaplar.
+* **Popüler Arama Radarı (Son 24 Saat):** `⏱️ Zaman: Son 24 Saat` • `⚡ Canlılık: 🟡 Gecikmeli (24 - 48 Saat)` — Arama kelimeleri Google Analytics tarafından 24-48 saatlik batch işleme ile raporlanır.
+* **DAU (Günlük Aktif Kullanıcı):** `⏱️ Zaman: Bugün` • `⚡ Canlılık: 🟢 Tam Canlı (GA4 Realtime + 24s Veri)` — Günün tekil kullanıcı sayısıdır. GA4 Data API paralel sorgusu ve Realtime aktif kullanıcı füzyonu ile anlık yansıtılır.
+* **WAU (Haftalık Aktif Kullanıcı):** `⏱️ Zaman: Son 7 Gün` • `⚡ Canlılık: 🟡 Yarı Canlı (4 - 8 Saat)` — Son 7 gündeki tekil kullanıcı kohortudur; platformun haftalık döngüdeki ziyaretçi havuzunu ölçer.
+* **MAU (Aylık Aktif Kullanıcı):** `⏱️ Zaman: Son 28 Gün` • `⚡ Canlılık: 🟡 Yarı Canlı (4 - 8 Saat)` — Son 28 gündeki tekil kullanıcı havuzudur; platformun toplam aktif pazar erişim büyüklüğünü (Total Reach) gösterir.
+* **Bağlılık (Stickiness Skoru %):** `⏱️ Zaman: Günlük / Aylık` • `⚡ Canlılık: 🟢 Hibrit Canlı (Saniyelik Oran)` — `(DAU / MAU) * 100` formülüyle hesaplanır. Kullanıcıların uygulamayı ne sıklıkla açtığını ölçer (Sektör standardı: %20+ mükemmeldir).
+* **Yeni Kullanıcı Edinimi (New Users):** `⏱️ Zaman: Son 28 Gün` • `⚡ Canlılık: 🟡 Yarı Canlı (4 - 8 Saat)` — İlk kez uygulamayı açan tekil cihaz sayısıdır (`first_open`). ASO ve mağaza reklamlarının organik büyüme getirme gücünü ölçer.
+* **Ortalama Odak Süresi (Avg Engagement):** `⏱️ Zaman: Oturum Ortalaması` • `⚡ Canlılık: 🟡 Yarı Canlı (4 - 8 Saat)` — Kullanıcının fırsatları incelemek için uygulamada aktif geçirdiği süredir (`userEngagementDuration / sessions`).
+* **Bildirim Dönüşü (FCM):** `⏱️ Zaman: Son 24 Saat` • `⚡ Canlılık: 🟢 Hibrit Canlı (0-15 sn + 24s)` — Gönderilen push bildirimlerine dokunarak uygulamayı açma adedidir (`notification_interaction`).
+* **Viral Paylaşım & Oylar:** `⏱️ Zaman: Son 24 Saat` • `⚡ Canlılık: 🟢 Hibrit Canlı (0-15 sn + 24s)` — Fırsatların WhatsApp/Telegram'da paylaşılma viralliğini (`deal_shared`) ve sıcak/soğuk topluluk oylarını (`deal_voted`) ölçer.
+* **En Çok Gezilen Ekranlar (Screen Views):** `⏱️ Zaman: Son 7 Gün` • `⚡ Canlılık: 🟡 Yarı Canlı (4 - 8 Saat)` — Kullanıcıların en çok hangi ekranda vakit geçirdiğini gösterir (`unifiedScreenName` üzerinden `HomeScreen_Deals`, `KuponlarPage`, `AktuelMagazalarPage`, `DealDetailScreen`).
+* **AdMob Reklam Monetizasyonu (onPaidEvent):** `⏱️ Zaman: Son 24 Saat` • `⚡ Canlılık: 🟢 Hibrit Canlı (0-15 sn + 24s)` — Native ve rewarded reklam gösterimlerini (`ad_impression`), tıklamaları (`ad_click`) ve tıklama oranını (% CTR) canlı ölçer; Google Ads kullanıcı edinimi için tROAS optimizasyon verisi sağlar.
 
 #### 2. ⚡ Altyapı & Kota Sağlığı (Infrastructure & Quota Health)
-* **Firestore Günlük Okuma Kotası (Bugün - 50.000):** `⏱️ Zaman: Bugün (Gece 03:00'te sıfırlanır)` — Veritabanından veri çekme hacmidir; 50.000 sınırını aşmadan sistemin sıfır maliyetle (Free Tier) çalışmasını sağlar.
-* **Firestore Günlük Yazma Kotası (Bugün - 20.000):** `⏱️ Zaman: Bugün (Gece 03:00'te sıfırlanır)` — Botların fırsat/kupon kaydetmesi ve oy verme işlemleridir; faturaya girmeyi önler.
-* **Cloud Storage Bant Genişliği (Bugün - 1 GB):** `⏱️ Zaman: Bugün (Günlük kota)` — Katalog ve ürün fotoğraflarının indirilme boyutudur; WebP ile 1 GB kotasının altında kalmayı sağlar.
-* **Cloud Functions Aylık Kota (Bu Ay - 2.000.000):** `⏱️ Zaman: Bu Ay (Takvim ayı)` — 26 fonksiyonun aylık 2 milyon ücretsiz çağrı sınırını korur.
-* **Google Cloud Güncel Harcama (Bu Ay):** `⏱️ Zaman: Bu Ayki Fatura Dönemi` — Bütçenin **0.00 TL (Free Tier Korumalı)** durumunu ve 250 TL / 500 TL alarmlarını denetler.
-* **App Check İstek Doğrulama (Canlı):** `⏱️ Zaman: Anlık Trafik` — Sahte bot ve korsan scraping isteklerini kapıda engelleyerek kotayı korur.
+* **Firestore Günlük Okuma Kotası (Bugün - 50.000):** `⏱️ Zaman: Bugün` • `⚡ Canlılık: 🟢 Tam Canlı (Saniyelik Doküman Sayımı)` — Veritabanındaki doküman hacmi anlıktır; Firebase Usage konsol grafiği ~1-2 saat gecikmelidir.
+* **Firestore Günlük Yazma Kotası (Bugün - 20.000):** `⏱️ Zaman: Bugün` • `⚡ Canlılık: 🟢 Tam Canlı (Tahmini Projeksiyon)` — Bot fırsat yazımı ve oylama işlemlerinin yazma riskini canlı modeller.
+* **Cloud Storage Bant Genişliği (Bugün - 1 GB):** `⏱️ Zaman: Bugün` • `⚡ Canlılık: 🟡 Yarı Canlı (Görseller Anlık, GB Fatura 12-24 Saat)` — Yüklenen katalog adedi canlıdır; indirilen net GB boyutu konsola 12-24 saatte yansır.
+* **Cloud Functions Aylık Kota (Bu Ay - 2.000.000):** `⏱️ Zaman: Bu Ay` • `⚡ Canlılık: 🔴 Gecikmeli (12 - 24 Saat)` — 26 fonksiyonun çağrı grafiği ve CPU tüketimi GCP Monitoring'e 12-24 saatte işlenir.
+* **Google Cloud Güncel Harcama (Bu Ay):** `⏱️ Zaman: Bu Ay` • `⚡ Canlılık: 🔴 Gecikmeli (12 - 24 Saat)` — GCP Billing günde 1 kez mutabakat yapar; 0.00 TL Free Tier durumunu doğrular.
+* **App Check İstek Doğrulama (Canlı):** `⏱️ Zaman: Anlık` • `⚡ Canlılık: 🟢 Tam Canlı (0 - 5 sn)` — Gelen API istekleri Play Integrity ile anlık kriptografik doğrulanır.
 
 #### 3. 🤖 Botlar & Servis Durumu (Autonomous Bots & Service Uptime)
-* **Telegram Dinleyicisi Kalp Atışı (Anlık Sinyal):** `⏱️ Zaman: Anlık (Son 15 Dakika)` — GCP VM'deki botun donup donmadığını ve indirim yakalamaya devam edip etmediğini gösterir. Yeşil: Canlı, Kırmızı: Durdu.
-* **İnteraktif HTTP Uptime Probu (/health Ping):** `⏱️ Zaman: Anlık (Canlı ping)` — Bot sunucusunun internet kapısının açık olup olmadığını ve kaç milisaniyede yanıt verdiğini test eder.
-* **Operasyonel Telemetri Sayaçları (Son Başlatmadan Beri):** `msgCount` (Okunan Telegram mesajı), `dealCount` (Paylaşılan fırsat), `dupCount` (Filtrelenen mükerrer/çöp mesaj) ve `errCount` (Hata sayısı).
-* **Acil Müdahale Komutları:** Sunucuya SSH ile bağlanıp tek tıkla `pm2 restart prod-bot` yapabilmeniz için hazır komut kartıdır.
+* **Telegram Dinleyicisi Kalp Atışı (Anlık Sinyal):** `⏱️ Zaman: Anlık` • `⚡ Canlılık: 🟢 Tam Canlı (< 1 Dakika)` — GCP VM'deki bot her 60 saniyede bir Firestore'a kalp atışı basar.
+* **İnteraktif HTTP Uptime Probu (/health Ping):** `⏱️ Zaman: Anlık` • `⚡ Canlılık: 🟢 Tam Canlı (Milisaniyelik 50-200ms)` — Butona basıldığı an bot konteynerine canlı HTTP isteği atılarak yanıt süresi test edilir.
+* **Operasyonel Telemetri Sayaçları (Son Başlatmadan Beri):** `⏱️ Zaman: Oturum Boyu` • `⚡ Canlılık: 🟢 Tam Canlı (< 1 Dakika)` — Botun RAM'indeki `msgCount`, `dealCount`, `dupCount` ve `errCount` sayaçları her kalp atışında güncellenir.
+* **Acil Müdahale Komutları:** Sunucuya SSH ile bağlanıp tek komutla botu yeniden başlatma rehberidir.
 
 #### 4. 🚨 Kararlılık, Hatalar & Konsol Köprüleri (Stability & Deep-Link Bridges)
-* **Canlı Sistem Hata Günlükleri (Son 50 Kayıt):** `⏱️ Zaman: Canlı / Son Hatalar` — Firestore `systemErrors` koleksiyonundaki çözülmemiş hataları ve durumunu listeler.
-* **Harici Konsol Köprüleri (Direct Deep-Links):**
-  - 💥 *Firebase Crashlytics (Canlı & Sürümler):* Hedef %99.5 çökmesiz kullanıcı oranını korumak ve ölümcül çökme yığınlarını incelemek içindir.
-  - ⚡ *Firebase Performance (Canlı Gözlem):* Uygulama açılış hızını (<2.0s), donan kareleri ve mağazaya yönlendirme gecikmesini denetler.
-  - 🪵 *GCP Logs Explorer (Canlı Sunucu Logları):* 26 fonksiyonun arka plandaki teknik JSON loglarını ve gizli kalan backend hatalarını sorgular.
-  - 💰 *GCP Cloud Billing (Bu Ay):* 0.00 TL bütçe kontrolü ve 250 TL / 500 TL alarmları içindir.
-  - 🛡️ *Firebase App Check (Canlı):* Gerçek mobil istemci doğrulama oranını (%95+) denetler.
+* **Canlı Sistem Hata Günlükleri (Son 50 Kayıt):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🟢 Tam Canlı (0 sn / Saniyelik)` — Try-catch ile yakalanan teknik hatalar anında Firestore `systemErrors` koleksiyonuna yazılır.
+* **Firebase Crashlytics (Canlı & Sürümler):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🟡 Gecikmeli (5 - 15 Dk / Sonraki Açılışta)` — Çökme raporu uygulamanın bir sonraki açılışında iletilir; konsola 5-15 dakikada işlenir.
+* **Firebase Performance (Canlı Gözlem):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🔴 Gecikmeli (24 - 48 Saat)` — Cold start ve ağ gecikmeleri Google sunucularında 24-48 saatte işlenir.
+* **GCP Cloud Logging (Canlı Sunucu Logları):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🟢 Tam Canlı (0 - 2 sn)` — Cloud Functions logları 2 saniye içinde Cloud Logging'e akar.
+* **GCP Cloud Billing (Bu Ay):** `⏱️ Zaman: Bu Ay` • `⚡ Canlılık: 🔴 Gecikmeli (12 - 24 Saat)` — Günlük fatura mutabakatı.
+* **Firebase App Check (Canlı):** `⏱️ Zaman: Anlık` • `⚡ Canlılık: 🟢 Tam Canlı (0 - 5 sn)` — Korsan botlar kapıda anında engellenir.
 
 ---
 
@@ -658,6 +667,10 @@ Observability Hub, çalıştığı alan adını ve seçili ortamı dinamik olara
 | :--- | :--- | :--- |
 | **Algılama Kuralı** | Hostname: `localhost`, `sicak-firsatlar-e6eae.web.app` | Hostname: `firsatkolik-prod`, `firsatkolik.app` |
 | **Firebase Proje ID** | `sicak-firsatlar-e6eae` | `firsatkolik-prod-e6eae` |
+| **Canlı Realtime Akışı** | `#/a374649967p512542954/realtime/overview` | `https://analytics.google.com/analytics/web/` |
+| **GA4 Realtime Konsolu** | [DEV GA4 Realtime](https://analytics.google.com/analytics/web/#/a374649967p512542954/realtime/overview) | [PROD GA4 Realtime](https://analytics.google.com/analytics/web/) |
+| **DebugView (Cihaz Testi)** | [DEV GA4 DebugView](https://analytics.google.com/analytics/web/#/a374649967p512542954/admin/debugview) | [PROD GA4 DebugView](https://analytics.google.com/analytics/web/) |
+| **Events (Olay Raporları)** | [DEV GA4 Events](https://analytics.google.com/analytics/web/#/a374649967p512542954/reports/events) | [PROD GA4 Events](https://analytics.google.com/analytics/web/) |
 | **Bot HTTP Uptime Portu** | `http://34.135.181.112:8081/health` | `http://34.135.181.112:8082/health` |
 | **PM2 Servis Adı** | `dev-bot` | `prod-bot` |
 | **Firebase Crashlytics Linki** | `.../project/sicak-firsatlar-e6eae/crashlytics` | `.../project/firsatkolik-prod-e6eae/crashlytics` |

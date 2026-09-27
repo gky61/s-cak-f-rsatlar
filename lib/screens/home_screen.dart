@@ -14,6 +14,7 @@ import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/ad_deal_card.dart';
+import '../services/ad_manager_service.dart';
 import '../models/category.dart';
 import '../models/deal.dart';
 import '../theme/app_theme.dart';
@@ -136,6 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadFollowedCategories();
     _loadFollowedKeywords();
     _loadUnreadMessageCounts();
+    AnalyticsService.instance.logScreenView(screenName: 'HomeScreen_Deals');
 
     if (widget.initialSearchQuery != null && widget.initialSearchQuery!.trim().isNotEmpty) {
       _isSearchMode = true;
@@ -1745,91 +1747,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                       Expanded(
                         child: _viewMode == CardViewMode.vertical
-                            ? GridView.builder(
+                            ? CustomScrollView(
                                 controller: _scrollController,
                                 key: ValueKey('deal_grid_$_selectedCategory'),
-                                padding: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 8),
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 11,
-                                  childAspectRatio: 0.635,
-                                ),
                                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                                cacheExtent: 500, // Optimize edilmiş cache
-                                addAutomaticKeepAlives: false, // Performans için
-                                addRepaintBoundaries: true, // Repaint optimizasyonu
-                                addSemanticIndexes: false, // Performans için
-                                itemCount: totalItemCount,
-                                itemBuilder: (context, index) {
-                                  // Loading indicator kontrolü
-                                  if (index >= dealsToShow.length + adCount) {
-                                    return Center(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: List.generate(3, (dotIndex) {
-                                          return Container(
-                                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                                            width: 6,
-                                            height: 6,
-                                            decoration: BoxDecoration(
-                                              color: primaryColor,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          );
-                                        }),
-                                      ),
-                                    );
-                                  }
-                                  
-                                  // Reklam pozisyonunu kontrol et (5-6-5-6-5-6 pattern)
-                                  // Reklam pozisyonları: 5, 12, 18, 25, 31, 38, ...
-                                  
-                                  // Kaç reklam geçtiğini hesapla
-                                  int passedAds = 0;
-                                  for (int i = 0; i < adPositions.length; i++) {
-                                    final adPosition = adPositions[i];
-                                    if (index == adPosition) {
-                                      // Bu pozisyon bir reklam pozisyonu
-                                      return RepaintBoundary(
-                                        key: ValueKey('ad_card_vertical_$i'),
-                                        child: AdDealCard(
-                                          viewMode: CardViewMode.vertical,
-                                        ),
-                                      );
-                                    }
-                                    if (index > adPosition) {
-                                      passedAds++;
-                                    }
-                                  }
-                                  
-                                  // Normal deal kartı (geçilen reklam sayısını çıkar)
-                                  final actualIndex = index - passedAds;
-                                  if (actualIndex >= dealsToShow.length || actualIndex < 0) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  final deal = dealsToShow[actualIndex];
-                                  final cardWidget = DealCard(
-                                    deal: deal,
-                                    viewMode: CardViewMode.vertical,
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => DealDetailScreen(dealId: deal.id),
-                                      ),
-                                    ),
-                                  );
-
-                                  return RepaintBoundary(
-                                    key: ValueKey('deal_grid_boundary_${deal.id}'),
-                                    child: actualIndex == 0
-                                        ? Container(
-                                            key: _tutorialService.firstDealCardKey,
-                                            child: cardWidget,
-                                          )
-                                        : cardWidget,
-                                  );
-                                },
+                                cacheExtent: 500,
+                                slivers: _buildGridWithHorizontalAdsSlivers(
+                                  context: context,
+                                  dealsToShow: dealsToShow,
+                                  primaryColor: primaryColor,
+                                  isLoadingMore: _hasMore && _isLoadingMore,
+                                ),
                               )
                             : ListView.builder(
                                 controller: _scrollController,
@@ -1867,11 +1795,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   for (int i = 0; i < adPositions.length; i++) {
                                     final adPosition = adPositions[i];
                                     if (index == adPosition) {
-                                      return RepaintBoundary(
+                                      return AdDealCard(
                                         key: ValueKey('ad_card_horizontal_$i'),
-                                        child: AdDealCard(
-                                          viewMode: CardViewMode.horizontal,
-                                        ),
+                                        viewMode: CardViewMode.horizontal,
                                       );
                                     }
                                     if (index > adPosition) {
@@ -1930,6 +1856,120 @@ class _HomeScreenState extends State<HomeScreen> {
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
+  }
+
+  /// 2 sütunlu dikey Grid görünümünde her 6 üründe bir (3 satırda bir)
+  /// iki sütunun arasını boydan boya kaplayan tam genişlikte yatay Native Reklam kartı yerleştirir.
+  /// Bu mimari Google AdMob Native Template standartlarına (min 300dp genişlik, 90-120dp yükseklik)
+  /// %100 uyar, "Advertiser assets outside native ad view" ihlalini sıfırlar ve e-ticaret UX standardını sağlar.
+  List<Widget> _buildGridWithHorizontalAdsSlivers({
+    required BuildContext context,
+    required List<Deal> dealsToShow,
+    required Color primaryColor,
+    required bool isLoadingMore,
+  }) {
+    final List<Widget> slivers = [];
+    final int chunkSize = AdManagerService.instance.nativeGridInterval; // Web Admin / Firestore ayarlı (Varsayılan: 6 ürün = 3 satır)
+
+    final int totalChunks = (dealsToShow.length / chunkSize).ceil();
+    for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      final startIndex = chunkIndex * chunkSize;
+      final endIndex = (startIndex + chunkSize > dealsToShow.length)
+          ? dealsToShow.length
+          : startIndex + chunkSize;
+      final chunkDeals = dealsToShow.sublist(startIndex, endIndex);
+
+      // 1. Ürün Grid Bölümü (2 Sütunlu)
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.only(left: 12, right: 12, top: 4, bottom: 4),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 11,
+              childAspectRatio: 0.635,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (ctx, idx) {
+                final deal = chunkDeals[idx];
+                final globalIndex = startIndex + idx;
+                final cardWidget = DealCard(
+                  deal: deal,
+                  viewMode: CardViewMode.vertical,
+                  onTap: () => Navigator.push(
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => DealDetailScreen(dealId: deal.id),
+                    ),
+                  ),
+                );
+
+                return RepaintBoundary(
+                  key: ValueKey('deal_grid_boundary_${deal.id}'),
+                  child: globalIndex == 0
+                      ? Container(
+                          key: _tutorialService.firstDealCardKey,
+                          child: cardWidget,
+                        )
+                      : cardWidget,
+                );
+              },
+              childCount: chunkDeals.length,
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
+              addSemanticIndexes: false,
+            ),
+          ),
+        ),
+      );
+
+      // 2. Tam Genişlikte Yatay Native Reklam (Her 6 üründen sonra)
+      if (chunkDeals.length == chunkSize) {
+        slivers.add(
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            sliver: SliverToBoxAdapter(
+              child: AdDealCard(
+                key: ValueKey('ad_card_grid_horizontal_$chunkIndex'),
+                viewMode: CardViewMode.horizontal,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    // 3. Alt Sayfalama / Loading İndikatörü
+    if (isLoadingMore) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(3, (dotIndex) {
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: primaryColor,
+                      shape: BoxShape.circle,
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 8)));
+    }
+
+    return slivers;
   }
 
   @override
@@ -2023,6 +2063,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: 'Popüler',
                   isSelected: _currentTabIndex == 1,
                   onTap: () {
+                    AnalyticsService.instance.logScreenView(screenName: 'PopularDealsScreen');
                     setState(() => _currentTabIndex = 1);
                   },
                 ),
@@ -2039,6 +2080,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: 'Kaydedilenler',
                   isSelected: _currentTabIndex == 2,
                   onTap: () {
+                    AnalyticsService.instance.logScreenView(screenName: 'FavoritesScreen');
                     setState(() => _currentTabIndex = 2);
                   },
                 ),
@@ -2051,6 +2093,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   isSelected: _currentTabIndex == 3,
                   badgeCount: _unreadMessageCount + _unreadAdminMessageCount,
                   onTap: () {
+                    AnalyticsService.instance.logScreenView(screenName: 'ProfileScreen');
                     setState(() => _currentTabIndex = 3);
                   },
                 ),

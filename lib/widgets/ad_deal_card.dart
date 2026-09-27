@@ -1,21 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
 import '../services/ad_manager_service.dart';
 import '../services/analytics_service.dart';
 import '../screens/kuponlar_page.dart';
-import 'ad_banner_widget.dart';
+import 'ad_native_widget.dart';
 import '../firebase_options.dart';
 
+/// FırsatKolik — Akış İçi Sponsorlu / Yerel Reklam Kartı (Native Ad Card)
+///
+/// Faz 3.3 kapsamında hem Grid (2 sütun dikey) hem de List (yatay tek sütun)
+/// modlarında Google AdMob Native Ads Advanced formatını kullanır.
+/// Reklam dolmadığında (No-fill) veya ağ hatasında yüksek dönüşümlü
+/// Kuponlar Keşif Kartı'na (House Promo Fallback) sorunsuz geçiş yapar.
 class AdDealCard extends StatelessWidget {
   final CardViewMode viewMode;
   final String? adUnitId;
+  final String placement;
 
   const AdDealCard({
     super.key,
     required this.viewMode,
     this.adUnitId,
+    this.placement = 'home',
   });
 
   @override
@@ -23,22 +30,39 @@ class AdDealCard extends StatelessWidget {
     return ListenableBuilder(
       listenable: AdManagerService.instance,
       builder: (context, _) {
-        if (!AdManagerService.instance.isAdsEnabled) {
-          return const SizedBox.shrink();
-        }
-        if (viewMode == CardViewMode.vertical && !AdManagerService.instance.nativeEnabled) {
-          return const SizedBox.shrink();
-        }
-        if (viewMode == CardViewMode.horizontal && !AdManagerService.instance.bannerEnabled) {
+        final adManager = AdManagerService.instance;
+        if (!adManager.isAdsEnabled) {
           return const SizedBox.shrink();
         }
 
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final primaryColor = Theme.of(context).colorScheme.primary;
+        // Native reklam şalteri kontrolü (Genel, Kuponlar, Aktüel veya Native kapatılmışsa fallback veya shrink)
+        if (!adManager.nativeEnabled ||
+            (placement == 'kuponlar' && !adManager.nativeCouponsEnabled) ||
+            (placement == 'aktuel' && !adManager.nativeAktuelEnabled)) {
+          return _buildHousePromoCard(context);
+        }
+
+        return AdNativeWidget(
+          viewMode: viewMode,
+          adUnitId: adUnitId ?? DefaultFirebaseOptions.nativeAdUnitId,
+          placement: placement == 'kuponlar'
+              ? 'kuponlar_list'
+              : (placement == 'aktuel'
+                  ? 'aktuel_grid'
+                  : (viewMode == CardViewMode.horizontal ? 'home_list' : 'home_grid')),
+          fallbackBuilder: (ctx) => _buildHousePromoCard(ctx),
+        );
+      },
+    );
+  }
+
+  /// Reklam yüklenemediğinde veya şalter kapalıyken gösterilen %100 uyumlu İç Keşif Kartı (House Promo)
+  Widget _buildHousePromoCard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     if (viewMode == CardViewMode.vertical) {
-      // 2 Sütunlu Grid İçin %100 AdMob Uyumlu Sponsorlu / Keşif Kartı
-      // (Google AdMob politikası gereği 300x250 banner'lar 160px hücreye küçültülerek ZORLANAMAZ)
+      // ─── 2 Sütunlu Grid İçin Dikey Keşif Kartı ───
       return Container(
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
@@ -61,7 +85,7 @@ class AdDealCard extends StatelessWidget {
           child: InkWell(
             onTap: () {
               AnalyticsService.instance.logCustomEvent('sponsored_deal_card_click', {
-                'placement': 'home_grid_vertical',
+                'placement': 'home_grid_vertical_fallback',
               });
               Navigator.push(
                 context,
@@ -70,7 +94,6 @@ class AdDealCard extends StatelessWidget {
             },
             child: Stack(
               children: [
-                // Arka plan gradient deseni
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
@@ -90,14 +113,11 @@ class AdDealCard extends StatelessWidget {
                     ),
                   ),
                 ),
-
-                // İçerik
                 Padding(
                   padding: const EdgeInsets.all(14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Üst İkon & Rozet
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -138,8 +158,6 @@ class AdDealCard extends StatelessWidget {
                         ],
                       ),
                       const Spacer(),
-
-                      // Başlık
                       Text(
                         'İndirim Kuponlarını Kaçırma!',
                         maxLines: 2,
@@ -152,8 +170,6 @@ class AdDealCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 6),
-
-                      // Açıklama
                       Text(
                         'Seçkin mağazalardaki anlık indirim kodlarını hemen incele.',
                         maxLines: 2,
@@ -166,8 +182,6 @@ class AdDealCard extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-
-                      // Buton
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -195,63 +209,208 @@ class AdDealCard extends StatelessWidget {
         ),
       );
     } else {
-      // Horizontal card: Liste modunda standart 320x100 Large Banner veya 320x50
+      // ─── Liste Modu İçin Yatay Keşif Kartı (Horizontal House Promo) ───
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
         height: 124,
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.darkSurface : const Color(0xFFF5F5F0),
+          color: isDark ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
           ],
           border: Border.all(
-            color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
             width: 1.5,
           ),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            children: [
-              // Reklam - Ortalanmış ve un-scaled
-              Center(
-                child: AdBannerWidget(
-                  adUnitId: adUnitId ?? DefaultFirebaseOptions.bannerAdUnitId,
-                  adSize: AdSize.largeBanner, // 320x100
-                ),
-              ),
-
-              // Reklam etiketi (sağ üst)
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: const Text(
-                    'Reklam',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+          child: InkWell(
+            onTap: () {
+              if (placement == 'kuponlar') {
+                AnalyticsService.instance.logCustomEvent('sponsored_deal_card_click', {
+                  'placement': 'kuponlar_list_horizontal_fallback',
+                });
+                Navigator.of(context).pop();
+              } else if (placement == 'aktuel') {
+                AnalyticsService.instance.logCustomEvent('sponsored_deal_card_click', {
+                  'placement': 'aktuel_grid_horizontal_fallback',
+                });
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              } else {
+                AnalyticsService.instance.logCustomEvent('sponsored_deal_card_click', {
+                  'placement': 'home_list_horizontal_fallback',
+                });
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const KuponlarPage()),
+                );
+              }
+            },
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: isDark
+                            ? [
+                                AppTheme.darkSurface,
+                                primaryColor.withValues(alpha: 0.10),
+                              ]
+                            : [
+                                Colors.white,
+                                primaryColor.withValues(alpha: 0.05),
+                              ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Row(
+                    children: [
+                      // Sol İkon Kutusu
+                      Container(
+                        width: 76,
+                        height: 76,
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: primaryColor.withValues(alpha: 0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            (placement == 'kuponlar' || placement == 'aktuel')
+                                ? Icons.local_fire_department_rounded
+                                : Icons.confirmation_number_rounded,
+                            color: primaryColor,
+                            size: 34,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+
+                      // Orta Bilgi Alanı
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                                  decoration: BoxDecoration(
+                                    color: primaryColor.withValues(alpha: 0.9),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.stars_rounded, size: 10, color: Colors.white),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'Sponsorlu',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  (placement == 'kuponlar' || placement == 'aktuel') ? 'Günün Fırsatı' : 'Özel Fırsat',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              (placement == 'kuponlar' || placement == 'aktuel')
+                                  ? 'Günün En Sıcak Fırsatları!'
+                                  : 'İndirim Kuponlarını Kaçırma!',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w800,
+                                color: isDark ? Colors.white : AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              (placement == 'kuponlar' || placement == 'aktuel')
+                                  ? 'Topluluğun oyladığı kaçırılmayacak günün indirimleri'
+                                  : 'Yüzlerce mağazada geçerli güncel kupon kodları',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+
+                      // Sağ Buton
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: primaryColor,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryColor.withValues(alpha: 0.3),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              (placement == 'kuponlar' || placement == 'aktuel') ? 'Fırsatlar' : 'Kuponlar',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Colors.white),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
-  },
-);
   }
 }

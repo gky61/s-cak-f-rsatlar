@@ -5,6 +5,7 @@ import 'package:shimmer/shimmer.dart';
 import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
 import 'katalog_listesi_page.dart';
+import '../services/analytics_service.dart';
 
 enum MagazaKategori {
   tumu('Tümü', Icons.apps_rounded),
@@ -97,6 +98,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.logScreenView(screenName: 'AktuelMagazalarPage');
     _kataloglarStream = FirebaseFirestore.instance.collection('kataloglar').snapshots();
   }
 

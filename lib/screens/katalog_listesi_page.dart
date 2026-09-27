@@ -7,6 +7,9 @@ import 'package:shimmer/shimmer.dart';
 import '../models/katalog.dart';
 import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
+import '../services/ad_manager_service.dart';
+import '../services/theme_service.dart';
+import '../widgets/ad_deal_card.dart';
 import 'katalog_detay_page.dart';
 
 enum KatalogSortOption {
@@ -207,42 +210,124 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
             return _buildEmptyCatalogState(isDark);
           }
 
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              // 1. STORE HERO HEADER CARD
-              SliverToBoxAdapter(
-                child: _buildStoreHeroHeader(catalogs.length, isDark),
-              ),
+          return ListenableBuilder(
+            listenable: AdManagerService.instance,
+            builder: (context, _) {
+              final adManager = AdManagerService.instance;
+              final bool showAds = adManager.isAdsEnabled &&
+                  adManager.nativeEnabled &&
+                  adManager.nativeAktuelEnabled;
+              final int chunkSize = (adManager.nativeAktuelInterval >= 4 &&
+                      adManager.nativeAktuelInterval <= 20)
+                  ? adManager.nativeAktuelInterval
+                  : 6;
 
-              // 2. SORT PILL CHIPS
-              SliverToBoxAdapter(
-                child: _buildSortPills(isDark),
-              ),
-
-              // 3. CATALOG GRID
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                    childAspectRatio: 0.58,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final catalog = catalogs[index];
-                      return KeyedSubtree(
-                        key: ValueKey(catalog.katalogId),
-                        child: _buildCatalogCard(context, catalog, isDark),
-                      );
-                    },
-                    childCount: catalogs.length,
-                  ),
+              final List<Widget> slivers = [
+                // 1. STORE HERO HEADER CARD
+                SliverToBoxAdapter(
+                  child: _buildStoreHeroHeader(catalogs.length, isDark),
                 ),
-              ),
-            ],
+
+                // 2. SORT PILL CHIPS
+                SliverToBoxAdapter(
+                  child: _buildSortPills(isDark),
+                ),
+              ];
+
+              if (!showAds) {
+                // Reklamlar kapalıysa standart tek parça SliverGrid
+                slivers.add(
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                    sliver: SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: 0.58,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final catalog = catalogs[index];
+                          return KeyedSubtree(
+                            key: ValueKey(catalog.katalogId),
+                            child: _buildCatalogCard(context, catalog, isDark),
+                          );
+                        },
+                        childCount: catalogs.length,
+                      ),
+                    ),
+                  ),
+                );
+              } else {
+                // Reklamlar aktif: Her 6 broşürden sonra tam genişlikte yatay Native Ad
+                final totalChunks = (catalogs.length / chunkSize).ceil();
+                for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                  final startIndex = chunkIndex * chunkSize;
+                  final endIndex = (startIndex + chunkSize > catalogs.length)
+                      ? catalogs.length
+                      : startIndex + chunkSize;
+                  final chunkCatalogs = catalogs.sublist(startIndex, endIndex);
+                  final isLastChunk = chunkIndex == totalChunks - 1;
+
+                  // 1. Broşür Grid Bölümü (2 Sütunlu)
+                  slivers.add(
+                    SliverPadding(
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        8,
+                        16,
+                        (isLastChunk && chunkCatalogs.length < chunkSize) ? 32 : 8,
+                      ),
+                      sliver: SliverGrid(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 14,
+                          childAspectRatio: 0.58,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (ctx, idx) {
+                            final catalog = chunkCatalogs[idx];
+                            return KeyedSubtree(
+                              key: ValueKey(catalog.katalogId),
+                              child: _buildCatalogCard(ctx, catalog, isDark),
+                            );
+                          },
+                          childCount: chunkCatalogs.length,
+                        ),
+                      ),
+                    ),
+                  );
+
+                  // 2. Tam Genişlikte Yatay Native Reklam (Her chunkSize broşürden sonra)
+                  if (chunkCatalogs.length == chunkSize) {
+                    slivers.add(
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          6,
+                          16,
+                          isLastChunk ? 32 : 8,
+                        ),
+                        sliver: SliverToBoxAdapter(
+                          child: AdDealCard(
+                            key: ValueKey('ad_card_aktuel_grid_$chunkIndex'),
+                            viewMode: CardViewMode.horizontal,
+                            placement: 'aktuel',
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                }
+              }
+
+              return CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: slivers,
+              );
+            },
           );
         },
       ),

@@ -130,8 +130,8 @@ FırsatKolik ekosistemi iki tamamen izole proje üzerinde çalışır:
 | **Flutter Build Flavor** | `--flavor dev --dart-define=FLAVOR=dev` | `--flavor prod --dart-define=FLAVOR=prod` |
 | **Bot Barındırma** | Compute Engine VM (`dev-bot` / Port 8081) | Compute Engine VM (`prod-bot` / Port 8082) |
 | **Dinlenen Telegram Kanalı**| `@indirimkaplani` | `@firsatkolik_canli` |
-| **Web Admin URL** | `https://sicak-firsatlar-e6eae.web.app/admin/` | `https://firsatkolik-prod-e6eae.web.app/admin/` |
-| **AdMob Banner Reklam ID** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Gerçek)* |
+| **AdMob Native Reklam ID (Faz 3.3)** | `ca-app-pub-3940256099942544/2247696110` *(Test)* | `ca-app-pub-6853997017739651/4004866134` *(Gerçek)* |
+| **AdMob Banner Reklam ID (Eski/Arşiv)** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Arşiv)* |
 | **App Check Sağlayıcısı** | Debug Provider (Debug Tokens) | Play Integrity API (Google Play Store) |
 | **Android Keystore** | Varsayılan Debug Keystore | `android/app/upload-keystore.jks` (Alias: `upload`) |
 
@@ -289,8 +289,9 @@ android {
 
 ### 6.3 Google AdMob & UMP (Consent) SDK Entegrasyonu
 * **PROD AdMob App ID:** `ca-app-pub-6853997017739651~8861215767`
-* **PROD Banner Reklam ID:** `ca-app-pub-6853997017739651/8758625050`
-* **Test Reklam Güvencesi:** `kDebugMode` ve DEV flavor'ında otomatik olarak Google test reklam ID'si (`ca-app-pub-3940256099942544/6300978111`) yüklenir.
+* **PROD Native Reklam ID (Faz 3.3 Akış):** `ca-app-pub-6853997017739651/4004866134`
+* **PROD Banner Reklam ID (Eski/Arşiv):** `ca-app-pub-6853997017739651/8758625050`
+* **Test Reklam Güvencesi:** `kDebugMode` ve DEV flavor'ında otomatik olarak Google test Native reklam ID'si (`ca-app-pub-3940256099942544/2247696110`) yüklenir.
 * **UMP SDK (KVKK/GDPR):** `main.dart` açılışında `ConsentInformation.instance.requestConsentInfoUpdate` ile kullanıcı rızası toplanır; ardından AdMob başlatılır.
 
 ---
@@ -397,7 +398,7 @@ Her aşamada Crashlytics çökme oranları ve Android Vitals ANR değerleri izle
 * **CPI (Cost Per Install):** Kanal bazlı indirme maliyeti.
 * **D1 / D7 / D30 Retention:** Kullanıcıların 1., 7. ve 30. günlerde uygulamaya geri dönme oranı.
 * **LTV / CAC Oranı:** Kullanıcıdan kazanılan AdMob reklam gelirinin kullanıcı edinme maliyetine oranı ($LTV > CAC$).
-* **eCPM & Fill Rate:** AdMob banner ve interstitial doluluk oranları.
+* **eCPM & Fill Rate:** AdMob native ve rewarded doluluk oranları.
 
 ---
 

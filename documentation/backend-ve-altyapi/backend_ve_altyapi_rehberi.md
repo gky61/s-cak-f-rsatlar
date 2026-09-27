@@ -118,7 +118,7 @@ FırsatKolik, **Geliştirme (DEV)** ve **Canlı (PROD)** olmak üzere iki tamame
 | **Uygulama Görünen Adı** | **FırsatKolik Dev** | **FırsatKolik** |
 | **Target SDK / Java** | Android SDK 36 / Java 17 | Android SDK 36 / Java 17 |
 | **Flavor Tanımı** | `--flavor dev --dart-define=FLAVOR=dev` | `--flavor prod --dart-define=FLAVOR=prod` |
-| **AdMob Reklamları** | Google Test Banner ID (`ca-app-pub-3940...`) | Gerçek Banner ID (`ca-app-pub-6853...`) |
+| **AdMob Reklamları** | Google Test Native ID (`ca-app-pub-3940...`) | Gerçek Native ID (`ca-app-pub-6853...`) (Faz 3.3) |
 | **App Check Sağlayıcısı**| Debug Provider (Debug Token) | Play Integrity API (Google Play Store) |
 | **Android Keystore** | Varsayılan Debug Keystore | `android/app/upload-keystore.jks` (Alias: upload) |
 | **Cloud Functions** | 27 Bağımsız Fonksiyon (İzole Trigger & Cron) | 27 Bağımsız Fonksiyon (İzole Trigger & Cron) |
@@ -208,9 +208,8 @@ Projenin başlangıcında Cloud Run üzerinde çalışan botların 7/24 açık k
 | **PROD Web App ID** | Web App ID | `1:228657473310:web:dc7c29279871906a380b0f` |
 | **PROD Android App ID**| Android App ID | `1:228657473310:android:f735a18f5c730ced380b0f` |
 | **PROD Keystore** | Keystore Yolu | `android/app/upload-keystore.jks` (Alias: `upload`) |
-| **PROD Keystore SHA-1**| SHA-1 Parmak İzi | `59:81:22:B5:48:21:79:1D:8C:55:5A:19:0E:C9:D9:76:31:E0:6D:9A` |
-| **PROD AdMob** | App ID / Banner ID | `ca-app-pub-6853997017739651~8861215767` / `ca-app-pub-6853.../8758625050` |
-| **VM Sunucusu** | VM Dış IP / Zone | `34.135.181.112` / `us-central1-a` (`telegram-bot-server`) |
+| **PROD AdMob (Android)**| App ID / Native ID | `ca-app-pub-6853997017739651~8861215767` / `ca-app-pub-6853997017739651/4004866134` (Faz 3.3 Native) |
+| **PROD AdMob (iOS)**    | App ID / Native ID | `ca-app-pub-6853997017739651~7339420575` / `ca-app-pub-6853997017739651/9437070495` (Faz 3.3 Native) |
 
 ---
 

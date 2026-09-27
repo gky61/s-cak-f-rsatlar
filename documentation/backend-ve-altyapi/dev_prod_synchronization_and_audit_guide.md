@@ -218,7 +218,7 @@ Canlıya geçiş operasyonunda tek bir maddenin dahi atlanmadığından emin olm
 - [ ] **1. Paket Adı:** `android/app/build.gradle` içinde PROD flavor `com.firsatkolik.app` olarak tanımlı mı?
 - [ ] **2. Keystore:** `upload-keystore.jks` dosyası `android/app/` altında mevcut ve `key.properties` yapılandırılmış mı?
 - [ ] **3. Google-Services:** `android/app/src/prod/google-services.json` dosyası PROD projesine (`228657473310`) ait mi?
-- [ ] **4. AdMob:** `firebase_options.dart` dosyasının release modda gerçek canlı ID'yi (`ca-app-pub-6853997017739651/8758625050`) döndürdüğü doğrulandı mı?
+- [ ] **4. AdMob:** `firebase_options.dart` dosyasının release modda resmi canlı Native ID'leri (Android: `ca-app-pub-6853997017739651/4004866134`, iOS: `ca-app-pub-6853997017739651/9437070495` - Faz 3.3 Native Ads) döndürdüğü ve `nativeAdUnitId` akışının çalıştığı doğrulandı mı?
 - [ ] **5. Play Integrity:** Google Play Console App Integrity alanında Firebase PROD projesi bağlandı mı?
 - [ ] **6. Play App Signing SHA-1:** Google Play App Signing SHA-1 parmak izi PROD Firebase Console'a eklendi mi?
 - [ ] **7. Shorebird:** `shorebird.yaml` dosyasında `prod` flavor için doğru App ID tanımlı mı?

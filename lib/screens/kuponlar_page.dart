@@ -17,6 +17,8 @@ import '../widgets/guest_login_bottom_sheet.dart';
 import '../services/notification_service.dart';
 import '../services/coupon_credit_service.dart';
 import '../services/ad_manager_service.dart';
+import '../services/theme_service.dart';
+import '../widgets/ad_deal_card.dart';
 import 'kupon_form_page.dart';
 
 class KuponlarPage extends StatefulWidget {
@@ -72,6 +74,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.logScreenView(screenName: 'KuponlarPage');
     NotificationService.isCouponsScreenActive = true;
     if (widget.highlightKuponId != null && widget.highlightKuponId!.trim().isNotEmpty) {
       _highlightedKuponId = widget.highlightKuponId!.trim();
@@ -2857,48 +2860,89 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     if (showBanner) headerCount++;
     if (hasHidden) headerCount++;
 
-    return ListView.builder(
-      controller: scrollController,
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 75),
-      itemCount: list.length + headerCount,
-      itemBuilder: (context, index) {
-        int currentIndex = 0;
+    return ListenableBuilder(
+      listenable: AdManagerService.instance,
+      builder: (context, _) {
+        final adManager = AdManagerService.instance;
+        final bool showAds = adManager.isAdsEnabled &&
+            adManager.nativeEnabled &&
+            adManager.nativeCouponsEnabled;
+        final int interval = (adManager.nativeCouponsInterval >= 3 &&
+                adManager.nativeCouponsInterval <= 15)
+            ? adManager.nativeCouponsInterval
+            : 5;
+        final int couponsPerAd = interval - 1; // Standart: 5 - 1 = 4 kupon
+        final int adCount =
+            (showAds && couponsPerAd > 0) ? (list.length ~/ couponsPerAd) : 0;
+        final int totalItemCount = list.length + headerCount + adCount;
 
-        if (showBanner) {
-          if (index == currentIndex) {
-            return _buildRadarInfoBanner(isDark);
-          }
-          currentIndex++;
-        }
+        return ListView.builder(
+          controller: scrollController,
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 75),
+          itemCount: totalItemCount,
+          itemBuilder: (context, index) {
+            int currentIndex = 0;
 
-        if (hasHidden) {
-          if (index == currentIndex) {
-            return _buildTabHiddenBanner(
-              tabName: tabName,
-              count: tabHiddenIds.length,
-              isDark: isDark,
-              onUnhide: () => _unhideCoupons(tabHiddenIds, tabName: tabName),
+            if (showBanner) {
+              if (index == currentIndex) {
+                return _buildRadarInfoBanner(isDark);
+              }
+              currentIndex++;
+            }
+
+            if (hasHidden) {
+              if (index == currentIndex) {
+                return _buildTabHiddenBanner(
+                  tabName: tabName,
+                  count: tabHiddenIds.length,
+                  isDark: isDark,
+                  onUnhide: () => _unhideCoupons(tabHiddenIds, tabName: tabName),
+                );
+              }
+              currentIndex++;
+            }
+
+            final itemIndex = index - currentIndex;
+
+            // ─── Akış İçi Native Reklam Kontrolü ───
+            // Her 4 kupondan sonra 1 reklam (5., 10., 15... sıralarda)
+            if (showAds && couponsPerAd > 0) {
+              final int blockSize = couponsPerAd + 1; // 5
+              if (itemIndex % blockSize == couponsPerAd) {
+                final adIndex = itemIndex ~/ blockSize;
+                return AdDealCard(
+                  key: ValueKey('coupon_ad_${tabName}_$adIndex'),
+                  viewMode: CardViewMode.horizontal,
+                  placement: 'kuponlar',
+                );
+              }
+            }
+
+            final passedAds = (showAds && couponsPerAd > 0)
+                ? (itemIndex ~/ (couponsPerAd + 1))
+                : 0;
+            final kuponIndex = itemIndex - passedAds;
+            if (kuponIndex < 0 || kuponIndex >= list.length) {
+              return const SizedBox.shrink();
+            }
+
+            final kupon = list[kuponIndex];
+            final isHiding = _animatingOutKuponIds.contains(kupon.id);
+            final isRestored = _recentlyRestoredKuponIds.contains(kupon.id);
+
+            return _AnimatedCouponItem(
+              key: ValueKey<String>(kupon.id),
+              kupon: kupon,
+              isHiding: isHiding,
+              isRestored: isRestored,
+              child: _buildCouponCard(
+                kupon: kupon,
+                isDark: isDark,
+                currentUser: currentUser,
+              ),
             );
-          }
-          currentIndex++;
-        }
-
-        final kuponIndex = index - currentIndex;
-        final kupon = list[kuponIndex];
-        final isHiding = _animatingOutKuponIds.contains(kupon.id);
-        final isRestored = _recentlyRestoredKuponIds.contains(kupon.id);
-
-        return _AnimatedCouponItem(
-          key: ValueKey<String>(kupon.id),
-          kupon: kupon,
-          isHiding: isHiding,
-          isRestored: isRestored,
-          child: _buildCouponCard(
-            kupon: kupon,
-            isDark: isDark,
-            currentUser: currentUser,
-          ),
+          },
         );
       },
     );

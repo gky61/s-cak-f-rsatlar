@@ -47,7 +47,7 @@ TOOLS = [
                 "days": {"type": "integer", "default": 7, "description": "Kaç günlük rapor istendiği"},
                 "platform": {"type": "string", "enum": ["all", "android", "ios"], "default": "all"},
                 "env": {"type": "string", "enum": ["all", "dev", "prod"], "default": "all"},
-                "format": {"type": "string", "enum": ["all", "banner", "interstitial", "native", "rewarded"], "default": "all"}
+                "format": {"type": "string", "enum": ["all", "native", "rewarded"], "default": "all"}
             }
         }
     },
@@ -61,7 +61,7 @@ TOOLS = [
     },
     {
         "name": "admob_list_units",
-        "description": "Android ve iOS için tanımlı tüm Banner, Interstitial, Native ve Rewarded reklam birim kimliklerini listeler.",
+        "description": "Android ve iOS için tanımlı tüm Native, Rewarded ve arşiv Banner reklam birim kimliklerini listeler.",
         "inputSchema": {
             "type": "object",
             "properties": {

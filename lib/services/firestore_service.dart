@@ -797,6 +797,7 @@ class FirestoreService {
         .update({'read': true});
   }
 
+
   Future<void> markAllNotificationsAsRead(String userId) async {
     final snapshot = await firestore
         .collection('users')

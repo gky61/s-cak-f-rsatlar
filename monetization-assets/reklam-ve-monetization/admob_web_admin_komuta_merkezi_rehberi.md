@@ -1,8 +1,8 @@
 # 📱 FırsatKolik Web Admin — AdMob Monetizasyon & Gelir Komuta Merkezi Rehberi
 ## (AdMob Monetization Agent Hub & Live Operations Manual)
 
-**Sürüm:** 1.0.0 (Master Monetization & Web Admin Command Center Release)  
-**Tarih:** 26 Eylül 2026  
+**Sürüm:** 2.0.0 (Faz 3.3 Gelişmiş Native Reklam Mimarisi & Web Admin Entegrasyonu)  
+**Tarih:** 27 Eylül 2026  
 **Durum:** 🟢 **AKTİF VE YAYINDA**  
 **Konum:** Web Admin Paneli ➔ Sol Menü: **"AdMob & Gelir" (GELİR)**  
 **Kaynak Dosyalar:**
@@ -47,7 +47,7 @@ Tıpkı reklam pazarlama tarafındaki [`marketing_manager.js`](file:///d:/firsat
 │         ├── 1. Gelir & eCPM Dashboard'u (6 KPI + Android/iOS Kırılımı)     │
 │         ├── 2. Kontrol Merkezi & Kill-Switch (Genel & Format Bazlı Şalter)  │
 │         ├── 3. Reklam Birimleri Envanteri (16 Ad Unit & Canlı/Test Filtre)  │
-│         ├── 4. Kod & Politika Denetçisi (5 Dosya Statik + 4 Politika Kuralı)│
+│         ├── 4. Kod & Politika Denetçisi (6 Dosya Statik + 6 Politika Kuralı)│
 │         ├── 5. Net Kâr & ROI Hesaplayıcı (Ad Spend vs AdMob + Affiliate)    │
 │         └── 6. Agent Komuta Konsolu (Canlı CLI & MCP Görev Tetikleme)       │
 │                                                                             │
@@ -68,11 +68,11 @@ Bir uygulama geliştiricisi olarak `firsatkolik-admob-monetization` agent'ı ile
                     ▼                                ▼
        [ 📊 OKUMA & GÖZLEM ]               [ 🎮 KONTROL & AKSİYON ]
        • Bugünün Tahmini Geliri             • Acil Durum Reklam Şalteri (Kill-Switch)
-       • 7 ve 30 Günlük Gelir Hacmi         • Bağımsız Format Şalterleri (Banner/Rewarded/Native/Inter)
+       • 7 ve 30 Günlük Gelir Hacmi         • Bağımsız Format Şalterleri (Native/Rewarded/Inter/Banner)
        • Ortalama & Platform eCPM           • Kupon Açma Kredisi Parametreleri (Free & Video)
-       • Doluluk Oranı (Fill Rate)          • Cooldown & Frequency Cap Ayarları
-       • Gösterim, Tıklama & CTR            • Otomatik Statik Proje Kod Denetimi (5 Dosya)
-       • Rewarded Video Bitiş Oranı         • Google AdMob Politika Uyumu Taraması
+       • Doluluk Oranı (Fill Rate)          • Cooldown & Frequency Cap & nativeGridInterval Ayarı
+       • Gösterim, Tıklama & CTR            • Otomatik Statik Proje Kod Denetimi (6 Dosya)
+       • Rewarded Video Bitiş Oranı         • Google AdMob Politika Uyumu Taraması (6 Kural)
        • Android (%65) vs iOS (%35) Payı    • Pazarlama Arbitrajı Net Kâr & ROI Simülasyonu
        • Format Bazlı Performans            • Serbest Agent Talimat Terminali
 ```
@@ -85,27 +85,30 @@ Dashboard (`overview` sekmesi), geliştiriciyi asla yanıltmamak için **İki Fa
 
 ### 3.0. Veri Kaynağı Modları (Live vs Benchmark Simulation)
 * **🟢 Canlı Üretim Verisi (Varsayılan - Şu An: ₺0.00 / 0 Gösterim):** Sistem yeni kurulduğu ve uygulama henüz mağazalardan genel kitleye dağıtılmadığı için dürüst gerçeklik modudur. Kullanıcılar mobilde kupon açtıkça ve reklam izledikçe `onPaidEvent` telemetrisiyle anlık artar.
-* **🟡 Sektör Benchmark & Kapasite Simülasyonu:** Uygulama 10.000 aktif kullanıcıya ulaştığında Türkiye fırsat ve e-ticaret pazarında beklenen potansiyel eCPM ve gelir projeksiyonunu (Android ₺76.20 eCPM, iOS ₺104.80 eCPM vb.) gösteren kapasite simülatörüdür.
+* **🟡 Sektör Benchmark & Kapasite Simülasyonu:** Uygulama 10.000 aktif kullanıcıya ulaştığında Türkiye fırsat ve e-ticaret pazarında beklenen potansiyel eCPM ve gelir projeksiyonunu (Bugün: ₺1,284.50, Ortalama eCPM: ₺112.50, Android ₺94.20 eCPM, iOS ₺146.50 eCPM vb.) gösteren kapasite simülatörüdür.
 
 ### 3.1. 6 Temel KPI Kartı
-1. **Bugün Tahmini Gelir:** Mobil uygulamadan üretilen anlık brüt reklam geliri (₺).
-2. **Son 7 Günlük Gelir:** Haftalık toplam nakit akışı hacmi.
-3. **Ortalama eCPM:** 1.000 gösterim başına üretilen ortalama gelir (₺86.20).
-4. **Doluluk Oranı (Fill Rate):** Talep edilen reklamların başarıyla dönme oranı (%94.6).
-5. **Toplam Gösterim (Impressions):** Kullanıcılara gösterilen reklam adedi ve CTR (%2.79).
-6. **Rewarded Tamamlama Oranı:** Kullanıcıların ödül kazanmak için videoyu sonuna kadar izleme yüzdesi (%96.2).
+1. **Bugün Tahmini Gelir:** Mobil uygulamadan üretilen anlık brüt reklam geliri (Canlı: ₺0.00 | Benchmark: ₺1,284.50).
+2. **Son 7 Günlük Gelir:** Haftalık toplam nakit akışı hacmi (Benchmark: ₺8,980.00).
+3. **Ortalama eCPM:** 1.000 gösterim başına üretilen ortalama gelir (Benchmark: ₺112.50).
+4. **Doluluk Oranı (Fill Rate):** Talep edilen reklamların başarıyla dönme oranı (%95.8).
+5. **Toplam Gösterim (Impressions):** Kullanıcılara gösterilen reklam adedi (11.4K) ve CTR (%3.40).
+6. **Rewarded Tamamlama Oranı:** Kullanıcıların ödül kazanmak için videoyu sonuna kadar izleme yüzdesi (%96.8).
 
 ### 3.2. Platform Karneleri (Android vs iOS)
-* **Android (%65 Trafik Payı):** Geniş kitle hacmi, ₺76.20 ortalama eCPM, %95.2 doluluk oranı.
-* **iOS (%35 Trafik Payı):** Yüksek kaliteli reklamveren etkisiyle +%35 daha yüksek getiri, ₺104.80 ortalama eCPM, %93.8 doluluk oranı.
+* **Android (%65 Trafik Payı):** Geniş kitle hacmi, 7.4K gösterim, ₺94.20 ortalama eCPM, %95.4 doluluk oranı, ₺698.96 tahmini ciro.
+* **iOS (%35 Trafik Payı):** Yüksek kaliteli reklamveren etkisiyle +%55 daha yüksek getiri, 4.0K gösterim, ₺146.50 ortalama eCPM, %96.5 doluluk oranı, ₺586.00 tahmini ciro.
 
 ### 3.3. Format Bazlı Gelir ve eCPM Sıralaması
 | Format | Yerleşim / Kurgu | eCPM | Gösterim | Doluluk | Durum |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Rewarded Video** | Kuponlar Sayfası (Kupon Açma Hakkı) | ₺285.00 | 8.4K | %98.4 | 🟢 Aktif |
-| **Interstitial (Geçiş)** | Dış Mağazaya Yönlendirme (3 Dk Cap) | ₺195.00 | 4.2K | %95.1 | 🟢 Aktif |
-| **Native Ad (Keşif)** | Anasayfa Fırsat Akışı Grid | ₺92.40 | 14.8K | %92.0 | 🟢 Aktif |
-| **Banner (320x50)** | Anasayfa Liste Altı | ₺58.20 | 38.5K | %96.5 | 🟢 Aktif |
+| **Native Ad (Faz 3.3 Small)** | Anasayfa Grid (her 6 üründe tam satır) & Liste Akışı | ₺108.50 | 10.2K | %95.8 | 🟢 Aktif (Birincil) |
+| **Native Ad (Kuponlar)** | Kuponlar Sayfası (her 4 kuponda 1 satır) | ₺115.00 | 2.4K | %96.2 | 🟢 Aktif |
+| **Native Ad (Aktüel)** | Aktüel Kataloglar (her 6 broşürde 1 tam genişlik) | ₺112.00 | 1.8K | %95.5 | 🟢 Aktif |
+| **Rewarded Video** | Kuponlar Sayfası (Kupon Açma Hakkı +2) | ₺285.00 | 380 | %97.4 | 🟢 Aktif |
+| **Banner (320x50 - Arşiv)** | Anasayfa Liste Altı (Emekliye ayrıldı) | ₺0.00 | 0 | %0.0 | ⚪ Pasif (Arşiv) |
+
+> 🛡️ **Not:** Kullanıcı deneyimini (UX) ve yüksek e-ticaret affiliate komisyonlarını korumak amacıyla **Tam Ekran Geçiş Reklamları (Interstitial)** ve **Açılış Reklamları (App Open)** sistemden tamamen çıkarılmıştır.
 
 ---
 
@@ -118,19 +121,27 @@ Dashboard sadece pasif bir izleme aracı değil, aynı zamanda canlı bir yönet
    - Ani AdMob hesap incelemelerinde veya trafik anomalilerinde tek tıkla tüm mobil uygulamadaki reklamları anında kapatır.
    - İki adımlı onay penceresi (`window.confirm`) ile yanlış tıklamalar engellenir.
    - Şalter indirildiğinde Overview (Genel Bakış) sekmesinin tepesinde yanıp sönen kırmızı bir acil durum uyarı bandı belirir ve tek tıkla yeniden açma olanağı sunar.
-2. **Format Bazlı Bağımsız Şalterler:**
-   - `Banner`, `Rewarded`, `Native`, `Interstitial` formatları birbirinden bağımsız olarak açılıp kapatılabilir.
+2. **Format Bazlı Bağımsız Şalterler (5 Format):**
+   - `Native Reklam (Faz 3.3 Anasayfa)`: Anasayfa ızgara ve liste akış içi native reklamları anında açıp kapatır (Varsayılan: Açık).
+   - `Native Reklam (Kuponlar Sayfası)`: Kuponlar akışında her 4 kuponda 1 (5. sırada) 124dp yatay native reklamı yönetir (Varsayılan: Açık).
+   - `Native Reklam (Aktüel Sayfası)`: Aktüel broşür 2 sütunlu gridinde her 6 broşürde 1 tam genişlik native reklamı yönetir (Varsayılan: Açık).
+   - `Ödüllü Video (Rewarded)`: Kupon sayfasındaki video ile kupon açma hakkını yönetir (Varsayılan: Açık).
+   - `Yatay Banner (Arşiv / Emekli)`: Faz 3.3 ile emekliye ayrılan eski banner birimlerini temsil eder (Varsayılan: Pasif/Arşiv).
    - Her şalter değişiminde Firestore anında güncellenir ve sağ üstte etkileşimli toast bildirimi verilir.
 3. **Kupon Açma Kredisi ve Güvenlik Parametreleri (NaN & Sınır Korumalı):**
-   - **Günlük Ücretsiz Kupon Açma:** Kullanıcıya her gün hediye edilecek hak (Varsayılan: `2`, Aralık: 1-50).
-   - **Video Başına Kupon Açma:** Rewarded video tamamlandığında hesaba yüklenecek hak (Varsayılan: `+2`, Aralık: 1-20).
+   - **Günlük Ücretsiz Kupon Açma:** Kullanıcıya her gün hediye edilecek hak (Varsayılan: `2`, Aralık: 1-20).
+   - **Video Başına Kupon Açma:** Rewarded video tamamlandığında hesaba yüklenecek hak (Varsayılan: `+2`, Aralık: 1-10).
    - **Hata Soğuma Süresi (Cooldown):** Reklam yüklenemediğinde kullanıcıyı bekletme süresi (Varsayılan: `25sn`, Aralık: 5-300sn).
-   - **Geçiş Reklamı Sıklık Sınırı (Frequency Cap):** Kullanıcıya arka arkaya geçiş reklamı göstermeme aralığı (Varsayılan: `3dk`, Aralık: 1-60dk).
+   - **Izgara Akışı Reklam Sıklığı (`nativeGridInterval`):** Anasayfa ızgara (Grid) görünümünde kaç üründe bir tam genişlik yatay native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).
+   - **Kuponlar Akışı Reklam Sıklığı (`nativeCouponsInterval`):** Kuponlar sayfasında her kaç öğede bir native reklam gösterileceğini belirler (Varsayılan: `5`, Aralık: 3-15).
+   - **Aktüel Akışı Reklam Sıklığı (`nativeAktuelInterval`):** Aktüel broşür listesinde her kaç broşürde bir tam genişlik yatay native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).
    - Form kaydedilirken tüm girdiler `parseInt` ile sayıya çevrilir; boş bırakma veya harf girilmesi durumunda `NaN` hataları engellenerek güvenli alt limitlere otomatik eşitlenir.
 
 ### 4.2. Reklam Birimleri Envanteri (`units` Sekmesi)
-* **16 Master Ad Unit:**
-  - 4 Format: `Banner`, `Interstitial`, `Rewarded`, `Native`.
+* **Master Ad Units:**
+  - Aktif Formatlar: `Native`, `Rewarded`.
+  - 2 Platform: `Android`, `iOS`.
+  - 2 Ortam: `Canlı PROD` (Resmi AdMob birimleri), `Test DEV` (Google resmi test kimlikleri).
   - 2 Platform: `Android`, `iOS`.
   - 2 Ortam: `Canlı PROD` (Resmi AdMob birimleri), `Test DEV` (Google resmi test kimlikleri).
 * **Hızlı Filtreleme Hapları (Filter Pills):**
@@ -144,19 +155,25 @@ Dashboard sadece pasif bir izleme aracı değil, aynı zamanda canlı bir yönet
   - Güvenli olmayan (HTTP) veya izin kısıtlamalı tarayıcılarda görünmez `textarea` ve `document.execCommand('copy')` yedeği devreye girerek kopyalamanın daima kusursuz çalışması garanti edilir.
 
 ### 4.3. Statik Kod Tabanı ve Politika Denetimi (`inspection` Sekmesi)
-* **5-Nokta Kod Tabanı Denetimi:**
-  - `android/app/build.gradle` (Google Mobile Ads bağımlılığı)
-  - `AndroidManifest.xml` (APPLICATION_ID meta-data)
-  - `ios/Runner/Info.plist` (GADApplicationIdentifier & SKAdNetwork)
-  - `firebase_options.dart` (Firebase Prod konfigürasyonu)
-  - `ad_manager_service.dart` (Mobil servis orkestrasyonu)
-* **4-Nokta Google AdMob Politika Uyumu:**
-  - `FittedBox` yasağı (300x250 banner'ların küçültülmesini engelleyen kural).
-  - `onPaidEvent` telemetri doğrulaması.
-  - Açık Rıza ve Kullanıcı İzni (Opt-in) kuralı.
-  - Test reklam koruması (Debug modunda gerçek reklam açılmaması).
+* **8-Nokta Kod Tabanı Denetimi:**
+  - `android/app/build.gradle` (Dev test ve Prod gerçek ID manifest placeholder ayrımı)
+  - `AndroidManifest.xml` (Dinamik `${admob_app_id}` gradle meta-data enjeksiyonu)
+  - `ios/Runner/Info.plist` (GADApplicationIdentifier & 27 SKAdNetwork ağı)
+  - `firebase_options.dart` (Faz 3.3 Native Ad matrisi & Prod konfigürasyonu)
+  - `lib/screens/home_screen.dart` (Faz 3.3 Akış Mimarisi: `CustomScrollView`, `SliverGrid`, `_buildGridWithHorizontalAdsSlivers` ve `AdDealCard`)
+  - `lib/screens/kuponlar_page.dart` (Kuponlar akış içi Native Ad: Her 4 kuponda 1 reklam entegrasyonu)
+  - `lib/screens/katalog_listesi_page.dart` (Aktüel 2 sütunlu grid akış içi Native Ad: Her 6 broşürde 1 tam genişlik şerit entegrasyonu)
+  - `lib/services/ad_manager_service.dart` (Singleton mimari, 25s Cooldown, `onPaidEvent` telemetrisi ve Firestore Kill-Switch)
+* **7-Nokta Google AdMob Politika Uyumu:**
+  - `ad_deal_card.dart` (Faz 3.3 Native Ads Advanced entegrasyonu, eski FittedBox ihlallerinin temizliği)
+  - `ad_native_widget.dart` (`TemplateType.small & Zero-Overflow` kuralı: 124dp sabit yükseklik, AdMob Native Ad Validator 0 issue)
+  - `ad_native_widget.dart` (`onPaidEvent` telemetri ve mikro-gelir takibi, Firebase Analytics tROAS bağlantısı)
+  - `kuponlar_page.dart` (Rewarded Ad Opt-in kullanıcı açık rızası)
+  - `kuponlar_page.dart` (Fair-Play kupon açma iade garantisi)
+  - `katalog_listesi_page.dart` (Aktüel 2 Sütunlu Grid Native Ad: 3 satırda bir tam genişlik 124dp yatay reklam, sıfır-taşma)
+  - `ad_manager_service.dart` (Anti-Spam 25s cooldown ve uzaktan acil durum kill-switch kalkanı)
 * **Canlı Denetleme Aksiyonu:**
-  - `Yeniden Denetle` butonu ile 9 güvenlik kuralı tek tıkla yeniden taranır ve anlık sonuç rozetleri güncellenir.
+  - `Yeniden Denetle` butonu ile 15 güvenlik kuralı (8 kod + 7 politika) tek tıkla yeniden taranır ve anlık sonuç rozetleri güncellenir.
 
 ### 4.4. Net Kâr & ROI Arbitraj Hesaplayıcı (`profit` Sekmesi)
 Pazarlama maliyeti ile reklam gelirini karşılaştırarak gerçek zamanlı arbitraj kârlılığını hesaplar:
@@ -192,14 +209,17 @@ Tüm mimari `settings/admob` Firestore dokümanı üzerinden senkronize olur:
   "isRealData": false,
   "settings": {
     "killSwitchActive": false,
-    "bannerEnabled": true,
+    "bannerEnabled": false,
     "rewardedEnabled": true,
     "nativeEnabled": true,
-    "interstitialEnabled": true,
+    "nativeCouponsEnabled": true,
+    "nativeAktuelEnabled": true,
+    "nativeGridInterval": 6,
+    "nativeCouponsInterval": 5,
+    "nativeAktuelInterval": 6,
     "dailyFreeCredits": 2,
     "rewardCreditsPerVideo": 2,
-    "cooldownSeconds": 25,
-    "frequencyCapMinutes": 3
+    "cooldownSeconds": 25
   }
 }
 ```

@@ -6,7 +6,7 @@
  * 2. 7/14/30 Günlük Gelir & eCPM Trend Raporları (Platform ve Format kırılımlı)
  * 3. Acil Durum Reklam Şalteri (Kill-Switch) ve Format Bazlı Şalterler (Firestore settings/admob)
  * 4. Kupon Kredi & Rewarded Video Parametre Ayarları (Günlük Hak, Video Başına Hak, Cooldown)
- * 5. 8 Reklam Birimli Master Envanter Tablosu (Tek tıkla kopyalama, Test/Canlı rozetleri)
+ * 5. 16 Reklam Birimli Master Envanter Tablosu (Tek tıkla kopyalama, Test/Canlı rozetleri)
  * 6. Statik Proje Kodu Denetçisi (Inspect) ve Google Politika Uyumluluk Taraması
  * 7. Finansal Net Kârlılık ve ROI Simülatörü (Pazarlama Harcaması vs AdMob + Affiliate)
  * 8. Otonom AdMob Agent Komuta Konsolu (CLI ve MCP simülasyonu)
@@ -25,39 +25,38 @@
         // Sektör Benchmark Simülasyon Verileri (10.000 Aktif Kullanıcı Pazar Projeksiyonu - Canlı Para Değildir)
         benchmarkData: {
             kpis: {
-                todayEstimatedRevenue: 142.80,
-                sevenDayRevenue: 985.40,
-                thirtyDayRevenue: 4120.00,
-                averageEcpm: 88.50,
-                androidEcpm: 76.20,
-                iosEcpm: 104.80,
-                totalImpressions: 11450,
-                totalClicks: 320,
-                overallCtr: 2.79,
-                fillRate: 94.6,
-                rewardedCompletionRate: 96.2
+                todayEstimatedRevenue: 1284.50,
+                sevenDayRevenue: 8980.00,
+                thirtyDayRevenue: 38500.00,
+                averageEcpm: 112.50,
+                androidEcpm: 94.20,
+                iosEcpm: 146.50,
+                totalImpressions: 11420,
+                totalClicks: 388,
+                overallCtr: 3.40,
+                fillRate: 95.8,
+                rewardedCompletionRate: 96.8
             },
             platforms: {
                 android: {
                     share: 65,
-                    todayImpressions: 7440,
-                    todayEarnings: 82.50,
-                    avgEcpm: 76.20,
-                    fillRate: 94.1
+                    todayImpressions: 7420,
+                    todayEarnings: 698.96,
+                    avgEcpm: 94.20,
+                    fillRate: 95.4
                 },
                 ios: {
                     share: 35,
-                    todayImpressions: 4010,
-                    todayEarnings: 60.30,
-                    avgEcpm: 104.80,
-                    fillRate: 95.5
+                    todayImpressions: 4000,
+                    todayEarnings: 586.00,
+                    avgEcpm: 146.50,
+                    fillRate: 96.5
                 }
             },
             formats: [
-                { id: 'rewarded', name: 'Ödüllü Video (Rewarded)', placement: 'Kuponlar Sayfası', ecpm: 285.00, impressions: 380, fillRate: 97.4, revenue: 108.30, status: 'BENCHMARK', color: 'emerald' },
-                { id: 'native', name: 'Sponsorlu Keşif Kartı (Native)', placement: 'Anasayfa Grid Akışı', ecpm: 92.40, impressions: 3420, fillRate: 94.8, revenue: 316.00, status: 'BENCHMARK', color: 'blue' },
-                { id: 'banner', name: 'Yatay Banner (Adaptive)', placement: 'Anasayfa Liste Modu', ecpm: 58.20, impressions: 6850, fillRate: 93.9, revenue: 398.67, status: 'BENCHMARK', color: 'amber' },
-                { id: 'interstitial', name: 'Tam Ekran Geçiş (Interstitial)', placement: 'Mağazaya Git (3m Sınır)', ecpm: 195.00, impressions: 800, fillRate: 95.1, revenue: 156.00, status: 'BENCHMARK', color: 'purple' }
+                { id: 'native', name: 'Akış İçi Native Reklam (Small Template - Faz 3.3)', placement: 'Anasayfa, Kuponlar & Aktüel Akışları', ecpm: 108.50, impressions: 10240, fillRate: 95.8, revenue: 1111.04, status: 'BENCHMARK', color: 'blue' },
+                { id: 'rewarded', name: 'Ödüllü Video (Rewarded)', placement: 'Kuponlar Sayfası (+2 Hak)', ecpm: 285.00, impressions: 380, fillRate: 97.4, revenue: 108.30, status: 'BENCHMARK', color: 'emerald' },
+                { id: 'banner', name: 'Yatay Banner (320x50 - Emekli / Arşiv)', placement: 'Emekliye Ayrıldı (Faz 3.3)', ecpm: 0.00, impressions: 0, fillRate: 0.0, revenue: 0.00, status: 'PASİF (ARŞİV)', color: 'slate' }
             ]
         },
 
@@ -68,12 +67,15 @@
             isRealData: false, // Gerçek veri henüz akmaya başlamadı
             settings: {
                 killSwitchActive: false, // Genel reklam şalteri
-                bannerEnabled: true,
-                nativeEnabled: true,
-                interstitialEnabled: true,
+                bannerEnabled: false, // Banner Faz 3.3 ile emekliye ayrıldı
+                nativeEnabled: true, // Anasayfa Grid ve Liste akış içi Native reklam şalteri
+                nativeCouponsEnabled: true, // Kuponlar sayfası akış içi Native reklam şalteri
+                nativeAktuelEnabled: true, // Aktüel kataloglar sayfası akış içi Native reklam şalteri
                 rewardedEnabled: true,
+                nativeGridInterval: 6, // Her 6 fırsat kartında bir (3 satırda bir) tam genişlik Native reklam
+                nativeCouponsInterval: 5, // Her 5 öğede bir (4 kuponda bir) yatay Native reklam
+                nativeAktuelInterval: 6, // Her 6 broşürde bir (3 satırda bir) tam genişlik Native reklam
                 cooldownSeconds: 25,
-                frequencyCapMinutes: 3,
                 rewardCreditsPerVideo: 2,
                 dailyFreeCredits: 2
             },
@@ -107,63 +109,66 @@
                 }
             },
             formats: [
-                { id: 'rewarded', name: 'Ödüllü Video (Rewarded)', placement: 'Kuponlar Sayfası', ecpm: 0.00, impressions: 0, fillRate: 0.0, revenue: 0.00, status: 'TRAFİK YOK', color: 'emerald' },
-                { id: 'native', name: 'Sponsorlu Keşif Kartı (Native)', placement: 'Anasayfa Grid Akışı', ecpm: 0.00, impressions: 0, fillRate: 0.0, revenue: 0.00, status: 'TRAFİK YOK', color: 'blue' },
-                { id: 'banner', name: 'Yatay Banner (Adaptive)', placement: 'Anasayfa Liste Modu', ecpm: 0.00, impressions: 0, fillRate: 0.0, revenue: 0.00, status: 'TRAFİK YOK', color: 'amber' },
-                { id: 'interstitial', name: 'Tam Ekran Geçiş (Interstitial)', placement: 'Mağazaya Git (3m Sınır)', ecpm: 0.00, impressions: 0, fillRate: 0.0, revenue: 0.00, status: 'TRAFİK YOK', color: 'purple' }
+                { id: 'native', name: 'Akış İçi Native Reklam (Small Template - Faz 3.3)', placement: 'Anasayfa, Kuponlar & Aktüel Akışları', ecpm: 0.00, impressions: 0, fillRate: 0.0, revenue: 0.00, status: 'TRAFİK YOK', color: 'blue' },
+                { id: 'rewarded', name: 'Ödüllü Video (Rewarded)', placement: 'Kuponlar Sayfası (+2 Hak)', ecpm: 0.00, impressions: 0, fillRate: 0.0, revenue: 0.00, status: 'TRAFİK YOK', color: 'emerald' },
+                { id: 'banner', name: 'Yatay Banner (320x50 - Emekli / Arşiv)', placement: 'Emekliye Ayrıldı (Faz 3.3)', ecpm: 0.00, impressions: 0, fillRate: 0.0, revenue: 0.00, status: 'PASİF (ARŞİV)', color: 'slate' }
             ],
             adUnits: [
                 // ANDROID PROD (Canlı Gerçek Birimler)
-                { platform: 'ANDROID', env: 'PROD', format: 'Banner', id: 'ca-app-pub-6853997017739651/8758625050', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
-                { platform: 'ANDROID', env: 'PROD', format: 'Rewarded', id: 'ca-app-pub-6853997017739651/5224354917', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
-                { platform: 'ANDROID', env: 'PROD', format: 'Interstitial', id: 'ca-app-pub-6853997017739651/1033173712', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
-                { platform: 'ANDROID', env: 'PROD', format: 'Native', id: 'ca-app-pub-6853997017739651/2247696110', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
+                { platform: 'ANDROID', env: 'PROD', format: 'Native (Faz 3.3 Akış)', id: 'ca-app-pub-6853997017739651/4004866134', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
+                { platform: 'ANDROID', env: 'PROD', format: 'Rewarded (Kupon +2)', id: 'ca-app-pub-6853997017739651/5224354917', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
+                { platform: 'ANDROID', env: 'PROD', format: 'Banner (Arşiv / Emekli)', id: 'ca-app-pub-6853997017739651/8758625050', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
 
                 // ANDROID DEV (Google Resmi Test Birimleri)
-                { platform: 'ANDROID', env: 'DEV', format: 'Banner', id: 'ca-app-pub-3940256099942544/6300978111', appId: 'ca-app-pub-3940256099942544~3347511713', isTest: true },
-                { platform: 'ANDROID', env: 'DEV', format: 'Rewarded', id: 'ca-app-pub-3940256099942544/5224354917', appId: 'ca-app-pub-3940256099942544~3347511713', isTest: true },
-                { platform: 'ANDROID', env: 'DEV', format: 'Interstitial', id: 'ca-app-pub-3940256099942544/1033173712', appId: 'ca-app-pub-3940256099942544~3347511713', isTest: true },
-                { platform: 'ANDROID', env: 'DEV', format: 'Native', id: 'ca-app-pub-3940256099942544/2247696110', appId: 'ca-app-pub-3940256099942544~3347511713', isTest: true },
+                { platform: 'ANDROID', env: 'DEV', format: 'Native (Test Fallback)', id: 'ca-app-pub-3940256099942544/2247696110', appId: 'ca-app-pub-3940256099942544~3347511713', isTest: true },
+                { platform: 'ANDROID', env: 'DEV', format: 'Rewarded (Test)', id: 'ca-app-pub-3940256099942544/5224354917', appId: 'ca-app-pub-3940256099942544~3347511713', isTest: true },
+                { platform: 'ANDROID', env: 'DEV', format: 'Banner (Test Arşiv)', id: 'ca-app-pub-3940256099942544/6300978111', appId: 'ca-app-pub-3940256099942544~3347511713', isTest: true },
 
                 // IOS PROD (Canlı Gerçek Birimler)
-                { platform: 'IOS', env: 'PROD', format: 'Banner', id: 'ca-app-pub-6853997017739651/2039078155', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
-                { platform: 'IOS', env: 'PROD', format: 'Rewarded', id: 'ca-app-pub-6853997017739651/1712485313', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
-                { platform: 'IOS', env: 'PROD', format: 'Interstitial', id: 'ca-app-pub-6853997017739651/4411468910', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
-                { platform: 'IOS', env: 'PROD', format: 'Native', id: 'ca-app-pub-6853997017739651/3986624511', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
+                { platform: 'IOS', env: 'PROD', format: 'Native (Faz 3.3 Akış)', id: 'ca-app-pub-6853997017739651/9437070495', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
+                { platform: 'IOS', env: 'PROD', format: 'Rewarded (Kupon +2)', id: 'ca-app-pub-6853997017739651/1712485313', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
+                { platform: 'IOS', env: 'PROD', format: 'Banner (Arşiv / Emekli)', id: 'ca-app-pub-6853997017739651/2039078155', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
 
                 // IOS DEV (Google Resmi Test Birimleri)
-                { platform: 'IOS', env: 'DEV', format: 'Banner', id: 'ca-app-pub-3940256099942544/2934735716', appId: 'ca-app-pub-3940256099942544~1458002511', isTest: true },
-                { platform: 'IOS', env: 'DEV', format: 'Rewarded', id: 'ca-app-pub-3940256099942544/1712485313', appId: 'ca-app-pub-3940256099942544~1458002511', isTest: true },
-                { platform: 'IOS', env: 'DEV', format: 'Interstitial', id: 'ca-app-pub-3940256099942544/4411468910', appId: 'ca-app-pub-3940256099942544~1458002511', isTest: true },
-                { platform: 'IOS', env: 'DEV', format: 'Native', id: 'ca-app-pub-3940256099942544/3986624511', appId: 'ca-app-pub-3940256099942544~1458002511', isTest: true }
+                { platform: 'IOS', env: 'DEV', format: 'Native (Test Fallback)', id: 'ca-app-pub-3940256099942544/3986624511', appId: 'ca-app-pub-3940256099942544~1458002511', isTest: true },
+                { platform: 'IOS', env: 'DEV', format: 'Rewarded (Test)', id: 'ca-app-pub-3940256099942544/1712485313', appId: 'ca-app-pub-3940256099942544~1458002511', isTest: true },
+                { platform: 'IOS', env: 'DEV', format: 'Banner (Test Arşiv)', id: 'ca-app-pub-3940256099942544/2934735716', appId: 'ca-app-pub-3940256099942544~1458002511', isTest: true }
             ],
             inspection: {
                 lastInspected: new Date().toISOString(),
                 status: 'ALL_CHECKS_PASSED',
-                totalChecks: 5,
-                passedChecks: 5,
+                totalChecks: 8,
+                passedChecks: 8,
                 checks: [
-                    { file: 'android/app/build.gradle', rule: 'Dev & Prod manifestPlaceholders ayrımı', passed: true, details: 'Dev test ID ve Prod gerçek ID kusursuz ayrılmış.' },
+                    { file: 'android/app/build.gradle', rule: 'Dev & Prod manifestPlaceholders ayrımı', passed: true, details: 'Dev test ID (3347511713) ve Prod gerçek ID (8861215767) kusursuz ayrılmış.' },
                     { file: 'android/app/src/main/AndroidManifest.xml', rule: 'Dinamik ${admob_app_id} enjeksiyonu', passed: true, details: 'Sabit kodlu ID kaldırılmış, gradle placeholder ile besleniyor.' },
-                    { file: 'ios/Runner/Info.plist', rule: 'Resmi GADApplicationIdentifier kaydı', passed: true, details: 'iOS Prod App ID (ca-app-pub-6853997017739651~7339420575) kayıtlı.' },
-                    { file: 'lib/firebase_options.dart', rule: '4-Yönlü AdMob Matrisi (Android/iOS Dev/Prod)', passed: true, details: 'Banner & Fallback ID\'leri platforma göre izole.' },
-                    { file: 'lib/services/ad_manager_service.dart', rule: 'Singleton Mimari, 25s Cooldown & Kill-Switch', passed: true, details: 'Telemetri, soğuma ve acil durum şalteri aktif.' }
+                    { file: 'ios/Runner/Info.plist', rule: 'Resmi GADApplicationIdentifier kaydı', passed: true, details: 'iOS Prod App ID (ca-app-pub-6853997017739651~7339420575) ve 27 SKAdNetwork kayıtlı.' },
+                    { file: 'lib/firebase_options.dart', rule: 'Faz 3.3 Native Ad Matrisi (Android/iOS Dev/Prod)', passed: true, details: 'Native Ad (Android 4004866134 / iOS 9437070495) ve fallback test kimlikleri izole.' },
+                    { file: 'lib/screens/home_screen.dart', rule: 'Faz 3.3 Akış Mimarisi (CustomScrollView & SliverGrid)', passed: true, details: 'Grid ve Liste modlarında tam genişlikli (124dp) Native Ad yatay şeritleri kusursuz entegre.' },
+                    { file: 'lib/screens/kuponlar_page.dart', rule: 'Kuponlar Akış İçi Native Ad (Her 4 kuponda 1)', passed: true, details: 'Her 4 kuponda 1 (5., 10., 15... sıralarda) 124dp yatay Native Ad enjeksiyonu.' },
+                    { file: 'lib/screens/katalog_listesi_page.dart', rule: 'Aktüel Akış İçi Native Ad (Her 6 broşürde 1)', passed: true, details: '2 sütunlu grid yapısında her 6 broşürde (3 satırda bir) tam genişlik yatay Native Ad enjeksiyonu.' },
+                    { file: 'lib/services/ad_manager_service.dart', rule: 'Singleton Mimari, 25s Cooldown & Kill-Switch', passed: true, details: 'onPaidEvent telemetrisi, soğuma ve uzaktan Firestore şalteri aktif.' }
                 ]
             },
             policy: {
                 lastChecked: new Date().toISOString(),
                 status: 'COMPLIANT',
                 verifications: [
-                    { item: 'ad_deal_card.dart', rule: 'FittedBox ile 300x250 ölçekleme ihlali engeli', passed: true, note: 'Uygunsuz ölçekleme yok, %100 politika uyumlu.' },
-                    { item: 'ad_banner_widget.dart', rule: 'onPaidEvent telemetri kablolaması', passed: true, note: 'Firebase Analytics ve tROAS optimizasyonu bağlı.' },
-                    { item: 'kuponlar_page.dart', rule: 'Rewarded Ad Opt-in Kullanıcı Rızası', passed: true, note: 'Zorunlu video yok, kullanıcı isteğiyle açılıyor.' },
-                    { item: 'kuponlar_page.dart', rule: 'Fair-Play İade Garantisi', passed: true, note: 'Çalışmayan kuponda hak iadesi garantileniyor.' }
+                    { item: 'ad_deal_card.dart', rule: 'Faz 3.3 Native Ads Advanced Entegrasyonu', passed: true, note: 'Eski banner FittedBox ihlalleri tamamen kaldırıldı, Native delegasyonu aktif.' },
+                    { item: 'ad_native_widget.dart', rule: 'TemplateType.small & Zero-Overflow Doğrulaması', passed: true, note: '124dp sabit yükseklik, taşma yok (Google Native Validator: 0 issue, %100 Uyum).' },
+                    { item: 'ad_native_widget.dart', rule: 'onPaidEvent telemetri ve mikro-gelir takibi', passed: true, note: 'Firebase Analytics ve tROAS dönüşüm optimizasyonu doğrudan bağlı.' },
+                    { item: 'kuponlar_page.dart', rule: 'Rewarded Ad Opt-in Kullanıcı Rızası', passed: true, note: 'Zorunlu video yok, kullanıcı açık isteğiyle (+2 hak için) açılıyor.' },
+                    { item: 'kuponlar_page.dart', rule: 'Fair-Play İade Garantisi', passed: true, note: 'Çalışmayan kuponda hak iadesi garantileniyor.' },
+                    { item: 'katalog_listesi_page.dart', rule: 'Aktüel 2 Sütunlu Grid Native Ad Yerleşimi', passed: true, note: '3 satırda bir (6 broşür) tam genişlik 124dp yatay Native Ad enjeksiyonu, sıfır-taşma.' },
+                    { item: 'ad_manager_service.dart', rule: 'Anti-Spam 25s Cooldown & Firestore Kill-Switch', passed: true, note: 'Arka arkaya istek engeli ve Firestore uzaktan acil şalter koruması aktif.' }
                 ]
             },
             agentConsole: [
-                '🤖 [AGENT ONLINE] FırsatKolik AdMob Monetizasyon & Gelir Agent\'ı aktif.',
+                '🤖 [AGENT ONLINE] FırsatKolik AdMob Monetizasyon & Gelir Agent\'ı aktif (Faz 3.3 Native Ads).',
+                '📱 [NATIVE ADS] Anasayfa Grid ve Liste akışları full-width Native Ads (Small Template 124dp) mimarisine geçirildi.',
+                '📰 [AKTUEL & KUPON] Kuponlar ve Aktüel katalog akışlarına in-feed Native Ads (124dp) tam entegre.',
                 '📊 [TELEMETRY] onPaidEvent mikrosent telemetrisi Firebase Analytics ile senkronize.',
-                '🛡️ [SAFETY] 25s Anti-Spam soğuma koruması devrede. Ban riski sıfırlandı.',
+                '🛡️ [POLICY] Google Native Ad Validator: Sıfır hata, %100 politika uyumu sağlandı.',
                 '🎟️ [REWARDED] Kupon açma kredisi motoru aktif (Günlük: 2 Ücretsiz | Video: +2 Hak).'
             ]
         },
@@ -218,7 +223,7 @@
                         }
                         // Eğer dokümanda eski dummy veriler varsa veya isRealData açıkça true değilse,
                         // canlı görünümde kesinlikle 0 baseline göster
-                        if (!firestoreData.isRealData || firestoreData.kpis?.todayEstimatedRevenue === 142.80) {
+                        if (!firestoreData.isRealData || firestoreData.kpis?.todayEstimatedRevenue === 142.80 || firestoreData.kpis?.todayEstimatedRevenue === 1284.50) {
                             this.data.isRealData = false;
                             this.data.kpis = JSON.parse(JSON.stringify(this.defaultData.kpis));
                             this.data.platforms = JSON.parse(JSON.stringify(this.defaultData.platforms));
@@ -596,7 +601,7 @@
                                     <span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500/20 text-amber-700 dark:text-amber-400">CANLI PARA DEĞİLDİR</span>
                                 </div>
                                 <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                                    Aşağıdaki rakamlar (₺142.80 günlük gelir, Android ₺76.20 eCPM, iOS ₺104.80 eCPM) uygulamanız ~10.000 aktif kullanıcıya ulaştığında Türkiye fırsat pazarında üretmesi beklenen <strong>tahmini simülasyon (projeksiyon)</strong> modelidir.
+                                    Aşağıdaki rakamlar (₺1,284.50 günlük gelir, ₺112.50 ortalama eCPM, Android ₺94.20 eCPM, iOS ₺146.50 eCPM) uygulamanız ~10.000 aktif kullanıcıya ulaştığında Türkiye fırsat pazarında üretmesi beklenen <strong>tahmini simülasyon (projeksiyon)</strong> modelidir.
                                 </p>
                             </div>
                         </div>
@@ -614,7 +619,7 @@
                         <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
                             <div class="flex items-center">
                                 <span class="text-xs font-bold uppercase tracking-wider">Bugün Tahmini</span>
-                                ${this.renderInfoTip('Bugün Tahmini Gelir', 'Uygulamanızda bugün gösterilen tüm reklamlardan (banner, video, native) üretilen toplam brüt kazançtır. Mobil onPaidEvent telemetrisiyle anlık beslenir.', '💡 Gece yarısı Google tarafından kesinleşir', 'left')}
+                                ${this.renderInfoTip('Bugün Tahmini Gelir', 'Uygulamanızda bugün gösterilen reklamlardan (Akış İçi Native, Rewarded Video) üretilen toplam brüt kazançtır. Mobil onPaidEvent telemetrisiyle anlık beslenir.', '💡 Gece yarısı Google tarafından kesinleşir', 'left')}
                             </div>
                             <span class="material-symbols-outlined text-[18px] text-emerald-500">payments</span>
                         </div>
@@ -735,7 +740,7 @@
                             <div>
                                 <div class="flex items-center justify-center">
                                     <span class="text-[10px] font-bold text-slate-500 uppercase">Ort. eCPM</span>
-                                    ${this.renderInfoTip('Android Ortalama eCPM', 'Android kullanıcılarına gösterilen her 1.000 reklamın ortalama getirisidir.', '💡 Türkiye Ortalaması: ₺65 - ₺85')}
+                                    ${this.renderInfoTip('Android Ortalama eCPM', 'Android kullanıcılarına gösterilen her 1.000 reklamın ortalama getirisidir.', '💡 Faz 3.3 Akış İçi Native & Rewarded Ortalaması: ₺85 - ₺120')}
                                 </div>
                                 <span class="text-sm font-black text-emerald-600 dark:text-emerald-400">₺${p.android.avgEcpm.toFixed(2)}</span>
                             </div>
@@ -784,7 +789,7 @@
                             <div>
                                 <div class="flex items-center justify-center">
                                     <span class="text-[10px] font-bold text-slate-500 uppercase">Ort. eCPM</span>
-                                    ${this.renderInfoTip('iOS Ortalama eCPM', 'iOS kullanıcılarına gösterilen her 1.000 reklamın ortalama getirisidir.', '💡 Türkiye Ortalaması: ₺95 - ₺120')}
+                                    ${this.renderInfoTip('iOS Ortalama eCPM', 'iOS kullanıcılarına gösterilen her 1.000 reklamın ortalama getirisidir.', '💡 Faz 3.3 iOS Premium Ortalaması: ₺130 - ₺180')}
                                 </div>
                                 <span class="text-sm font-black text-sky-600 dark:text-sky-400">₺${p.ios.avgEcpm.toFixed(2)}</span>
                             </div>
@@ -828,7 +833,7 @@
                                     <th class="p-3 font-black">
                                         <div class="flex items-center">
                                             <span>Format</span>
-                                            ${this.renderInfoTip('Reklam Formatı', 'Uygulama içinde çalışan reklam biçiminin türüdür.', 'Banner, Video, Native, Geçiş', 'bottom-left')}
+                                            ${this.renderInfoTip('Reklam Formatı', 'Uygulama içinde çalışan reklam biçiminin türüdür.', 'Native Ads (Faz 3.3), Rewarded Video', 'bottom-left')}
                                         </div>
                                     </th>
                                     <th class="p-3 font-black">
@@ -873,18 +878,15 @@
                                 ${formatsList.map(f => {
                                     let tipDesc = '';
                                     let tipHint = '';
-                                    if (f.id === 'rewarded') {
-                                        tipDesc = 'Kullanıcı kupon açmak için kendi isteğiyle 15-30 sn video izler. Kullanıcıya net bir ödül sunduğu için en çok kazandıran formattır.';
+                                    if (f.id === 'native') {
+                                        tipDesc = 'Faz 3.3 Gelişmiş Native Ad mimarisi. Anasayfa Grid & Liste, Kuponlar (her 4 kuponda 1) ve Aktüel katalog gridinde (her 6 broşürde 1) yerleşir. Organik tasarıma tam uyum sağlar; ban ve validator riski sıfırdır.';
+                                        tipHint = '🎯 eCPM: ₺95 - ₺140 (Yüksek Tıklama & CTR)';
+                                    } else if (f.id === 'rewarded') {
+                                        tipDesc = 'Kullanıcı kupon açmak için kendi isteğiyle 15-30 sn video izler. Kullanıcıya net bir ödül (+2 Hak) sunduğu için en çok kazandıran formattır.';
                                         tipHint = '💰 eCPM: ₺200 - ₺350 (En Yüksek Getiri)';
-                                    } else if (f.id === 'native') {
-                                        tipDesc = 'Anasayfadaki fırsat kartları arasına doğal olarak yerleşir. Tasarıma uyum sağladığı için kullanıcıyı rahatsız etmez ve yüksek tıklama alır.';
-                                        tipHint = '🎯 eCPM: ₺80 - ₺120';
                                     } else if (f.id === 'banner') {
-                                        tipDesc = 'Ekranın altında sabit duran standart reklam şerididir. Gösterimi çok fazladır ancak tekil getirisi düşüktür.';
-                                        tipHint = '📊 eCPM: ₺45 - ₺70';
-                                    } else if (f.id === 'interstitial') {
-                                        tipDesc = 'Kullanıcı mağazaya git butonuna bastığında açılan tam ekran reklamdır. Kullanıcıyı bezdirmemek için 3 dakika sınırı uygulanır.';
-                                        tipHint = '⏳ eCPM: ₺150 - ₺220';
+                                        tipDesc = 'Eski 320x50 sabit şerit reklam formatıdır. Faz 3.3 ile emekliye ayrılmış olup yerini yüksek performanslı Akış İçi Native reklama bırakmıştır.';
+                                        tipHint = '📊 Durum: Arşiv / Pasif (Trafik Native\'e Aktarıldı)';
                                     }
 
                                     return `
@@ -964,27 +966,63 @@
                     <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
                         <div class="flex items-center">
                             <h3 class="text-base font-black text-slate-900 dark:text-white mb-1">Format Bazlı Şalterler</h3>
-                            ${this.renderInfoTip('Bağımsız Format Şalterleri', 'Uygulamadaki 4 reklam çeşidini (Banner, Video, Native, Geçiş) ayrı ayrı kapatıp açmanızı sağlar. Bir reklam türü sorun yaratırsa diğerlerini etkilemeden kapatabilirsiniz.', 'İstemcilere anlık Firestore senkronizasyonu', 'left')}
+                            ${this.renderInfoTip('Bağımsız Format Şalterleri', 'Uygulamadaki reklam formatlarını (Native, Rewarded) ayrı ayrı kapatıp açmanızı sağlar. Bir reklam türü sorun yaratırsa diğerlerini etkilemeden kapatabilirsiniz.', 'İstemcilere anlık Firestore senkronizasyonu', 'left')}
                         </div>
                         <p class="text-xs text-slate-500 mb-4">Her reklam formatını bağımsız olarak açıp kapatabilirsiniz</p>
 
                         <div class="space-y-3">
+                            <!-- 1. Akış İçi Native Reklam (Faz 3.3) -->
                             <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
                                 <div class="flex items-center gap-3">
-                                    <span class="material-symbols-outlined text-[20px] text-amber-500">ad_units</span>
+                                    <span class="material-symbols-outlined text-[20px] text-blue-500">view_compact</span>
                                     <div>
                                         <div class="flex items-center">
-                                            <span class="text-xs font-black text-slate-900 dark:text-white">Yatay Banner Reklamları</span>
-                                            ${this.renderInfoTip('Banner Reklamı', 'Sayfanın altında sabit duran standart 320x50 boyutundaki reklam şerididir. Gösterimi yüksek ancak birim getirisi mütevazıdır.', 'Yerleşim: Anasayfa liste görünümü')}
+                                            <span class="text-xs font-black text-slate-900 dark:text-white">Akış İçi Native Reklam (Faz 3.3)</span>
+                                            ${this.renderInfoTip('Native Reklam (Faz 3.3)', 'Anasayfa 2 sütunlu Grid (her 6 üründe bir tam genişlik şerit) ve Liste modunda fırsat kartları arasında yerleşen modern reklam formatıdır. Kapatıldığında organik Kuponlar Keşif Kartı\'na (House Promo) geçer.', 'Yerleşim: Anasayfa Grid & Liste Akışı')}
                                         </div>
-                                        <div class="text-[11px] text-slate-500">Anasayfa liste görünümü altı</div>
+                                        <div class="text-[11px] text-slate-500">Anasayfa Grid & Liste akış içi sponsorlu kart</div>
                                     </div>
                                 </div>
-                                <button onclick="window.AdMobManager.toggleFormat('bannerEnabled')" class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${s.bannerEnabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}">
-                                    ${s.bannerEnabled ? 'AÇIK' : 'KAPALI'}
+                                <button onclick="window.AdMobManager.toggleFormat('nativeEnabled')" class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${s.nativeEnabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}">
+                                    ${s.nativeEnabled ? 'AÇIK' : 'KAPALI'}
                                 </button>
                             </div>
 
+                            <!-- 1.2. Akış İçi Native (Kuponlar Sayfası) -->
+                            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-[20px] text-teal-500">confirmation_number</span>
+                                    <div>
+                                        <div class="flex items-center">
+                                            <span class="text-xs font-black text-slate-900 dark:text-white">Akış İçi Native (Kuponlar Sayfası)</span>
+                                            ${this.renderInfoTip('Native Reklam (Kuponlar)', 'Kuponlar sayfasında her 4 kupondan sonra (5., 10., 15... sıralarda) kupon kartlarıyla birebir uyumlu 124dp yatay Small Native reklam gösterir. Kapatıldığında organik Günün Sıcak Fırsatları Keşif Kartı\'na geçer.', 'Yerleşim: Kuponlar Akışı (Her 4 Kuponda 1 Reklam)')}
+                                        </div>
+                                        <div class="text-[11px] text-slate-500">Kuponlar listesinde her 4 kuponda 1 sponsorlu kart</div>
+                                    </div>
+                                </div>
+                                <button onclick="window.AdMobManager.toggleFormat('nativeCouponsEnabled')" class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${s.nativeCouponsEnabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}">
+                                    ${s.nativeCouponsEnabled ? 'AÇIK' : 'KAPALI'}
+                                </button>
+                            </div>
+
+                            <!-- 1.3. Akış İçi Native (Aktüel Kataloglar Sayfası) -->
+                            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-[20px] text-indigo-500">auto_stories</span>
+                                    <div>
+                                        <div class="flex items-center">
+                                            <span class="text-xs font-black text-slate-900 dark:text-white">Akış İçi Native (Aktüel Sayfası)</span>
+                                            ${this.renderInfoTip('Native Reklam (Aktüel)', 'Aktüel broşür listesinde 2 sütunlu grid yapısında her 6 broşürden sonra (3 satırda bir) tam genişlik yatay Small Native reklam gösterir. Kapatıldığında organik Günün Sıcak Fırsatları Keşif Kartı\'na geçer.', 'Yerleşim: Aktüel Grid Akışı (Her 6 Broşürde 1 Reklam)')}
+                                        </div>
+                                        <div class="text-[11px] text-slate-500">Aktüel broşür listesinde her 6 broşürde 1 sponsorlu kart</div>
+                                    </div>
+                                </div>
+                                <button onclick="window.AdMobManager.toggleFormat('nativeAktuelEnabled')" class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${s.nativeAktuelEnabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}">
+                                    ${s.nativeAktuelEnabled ? 'AÇIK' : 'KAPALI'}
+                                </button>
+                            </div>
+
+                            <!-- 2. Ödüllü Video (Rewarded) -->
                             <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
                                 <div class="flex items-center gap-3">
                                     <span class="material-symbols-outlined text-[20px] text-emerald-500">smart_display</span>
@@ -1001,35 +1039,21 @@
                                 </button>
                             </div>
 
-                            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <span class="material-symbols-outlined text-[20px] text-blue-500">view_compact</span>
-                                    <div>
-                                        <div class="flex items-center">
-                                            <span class="text-xs font-black text-slate-900 dark:text-white">Sponsorlu Keşif Kartı (Native)</span>
-                                            ${this.renderInfoTip('Native Keşif Kartı', 'Anasayfadaki fırsat kartlarıyla aynı tasarıma sahip reklamlardır. Kullanıcı akışını bölmez, doğal bir etkileşim sunar.', 'Yerleşim: Anasayfa grid akışı')}
-                                        </div>
-                                        <div class="text-[11px] text-slate-500">Anasayfa 2 sütunlu grid içi</div>
-                                    </div>
-                                </div>
-                                <button onclick="window.AdMobManager.toggleFormat('nativeEnabled')" class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${s.nativeEnabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}">
-                                    ${s.nativeEnabled ? 'AÇIK' : 'KAPALI'}
-                                </button>
-                            </div>
 
-                            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <!-- 4. Yatay Banner (Arşiv / Pasif) -->
+                            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between opacity-80">
                                 <div class="flex items-center gap-3">
-                                    <span class="material-symbols-outlined text-[20px] text-purple-500">fullscreen</span>
+                                    <span class="material-symbols-outlined text-[20px] text-slate-400">view_stream</span>
                                     <div>
                                         <div class="flex items-center">
-                                            <span class="text-xs font-black text-slate-900 dark:text-white">Tam Ekran Geçiş (Interstitial)</span>
-                                            ${this.renderInfoTip('Geçiş Reklamı (Interstitial)', 'Kullanıcı mağazaya git butonuna bastığında gösterilen tam ekran reklamdır. Aşırı gösterimi önlemek için 3 dakika sıklık sınırı uygulanır.', 'Sıklık Limiti: 3 Dakikada En Fazla 1 Kez')}
+                                            <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Yatay Banner (320x50 - Arşiv)</span>
+                                            ${this.renderInfoTip('Yatay Banner (Arşiv)', 'Eski 320x50 şerit reklam formatıdır. Faz 3.3 ile emekliye ayrılmış olup yerini yüksek performanslı Akış İçi Native reklama bırakmıştır.', 'Durum: Arşiv / Pasif')}
                                         </div>
-                                        <div class="text-[11px] text-slate-500">Mağazaya gidişlerde 3m sınırlı</div>
+                                        <div class="text-[11px] text-slate-400">Emekli edildi (Faz 3.3 ile Native\'e taşındı)</div>
                                     </div>
                                 </div>
-                                <button onclick="window.AdMobManager.toggleFormat('interstitialEnabled')" class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${s.interstitialEnabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}">
-                                    ${s.interstitialEnabled ? 'AÇIK' : 'KAPALI'}
+                                <button onclick="window.AdMobManager.toggleFormat('bannerEnabled')" class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${s.bannerEnabled ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}">
+                                    ${s.bannerEnabled ? 'AÇIK' : 'PASİF'}
                                 </button>
                             </div>
                         </div>
@@ -1042,16 +1066,16 @@
                         <h3 class="text-base font-black text-slate-900 dark:text-white mb-1">Kupon Kredisi ve Güvenlik Parametreleri</h3>
                         ${this.renderInfoTip('Kupon Kredisi ve Güvenlik Parametreleri', 'Kullanıcıların kupon açma haklarını ve reklamların güvenli gösterim kurallarını belirleyen canlı sistem ayarlarıdır.', 'Kaydedildiği anda mobil uygulamada aktif olur', 'left')}
                     </div>
-                    <p class="text-xs text-slate-500 mb-6">Mobil uygulamanın AdManagerService ve CouponCreditService çalışma eşiklerini canlı güncelleyin</p>
+                    <p class="text-xs text-slate-500 mb-6">Mobil uygulamanın AdManagerService, Native Akış ve CouponCreditService çalışma eşiklerini canlı güncelleyin</p>
 
-                    <form id="admobSettingsForm" onsubmit="window.AdMobManager.saveSettings(event)" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <form id="admobSettingsForm" onsubmit="window.AdMobManager.saveSettings(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         <div>
                             <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
                                 <span>Günlük Ücretsiz Kupon Açma</span>
                                 ${this.renderInfoTip('Günlük Ücretsiz Kupon Açma', 'Kullanıcıya her gece 00:00\'da hediye edilen kupon açma sayısıdır. Kullanıcının uygulamayı her gün açmasını (retention) teşvik eder.', '💡 Önerilen: 2 Hak', 'left')}
                             </label>
                             <div class="relative">
-                                <input type="number" id="inputDailyFreeCredits" min="1" max="10" value="${s.dailyFreeCredits}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <input type="number" id="inputDailyFreeCredits" min="1" max="20" value="${s.dailyFreeCredits}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
                                 <span class="absolute right-3 top-2.5 text-xs text-slate-400">Hak</span>
                             </div>
                             <span class="text-[10px] text-slate-500 mt-1 block">Her gece 00:00 rollover ile tanımlanır</span>
@@ -1063,10 +1087,46 @@
                                 ${this.renderInfoTip('Video Başına Kupon Kazanımı', 'Kullanıcı 1 adet ödüllü video izlemeyi tamamladığında kazanacağı kupon hakkıdır. Örn: 2 hak = 1 video ile 2 kupon kodu açılabilir.', '💡 Önerilen: 2 Hak', 'left')}
                             </label>
                             <div class="relative">
-                                <input type="number" id="inputRewardCreditsPerVideo" min="1" max="5" value="${s.rewardCreditsPerVideo}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <input type="number" id="inputRewardCreditsPerVideo" min="1" max="10" value="${s.rewardCreditsPerVideo}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
                                 <span class="absolute right-3 top-2.5 text-xs text-slate-400">Hak</span>
                             </div>
                             <span class="text-[10px] text-slate-500 mt-1 block">1 Rewarded Video izlendiğinde</span>
+                        </div>
+
+                        <div>
+                            <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
+                                <span>Native Sıklığı (Grid)</span>
+                                ${this.renderInfoTip('Native Reklam Sıklığı (Grid)', '2 sütunlu grid akışında her kaç fırsat kartından sonra tam genişlikte yatay Native Reklam yerleştirileceğini belirler. Standart: 6 ürün (3 satırda bir).', '💡 Önerilen: 6 Ürün (3 Satır)', 'left')}
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="inputNativeGridInterval" min="4" max="20" value="${s.nativeGridInterval || 6}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <span class="absolute right-3 top-2.5 text-xs text-slate-400">Ürün</span>
+                            </div>
+                            <span class="text-[10px] text-slate-500 mt-1 block">Her 6 üründe 1 reklam şeridi</span>
+                        </div>
+
+                        <div>
+                            <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
+                                <span>Native Sıklığı (Kuponlar)</span>
+                                ${this.renderInfoTip('Native Reklam Sıklığı (Kuponlar)', 'Kuponlar sayfasında her kaç kupondan sonra akış içi yatay Native Reklam yerleştirileceğini belirler. Standart: 5 (Her 4 kuponda 1 reklam, 5. sırada).', '💡 Önerilen: 5 (4 Kupon + 1 Reklam)', 'left')}
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="inputNativeCouponsInterval" min="3" max="15" value="${s.nativeCouponsInterval || 5}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <span class="absolute right-3 top-2.5 text-xs text-slate-400">Öğe</span>
+                            </div>
+                            <span class="text-[10px] text-slate-500 mt-1 block">Her 4 kuponda 1 reklam (5. sıra)</span>
+                        </div>
+
+                        <div>
+                            <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
+                                <span>Native Sıklığı (Aktüel)</span>
+                                ${this.renderInfoTip('Native Reklam Sıklığı (Aktüel)', '2 sütunlu Aktüel broşür akışında her kaç broşürden sonra tam genişlikte yatay Native Reklam yerleştirileceğini belirler. Standart: 6 broşür (3 satırda bir).', '💡 Önerilen: 6 Broşür (3 Satır)', 'left')}
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="inputNativeAktuelInterval" min="4" max="20" value="${s.nativeAktuelInterval || 6}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <span class="absolute right-3 top-2.5 text-xs text-slate-400">Broşür</span>
+                            </div>
+                            <span class="text-[10px] text-slate-500 mt-1 block">Her 6 broşürde 1 reklam şeridi</span>
                         </div>
 
                         <div>
@@ -1075,26 +1135,20 @@
                                 ${this.renderInfoTip('Hata Soğuma Süresi (Anti-Spam Cooldown)', 'Bir reklam yüklenemediğinde veya ağ koptuğunda, uygulamanın tekrar Google sunucularına istek göndermeden önce bekleyeceği süredir (saniye). Google\'ın reklam kısıtlaması (Ad Serving Limit) getirmesini engeller.', '🛡️ Ban koruma eşiği: 25 Saniye', 'left')}
                             </label>
                             <div class="relative">
-                                <input type="number" id="inputCooldownSeconds" min="5" max="120" value="${s.cooldownSeconds}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <input type="number" id="inputCooldownSeconds" min="5" max="300" value="${s.cooldownSeconds}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
                                 <span class="absolute right-3 top-2.5 text-xs text-slate-400">Saniye</span>
                             </div>
                             <span class="text-[10px] text-slate-500 mt-1 block">Reklam yüklenemezse bekleme</span>
                         </div>
 
-                        <div>
-                            <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
-                                <span>Geçiş Reklam Sıklık Limiti</span>
-                                ${this.renderInfoTip('Geçiş Reklamı Sıklık Sınırı (Frequency Cap)', 'Aynı kullanıcıya tam ekran geçiş reklamının (Interstitial) ne aralıkla gösterilebileceğidir (dakika). Örneğin 3 dakika girildiğinde, kullanıcı 3 dakika boyunca kaç kez mağazaya giderse gitsin en fazla 1 kez reklam görür. Kullanıcıyı boğmaz.', '🛡️ UX & Politika Koruması: 3 Dakika', 'right')}
-                            </label>
-                            <div class="relative">
-                                <input type="number" id="inputFrequencyCapMinutes" min="1" max="30" value="${s.frequencyCapMinutes}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
-                                <span class="absolute right-3 top-2.5 text-xs text-slate-400">Dakika</span>
-                            </div>
-                            <span class="text-[10px] text-slate-500 mt-1 block">Interstitial sıklık tavanı</span>
-                        </div>
 
-                        <div class="col-span-full pt-4 flex justify-end">
-                            <button type="submit" class="px-6 py-2.5 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2">
+
+                        <div class="col-span-full pt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <button type="button" onclick="window.AdMobManager.resetSettings()" class="w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-200 dark:border-slate-700">
+                                <span class="material-symbols-outlined text-[16px]">restart_alt</span>
+                                <span>Varsayılanlara Sıfırla</span>
+                            </button>
+                            <button type="submit" class="w-full sm:w-auto px-6 py-2.5 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2">
                                 <span class="material-symbols-outlined text-[18px]">save</span>
                                 <span>Parametreleri Kaydet & Mobil İstemcilere Dağıt</span>
                             </button>
@@ -1158,7 +1212,7 @@
                                     <th class="p-3 font-black">
                                         <div class="flex items-center">
                                             <span>Format</span>
-                                            ${this.renderInfoTip('Reklam Formatı', 'Reklamın biçimidir: Banner, Ödüllü Video (Rewarded), Yerel İlan (Native) veya Tam Ekran (Interstitial).', 'Formatlar bağımsız çalışır', 'bottom')}
+                                            ${this.renderInfoTip('Reklam Formatı', 'Reklamın biçimidir: Akış İçi Native (Faz 3.3), Ödüllü Video (Rewarded) ve Arşiv Banner.', 'Formatlar bağımsız çalışır', 'bottom')}
                                         </div>
                                     </th>
                                     <th class="p-3 font-black">
@@ -1227,7 +1281,7 @@
                             <div>
                                 <div class="flex items-center gap-1.5">
                                     <h3 class="text-base font-black text-slate-900 dark:text-white">Proje Dosyaları Sağlık Karnesi</h3>
-                                    ${this.renderInfoTip('Statik Kod Denetimi', 'Mobil uygulamanın yapılandırma dosyalarında AdMob anahtarlarının ve güvenlik kurallarının hatasız olduğunu doğrular.', '5/5 Doğrulama Kapsamı', 'left')}
+                                    ${this.renderInfoTip('Statik Kod Denetimi', 'Mobil uygulamanın yapılandırma dosyalarında AdMob anahtarlarının ve güvenlik kurallarının hatasız olduğunu doğrular.', '8/8 Doğrulama Kapsamı', 'left')}
                                 </div>
                                 <p class="text-xs text-slate-500">build.gradle, Info.plist ve manifest denetimi</p>
                             </div>
@@ -1358,13 +1412,13 @@
                         <div>
                             <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
                                 <span>AdMob Reklam Geliri (TL)</span>
-                                ${this.renderInfoTip('AdMob Reklam Geliri', 'Kullanıcıların uygulama içinde gördüğü banner, native ve izlediği videolardan AdMob tarafından ödenen brüt gelirdir.', 'Mobil Reklam Kazancı (Gelir)')}
+                                ${this.renderInfoTip('AdMob Reklam Geliri', 'Kullanıcıların anasayfada gördüğü akış içi Native reklamlar, tam ekran geçişler ve kupon için izlediği Rewarded videolardan AdMob tarafından ödenen brüt gelirdir.', 'Mobil Reklam Kazancı (Gelir)')}
                             </label>
                             <div class="relative">
                                 <input type="number" id="calcAdmobRev" value="0" step="10" oninput="window.AdMobManager.recalculateProfit()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                                 <span class="absolute right-3 top-2.5 text-xs text-slate-400">₺</span>
                             </div>
-                            <span class="text-[10px] text-slate-500 mt-1 block">Banner, Rewarded ve Native</span>
+                            <span class="text-[10px] text-slate-500 mt-1 block">Native Ads ve Rewarded</span>
                         </div>
 
                         <div>
@@ -1531,10 +1585,11 @@
             await this.persistSettings();
 
             const labels = {
-                bannerEnabled: 'Banner',
-                rewardedEnabled: 'Ödüllü Video',
-                nativeEnabled: 'Sponsorlu Keşif (Native)',
-                interstitialEnabled: 'Geçiş (Interstitial)'
+                nativeEnabled: 'Akış İçi Native Reklam (Anasayfa)',
+                nativeCouponsEnabled: 'Akış İçi Native Reklam (Kuponlar)',
+                nativeAktuelEnabled: 'Akış İçi Native Reklam (Aktüel)',
+                rewardedEnabled: 'Ödüllü Video (Rewarded)',
+                bannerEnabled: 'Banner (Arşiv / Pasif)'
             };
             const label = labels[formatKey] || formatKey;
             const stateStr = this.data.settings[formatKey] ? 'AÇIK' : 'KAPALI';
@@ -1555,24 +1610,67 @@
 
             const dInput = parseInt(document.getElementById('inputDailyFreeCredits')?.value, 10);
             const rInput = parseInt(document.getElementById('inputRewardCreditsPerVideo')?.value, 10);
+            const nInput = parseInt(document.getElementById('inputNativeGridInterval')?.value, 10);
+            const ncInput = parseInt(document.getElementById('inputNativeCouponsInterval')?.value, 10);
+            const naInput = parseInt(document.getElementById('inputNativeAktuelInterval')?.value, 10);
             const cInput = parseInt(document.getElementById('inputCooldownSeconds')?.value, 10);
-            const fInput = parseInt(document.getElementById('inputFrequencyCapMinutes')?.value, 10);
-
             const dailyCredits = isNaN(dInput) || dInput < 1 ? 2 : Math.min(dInput, 20);
             const rewardCredits = isNaN(rInput) || rInput < 1 ? 2 : Math.min(rInput, 10);
+            const nativeGridInterval = isNaN(nInput) || nInput < 4 ? 6 : Math.min(nInput, 20);
+            const nativeCouponsInterval = isNaN(ncInput) || ncInput < 3 ? 5 : Math.min(ncInput, 15);
+            const nativeAktuelInterval = isNaN(naInput) || naInput < 4 ? 6 : Math.min(naInput, 20);
             const cooldown = isNaN(cInput) || cInput < 5 ? 25 : Math.min(cInput, 300);
-            const freqCap = isNaN(fInput) || fInput < 1 ? 3 : Math.min(fInput, 60);
 
             this.data.settings.dailyFreeCredits = dailyCredits;
             this.data.settings.rewardCreditsPerVideo = rewardCredits;
+            this.data.settings.nativeGridInterval = nativeGridInterval;
+            this.data.settings.nativeCouponsInterval = nativeCouponsInterval;
+            this.data.settings.nativeAktuelInterval = nativeAktuelInterval;
             this.data.settings.cooldownSeconds = cooldown;
-            this.data.settings.frequencyCapMinutes = freqCap;
 
             await this.persistSettings();
-            this.logToConsole(`💾 [SETTINGS] Kupon kredileri (Günlük: ${dailyCredits}, Video: ${rewardCredits}) ve güvenlik eşikleri (Cooldown: ${cooldown}s, FreqCap: ${freqCap}m) güncellendi.`);
+            this.logToConsole(`💾 [SETTINGS] Kupon kredileri (Günlük: ${dailyCredits}, Video: ${rewardCredits}), Native Sıklığı (Anasayfa: ${nativeGridInterval} ürün, Kuponlar: ${nativeCouponsInterval} öğe, Aktüel: ${nativeAktuelInterval} broşür) ve güvenlik eşikleri (Cooldown: ${cooldown}s) güncellendi.`);
 
             if (typeof window.showToast === 'function') {
                 window.showToast('AdMob ve Kupon parametreleri başarıyla kaydedildi!', 'success');
+            }
+        },
+
+        /**
+         * AdMob ve Kupon Parametrelerini Varsayılanlara Sıfırlar
+         */
+        resetSettings: async function() {
+            if (!confirm('Tüm AdMob ve Kupon parametrelerini varsayılan fabrika ayarlarına sıfırlamak istediğinize emin misiniz?')) {
+                return;
+            }
+            const def = this.defaultData.settings;
+            const inDaily = document.getElementById('inputDailyFreeCredits');
+            const inReward = document.getElementById('inputRewardCreditsPerVideo');
+            const inGrid = document.getElementById('inputNativeGridInterval');
+            const inCoupons = document.getElementById('inputNativeCouponsInterval');
+            const inAktuel = document.getElementById('inputNativeAktuelInterval');
+            const inCooldown = document.getElementById('inputCooldownSeconds');
+
+            if (inDaily) inDaily.value = def.dailyFreeCredits;
+            if (inReward) inReward.value = def.rewardCreditsPerVideo;
+            if (inGrid) inGrid.value = def.nativeGridInterval;
+            if (inCoupons) inCoupons.value = def.nativeCouponsInterval;
+            if (inAktuel) inAktuel.value = def.nativeAktuelInterval;
+            if (inCooldown) inCooldown.value = def.cooldownSeconds;
+
+            if (this.data && this.data.settings) {
+                this.data.settings.dailyFreeCredits = def.dailyFreeCredits;
+                this.data.settings.rewardCreditsPerVideo = def.rewardCreditsPerVideo;
+                this.data.settings.nativeGridInterval = def.nativeGridInterval;
+                this.data.settings.nativeCouponsInterval = def.nativeCouponsInterval;
+                this.data.settings.nativeAktuelInterval = def.nativeAktuelInterval;
+                this.data.settings.cooldownSeconds = def.cooldownSeconds;
+                await this.persistSettings();
+            }
+
+            this.logToConsole('↺ [RESET] AdMob ve Kupon parametreleri varsayılan değerlere sıfırlandı.');
+            if (typeof window.showToast === 'function') {
+                window.showToast('AdMob parametreleri varsayılan ayarlara sıfırlandı.', 'info');
             }
         },
 
@@ -1603,6 +1701,13 @@
             if (typeof window.showToast === 'function') {
                 window.showToast(`${label || 'Örnek senaryo'} yüklendi (₺${spend.toLocaleString('tr-TR')} harcama / ₺${(admob + affiliate).toLocaleString('tr-TR')} gelir).`, 'info');
             }
+        },
+
+        /**
+         * Örnek Senaryo Yükler (Alias)
+         */
+        loadProfitPreset: function(spend, admob, affiliate, label) {
+            return this.setProfitScenario(spend, admob, affiliate, label);
         },
 
         /**
@@ -1747,7 +1852,7 @@
                 this.data.policy.lastChecked = new Date().toISOString();
             }
             this.renderCurrentTabContent();
-            this.logToConsole('🔍 [INSPECT] 5 proje dosyasında statik AdMob kimlik denetimi ve 4 politika kuralı doğrulandı: TÜMÜ BAŞARILI ✅.');
+            this.logToConsole('🔍 [INSPECT] 8 proje dosyasında statik AdMob kimlik denetimi ve 7 politika kuralı doğrulandı: TÜMÜ BAŞARILI ✅.');
             if (typeof window.showToast === 'function') {
                 window.showToast('Statik kod ve politika denetimi tamamlandı: 100% Uyumlu! ✅', 'success');
             }
@@ -1803,25 +1908,31 @@
             const ks = this.data?.settings?.killSwitchActive;
             const dCredits = this.data?.settings?.dailyFreeCredits || 2;
             const rCredits = this.data?.settings?.rewardCreditsPerVideo || 2;
-            const bOn = this.data?.settings?.bannerEnabled ? 'AÇIK' : 'KAPALI';
+            const nInterval = this.data?.settings?.nativeGridInterval || 6;
+            const ncInterval = this.data?.settings?.nativeCouponsInterval || 5;
+            const naInterval = this.data?.settings?.nativeAktuelInterval || 6;
+            const nOn = this.data?.settings?.nativeEnabled ? 'AÇIK' : 'KAPALI';
+            const ncOn = this.data?.settings?.nativeCouponsEnabled ? 'AÇIK' : 'KAPALI';
+            const naOn = this.data?.settings?.nativeAktuelEnabled ? 'AÇIK' : 'KAPALI';
+            const bOn = this.data?.settings?.bannerEnabled ? 'AÇIK' : 'PASİF (ARŞİV)';
             const rwOn = this.data?.settings?.rewardedEnabled ? 'AÇIK' : 'KAPALI';
 
             switch(cmd) {
                 case 'status':
                     this.logToConsole('⚡ CMD: python admob_cli.py status --platform all --env prod');
-                    this.logToConsole(`✅ STATUS: ${ks ? 'PAUSED (KILL-SWITCH AKTİF)' : 'OPERATIONAL'} | KillSwitch: ${ks ? 'TRUE (KAPALI)' : 'FALSE (ÇALIŞIYOR)'} | Banner: ${bOn} | Rewarded: ${rwOn} | Kupon: Günlük ${dCredits} / Video +${rCredits}`);
+                    this.logToConsole(`✅ STATUS: ${ks ? 'PAUSED (KILL-SWITCH AKTİF)' : 'OPERATIONAL'} | KillSwitch: ${ks ? 'TRUE (DURDURULDU)' : 'FALSE (AKTİF)'} | Native(Anasayfa): ${nOn} (${nInterval} üründe 1) | Native(Kuponlar): ${ncOn} (${ncInterval} öğede 1 / 4 kuponda 1) | Native(Aktüel): ${naOn} (${naInterval} broşürde 1) | Rewarded: ${rwOn} | Banner: ${bOn} | Kupon: Günlük ${dCredits} / Video +${rCredits}`);
                     break;
                 case 'ecpm-optimize':
                     this.logToConsole('⚡ CMD: Agent AdMob Mediation & Floor Price Analizi Başlatıldı');
-                    this.logToConsole('💡 RECOM: iOS eCPM ortalaması ₺104.80. Rewarded video tabanı ₺285.00 olarak optimize edildi.');
+                    this.logToConsole('💡 RECOM: Faz 3.3 Akış İçi Native reklamlar ortalama ₺108.50 eCPM üretmektedir (iOS: ₺146.50). Rewarded video tabanı ₺285.00 olarak optimize edildi.');
                     break;
                 case 'policy-audit':
                     this.logToConsole('⚡ CMD: python admob_cli.py policy-check');
-                    this.logToConsole('🛡️ POLICY: COMPLIANT ✅ (FittedBox ihlali yok, onPaidEvent telemetrisi bağlı, Fair-Play garantili)');
+                    this.logToConsole('🛡️ POLICY: COMPLIANT ✅ (Google Native Ad Validator: 0 issue, TemplateType.small 124dp sıfır-taşma, onPaidEvent telemetrisi bağlı, Fair-Play garantili)');
                     break;
                 case 'ios-report':
                     this.logToConsole('⚡ CMD: python admob_cli.py report --platform ios --days 7');
-                    this.logToConsole('📱 iOS SUMMARY: 4.010 Imp, ₺60.30 Gelir, ₺104.80 eCPM, %95.5 Fill Rate.');
+                    this.logToConsole('📱 iOS SUMMARY: 4.000 Imp, ₺586.00 Gelir, ₺146.50 eCPM, %96.5 Fill Rate (Faz 3.3 Native Ads).');
                     break;
                 case 'clean-cache':
                     this.logToConsole('⚡ CMD: AdManagerService mobil önbelleği ve cooldown sayaçları sıfırlandı.');

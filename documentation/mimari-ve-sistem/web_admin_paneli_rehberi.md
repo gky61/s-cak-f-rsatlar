@@ -51,9 +51,9 @@ Yönetici panele erişmek istediğinde süreç şu güvenlik kontrollerinden ge�
 
 ---
 
-## 📊 3. Web Admin Panelinin 10 Temel Görünümü
+## 📊 3. Web Admin Panelinin Temel Görünümleri
 
-Panel, sol navigasyon menüsü üzerinden 10 bağımsız modüle ayrılmıştır:
+Panel, sol navigasyon menüsü üzerinden bağımsız modüllere ayrılmıştır:
 
 ```
 Web Admin Paneli
@@ -66,7 +66,9 @@ Web Admin Paneli
 ├── 7. 🔔 Bildirimler Merkezi (Cihaz İstatistikleri & Manuel Push)
 ├── 8. 📜 Sistem Logları (Hata Kayıtları & systemErrors)
 ├── 9. 🎟️ Kuponlar Yönetimi (Manuel Ekleme & Otomatik Kazıma)
-└── 10. 📰 Aktüel Kataloglar (Broşür İnceleme & Kazıma)
+├── 10. 📰 Aktüel Kataloglar (Broşür İnceleme & Kazıma)
+├── 11. 💰 AdMob Monetizasyon & Gelir Merkezi (Faz 3.3 Gelişmiş Native Ads Mimarisi)
+└── 12. 👁️‍🗨️ Telemetri & Observability HUB (GA4 Trafik, Sadakat, Kotalar & Bot Sağlığı)
 ```
 
 ---
@@ -264,6 +266,122 @@ Web Admin Paneli
   - **Tekil Katalog Silme (`deleteSingleCatalog`):** Hatalı veya süresi geçmiş tekil bir kataloğu onay kutusuyla silme.
   - **Akakçe'den Kazı (`scrapeCatalogsManual`):** 36 mağazanın aktüel broşürlerini Akakçe'den 5 aşamalı WAF bypass hattıyla çekme.
   - **Tüm Katalogları Temizleme (`deleteAllCatalogs`):** 500'lük chunk batch ile tüm katalogları sıfırlama.
+
+---
+
+### 11. 💰 AdMob Monetizasyon & Gelir Merkezi Görünümü (Faz 3.3 Gelişmiş Native Ads Mimarisi — `admob_manager.js`)
+* **Modüler Mimari (`window.AdMobManager`):**
+  - Ağır kütüphanelere ihtiyaç duymayan saf Vanilla JavaScript (ES6+) mimarisi.
+  - `app.js` dosyasını şişirmeden kendi durumunu (state), 6 bağımsız sekmesini, interaktif bilgi kutularını (tooltips) ve Firestore gerçek zamanlı veri akışını izole yönetir.
+  - `settings/admob` Firestore dokümanı ile çift yönlü anlık senkronizasyon: Web Admin'de yapılan herhangi bir şalter veya parametre değişikliği mobilde uygulama güncellemesi gerektirmeden saliseler içinde devreye girer.
+* **6 Temel Operasyonel Sekme:**
+  - **1. 📊 Gelir & eCPM Dashboard'u (`overview`):**
+    - **Çift Veri Kaynağı Modu (Dual Data Mode):**
+      - `🟢 Canlı Üretim Verisi (Varsayılan - Şu An: ₺0.00 / 0 Gösterim)`: Uygulama henüz mağazalardan genel kitleye dağıtılmadığı için dürüst sıfır veri modu. Kullanıcılar mobilde kupon açtıkça ve reklam gördükçe `onPaidEvent` telemetrisiyle anlık artar.
+      - `🟡 Sektör Benchmark Simülasyonu`: 10.000 aktif kullanıcı pazar projeksiyonunu (Bugün: ₺1,284.50, Son 7 Gün: ₺8,980.00, Son 30 Gün: ₺38,500.00, Ortalama eCPM: ₺112.50, CTR: %3.40, Doluluk: %95.8, Rewarded Tamamlama: %96.8) simüle eden projeksiyon modu.
+    - **Platform Karnesi Dağılımı:**
+      - `🤖 Android (%65 Trafik Payı)`: 7.4K gösterim, ₺94.20 ortalama eCPM, %95.4 doluluk oranı, ₺698.96 tahmini ciro.
+      - `🍎 iOS (%35 Trafik Payı)`: 4.0K gösterim, ₺146.50 ortalama eCPM (+%55 premium getiri), %96.5 doluluk oranı, ₺586.00 tahmini ciro.
+    - **Faz 3.3 Format Bazlı Gelir ve eCPM Sıralaması:**
+      - `Akış İçi Native Reklam (Small Template - Faz 3.3)`: Anasayfa Grid (her 6 üründe bir tam satır) ve Liste (5-6-5 akış) yerleşimi, ₺108.50 eCPM, 10.2K gösterim, %95.8 doluluk, ₺1,111.04 ciro (Birincil Akış Formatı).
+      - `Akış İçi Native Reklam (Kuponlar Sayfası)`: Kupon akışı (her 4 kuponda 1 satır), ₺115.00 eCPM, 2.4K gösterim, %96.2 doluluk, ₺276.00 ciro.
+      - `Akış İçi Native Reklam (Aktüel Sayfası)`: Katalog akışı (her 6 broşürde 1 tam genişlik), ₺112.00 eCPM, 1.8K gösterim, %95.5 doluluk, ₺201.60 ciro.
+      - `Ödüllü Video (Rewarded)`: Kuponlar sayfası (+2 hak), ₺285.00 eCPM, 380 gösterim, %97.4 doluluk, ₺108.30 ciro.
+      - `Yatay Banner (320x50 - Emekli / Arşiv)`: Faz 3.3 mimarisiyle anasayfa akışından tamamen emekliye ayrılmış, arşivlenmiş pasif format (₺0.00 ciro / 0 gösterim).
+      - *(Not: Kullanıcı deneyimini ve affiliate gelirlerini korumak için Interstitial ve App Open formatları sistemden arındırılmıştır.)*
+  - **2. ⚙️ Şalterler & Parametreler (`control`):**
+    - **Acil Durum Şalteri (Master Kill-Switch):** Ani AdMob incelemelerinde veya anomali durumlarında tek tıkla ve iki adımlı güvenlik penceresiyle (`window.confirm`) tüm mobil uygulamadaki reklamları anında durdurma imkanı.
+    - **Bağımsız Format Şalterleri (5 Format):**
+      - `Akış İçi Native Reklam (Faz 3.3 Anasayfa)`: Anasayfa ızgara ve liste akış içi native reklamları anında açıp kapatır.
+      - `Akış İçi Native (Kuponlar Sayfası)`: Kuponlar listesinde her 4 kupondan sonra (5., 10., 15... sıralarda) gösterilen 124dp yatay native reklamı yönetir.
+      - `Akış İçi Native (Aktüel Sayfası)`: Aktüel broşür listesinde 2 sütunlu grid akışında her 6 broşürden sonra gösterilen tam genişlik native reklamı yönetir.
+      - `Ödüllü Video (Rewarded)`: Kupon sayfasındaki video ile kupon açma hakkını yönetir.
+      - `Yatay Banner (Arşiv / Emekli)`: Faz 3.3 ile emekliye ayrılan eski banner birimlerini temsil eder (Varsayılan: Pasif/Arşiv).
+    - **6 Temel Operasyonel Parametre (NaN ve Sınır Korumalı):**
+      - `Günlük Ücretsiz Kupon Açma Hakkı`: Varsayılan 2 (1-20 arası).
+      - `Video Başına Kupon Açma Hakkı`: Varsayılan +2 (1-10 arası).
+      - `Izgara Akışı Reklam Sıklığı (nativeGridInterval)`: Varsayılan 6 ürün (4-20 arası). Anasayfa ızgara (Grid) görünümünde kaç üründe bir tam genişlik yatay native reklam yerleştirileceğini belirler.
+      - `Kuponlar Akışı Reklam Sıklığı (nativeCouponsInterval)`: Varsayılan 5 (3-15 arası). Her 4 kuponda 1 (5. sırada) reklam enjeksiyonu.
+      - `Aktüel Akışı Reklam Sıklığı (nativeAktuelInterval)`: Varsayılan 6 (4-20 arası). 2 sütunlu broşür gridinde her 6 broşürden sonra tam genişlik reklam enjeksiyonu.
+      - `Hata Soğuma Süresi (Cooldown)`: Varsayılan 25 saniye (5-300 sn arası, Google kısıtlamalarını engeller).
+  - **3. 📦 Reklam Birimleri Envanteri (`units`):**
+    - **Master Ad Unit Kayıtları:** Android ve iOS platformları için hem Canlı PROD (`ca-app-pub-6853997017739651/...`) hem de Google resmi DEV test birim kimlikleri (`ca-app-pub-3940256099942544/...`).
+    - **Dinamik Filtreleme Hapları:** `Tümü`, `Android`, `iOS`, `Canlı PROD`, `Test DEV`.
+    - **Çift Katmanlı Kopyalama Güvenliği:** Modern `navigator.clipboard.writeText` API'ı ve HTTP/iframe fallback `document.execCommand('copy')` desteği.
+  - **4. 🛡️ Kod & Politika Denetçisi (`inspection`):**
+    - **8-Nokta Statik Kod Denetimi:**
+      1. `android/app/build.gradle`: Dev test ID (`3347511713`) ve Prod gerçek ID (`8861215767`) ayrımı.
+      2. `android/app/src/main/AndroidManifest.xml`: Dinamik `${admob_app_id}` gradle manifest placeholder enjeksiyonu.
+      3. `ios/Runner/Info.plist`: iOS Prod App ID (`ca-app-pub-6853997017739651~7339420575`) ve 27 SKAdNetwork ağı.
+      4. `lib/firebase_options.dart`: Faz 3.3 Native Ad matrisi ve fallback test kimlikleri.
+      5. `lib/screens/home_screen.dart`: Faz 3.3 Akış Mimarisi (`CustomScrollView`, `SliverGrid`, `_buildGridWithHorizontalAdsSlivers` ve `AdDealCard` tam genişlik yatay reklam şeritleri).
+      6. `lib/screens/kuponlar_page.dart`: Kuponlar akış içi Native Ad (Her 4 kuponda 1 reklam) entegrasyonu.
+      7. `lib/screens/katalog_listesi_page.dart`: Aktüel 2 sütunlu grid akış içi Native Ad (Her 6 broşürde 1 tam genişlik şerit) entegrasyonu.
+      8. `lib/services/ad_manager_service.dart`: Singleton mimari, 25s Cooldown, `onPaidEvent` telemetrisi ve Firestore Kill-Switch.
+    - **7-Nokta Google AdMob Politika Uyumu Doğrulaması:**
+      1. `ad_deal_card.dart`: Faz 3.3 Native Ads Advanced entegrasyonu (Eski FittedBox banner ihlalleri tamamen temizlendi).
+      2. `ad_native_widget.dart`: `TemplateType.small` & Zero-Overflow kuralı (124dp sabit yükseklik, sıfır piksel taşması, AdMob Native Ad Validator 0 issue).
+      3. `ad_native_widget.dart`: `onPaidEvent` telemetri ve mikro-gelir takibi (Firebase Analytics & tROAS bağlantısı).
+      4. `kuponlar_page.dart`: Rewarded Ad Opt-in kullanıcı açık rızası (Otomatik video oynatma yasağına tam uyum).
+      5. `kuponlar_page.dart`: Fair-Play kupon açma iade garantisi.
+      6. `katalog_listesi_page.dart`: Aktüel 2 Sütunlu Grid Native Ad yerleşimi (3 satırda bir tam genişlik 124dp yatay reklam, sıfır-taşma).
+      7. `ad_manager_service.dart`: Anti-Spam 25s cooldown ve uzaktan acil durum kill-switch kalkanı.
+  - **5. 📈 Net Kâr & ROI Arbitraj Hesaplayıcı (`profit`):**
+    - Pazarlama maliyetleri ile reklam gelirlerini karşılaştırarak gerçek zamanlı büyüme arbitrajını hesaplayan finansal motor:
+      $$\text{Net Kâr} = (\text{AdMob Geliri} + \text{Affiliate Geliri}) - \text{Pazarlama Harcaması}$$
+      $$\text{ROI} = \left(\frac{\text{Net Kâr}}{\text{Pazarlama Harcaması}}\right) \times 100$$
+    - 3 Hazır Senaryo Butonu: `🌱 Başlangıç` (₺2.5K harcama / ₺2.25K net kâr / +%90 ROI), `🚀 Büyüme` (₺7.5K harcama / ₺8.0K net kâr / +%106.7 ROI), `⚡ Scale / Lansman` (₺20K harcama / ₺23.1K net kâr / +%115.5 ROI).
+  - **6. 🤖 AdMob Agent Komuta Konsolu (`agent`):**
+    - AdMob Ajanı ile canlı iletişim kurulan interaktif terminal arayüzü.
+    - Hızlı Komutlar: `Sağlık Durumu`, `eCPM Optimizasyonu İste`, `Politika Denetim Raporu`, `iOS eCPM Kırılımı`, `Önbellek Temizle`.
+    - Serbest Metin Girişi: Özel komut ve sorguları canlı işleyip terminale döken zeki yanıt motoru.
+* **💡 İnfo Tooltip Bileşeni:**
+  - Tüm kart ve tablolarda `(i)` bilgi ikonu üzerinden acemi dostu tanımlar, formüller ve endüstri standartları içeren interaktif mikro-pencereler sunulur.
+
+---
+
+### 12. 👁️‍🗨️ Telemetri & Observability HUB (`window.ObservabilityManager`)
+
+> [!IMPORTANT]
+> **Tüm Metriklerin Tek Ekranda Birleşimi (All-in-One Observability Hub):** FırsatKolik Web Admin Paneline entegre edilen **Modül 12 (Observability HUB)**, yöneticilerin 15'ten fazla harici Google Cloud, Firebase ve sunucu konsolu arasında kaybolmasını önleyen merkezi telemetri ve operasyonel kontrol odasıdır. `web/admin/observability_manager.js` üzerinden izole, modüler ve sıfır maliyetli olarak çalışır.
+
+* **4 Ana Sekmeli Kapsamlı Gözlem Mimarisi:**
+  1. **📊 Canlı Trafik & Gelir Analitiği (17 Metrik):**
+     - **Anlık Aktif Kullanıcı (Son 30 Dk):** GA4 Realtime API ile son 30 dakikadaki tekil kullanıcı akışı (0-5 sn canlı).
+     - **Mağazaya Git Tıklaması (Son 24s):** `deal_outbound_click` affiliate yönlendirme adedi (Ana gelir motoru).
+     - **Kupon Kopyalama (Son 24s):** `coupon_copied` adedi (Kupon talebini ölçer).
+     - **Katalog Görüntüleme (Son 24s):** `catalog_view` adedi (Broşür okunma trafiği).
+     - **Mağaza Dağılım Çubukları:** Veritabanındaki aktif fırsat ve mağaza dağılımı (Saniyelik tam canlı).
+     - **Fırsat Dönüşüm Hunisi:** `deal_view` ➔ `deal_outbound_click` dönüşüm yüzdesi (%15-%25 hedefi).
+     - **Arama & Talep Radarı:** `search_performed` olayları ve arayıp bulunamayan kelime radarı.
+     - **DAU / WAU / MAU:** Günlük (today), haftalık (7 gün) ve aylık (28 gün) tekil aktif kullanıcı kohortları.
+     - **Bağlılık (Stickiness Skoru %):** `(DAU / MAU) * 100` formülüyle hesaplanan sadakat skoru (Sektör standardı %20+).
+     - **Yeni Kullanıcı Edinimi:** Son 28 gündeki ilk açılışlar (`newUsers` / `first_open`, ASO başarısı).
+     - **Ortalama Odak Süresi:** Oturum başına aktif etkileşim süresi (`userEngagementDuration / sessions`).
+     - **Bildirim Dönüşü (FCM):** Push bildirimlerine dokunma adedi (`notification_interaction`).
+     - **Viral Paylaşım & Oylar:** WhatsApp/Telegram paylaşımları (`deal_shared`) ve sıcak/soğuk oyları (`deal_voted`).
+     - **En Çok Gezilen Ekranlar (Screen Views):** Son 7 günün en popüler ekranları (`unifiedScreenName`).
+     - **AdMob Reklam Monetizasyonu (CTR & Gösterim):** `ad_impression`, `ad_click` ve `% CTR` oranları; `onPaidEvent` mikro-gelir takibi.
+  2. **⚡ Altyapı & Kota Sağlığı (6 Metrik - Free Tier Güvencesi):**
+     - **Firestore Günlük Okuma Kotası (Bugün):** 50.000 sınırına karşı aktif doküman hacmi (Saniyelik server-side count).
+     - **Firestore Günlük Yazma Kotası (Bugün):** 20.000 sınırına karşı bot ve oylama yazma projeksiyonu (< %2).
+     - **Storage Bant Genişliği & İndirme (Bugün):** 1 GB sınırına karşı WebP katalog görsel adedi ve indirme kotası.
+     - **Cloud Functions Çağrı Kotası (Bu Ay):** 2.000.000 limitine karşı 26 fonksiyonun aylık çağrı sağlığı.
+     - **GCP Harcama & Bütçe Koruması (Bu Ay):** 0.00 TL Free Tier koruması ve bütçe alarmları.
+     - **App Check İstek Doğrulama (Canlı):** Play Integrity & App Attest ile sahte istek engelleme (Hedef >= %95).
+  3. **🤖 Botlar & Servis Durumu (6 Metrik - Otonom Altyapı):**
+     - **Otonom Telegram Botu Kalp Atışı:** `settings/telegramBot` dokümanı `lastHeartbeatAt` canlılık sinyali (<1 Dk).
+     - **HTTP /health Canlılık Probu:** GCP VM bot konteynerine canlı ping (50-200ms milisaniyelik test).
+     - **Oturum Sayaçları:** Yakalanan ham mesaj (`msgCount`), paylaşılan fırsat (`dealCount`), elenen spam (`dupCount`) ve hata sayısı (`errCount`).
+     - **SSH Hızlı Müdahale Rehberi:** VM'e bağlanıp 3 hazır komutla botu yeniden başlatma rehberi.
+  4. **🚨 Kararlılık, Hatalar & Konsol Köprüleri (7 Metrik - Sıfır Kör Nokta):**
+     - **Sistem Hataları (Canlı):** `systemErrors` koleksiyonundaki açık ve toplam teknik hatalar.
+     - **Son Sistem Hataları Tablosu:** Kaynak, mesaj, zaman ve çözülme durumuyla son 5 hata akışı.
+     - **Firebase Crashlytics Köprüsü:** Hedef >= %99.5 Crash-Free Users; DEV ve PROD doğrudan bağlantıları.
+     - **Firebase Performance Köprüsü:** Hedef < 2.0s Cold Start, donan kareler ve ağ gecikmeleri.
+     - **GCP Cloud Logging Köprüsü:** 26 Cloud Function'ın saniyelik ham sunucu logları.
+     - **GCP Bütçe Alarmı:** 250 TL (%50), 400 TL (%80) ve 500 TL (%100) acil uyarı eşikleri.
+     - **Firebase App Check Güvenlik Köprüsü:** Kriptografik doğrulama konsolu.
 
 ---
 

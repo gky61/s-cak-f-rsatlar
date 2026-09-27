@@ -11,10 +11,8 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       try {
         expect(DefaultFirebaseOptions.bannerAdUnitId, 'ca-app-pub-3940256099942544/6300978111');
-        expect(DefaultFirebaseOptions.interstitialAdUnitId, 'ca-app-pub-3940256099942544/1033173712');
         expect(DefaultFirebaseOptions.nativeAdUnitId, 'ca-app-pub-3940256099942544/2247696110');
         expect(DefaultFirebaseOptions.rewardedAdUnitId, 'ca-app-pub-3940256099942544/5224354917');
-        expect(DefaultFirebaseOptions.appOpenAdUnitId, 'ca-app-pub-3940256099942544/9257395921');
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -22,10 +20,8 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       try {
         expect(DefaultFirebaseOptions.bannerAdUnitId, 'ca-app-pub-3940256099942544/2934735716');
-        expect(DefaultFirebaseOptions.interstitialAdUnitId, 'ca-app-pub-3940256099942544/4411468910');
         expect(DefaultFirebaseOptions.nativeAdUnitId, 'ca-app-pub-3940256099942544/3986624511');
         expect(DefaultFirebaseOptions.rewardedAdUnitId, 'ca-app-pub-3940256099942544/1712485313');
-        expect(DefaultFirebaseOptions.appOpenAdUnitId, 'ca-app-pub-3940256099942544/5575463023');
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -81,6 +77,78 @@ void main() {
           reason: 'FittedBox scaling down AdMob banners is an AdMob policy violation');
       expect(dealCardCode.contains('FittedBox('), isFalse);
       expect(dealCardCode.contains('AdManagerService'), isTrue);
+    });
+
+    test('6. Faz 3.3: AdNativeWidget exists, wires onPaidEvent telemetry and uses NativeTemplateStyle', () {
+      final nativeWidgetFile = File('lib/widgets/ad_native_widget.dart');
+      expect(nativeWidgetFile.existsSync(), isTrue);
+
+      final code = nativeWidgetFile.readAsStringSync();
+      expect(code.contains('NativeTemplateStyle('), isTrue,
+          reason: 'Must use Google Mobile Ads official NativeTemplateStyle');
+      expect(code.contains('TemplateType.small'), isTrue,
+          reason: 'Horizontal ListView must use TemplateType.small');
+      expect(code.contains('TemplateType.medium'), isTrue,
+          reason: 'Vertical GridView must use TemplateType.medium');
+      expect(code.contains('onPaidEvent:'), isTrue,
+          reason: 'Must wire onPaidEvent telemetry for ROAS tracking');
+      expect(code.contains('adManager.recordAdSuccess'), isTrue);
+      expect(code.contains('adManager.recordAdFailure'), isTrue);
+    });
+
+    test('7. Faz 3.3: ad_deal_card.dart delegates stream ads to AdNativeWidget and nativeAdUnitId', () {
+      final dealCardCode = File('lib/widgets/ad_deal_card.dart').readAsStringSync();
+      expect(dealCardCode.contains('AdNativeWidget('), isTrue);
+      expect(dealCardCode.contains('DefaultFirebaseOptions.nativeAdUnitId'), isTrue);
+      expect(dealCardCode.contains('AdBannerWidget'), isFalse,
+          reason: 'Old AdBannerWidget must be completely replaced by AdNativeWidget in deal stream');
+    });
+
+    test('8. Faz 3.3: AdManagerService and home_screen.dart support dynamic nativeGridInterval', () {
+      final adManager = AdManagerService.instance;
+      expect(adManager.nativeGridInterval, 6);
+
+      final homeScreenCode = File('lib/screens/home_screen.dart').readAsStringSync();
+      expect(homeScreenCode.contains('AdManagerService.instance.nativeGridInterval'), isTrue,
+          reason: 'home_screen.dart must read dynamic grid interval from AdManagerService');
+    });
+
+    test('9. Faz 3.3: AdManagerService supports nativeCouponsEnabled and nativeCouponsInterval', () {
+      final adManager = AdManagerService.instance;
+      expect(adManager.nativeCouponsEnabled, isTrue);
+      expect(adManager.nativeCouponsInterval, 5);
+    });
+
+    test('10. Faz 3.3: kuponlar_page.dart injects Native Ads every 5 items (after 4 coupons)', () {
+      final kuponlarCode = File('lib/screens/kuponlar_page.dart').readAsStringSync();
+      expect(kuponlarCode.contains('AdDealCard('), isTrue,
+          reason: 'kuponlar_page.dart must inject AdDealCard into the stream');
+      expect(kuponlarCode.contains("placement: 'kuponlar'"), isTrue,
+          reason: 'kuponlar_page.dart must specify kuponlar placement for telemetry and fallback');
+      expect(kuponlarCode.contains('nativeCouponsEnabled'), isTrue);
+      expect(kuponlarCode.contains('nativeCouponsInterval'), isTrue);
+      expect(kuponlarCode.contains('itemIndex % blockSize == couponsPerAd'), isTrue,
+          reason: 'Must inject ad on the 5th item (after 4 coupons) consistently');
+    });
+
+    test('11. Faz 3.3: AdManagerService supports nativeAktuelEnabled and nativeAktuelInterval', () {
+      final adManager = AdManagerService.instance;
+      expect(adManager.nativeAktuelEnabled, isTrue);
+      expect(adManager.nativeAktuelInterval, 6);
+    });
+
+    test('12. Faz 3.3: katalog_listesi_page.dart injects horizontal Native Ads after every 6 catalogs in 2-column grid', () {
+      final katalogCode = File('lib/screens/katalog_listesi_page.dart').readAsStringSync();
+      expect(katalogCode.contains('AdDealCard('), isTrue,
+          reason: 'katalog_listesi_page.dart must inject AdDealCard into the grid stream');
+      expect(katalogCode.contains("placement: 'aktuel'"), isTrue,
+          reason: 'katalog_listesi_page.dart must specify aktuel placement for telemetry and fallback');
+      expect(katalogCode.contains('nativeAktuelEnabled'), isTrue);
+      expect(katalogCode.contains('nativeAktuelInterval'), isTrue);
+      expect(katalogCode.contains('CardViewMode.horizontal'), isTrue,
+          reason: 'Must render full-width horizontal card across the 2-column grid');
+      expect(katalogCode.contains('chunkCatalogs.length == chunkSize'), isTrue,
+          reason: 'Must inject ad banner only after complete chunk of 6 brochures (3 full rows)');
     });
   });
 }

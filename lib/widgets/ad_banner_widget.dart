@@ -9,6 +9,10 @@ void _log(String message) {
   if (kDebugMode) print('📢 [AdBannerWidget] $message');
 }
 
+/// [DEPRECATED - FAZ 3.3]: Akış içi banner reklamlar tamamen kaldırılmış ve
+/// yerini yüksek eCPM ($1.50 - $3.50) üreten, 2 sütunlu ve yatay modlara %100 uyumlu
+/// [AdNativeWidget] mimarisine bırakmıştır.
+@Deprecated('Faz 3.3 kapsamında akış içi banner reklamlar AdNativeWidget formatına taşınmıştır.')
 class AdBannerWidget extends StatefulWidget {
   final String adUnitId;
   final AdSize adSize;

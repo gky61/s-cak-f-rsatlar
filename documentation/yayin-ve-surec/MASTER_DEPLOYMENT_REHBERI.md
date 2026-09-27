@@ -71,9 +71,9 @@ Projede Geliştirme (DEV) ve Canlı (PROD) ortamları hiçbir şekilde birbirine
 | **Web Admin Panel URL** | `https://sicak-firsatlar-e6eae.web.app/admin/` | `https://firsatkolik.app/admin/` |
 | **Cloud Functions Adedi** | 27 Fonksiyon (`Europe/Istanbul` Cron'ları) | 27 Fonksiyon (`Europe/Istanbul` Cron'ları) |
 | **GCP VM Konteyner Adı** | `dev-bot` (Host Port: `8081` -> `8080`) | `prod-bot` (Host Port: `8082` -> `8080`) |
-| **Dinlenen Telegram Kanalı**| `@indirimkaplani` (veya test kanalları) | `@firsatkolik_canli` |
-| **AdMob Banner ID (Android)** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Gerçek)* |
-| **AdMob Banner ID (iOS)** | `ca-app-pub-3940256099942544/2934735716` *(Test)* | `ca-app-pub-6853997017739651/2039078155` *(Gerçek)* |
+| **AdMob Native Ad ID (Android - Faz 3.3)** | `ca-app-pub-3940256099942544/2247696110` *(Test)* | `ca-app-pub-6853997017739651/4004866134` *(Gerçek)* |
+| **AdMob Native Ad ID (iOS - Faz 3.3)** | `ca-app-pub-3940256099942544/3986624511` *(Test)* | `ca-app-pub-6853997017739651/9437070495` *(Gerçek)* |
+| **AdMob Banner ID (Eski/Arşiv)** | `ca-app-pub-3940256099942544/6300978111` *(Test)* | `ca-app-pub-6853997017739651/8758625050` *(Arşiv)* |
 | **AdMob App ID (Android)** | `ca-app-pub-3940256099942544~3347511713` *(Test)* | `ca-app-pub-6853997017739651~8861215767` *(Gerçek)* |
 | **AdMob App ID (iOS)** | `ca-app-pub-3940256099942544~1458002511` *(Test)* | `ca-app-pub-6853997017739651~7339420575` *(Gerçek)* |
 | **AdMob Yönetim Servisi** | `AdManagerService` (25s Cooldown, Kill-Switch) | `AdManagerService` (onPaidEvent Telemetrisi) |
@@ -137,12 +137,12 @@ Sanal makinede (`/home/murat/app/{env}-bot/.env`) tanımlanan değişkenler:
 ### 3.6 Google AdMob Master Kimlikleri ve Reklam Birimleri Envanteri
 * **Yayıncı (Publisher ID):** `pub-6853997017739651`
 
-| Platform & Ortam | AdMob App ID (Uygulama Kimliği) | Banner Ad Unit ID (Reklam Birimi) | Tanımlandığı Yer |
-| :--- | :--- | :--- | :--- |
-| **Android DEV** | `ca-app-pub-3940256099942544~3347511713` (Test) | `ca-app-pub-3940256099942544/6300978111` (Test) | `android/app/build.gradle` (`dev` flavor) & `firebase_options.dart` |
-| **Android PROD** | `ca-app-pub-6853997017739651~8861215767` (Gerçek) | `ca-app-pub-6853997017739651/8758625050` (Gerçek) | `android/app/build.gradle` (`prod` flavor) & `firebase_options.dart` |
-| **iOS DEV** | `ca-app-pub-3940256099942544~1458002511` (Test) | `ca-app-pub-3940256099942544/2934735716` (Test) | `firebase_options.dart` (Debug/Dev Fallback) |
-| **iOS PROD** | `ca-app-pub-6853997017739651~7339420575` (Gerçek) | `ca-app-pub-6853997017739651/2039078155` (Gerçek) | `ios/Runner/Info.plist` & `firebase_options.dart` |
+| Platform & Ortam | AdMob App ID (Uygulama Kimliği) | Native Ad Unit ID (Faz 3.3 Akış) | Banner Ad Unit ID (Eski/Arşiv) | Tanımlandığı Yer |
+| :--- | :--- | :--- | :--- | :--- |
+| **Android DEV** | `ca-app-pub-3940256099942544~3347511713` (Test) | `ca-app-pub-3940256099942544/2247696110` (Test) | `ca-app-pub-3940256099942544/6300978111` (Test) | `android/app/build.gradle` (`dev` flavor) & `firebase_options.dart` |
+| **Android PROD** | `ca-app-pub-6853997017739651~8861215767` (Gerçek) | `ca-app-pub-6853997017739651/4004866134` (Gerçek) | `ca-app-pub-6853997017739651/8758625050` (Arşiv) | `android/app/build.gradle` (`prod` flavor) & `firebase_options.dart` |
+| **iOS DEV** | `ca-app-pub-3940256099942544~1458002511` (Test) | `ca-app-pub-3940256099942544/3986624511` (Test) | `ca-app-pub-3940256099942544/2934735716` (Test) | `firebase_options.dart` (Debug/Dev Fallback) |
+| **iOS PROD** | `ca-app-pub-6853997017739651~7339420575` (Gerçek) | `ca-app-pub-6853997017739651/9437070495` (Gerçek) | `ca-app-pub-6853997017739651/2039078155` (Arşiv) | `ios/Runner/Info.plist` & `firebase_options.dart` |
 
 * **Otomasyon & CLI Kontrol:** `python monetization-assets/scripts/admob_cli.py status`
 

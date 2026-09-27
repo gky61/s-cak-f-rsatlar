@@ -323,13 +323,25 @@ void _initializeBackgroundServices() {
 
 /// AdMob ve UMP Consent akışını asenkron başlatır
 void _initAdMobAndUmp() {
+  bool adMobInitialized = false;
+
   Future<void> initAdMob() async {
+    if (adMobInitialized) return;
+    adMobInitialized = true;
     try {
       await AdManagerService.instance.initialize();
     } catch (e) {
       _log('⚠️ AdMob başlatma hatası: $e');
     }
   }
+
+  // Güvenlik zaman aşımı: UMP ağ sorgusu 2.5 saniyeyi aşarsa cold-start akışında AdMob'u doğrudan başlat
+  Timer(const Duration(milliseconds: 2500), () {
+    if (!adMobInitialized) {
+      _log('⏱️ UMP Consent zaman aşımı (2.5s), AdMob doğrudan başlatılıyor');
+      initAdMob();
+    }
+  });
 
   try {
     final params = ConsentRequestParameters();
@@ -354,6 +366,7 @@ void _initAdMobAndUmp() {
     );
   } catch (e) {
     _log('⚠️ AdMob/UMP başlatma genel hatası: $e');
+    initAdMob();
   }
 }
 

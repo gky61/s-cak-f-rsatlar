@@ -1,6 +1,7 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 /// FırsatKolik Merkezi Telemetri, Kullanıcı Trafiği ve Analitik Servisi
 /// 
@@ -17,9 +18,44 @@ class AnalyticsService {
   final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
 
   /// MaterialApp.navigatorObservers için otomatik sayfa takipçisi
+  /// nameExtractor: Route settings'den okunabilir ekran adı çıkarır.
+  /// Eğer route adı yoksa, widget runtimeType ismini kullanır.
   late final FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(
     analytics: _analytics,
+    nameExtractor: (RouteSettings settings) {
+      // Route adı varsa kullan (ör. '/deal-detail')
+      final name = settings.name;
+      if (name != null && name != '/' && name.isNotEmpty) {
+        return name;
+      }
+      // Route adı '/' veya null ise, arguments'tan widget adını çıkarmaya çalış
+      // Varsayılan olarak route adını döndür
+      return name ?? 'unknown_screen';
+    },
   );
+
+  /// Manuel Ekran Görüntüleme Kaydı (Screen View)
+  /// BottomNavigationBar veya IndexedStack gibi navigator observer'ın yakalayamadığı
+  /// sekme değişimlerini GA4 ve Crashlytics'e kesin olarak iletir.
+  Future<void> logScreenView({
+    required String screenName,
+    String? screenClass,
+  }) async {
+    try {
+      await _analytics.logScreenView(
+        screenName: screenName,
+        screenClass: screenClass ?? screenName,
+      );
+      _recordBreadcrumb('screen_view', {'screen': screenName, 'class': screenClass ?? screenName});
+      if (kDebugMode) {
+        print('📱 [Analytics] ScreenView: $screenName (${screenClass ?? screenName})');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ [Analytics] ScreenView hatası: $e');
+      }
+    }
+  }
 
   /// Kullanıcı Kimliğini Hem Analytics Hem Crashlytics'e Eşler (KVKK / Anonim UID)
   Future<void> setUser(String? userId) async {
@@ -224,7 +260,7 @@ class AnalyticsService {
   /// optimizasyonu yapabilmesi ve kullanıcı başına LTV değerini ölçebilmesi için gereklidir.
   Future<void> logAdImpression({
     required String adUnitId,
-    required String adFormat, // 'banner', 'native', 'interstitial', 'rewarded', 'app_open'
+    required String adFormat, // 'native', 'rewarded'
     int? valueMicros,
     String? currencyCode,
     int? precisionType,
