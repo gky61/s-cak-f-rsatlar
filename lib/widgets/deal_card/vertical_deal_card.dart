@@ -365,7 +365,15 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          if (deal.ratingValue != null) ...[
+                                          if (deal.hasMigrosPromoLabel) ...[
+                                            // Migros kampanyalı ise: Kategori ve sade ikon yerine Money kampanya etiketi
+                                            Flexible(
+                                              child: buildMigrosPromoBadge(
+                                                label: deal.priceLabel!.trim(),
+                                                isDark: isDark,
+                                              ),
+                                            ),
+                                          ] else if (deal.ratingValue != null) ...[
                                             const Icon(
                                               Icons.star_rounded,
                                               size: 13.5,
@@ -396,6 +404,14 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                                 ),
                                               ),
                                             ],
+                                            if (deal.isAmazonWarehouse) ...[
+                                              const SizedBox(width: 3),
+                                              _buildWarehouseBadge(),
+                                            ],
+                                            if (StorePriceBadge.hasBadge(deal: deal)) ...[
+                                              const SizedBox(width: 3),
+                                              StorePriceBadge(deal: deal, compact: true),
+                                            ],
                                           ] else ...[
                                             // Puan yoksa: zarif kategori etiketi (hizalama asla şaşmaz)
                                             Flexible(
@@ -410,14 +426,14 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                                 ),
                                               ),
                                             ),
-                                          ],
-                                          if (deal.isAmazonWarehouse) ...[
-                                            const SizedBox(width: 3),
-                                            _buildWarehouseBadge(),
-                                          ],
-                                          if (StorePriceBadge.hasBadge(deal: deal)) ...[
-                                            const SizedBox(width: 3),
-                                            StorePriceBadge(deal: deal, compact: true),
+                                            if (deal.isAmazonWarehouse) ...[
+                                              const SizedBox(width: 3),
+                                              _buildWarehouseBadge(),
+                                            ],
+                                            if (StorePriceBadge.hasBadge(deal: deal)) ...[
+                                              const SizedBox(width: 3),
+                                              StorePriceBadge(deal: deal, compact: true),
+                                            ],
                                           ],
                                         ],
                                       ),

@@ -103,6 +103,12 @@ class Deal {
   /// Fırsatın admin tarafından reddedilip edilmediğini döner
   bool get isRejectedClean => isRejected == true;
 
+  /// Fırsatın Migros mağazasına ait olup olmadığını döner
+  bool get isMigros => store.trim().toLowerCase().contains('migros');
+
+  /// Fırsatın Migros'a özel geçerli bir kampanya/indirim etiketine (2 Al 1 Öde, 2 Öde 1'si Money Hediye vb.) sahip olup olmadığını döner
+  bool get hasMigrosPromoLabel => isMigros && priceLabel != null && priceLabel!.trim().isNotEmpty;
+
   /// Fırsatın kaynak adını (Telegram Kanalı / Kazıma Sayfası veya Kullanıcı Adı) döner
   String get sourceDisplayName {
     if (isUserSubmitted) {

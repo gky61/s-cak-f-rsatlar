@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sicak_firsatlar/models/deal.dart';
 import 'package:sicak_firsatlar/widgets/deal_card/deal_card_helpers.dart';
 
 void main() {
@@ -80,6 +81,67 @@ void main() {
 
       final daysAgo = now.subtract(const Duration(days: 4));
       expect(formatRelativeTimeCompact(daysAgo), '4g');
+    });
+
+    test('isMigros and hasMigrosPromoLabel should identify Migros campaign deals correctly', () {
+      final migrosDealWithPromo = Deal(
+        id: '1',
+        title: 'Nestle Mısır Gevreği',
+        store: 'Migros',
+        price: 169.95,
+        priceLabel: '2 Öde 1\'si Money Hediye',
+        category: 'supermarket',
+        link: 'https://migros.com.tr/test',
+        imageUrl: 'https://example.com/img.jpg',
+        hotVotes: 10,
+        coldVotes: 0,
+        commentCount: 0,
+        postedBy: 'botkolik',
+        createdAt: DateTime.now(),
+        isEditorPick: false,
+      );
+
+      final migrosDealWithoutPromo = Deal(
+        id: '2',
+        title: 'Süt',
+        store: 'Migros Hemen',
+        price: 25.0,
+        category: 'supermarket',
+        link: 'https://migros.com.tr/test',
+        imageUrl: 'https://example.com/img.jpg',
+        hotVotes: 10,
+        coldVotes: 0,
+        commentCount: 0,
+        postedBy: 'botkolik',
+        createdAt: DateTime.now(),
+        isEditorPick: false,
+      );
+
+      final amazonDeal = Deal(
+        id: '3',
+        title: 'Kulaklık',
+        store: 'Amazon',
+        price: 500.0,
+        priceLabel: 'Çok Al Az Öde',
+        category: 'elektronik',
+        link: 'https://amazon.com.tr/test',
+        imageUrl: 'https://example.com/img.jpg',
+        hotVotes: 10,
+        coldVotes: 0,
+        commentCount: 0,
+        postedBy: 'botkolik',
+        createdAt: DateTime.now(),
+        isEditorPick: false,
+      );
+
+      expect(migrosDealWithPromo.isMigros, isTrue);
+      expect(migrosDealWithPromo.hasMigrosPromoLabel, isTrue);
+
+      expect(migrosDealWithoutPromo.isMigros, isTrue);
+      expect(migrosDealWithoutPromo.hasMigrosPromoLabel, isFalse);
+
+      expect(amazonDeal.isMigros, isFalse);
+      expect(amazonDeal.hasMigrosPromoLabel, isFalse);
     });
   });
 }

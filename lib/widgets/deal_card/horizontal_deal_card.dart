@@ -420,12 +420,12 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                 ),
                               ),
                               const SizedBox(height: 3.0),
-                              // 3. Değerlendirme & Termometre Satırı (Mağaza Puanı + Canlı Termometre)
+                              // 3. Değerlendirme & Termometre Satırı (Mağaza Puanı / Migros İçin Zaman + Canlı Termometre)
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  // Sol: Mağaza Puanı ve Oy Adedi
+                                  // Sol: Mağaza Puanı veya Migros için Paylaşım Zamanı
                                   if (deal.ratingValue != null)
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -460,6 +460,27 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                         ],
                                       ],
                                     )
+                                  else if (deal.isMigros)
+                                    // Migros ürünlerinde puan olmadığından zaman üste kaydırılır
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.access_time_rounded,
+                                          size: 10.5,
+                                          color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                        ),
+                                        const SizedBox(width: 3.5),
+                                        Text(
+                                          formatRelativeTimeCompact(deal.createdAt),
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                          ),
+                                        ),
+                                      ],
+                                    )
                                   else
                                     const SizedBox.shrink(),
 
@@ -472,31 +493,47 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                 ],
                               ),
                               const SizedBox(height: 3.5),
-                              // 4. Zaman & Yorum Satırı (Kompakt "8sa", "3g" formatı - "önce" eki kaldırıldı)
+                              // 4. Zaman & Yorum Satırı (Migros için Kampanya Rozeti / Diğerleri için Zaman)
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  // Sol: Paylaşım Zamanı
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.access_time_rounded,
-                                        size: 10.5,
-                                        color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                                      ),
-                                      const SizedBox(width: 3.5),
-                                      Text(
-                                        formatRelativeTimeCompact(deal.createdAt),
-                                        style: TextStyle(
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.w500,
-                                          color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                  // Sol: Migros Kampanya Rozeti veya Normal Mağazalar İçin Paylaşım Zamanı
+                                  if (deal.hasMigrosPromoLabel)
+                                    Flexible(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(right: 6.0),
+                                        child: buildMigrosPromoBadge(
+                                          label: deal.priceLabel!.trim(),
+                                          isDark: isDark,
+                                          fontSize: 9.0,
+                                          iconSize: 11.0,
+                                          padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 1.5),
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    )
+                                  else if (!deal.isMigros)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.access_time_rounded,
+                                          size: 10.5,
+                                          color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                        ),
+                                        const SizedBox(width: 3.5),
+                                        Text(
+                                          formatRelativeTimeCompact(deal.createdAt),
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
 
                                   // Sağ: Yorum Rozeti
                                   buildDealCommentBadge(

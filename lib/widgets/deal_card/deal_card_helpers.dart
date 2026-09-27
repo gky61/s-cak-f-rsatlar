@@ -233,6 +233,102 @@ Widget buildDealCommentBadge({
   return badgeWidget;
 }
 
+/// Migros kampanyalı ürünler için (2 Al 1 Öde, 2 Öde 1'si Money Hediye vb.)
+/// Fırsat kartlarında kullanılan minimalist, canlı ve profesyonel Money kampanya rozeti.
+Widget buildMigrosPromoBadge({
+  required String label,
+  required bool isDark,
+  double fontSize = 8.5,
+  double iconSize = 10.5,
+  EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: 5.0, vertical: 1.5),
+  double borderRadius = 4.5,
+}) {
+  return Container(
+    padding: padding,
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        colors: [
+          Color(0xFFFFD000), // Parlak sarı
+          Color(0xFFFF9500), // Canlı amber
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(
+        color: const Color(0xFFFFE066),
+        width: 0.8,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFFFF9500).withValues(alpha: 0.30),
+          blurRadius: 3,
+          offset: const Offset(0, 1),
+        ),
+      ],
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: iconSize,
+          height: iconSize,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 1.5,
+                offset: Offset(0, 0.5),
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: Image.asset(
+              'assets/money.webp',
+              width: iconSize,
+              height: iconSize,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: iconSize,
+                height: iconSize,
+                color: const Color(0xFF141414),
+                child: Center(
+                  child: Text(
+                    'M',
+                    style: TextStyle(
+                      color: const Color(0xFFFFD000),
+                      fontWeight: FontWeight.w900,
+                      fontSize: iconSize * 0.58,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 3.5),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF1C1304),
+              letterSpacing: -0.1,
+              height: 1.05,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 String formatExactDateTime(DateTime date) {
   try {
     return DateFormat('d MMMM - HH:mm', 'tr_TR').format(date);
