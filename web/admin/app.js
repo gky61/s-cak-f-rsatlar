@@ -1671,7 +1671,9 @@ function createDealRow(deal) {
     } else {
         // Bot paylaşımı (Telegram Kanalları)
         let channelName = '';
-        if (deal.telegramChatTitle) {
+        if (deal.postedByName === 'Botkolik' || postedByRaw === 'botkolik') {
+            channelName = 'Botkolik';
+        } else if (deal.telegramChatTitle) {
             channelName = deal.telegramChatTitle;
         } else if (deal.telegramChatUsername) {
             channelName = deal.telegramChatUsername.startsWith('@') ? deal.telegramChatUsername : `@${deal.telegramChatUsername}`;
@@ -1680,7 +1682,7 @@ function createDealRow(deal) {
         } else if (postedByRaw && postedByRaw !== 'admin' && postedByRaw !== 'Bilinmiyor') {
             channelName = postedByRaw;
         } else {
-            channelName = 'Bot (Genel)';
+            channelName = 'Botkolik';
         }
 
         sourceBadge = `
@@ -2387,18 +2389,23 @@ async function showDealModal(deal) {
     // Modal Sidebar (Sağ Kolon)
     const modalSidebarEl = document.getElementById('modalSidebar');
     if (modalSidebarEl) {
+        const isNew = Boolean(deal._isNew || deal._isPreGeneratedId || !deal.id);
         const lastUpdate = deal.updatedAt ? `${formatFullDateTime(deal.updatedAt)} (${getTimeAgo(deal.updatedAt)})` : createdAt;
 
-        // Kullanıcı adı ve profil görseli için
-        const authorName = isUserSubmitted ? userDisplayName : 'Bot';
-        const authorInitials = isUserSubmitted && userDisplayName
-            ? userDisplayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || userDisplayName.substring(0, 2).toUpperCase()
-            : 'BOT';
+        // Kullanıcı adı ve profil görseli için (Admin tarafından eklenen veya bot olan fırsatlarda Botkolik gösterilir)
+        const isBot = isNew || !isUserSubmitted || deal.postedBy === 'botkolik';
+        const authorName = isBot ? 'Botkolik' : userDisplayName;
+        const authorInitials = isBot ? 'BK' : (userDisplayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || userDisplayName.substring(0, 2).toUpperCase());
 
         // Profil görseli HTML'i
-        const profileImageHtml = isUserSubmitted && userProfileImage
-            ? `<img src="${escapeHtml(userProfileImage)}" alt="${escapeHtml(authorName)}" class="w-12 h-12 rounded-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div style="display:none;" class="w-12 h-12 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 font-bold text-sm">${authorInitials}</div>`
-            : `<div class="w-12 h-12 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 font-bold text-sm">${authorInitials}</div>`;
+        let profileImageHtml;
+        if (isBot) {
+            profileImageHtml = `<img src="../assets/botkolik.webp" alt="Botkolik" class="w-12 h-12 rounded-full object-cover ring-2 ring-primary/30" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div style="display:none;" class="w-12 h-12 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">BK</div>`;
+        } else if (userProfileImage) {
+            profileImageHtml = `<img src="${escapeHtml(userProfileImage)}" alt="${escapeHtml(authorName)}" class="w-12 h-12 rounded-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div style="display:none;" class="w-12 h-12 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 font-bold text-sm">${authorInitials}</div>`;
+        } else {
+            profileImageHtml = `<div class="w-12 h-12 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 font-bold text-sm">${authorInitials}</div>`;
+        }
 
         modalSidebarEl.innerHTML = `
             <!-- Status Card -->
@@ -2407,8 +2414,8 @@ async function showDealModal(deal) {
                 <div class="flex flex-col gap-4">
                     <label class="flex flex-col gap-2">
                         <select id="editStatus" class="form-select w-full rounded-lg ${isApproved ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' : (deal.status === 'rejected' || deal.isRejected ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400')} focus:ring-1 focus:ring-primary h-12 px-4 text-base font-semibold">
-                            <option value="pending" ${(!isApproved && !deal.isRejected && deal.status !== 'rejected' && !deal.isExpired && deal.status !== 'expired') ? 'selected' : ''}>Onay Bekliyor</option>
-                            <option value="active" ${(isApproved && !deal.isExpired && deal.status !== 'expired' && !deal.isRejected && deal.status !== 'rejected') ? 'selected' : ''}>Yayında</option>
+                            <option value="pending" ${(deal.status === 'pending' || (!isApproved && !deal.isRejected && deal.status !== 'rejected' && !deal.isExpired && deal.status !== 'expired')) ? 'selected' : ''}>Onay Bekliyor</option>
+                            <option value="active" ${(deal.status === 'active' || (isApproved && !deal.isExpired && deal.status !== 'expired' && !deal.isRejected && deal.status !== 'rejected')) ? 'selected' : ''}>Yayında</option>
                             <option value="rejected" ${(deal.isRejected || deal.status === 'rejected') ? 'selected' : ''}>Reddedildi</option>
                             <option value="expired" ${(deal.isExpired || deal.status === 'expired') ? 'selected' : ''}>Süresi Doldu</option>
                         </select>
@@ -2431,11 +2438,11 @@ async function showDealModal(deal) {
                 
                 <!-- Action Buttons -->
                 <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 flex flex-col gap-2">
-                    <button id="saveBtn" class="w-full h-11 px-4 rounded-lg ${isApproved ? 'bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20' : 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm shadow-lg shadow-emerald-500/20'} transition-all flex items-center justify-center gap-2" type="button">
-                        <span class="material-symbols-outlined text-[18px]">${isApproved ? 'save' : 'check'}</span>
-                        <span>${isApproved ? 'Kaydet' : 'Onayla'}</span>
+                    <button id="saveBtn" class="w-full h-11 px-4 rounded-lg ${isNew ? 'bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20' : (isApproved ? 'bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20' : 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm shadow-lg shadow-emerald-500/20')} transition-all flex items-center justify-center gap-2" type="button">
+                        <span class="material-symbols-outlined text-[18px]">${isNew ? 'add' : (isApproved ? 'save' : 'check')}</span>
+                        <span>${isNew ? 'Oluştur' : (isApproved ? 'Kaydet' : 'Onayla')}</span>
                     </button>
-                    ${deal.id ? `
+                    ${(!isNew && deal.id) ? `
                     <button id="deleteDealBtn" class="w-full h-10 px-4 rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-semibold text-xs transition-colors flex items-center justify-center gap-1.5" type="button">
                         <span class="material-symbols-outlined text-[16px]">delete</span>
                         <span>Fırsatı Kalıcı Olarak Sil</span>
@@ -2483,13 +2490,13 @@ async function showDealModal(deal) {
                 <div class="flex items-center gap-3">
                     <div class="relative">
                         ${profileImageHtml}
-                        ${!isUserSubmitted ? `<span class="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary border-2 border-white dark:border-surface-dark" title="Bot">
+                        ${isBot ? `<span class="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary border-2 border-white dark:border-surface-dark" title="Botkolik">
                             <span class="material-symbols-outlined text-[12px] text-white">smart_toy</span>
                         </span>` : ''}
                     </div>
                     <div class="flex flex-col">
                         <span class="text-sm font-bold text-gray-900 dark:text-white">${escapeHtml(authorName)}</span>
-                        <span class="text-xs text-slate-500 dark:text-slate-400">${isUserSubmitted ? 'Kullanıcı' : 'Bot'} • ID: #${deal.id.substring(0, 6)}</span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">${isBot ? 'Botkolik' : 'Kullanıcı'} • ID: #${(!isNew && deal.id) ? deal.id.substring(0, 6) : 'YENİ'}</span>
                     </div>
                 </div>
                 <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-2 text-xs">
@@ -2504,13 +2511,13 @@ async function showDealModal(deal) {
                 </div>
             </div>
             
-            ${!isUserSubmitted ? `
+            ${isBot ? `
             <!-- Bot Source Info -->
             <div class="bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30 p-4 shadow-sm flex items-start gap-3">
                 <span class="material-symbols-outlined text-blue-600 dark:text-blue-400 mt-0.5">smart_toy</span>
                 <div class="flex flex-col gap-1">
-                    <span class="text-sm font-bold text-blue-900 dark:text-blue-200">Otomatik Bot</span>
-                    <p class="text-xs text-blue-700 dark:text-blue-400 leading-normal">Bu fırsat otomatik olarak yakalandı. Lütfen fiyatı ve stok durumunu kontrol ediniz.</p>
+                    <span class="text-sm font-bold text-blue-900 dark:text-blue-200">${isNew ? 'Botkolik Paylaşımı' : 'Botkolik Otonom Bot'}</span>
+                    <p class="text-xs text-blue-700 dark:text-blue-400 leading-normal">${isNew ? 'Bu fırsat Admin Paneli üzerinden Botkolik adına eklenmektedir.' : 'Bu fırsat otomatik olarak yakalandı. Lütfen fiyatı ve stok durumunu kontrol ediniz.'}</p>
                 </div>
             </div>
             ` : ''}
@@ -2520,12 +2527,14 @@ async function showDealModal(deal) {
     // Breadcrumb
     const breadcrumbEl = document.getElementById('modalBreadcrumb');
     if (breadcrumbEl) {
-        breadcrumbEl.textContent = `Fırsat #${deal.id.substring(0, 8)}`;
+        const isNew = Boolean(deal._isNew || deal._isPreGeneratedId || !deal.id);
+        breadcrumbEl.textContent = isNew ? 'Yeni Fırsat Ekle' : `Fırsat #${deal.id.substring(0, 8)}`;
     }
 
     // Title
     if (modalTitle) {
-        modalTitle.textContent = deal.title || 'Fırsat Düzenle';
+        const isNew = Boolean(deal._isNew || deal._isPreGeneratedId || !deal.id);
+        modalTitle.textContent = isNew ? 'Yeni Fırsat Ekle' : (deal.title || 'Fırsat Düzenle');
     }
 
     // Character count update
@@ -2846,12 +2855,15 @@ async function showDealModal(deal) {
         const cancelBtnEl = document.getElementById('cancelBtn');
 
         if (saveBtnEl) {
+            const isNew = Boolean(currentDeal._isNew || currentDeal._isPreGeneratedId || !currentDeal.id || currentDeal.id === '');
             const isApproved = currentDeal.isApproved === true;
-            saveBtnEl.innerHTML = isApproved
-                ? '<span class="material-symbols-outlined text-[18px]">save</span><span>Kaydet</span>'
-                : '<span class="material-symbols-outlined text-[18px]">check</span><span>Onayla</span>';
+            saveBtnEl.innerHTML = isNew
+                ? '<span class="material-symbols-outlined text-[18px]">add</span><span>Oluştur</span>'
+                : (isApproved
+                    ? '<span class="material-symbols-outlined text-[18px]">save</span><span>Kaydet</span>'
+                    : '<span class="material-symbols-outlined text-[18px]">check</span><span>Onayla</span>');
 
-            console.log('🔘 Adding event listener to saveBtn (Onayla button)');
+            console.log('🔘 Adding event listener to saveBtn (button action)');
             // Önceki listener'ları temizle
             const newSaveBtn = saveBtnEl.cloneNode(true);
             saveBtnEl.parentNode.replaceChild(newSaveBtn, saveBtnEl);
@@ -2859,7 +2871,7 @@ async function showDealModal(deal) {
             newSaveBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('✅ Onayla/Kaydet butonu tıklandı (direct listener)!', currentDeal?.id);
+                console.log('✅ Onayla/Kaydet/Oluştur butonu tıklandı (direct listener)!', currentDeal?.id);
 
                 if (!currentDeal) {
                     console.error('❌ No current deal!');
@@ -2870,7 +2882,7 @@ async function showDealModal(deal) {
                 // Butonu devre dışı bırak
                 newSaveBtn.disabled = true;
                 const originalHTML = newSaveBtn.innerHTML;
-                const isNew = !currentDeal.id || currentDeal.id === '';
+                const isNew = Boolean(currentDeal._isNew || currentDeal._isPreGeneratedId || !currentDeal.id || currentDeal.id === '');
                 const isApp = currentDeal.isApproved === true;
 
                 if (isNew) {
@@ -3039,9 +3051,9 @@ async function saveDealChanges() {
 
     try {
         // Yeni deal mi yoksa mevcut deal mi?
-        const isNewDeal = !currentDeal.id || currentDeal.id === '';
+        const isNewDeal = Boolean(currentDeal._isNew || currentDeal._isPreGeneratedId || !currentDeal.id || currentDeal.id === '');
 
-        console.log(`💾 ${isNewDeal ? 'Creating new deal' : 'Saving deal changes for:'} ${isNewDeal ? '' : currentDeal.id}`);
+        console.log(`💾 ${isNewDeal ? 'Creating new deal' : 'Saving deal changes for:'} ${isNewDeal ? (currentDeal.id || '(auto ID)') : currentDeal.id}`);
 
         const title = document.getElementById('editTitle')?.value || currentDeal.title || '';
         const description = document.getElementById('editDescription')?.value || currentDeal.description || '';
@@ -3056,7 +3068,7 @@ async function saveDealChanges() {
             : (currentDeal.subCategory || currentDeal.subcategory || null);
         const status = document.getElementById('editStatus')?.value || (currentDeal.isApproved ? 'active' : 'pending');
         const isHot = document.getElementById('editIsHot')?.checked || false;
-        const store = document.getElementById('editStore')?.value?.trim() || (currentDeal && currentDeal.store) || 'Bilinmeyen';
+        let store = document.getElementById('editStore')?.value?.trim() || (currentDeal && currentDeal.store) || '';
         const couponCode = document.getElementById('editCouponCode')?.value || '';
         const brand = document.getElementById('editBrand')?.value?.trim() || null;
         const priceLabel = document.getElementById('editPriceLabel')?.value?.trim() || null;
@@ -3067,6 +3079,16 @@ async function saveDealChanges() {
 
         let finalCleanUrl = cleanUrlInput || currentDeal.cleanUrl || '';
         let processedUrl = affiliateUrlInput || currentDeal.url || currentDeal.link || '';
+
+        // Eğer mağaza adı boşsa linkten tespit et
+        if (!store || store === 'Bilinmeyen') {
+            const detectedStore = detectStoreFromUrl(finalCleanUrl || processedUrl);
+            if (detectedStore && detectedStore !== 'Bilinmeyen') {
+                store = detectedStore;
+            } else {
+                store = store || 'Bilinmeyen';
+            }
+        }
 
         const isDealAffiliateSupported = isAffiliateSupportedStore(store) ||
             isAffiliateSupportedStore(cleanUrlInput) ||
@@ -3151,6 +3173,10 @@ async function saveDealChanges() {
         const createdAtDate = cleanCreatedAt ? new Date(cleanCreatedAt) : new Date();
         const isCreatedAtValid = createdAtDate instanceof Date && !isNaN(createdAtDate.getTime());
 
+        const isApprovedState = (status === 'active');
+        const isRejectedState = (status === 'rejected');
+        const isExpiredState = (status === 'expired' || status === 'rejected');
+
         // Firestore undefined değerleri kabul etmez, bu yüzden sadece tanımlı alanları ekle
         const dealData = {
             title: title.trim(),
@@ -3166,19 +3192,24 @@ async function saveDealChanges() {
             hidePrice: hidePrice,
             imageUrls: imageUrls.length > 0 ? imageUrls : [],
             status: status,
-            isApproved: (status === 'active'),
-            isRejected: (status === 'rejected'),
-            isExpired: (status === 'expired' || status === 'rejected'),
+            isApproved: isApprovedState,
+            isActive: isApprovedState,
+            isRejected: isRejectedState,
+            isExpired: isExpiredState,
             isHot: isHot || false,
             isEditorPick: isHot || false, // Hem isHot hem isEditorPick olarak aynı değeri set et
             couponCode: couponCode || '',
             store: store,
-            postedBy: isNewDeal ? (currentUser ? currentUser.uid : 'admin') : (currentDeal.postedBy || 'admin'),
+            postedBy: isNewDeal ? 'botkolik' : (currentDeal.postedBy || 'botkolik'),
+            postedByName: isNewDeal ? 'Botkolik' : (currentDeal.postedByName || (currentDeal.isUserSubmitted ? null : 'Botkolik')),
+            postedByAvatar: isNewDeal ? 'assets/botkolik.webp' : (currentDeal.postedByAvatar || (currentDeal.isUserSubmitted ? null : 'assets/botkolik.webp')),
             hotVotes: isNewDeal ? 0 : (currentDeal.hotVotes || 0),
             coldVotes: isNewDeal ? 0 : (currentDeal.coldVotes || 0),
             expiredVotes: isNewDeal ? 0 : (currentDeal.expiredVotes || 0),
             commentCount: isNewDeal ? 0 : (currentDeal.commentCount || 0),
+            viewCount: isNewDeal ? 0 : (currentDeal.viewCount || 0),
             isUserSubmitted: isNewDeal ? false : (currentDeal.isUserSubmitted || false),
+            isTest: false,
             createdAt: isNewDeal ? firebase.firestore.FieldValue.serverTimestamp() : (isCreatedAtValid ? firebase.firestore.Timestamp.fromDate(createdAtDate) : firebase.firestore.FieldValue.serverTimestamp()),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
             brand: brand,
@@ -3189,9 +3220,8 @@ async function saveDealChanges() {
         };
 
         // Track approvedAt when transitioning to active/approved state
-        const isApprovedNow = (status === 'active');
-        const previouslyApproved = !isNewDeal && currentDeal.isApproved === true && currentDeal.isExpired !== true && currentDeal.status !== 'expired';
-        if (isApprovedNow) {
+        if (isApprovedState) {
+            const previouslyApproved = !isNewDeal && currentDeal.isApproved === true && currentDeal.isExpired !== true && currentDeal.status !== 'expired';
             if (previouslyApproved && currentDeal.approvedAt) {
                 let cleanApprovedAt = currentDeal.approvedAt;
                 if (cleanApprovedAt && typeof cleanApprovedAt.toDate === 'function') {
@@ -3219,20 +3249,20 @@ async function saveDealChanges() {
             // Yeni deal oluştur
             console.log('📝 Creating new deal:', dealData);
             let newDealId;
-            if (currentDeal._isPreGeneratedId && currentDeal.id) {
-                // Görsel yükleme sırasında önceden oluşturulmuş ID varsa onu kullan
+            if (currentDeal.id && (currentDeal._isPreGeneratedId || currentDeal._isNew)) {
+                // Görsel yükleme sırasında önceden oluşturulmuş ID varsa veya set edilmiş ID varsa set ile oluştur
                 await db.collection('deals').doc(currentDeal.id).set(dealData);
                 newDealId = currentDeal.id;
-                console.log('✅ New deal created with pre-generated ID:', newDealId);
+                console.log('✅ New deal created with pre-generated ID via set():', newDealId);
             } else {
                 const docRef = await db.collection('deals').add(dealData);
                 newDealId = docRef.id;
-                console.log('✅ New deal created with ID:', newDealId);
+                console.log('✅ New deal created with auto ID:', newDealId);
             }
             showSuccess('Fırsat başarıyla oluşturuldu!');
+            closeDealModal();
             await loadDeals();
             updateStats();
-            closeDealModal();
         } else {
             // Mevcut deal'i güncelle
             console.log('📝 Update data:', dealData);
@@ -3241,7 +3271,7 @@ async function saveDealChanges() {
             await db.collection('deals').doc(currentDeal.id).update(dealData);
 
             console.log('✅ Deal updated successfully!');
-            showSuccess('Fırsat onaylandı ve yayınlandı!');
+            showSuccess('Fırsat başarıyla güncellendi!');
 
             // Modal'ı kapat ve listeyi yenile
             closeDealModal();
@@ -3251,7 +3281,7 @@ async function saveDealChanges() {
     } catch (error) {
         console.error('❌ Save error:', error);
         console.error('❌ Error stack:', error.stack);
-        showError('Onaylama hatası: ' + error.message);
+        showError('İşlem hatası: ' + error.message);
         throw error; // Hata durumunda throw et ki buton tekrar aktif olsun
     }
 }
@@ -3274,30 +3304,28 @@ async function showAddDealModal() {
         imageUrl: '',
         imageUrls: [],
         store: '',
-        isApproved: false,
+        isApproved: true,
+        status: 'active',
         isHot: false,
         couponCode: '',
         hotVotes: 0,
         coldVotes: 0,
         expiredVotes: 0,
         commentCount: 0,
-        postedBy: currentUser ? currentUser.uid : 'admin',
+        viewCount: 0,
+        postedBy: 'botkolik',
+        postedByName: 'Botkolik',
+        postedByAvatar: 'assets/botkolik.webp',
         createdAt: new Date(),
         isEditorPick: false,
         isExpired: false,
-        isUserSubmitted: false // Admin tarafından eklenen deal'ler bot deal'i olarak işaretlenir
+        isRejected: false,
+        isUserSubmitted: false, // Admin tarafından eklenen deal'ler bot deal'i olarak işaretlenir
+        _isNew: true
     };
 
     // Modal'ı aç
     await showDealModal(newDeal);
-
-    // Buton metnini "Oluştur" olarak değiştir
-    setTimeout(() => {
-        const saveBtn = document.getElementById('saveBtn');
-        if (saveBtn) {
-            saveBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">add</span><span>Oluştur</span>';
-        }
-    }, 200);
 }
 
 // Update stats
@@ -5636,25 +5664,28 @@ window.swapMainImage = async function () {
 
     console.log('✅ Images swapped:', imageUrls);
 
-    // Firestore'a kaydet
-    try {
-        console.log('💾 Saving image swap to Firestore...');
-        await db.collection('deals').doc(currentDeal.id).update({
-            imageUrl: imageUrls[0],
-            imageUrls: imageUrls,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        console.log('✅ Image swap saved to Firestore');
-    } catch (error) {
-        console.error('❌ Error saving image swap:', error);
-        showError('Görsel değişikliği kaydedilemedi: ' + error.message);
-        // Hata olsa bile UI'ı güncelle (kullanıcı deneyimi için)
+    // Firestore'a kaydet (sadece veritabanında zaten kayıtlı olan fırsatlar için)
+    const isNew = Boolean(currentDeal._isNew || currentDeal._isPreGeneratedId || !currentDeal.id || currentDeal.id === '');
+    if (!isNew && currentDeal.id) {
+        try {
+            console.log('💾 Saving image swap to Firestore...');
+            await db.collection('deals').doc(currentDeal.id).update({
+                imageUrl: imageUrls[0],
+                imageUrls: imageUrls,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log('✅ Image swap saved to Firestore');
+        } catch (error) {
+            console.error('❌ Error saving image swap:', error);
+            showError('Görsel değişikliği kaydedilemedi: ' + error.message);
+            // Hata olsa bile UI'ı güncelle (kullanıcı deneyimi için)
+        }
     }
 
     // UI'ı güncelle (event listener'ları da yeniden ekler)
     updateModalImages(imageUrls);
 
-    showSuccess('Görseller değiştirildi ve kaydedildi!');
+    showSuccess(isNew ? 'Görseller sıralandı!' : 'Görseller değiştirildi ve kaydedildi!');
 }
 
 // Show user detail modal
