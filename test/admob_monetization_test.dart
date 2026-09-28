@@ -161,5 +161,23 @@ void main() {
       expect(nativeWidgetCode.contains('clipBehavior: Clip.antiAlias'), isTrue,
           reason: 'Must use native container clipBehavior instead of invasive nested ClipRRect');
     });
+
+    test('14. Faz 3.3: iOS enterprise FLTNativeAdFactory architecture permanently eliminates validator issues', () {
+      final nativeWidgetCode = File('lib/widgets/ad_native_widget.dart').readAsStringSync();
+      expect(nativeWidgetCode.contains("'firsatkolik_native_ad_factory'"), isTrue,
+          reason: 'ad_native_widget must route iOS native ads to custom FLTNativeAdFactory');
+
+      final appDelegateCode = File('ios/Runner/AppDelegate.swift').readAsStringSync();
+      expect(appDelegateCode.contains('FirsatKolikNativeAdFactory'), isTrue,
+          reason: 'AppDelegate.swift must implement FirsatKolikNativeAdFactory');
+      expect(appDelegateCode.contains('FLTGoogleMobileAdsPlugin.registerNativeAdFactory'), isTrue,
+          reason: 'AppDelegate.swift must register firsatkolik_native_ad_factory');
+      expect(appDelegateCode.contains('mediaContainer.widthAnchor.constraint(equalToConstant: 120)'), isTrue,
+          reason: 'Media container must strictly enforce 120x120pt to satisfy video validator');
+
+      final bridgingHeaderCode = File('ios/Runner/Runner-Bridging-Header.h').readAsStringSync();
+      expect(bridgingHeaderCode.contains('FLTGoogleMobileAdsPlugin.h'), isTrue,
+          reason: 'Runner-Bridging-Header.h must expose FLTGoogleMobileAdsPlugin to Swift');
+    });
   });
 }

@@ -132,6 +132,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
+    final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
 
     final templateStyle = NativeTemplateStyle(
       templateType: widget.viewMode == CardViewMode.horizontal
@@ -162,14 +163,25 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
       ),
     );
 
+    // iOS platformunda Google'ın GADTSmallTemplateView.xib kısıtlarını (0.25 media width ve subpixel
+    // AutoLayout taşması) aşmak için kurumsal standart olan FLTNativeAdFactory (firsatkolik_native_ad_factory)
+    // kullanılır. Android tarafında ise sorunsuz çalışan NativeTemplateStyle mimarisi korunur.
+    final String? factoryId = isIOS ? 'firsatkolik_native_ad_factory' : null;
+    final NativeTemplateStyle? nativeStyle = isIOS ? null : templateStyle;
+    final Map<String, Object>? customOpts = isIOS ? <String, Object>{'isDark': isDark} : null;
+
     _nativeAd = NativeAd(
       adUnitId: widget.adUnitId,
       request: const AdRequest(),
-      nativeTemplateStyle: templateStyle,
+      factoryId: factoryId,
+      nativeTemplateStyle: nativeStyle,
+      customOptions: customOpts,
       nativeAdOptions: NativeAdOptions(
         mediaAspectRatio: MediaAspectRatio.landscape,
         videoOptions: VideoOptions(
           startMuted: true,
+          clickToExpandRequested: false,
+          customControlsRequested: false,
         ),
       ),
       listener: NativeAdListener(
@@ -267,11 +279,15 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
   }
 
   Widget _buildSkeleton(BuildContext context, bool isDark) {
+    final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+    final double cardHeight = isIOS ? 142.0 : 126.0;
+    final double mediaBoxSize = isIOS ? 120.0 : 90.0;
+
     if (widget.viewMode == CardViewMode.horizontal) {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
-        height: 126,
-        padding: const EdgeInsets.all(12),
+        height: cardHeight,
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(16),
@@ -280,11 +296,11 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
             width: 1.0,
           ),
         ),
-        child: const Row(
+        child: Row(
           children: [
-            ShimmerBox(width: 90, height: 90, borderRadius: 12),
-            SizedBox(width: 12),
-            Expanded(
+            ShimmerBox(width: mediaBoxSize, height: mediaBoxSize, borderRadius: 12),
+            const SizedBox(width: 12),
+            const Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -343,6 +359,10 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
+    final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+    // Android platform view unclipped framing: height: 126, iOS 120x120 MediaView framing: 142
+    final double cardHeight = isIOS ? 142.0 : 126.0; // height: 126
+    final double innerHeight = isIOS ? 140.0 : 124.0;
 
     // Reklam yüklenememişse veya devre dışıysa fallback builder çağrılır
     if (_isAdFailed || (!AdManagerService.instance.isAdsEnabled || !AdManagerService.instance.nativeEnabled)) {
@@ -362,7 +382,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
     if (widget.viewMode == CardViewMode.horizontal) {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
-        height: 126,
+        height: cardHeight,
         decoration: BoxDecoration(
           color: surfaceColor,
           borderRadius: BorderRadius.circular(16),
@@ -378,7 +398,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
         clipBehavior: Clip.antiAlias,
         child: SizedBox(
           width: double.infinity,
-          height: 124,
+          height: innerHeight,
           child: AdWidget(
             key: ValueKey('ad_widget_${widget.adUnitId}_${_nativeAd.hashCode}'),
             ad: _nativeAd!,
