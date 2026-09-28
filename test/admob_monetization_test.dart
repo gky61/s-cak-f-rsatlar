@@ -179,5 +179,23 @@ void main() {
       expect(bridgingHeaderCode.contains('FLTGoogleMobileAdsPlugin.h'), isTrue,
           reason: 'Runner-Bridging-Header.h must expose FLTGoogleMobileAdsPlugin to Swift');
     });
+
+    test('15. Faz 3.3: NativeAd cold-start concurrency lock, keep-alive and scroll preservation', () {
+      final nativeWidgetCode = File('lib/widgets/ad_native_widget.dart').readAsStringSync();
+      expect(nativeWidgetCode.contains('AutomaticKeepAliveClientMixin'), isTrue,
+          reason: '_AdNativeWidgetState must mix in AutomaticKeepAliveClientMixin');
+      expect(nativeWidgetCode.contains('bool _isLoading = false;'), isTrue,
+          reason: 'Must maintain atomic _isLoading guard against concurrent dual load calls');
+      expect(nativeWidgetCode.contains('if (_isLoading || _isAdLoaded || !mounted)'), isTrue,
+          reason: '_loadAd must reject duplicate in-flight load requests');
+      expect(nativeWidgetCode.contains('didUpdateWidget(AdNativeWidget oldWidget)'), isTrue,
+          reason: 'Must implement didUpdateWidget to handle viewMode or adUnitId switches');
+      expect(nativeWidgetCode.contains('super.build(context);'), isTrue,
+          reason: 'build method must invoke super.build(context) for KeepAlive');
+
+      final homeScreenCode = File('lib/screens/home_screen.dart').readAsStringSync();
+      expect(homeScreenCode.contains('addAutomaticKeepAlives: true'), isTrue,
+          reason: 'home_screen.dart ListView.builder must enable addAutomaticKeepAlives for ad preservation');
+    });
   });
 }

@@ -209,15 +209,31 @@ Marketing Agent gibi, AdMob için de tamamen bağımsız ve uzman bir agent kuru
 ## 🧩 5. Faz 3.3 Native Ad Soğuk Başlangıç & PlatformView Kök Neden Analizi (Root Cause Analysis & Gold Standard Fix)
 
 ### 5.1. Belirti (Symptom)
-Test cihazında soğuk başlangıçta (Cold-Start) Native Ad kartı 124dp çerçevesiyle boş bir kutu olarak kalmakta, liste-grid görünümü değiştirildiğinde anında gelmekte, ancak uygulama kapatılıp açıldığında tekrar boş kalmaktaydı. Reklam dolmadığında çalışan House Promo Fallback ise tetiklenmemekteydi.
+Test cihazında soğuk başlangıçta (Cold-Start) Native Ad kartı 126dp/142dp çerçevesiyle ve gölgesiyle ekrana basılmakta ancak içi tamamen boş (şeffaf/beyaz) kalmaktaydı. İlginç şekilde, kullanıcı Grid ile List view arasında geçiş yaptığında veya kategori değiştirip (örn. Teknoloji -> Tümü) geri döndüğünde reklam kusursuz şekilde görünmekte; fakat uygulama kapatılıp açıldığında (çık-gir yapıldığında) tekrar rastgele olarak boş kalmaktaydı. Kuponlar ve Aktüel sayfalarındaki native reklamlarda ise bu sorun hiç yaşanmamaktaydı. Reklam dolmadığında çalışan House Promo Fallback ise tetiklenmemekteydi.
 
-### 5.2. Kök Neden Zinciri (Root-Cause Chain)
-1. **UMP ve AdMob Asenkron Yarış Durumu:** `main.dart` içindeki UMP rıza sorgusu ağda beklerken Flutter UI Frame 1'i (t ~ 100ms) çizmiş ve `AdNativeWidget` AdMob SDK ilklendirilmeden reklam istemeye çalışmıştır.
-2. **PlatformView ve RepaintBoundary Donması:** `HomeScreen`, `KuponlarPage` ve `KatalogListesiPage` içerisindeki `RepaintBoundary` sarmalayıcıları, Android `SurfaceTexture` ilk karesini üretemeden önce boş/şeffaf raster katmanını GPU önbelleğine kilitlemiştir. View toggle yapıldığında sliver yeniden inşa edildiği için önbellek geçersiz kılınıp reklam görünür hale gelmekteydi.
-3. **Fallback Neden Tetiklenmedi?** Reklam açık bir hata (`onAdFailedToLoad`) almadığı için Flutter durumunda `_isAdFailed = false` kalmış ve House Promo yerine boş `AdWidget` çizilmiştir.
+### 5.2. Gerçek Kök Neden Zinciri (True Root-Cause Chain)
+1. **Asenkron Çift Çağrı Yarış Durumu (Concurrent Dual-Load Race Condition):**
+   * Soğuk başlangıçta `AdNativeWidget.initState()` frame 1'de `_loadAd()` çağırır. Bu sırada SDK henüz ilklendirilmediği için `_loadAd()` fonksiyonu `await adManager.waitForInitialization` satırında askıya alınır.
+   * Bu sırada `_nativeAd = null`, `_isAdLoaded = false`, `_isAdFailed = false` durumundadır.
+   * `main.dart` içindeki `MobileAds.instance.initialize()` tamamlandığında `AdManagerService` son satırında `notifyListeners()` ateşler.
+   * `_AdNativeWidgetState._onAdSettingsChanged()` dinleyicisi `else if (_nativeAd == null && !_isAdLoaded && !_isAdFailed)` koşulunu kontrol eder. Tüm şartlar doğru olduğu için **`_loadAd()` fonksiyonu ikinci kez paralel olarak çağrılır!**
+   * Kodda **`_isLoading` kilit bayrağı bulunmadığı için**, iki `_loadAd()` akışı eşzamanlı olarak iki farklı `NativeAd` nesnesi (Örnek A ve Örnek B) oluşturur ve ikinci çağrı `_nativeAd` referansını ezer.
+   * Örnek B yüklenirken Örnek A'nın `onAdLoaded` callback'i tetiklenir ve `setState` ile Flutter'a `AdWidget(ad: _nativeAd!)` çizdirilir. Ancak `_nativeAd` o sırada henüz yüklenmemiş olan Örnek B'ye işaret etmektedir!
+   * Android tarafında `GoogleMobileAdsViewFactory.create()`, henüz yüklenmemiş ad için `ad.getPlatformView() == null` görerek boş bir `new View(context)` (dummy view) döner.
+   * Flutter motoru bu boş PlatformView'ı GPU render ağacına bağlar. Örnek B sonradan yüklense bile `AdWidget` aynı `ValueKey` nedeniyle view'ı yenilemez ve kart **sonsuza kadar boş bir kutu olarak kalır!**
+2. **View ve Kategori Değişiminde Neden Düzeliyordu?**
+   * Kullanıcı Grid <-> List veya kategori değiştirdiğinde `ListView` baştan kurulur. Bu esnada AdMob SDK zaten `%100 initialized` durumdadır.
+   * `waitForInitialization` beklenmediği için `notifyListeners()` ile çakışma yaşanmaz; `_loadAd()` sadece **tek bir kez** çalışır ve reklam anında görünür.
+3. **Kuponlar ve Aktüel Sayfalarında Neden Sorun Olmuyor?**
+   * Kuponlar ve Aktüel sayfalarına kullanıcı anasayfadan tıkladıktan sonra gidildiği için, AdMob SDK o ana kadar çoktan ilklendirilmiştir. Bu nedenle bu sayfalarda hiçbir zaman soğuk başlangıç yarış durumu tetiklenmez.
+4. **Liste Kaydırmada Dispose ve Yeniden Yükleme (`addAutomaticKeepAlives: false`):**
+   * `HomeScreen` ListView'da `addAutomaticKeepAlives: false` kullanıldığı ve `_AdNativeWidgetState` keep-alive uygulamadığı için kullanıcı akışta gezinirken ekrandan çıkan reklam kartı bellekten atılmakta ve geri gelindiğinde tekrar yarış durumuna veya cooldown'a takılmaktaydı.
 
-### 5.3. Dünya Standardı Mimari Çözüm (Gold Standard Fix)
-* **SDK Asenkron Kilidi:** `AdManagerService.waitForInitialization` Completer'ı ile SDK hazır olmadan hiçbir reklam isteği atılmaz (4s emniyet timeout'lu).
-* **UMP Emniyet Zamanlayıcısı:** `main.dart` içinde 2.5s fallback zamanlayıcısı ile SDK gecikmesi önlenir.
-* **RepaintBoundary Kaldırılması:** PlatformView'ler asla `RepaintBoundary` ile sarılmaz; kararlı `ValueKey` ile doğrudan yönetilir.
-* **Post-Frame Uyandırma:** `onAdLoaded` sonrasında `addPostFrameCallback` ile Android `SurfaceTexture` ilk karesi Flutter render ağacına zorunlu olarak tanıtılır.
+### 5.3. Dünya Standardı Kesin Çözüm Mimarisi (Production-Ready Architecture)
+* **Atomik Eşzamanlılık Kilidi (`_isLoading` Guard):** `_loadAd()` başlangıcına `if (_isLoading || _isAdLoaded || !mounted) return;` kontrolü eklendi ve `_isLoading = true;` yapıldı. `_onAdSettingsChanged` içine `!_isLoading` filtresi konularak mükerrer yükleme çağrıları kesin olarak engellendi.
+* **AdInstance Doğrulama Garantisi:** `NativeAd adInstance` nesnesi oluşturulup `onAdLoaded` içinde `if (ad != adInstance) return;` kontrolüyle yalnızca o çağrıda yüklenen gerçek örneğin `setState` tetiklemesi ve `_nativeAd`'e atanması sağlandı.
+* **`AutomaticKeepAliveClientMixin` Entegrasyonu:** `_AdNativeWidgetState` sınıfına `AutomaticKeepAliveClientMixin` ve `wantKeepAlive => _isAdLoaded` eklendi. Yüklenen bir reklam kullanıcı listeyi aşağı-yukarı kaydırsa bile bellekte tutulur, tekrar dispose olup baştan yüklenmeye çalışmaz.
+* **HomeScreen Keep-Alive Desteği:** `home_screen.dart` içindeki `ListView.builder` için `addAutomaticKeepAlives: true` aktifleştirildi.
+* **`didUpdateWidget` Reaktivitesi:** ViewMode veya AdUnitId değiştiğinde eski reklamı usulünce dispose edip temiz yükleme başlatan `didUpdateWidget` yaşam döngüsü kuruldu.
+* **PlatformView Çift Rebuild Temizliği:** `onAdLoaded` içindeki fazladan `addPostFrameCallback(setState)` kaldırıldı; tek ve kararlı bir `setState` ile PlatformView'ın ilk karesi stabil şekilde bağlandı.
+

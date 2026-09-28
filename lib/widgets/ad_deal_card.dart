@@ -43,6 +43,7 @@ class AdDealCard extends StatelessWidget {
         }
 
         return AdNativeWidget(
+          key: ValueKey('ad_native_widget_${placement}_${viewMode.name}_${adUnitId ?? "default"}'),
           viewMode: viewMode,
           adUnitId: adUnitId ?? DefaultFirebaseOptions.nativeAdUnitId,
           placement: placement == 'kuponlar'

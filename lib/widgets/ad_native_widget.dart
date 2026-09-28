@@ -35,14 +35,19 @@ class AdNativeWidget extends StatefulWidget {
   State<AdNativeWidget> createState() => _AdNativeWidgetState();
 }
 
-class _AdNativeWidgetState extends State<AdNativeWidget> {
+class _AdNativeWidgetState extends State<AdNativeWidget>
+    with AutomaticKeepAliveClientMixin<AdNativeWidget> {
   NativeAd? _nativeAd;
   bool _isAdLoaded = false;
   bool _isAdFailed = false;
+  bool _isLoading = false;
   int _retryCount = 0;
   static const int _maxRetries = 1;
   DateTime? _loadStartTime;
   Timer? _timeoutTimer;
+
+  @override
+  bool get wantKeepAlive => _isAdLoaded;
 
   @override
   void initState() {
@@ -53,10 +58,27 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
     });
   }
 
+  @override
+  void didUpdateWidget(AdNativeWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.adUnitId != oldWidget.adUnitId || widget.viewMode != oldWidget.viewMode) {
+      _timeoutTimer?.cancel();
+      _nativeAd?.dispose();
+      _nativeAd = null;
+      _isAdLoaded = false;
+      _isAdFailed = false;
+      _isLoading = false;
+      _retryCount = 0;
+      _loadAd();
+    }
+  }
+
   void _onAdSettingsChanged() {
     if (!mounted) return;
     final adManager = AdManagerService.instance;
     if (!adManager.isAdsEnabled || !adManager.nativeEnabled) {
+      _timeoutTimer?.cancel();
+      _isLoading = false;
       if (_nativeAd != null) {
         _nativeAd?.dispose();
         _nativeAd = null;
@@ -67,12 +89,18 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
           _isAdFailed = true;
         });
       }
-    } else if (_nativeAd == null && !_isAdLoaded && !_isAdFailed) {
+    } else if (_nativeAd == null && !_isAdLoaded && !_isAdFailed && !_isLoading) {
       _loadAd();
     }
   }
 
   Future<void> _loadAd() async {
+    // 0. Atomic eşzamanlılık ve mükerrer yükleme kilidi (Cold-start yarış durumunu ve boş kalmayı kesin önler)
+    if (_isLoading || _isAdLoaded || !mounted) {
+      _log('⏭️ _loadAd atlandı: isLoading=$_isLoading, isAdLoaded=$_isAdLoaded, mounted=$mounted');
+      return;
+    }
+
     final adManager = AdManagerService.instance;
     if (!adManager.isAdsEnabled || !adManager.nativeEnabled) {
       _log('🚫 Reklamlar genel şalter veya native şalteriyle kapatılmış durumda');
@@ -84,6 +112,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
       return;
     }
 
+    _isLoading = true;
+
     // 1. AdMob SDK'nın başlatılmasını bekle (Cold-start yarış durumunu ve boş kalmayı kesin olarak çözer)
     if (!adManager.isInitialized) {
       _log('⏳ AdMob SDK henüz başlatılmadı, başlatma bekleniyor...');
@@ -93,6 +123,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
       );
       if (!ready || !mounted) {
         _log('⚠️ AdMob SDK başlatma zaman aşımı veya unmounted, fallback devreye alınıyor');
+        _isLoading = false;
         if (mounted) {
           setState(() {
             _isAdFailed = true;
@@ -104,6 +135,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
 
     if (!adManager.canRequestAd(widget.adUnitId)) {
       _log('⏳ ${widget.adUnitId} için soğuma süresi bekleniyor, istek atlanıyor');
+      _isLoading = false;
       if (mounted) {
         setState(() {
           _isAdFailed = true;
@@ -121,6 +153,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
         _log('⏱️ Native Ad yükleme zaman aşımı (8 saniye) → Fallback tetikleniyor');
         _nativeAd?.dispose();
         _nativeAd = null;
+        _isLoading = false;
         if (mounted) {
           setState(() {
             _isAdLoaded = false;
@@ -170,7 +203,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
     final NativeTemplateStyle? nativeStyle = isIOS ? null : templateStyle;
     final Map<String, Object>? customOpts = isIOS ? <String, Object>{'isDark': isDark} : null;
 
-    _nativeAd = NativeAd(
+    late final NativeAd adInstance;
+    adInstance = NativeAd(
       adUnitId: widget.adUnitId,
       request: const AdRequest(),
       factoryId: factoryId,
@@ -187,6 +221,15 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
       listener: NativeAdListener(
         onAdLoaded: (ad) {
           _timeoutTimer?.cancel();
+          _isLoading = false;
+
+          // Eğer bu callback anında ad örneği güncel aktif adInstance değilse veya widget unmount olduysa dispose et
+          if (!mounted || ad != adInstance) {
+            _log('⚠️ Eski veya geçersiz ad örneği yüklendi, güvenle temizleniyor');
+            ad.dispose();
+            return;
+          }
+
           final loadTime = _loadStartTime != null
               ? DateTime.now().difference(_loadStartTime!).inMilliseconds
               : 0;
@@ -194,20 +237,11 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
           adManager.recordAdSuccess(widget.adUnitId);
           _retryCount = 0;
 
-          if (mounted) {
-            setState(() {
-              _isAdLoaded = true;
-              _isAdFailed = false;
-            });
-
-            // Android PlatformView (SurfaceTexture) ilk kare uyandırma tetikleyicisi
-            // Native Ad yüklendiğinde render katmanını tazeleyerek boş (blank) kalmasını önler
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                setState(() {});
-              }
-            });
-          }
+          setState(() {
+            _nativeAd = adInstance;
+            _isAdLoaded = true;
+            _isAdFailed = false;
+          });
         },
         onPaidEvent: (Ad ad, double valueMicros, PrecisionType precision, String currencyCode) {
           adManager.handlePaidEvent(
@@ -216,21 +250,24 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
             valueMicros: valueMicros,
             precision: precision,
             currencyCode: currencyCode,
-            responseInfo: _nativeAd?.responseInfo,
+            responseInfo: adInstance.responseInfo,
           );
         },
         onAdFailedToLoad: (ad, error) {
           _timeoutTimer?.cancel();
+          _isLoading = false;
           _log('❌ Native Ad yüklenemedi: [${error.code}] ${error.message}');
           adManager.recordAdFailure(widget.adUnitId, error);
           ad.dispose();
-          _nativeAd = null;
+          if (adInstance == _nativeAd) {
+            _nativeAd = null;
+          }
 
           if (error.code != 3 && _retryCount < _maxRetries) {
             _retryCount++;
             _log('🔄 Native Ad yükleme 15 saniye sonra tekrar denenecek...');
             Future.delayed(const Duration(seconds: 15), () {
-              if (mounted && _nativeAd == null) {
+              if (mounted && _nativeAd == null && !_isLoading) {
                 _loadAd();
               }
             });
@@ -266,13 +303,15 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
       ),
     );
 
-    _nativeAd?.load();
+    _nativeAd = adInstance;
+    adInstance.load();
   }
 
   @override
   void dispose() {
     AdManagerService.instance.removeListener(_onAdSettingsChanged);
     _timeoutTimer?.cancel();
+    _isLoading = false;
     _nativeAd?.dispose();
     _nativeAd = null;
     super.dispose();
@@ -357,6 +396,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
     final isIOS = defaultTargetPlatform == TargetPlatform.iOS;

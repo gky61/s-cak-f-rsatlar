@@ -1765,7 +1765,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
                                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                                 cacheExtent: 500, // Optimize edilmiş cache
-                                addAutomaticKeepAlives: false, // Performans için
+                                addAutomaticKeepAlives: true, // Native Ad ve keep-alive widget'larının scroll sırasında dispose olmasını önler
                                 addRepaintBoundaries: true, // Repaint optimizasyonu
                                 addSemanticIndexes: false, // Performans için
                                 itemCount: totalItemCount,
