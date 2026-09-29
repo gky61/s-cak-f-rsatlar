@@ -18,6 +18,11 @@ allprojects {
         google()
         mavenCentral()
     }
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs += [
+            "-Xlint:-options",
+        ]
+    }
 }
 
 rootProject.buildDir = '../build'
@@ -28,23 +33,15 @@ subprojects {
 subprojects {
     afterEvaluate { project ->
         if (project.hasProperty('android')) {
+            project.android {
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
             project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
                 kotlinOptions {
-                    def target = project.android.compileOptions.targetCompatibility
-                    if (target != null) {
-                        def targetStr = target.toString()
-                        if (targetStr.contains("1.8") || targetStr.contains("VERSION_1_8")) {
-                            jvmTarget = "1.8"
-                        } else if (targetStr.contains("11") || targetStr.contains("VERSION_11")) {
-                            jvmTarget = "11"
-                        } else if (targetStr.contains("17") || targetStr.contains("VERSION_17")) {
-                            jvmTarget = "17"
-                        } else if (targetStr.contains("21") || targetStr.contains("VERSION_21")) {
-                            jvmTarget = "21"
-                        } else {
-                            jvmTarget = targetStr.replace("VERSION_", "").replace("_", ".")
-                        }
-                    }
+                    jvmTarget = '17'
                 }
             }
         }
