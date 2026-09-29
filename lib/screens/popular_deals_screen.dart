@@ -7,6 +7,7 @@ import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
+import '../widgets/scroll_to_top_button.dart';
 import 'deal_detail_screen.dart';
 
 class PopularDealsScreen extends StatefulWidget {
@@ -52,7 +53,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   void _scrollListener() {
     if (!_scrollController.hasClients) return;
     final offset = _scrollController.offset;
-    final shouldShow = offset > 800;
+    final shouldShow = offset > ScrollToTopButton.defaultThreshold;
     if (shouldShow != _showScrollToTop && mounted) {
       setState(() {
         _showScrollToTop = shouldShow;
@@ -453,24 +454,10 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
           ),
         ],
       ),
-      floatingActionButton: _showScrollToTop
-          ? FloatingActionButton.small(
-              heroTag: 'popular_scroll_to_top',
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                if (_scrollController.hasClients) {
-                  _scrollController.animateTo(
-                    0,
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOut,
-                  );
-                }
-              },
-              backgroundColor: primaryColor,
-              elevation: 4,
-              child: const Icon(Icons.keyboard_arrow_up_rounded, color: Colors.white, size: 20),
-            )
-          : null,
+      floatingActionButton: ScrollToTopButton(
+        isVisible: _showScrollToTop,
+        scrollController: _scrollController,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }

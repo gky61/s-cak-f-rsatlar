@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
 import 'katalog_listesi_page.dart';
 import '../services/analytics_service.dart';
+import '../widgets/scroll_to_top_button.dart';
 
 enum MagazaKategori {
   tumu('Tümü', Icons.apps_rounded),
@@ -44,10 +45,12 @@ class AktuelMagazalarPage extends StatefulWidget {
 
 class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   late final Stream<QuerySnapshot> _kataloglarStream;
   String _searchQuery = '';
   MagazaKategori _selectedCategory = MagazaKategori.tumu;
   bool _hideHeroBanner = false;
+  bool _showScrollToTop = false;
 
   static const List<Magaza> _magazalar = [
     // 1. Öncelik – Süpermarket / Marketler
@@ -99,7 +102,16 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
   void initState() {
     super.initState();
     AnalyticsService.instance.logScreenView(screenName: 'AktuelMagazalarPage');
+    _scrollController.addListener(_onScroll);
     _kataloglarStream = FirebaseFirestore.instance.collection('kataloglar').snapshots();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final show = _scrollController.offset > 600.0;
+    if (show != _showScrollToTop && mounted) {
+      setState(() => _showScrollToTop = show);
+    }
   }
 
   void _dismissBanner() {
@@ -111,6 +123,8 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -191,6 +205,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
           }
 
           return CustomScrollView(
+            controller: _scrollController,
             physics: const BouncingScrollPhysics(),
             slivers: [
               // 1. HERO BANNER
@@ -246,6 +261,11 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
           );
         },
       ),
+      floatingActionButton: ScrollToTopButton(
+        isVisible: _showScrollToTop,
+        scrollController: _scrollController,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 

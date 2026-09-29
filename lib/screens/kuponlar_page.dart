@@ -19,6 +19,7 @@ import '../services/coupon_credit_service.dart';
 import '../services/ad_manager_service.dart';
 import '../services/theme_service.dart';
 import '../widgets/ad_deal_card.dart';
+import '../widgets/scroll_to_top_button.dart';
 import 'kupon_form_page.dart';
 
 class KuponlarPage extends StatefulWidget {
@@ -56,6 +57,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   late TabController _tabController;
   final ScrollController _radarScrollController = ScrollController();
   final ScrollController _toplulukScrollController = ScrollController();
+  bool _showRadarScrollToTop = false;
+  bool _showToplulukScrollToTop = false;
   bool _hasAutoScrolledToHighlight = false;
   String _selectedStoreFilter = 'Tümü';
   String? _highlightedKuponId;
@@ -100,6 +103,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       }
       if (mounted) setState(() {});
     });
+    _radarScrollController.addListener(_onRadarScroll);
+    _toplulukScrollController.addListener(_onToplulukScroll);
     _kuponlarStream = _kuponService.getKuponlarStream();
     _checkAdminStatus();
     _loadHiddenCoupons();
@@ -144,10 +149,28 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     }
     _couponVoteDebounceTimers.clear();
     _tabController.dispose();
+    _radarScrollController.removeListener(_onRadarScroll);
+    _toplulukScrollController.removeListener(_onToplulukScroll);
     _radarScrollController.dispose();
     _toplulukScrollController.dispose();
     _authSub?.cancel();
     super.dispose();
+  }
+
+  void _onRadarScroll() {
+    if (!_radarScrollController.hasClients) return;
+    final show = _radarScrollController.offset > ScrollToTopButton.defaultThreshold;
+    if (show != _showRadarScrollToTop && mounted) {
+      setState(() => _showRadarScrollToTop = show);
+    }
+  }
+
+  void _onToplulukScroll() {
+    if (!_toplulukScrollController.hasClients) return;
+    final show = _toplulukScrollController.offset > ScrollToTopButton.defaultThreshold;
+    if (show != _showToplulukScrollToTop && mounted) {
+      setState(() => _showToplulukScrollToTop = show);
+    }
   }
 
   /// Yeni açılan kuponu Botkolik çerçeve ışıma efekti için 3.5 saniye boyunca işaretler
@@ -3470,58 +3493,65 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           ),
         ],
       ),
-      floatingActionButton: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        transitionBuilder: (child, animation) => ScaleTransition(
-          scale: animation,
-          child: FadeTransition(opacity: animation, child: child),
-        ),
-        child: _tabController.index == 1
-            ? Container(
-                key: const ValueKey('share_coupon_fab'),
-                height: 48,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primary.withValues(alpha: 0.35),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
+      floatingActionButton: _tabController.index == 0
+          ? ScrollToTopButton(
+              isVisible: _showRadarScrollToTop,
+              scrollController: _radarScrollController,
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                ScrollToTopButton(
+                  isVisible: _showToplulukScrollToTop,
+                  scrollController: _toplulukScrollController,
                 ),
-                child: FloatingActionButton.extended(
-                  onPressed: () {
-                    final currentUser = AuthService().currentUser;
-                    if (currentUser == null) {
-                      showGuestLoginBottomSheet(
-                        context,
-                        title: 'Kupon Paylaşmak İçin Giriş Yap! 🎟️',
-                        message: 'Topluluğa katkıda bulunmak ve indirim kuponunu paylaşmak için hemen giriş yap.',
-                        primaryButtonText: '🚀 Google ile Giriş Yap',
-                      );
-                      return;
-                    }
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => KuponFormPage(userId: currentUser.uid),
+                if (_showToplulukScrollToTop) const SizedBox(height: 10),
+                Container(
+                  key: const ValueKey('share_coupon_fab'),
+                  height: 48,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primary.withValues(alpha: 0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
                       ),
-                    );
-                  },
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  icon: const Icon(Icons.add_rounded, size: 20),
-                  label: const Text(
-                    'Kupon Paylaş',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, letterSpacing: -0.2),
+                    ],
+                  ),
+                  child: FloatingActionButton.extended(
+                    onPressed: () {
+                      final currentUser = AuthService().currentUser;
+                      if (currentUser == null) {
+                        showGuestLoginBottomSheet(
+                          context,
+                          title: 'Kupon Paylaşmak İçin Giriş Yap! 🎟️',
+                          message: 'Topluluğa katkıda bulunmak ve indirim kuponunu paylaşmak için hemen giriş yap.',
+                          primaryButtonText: '🚀 Google ile Giriş Yap',
+                        );
+                        return;
+                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => KuponFormPage(userId: currentUser.uid),
+                        ),
+                      );
+                    },
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    icon: const Icon(Icons.add_rounded, size: 20),
+                    label: const Text(
+                      'Kupon Paylaş',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, letterSpacing: -0.2),
+                    ),
                   ),
                 ),
-              )
-            : const SizedBox.shrink(key: ValueKey('empty_fab')),
-      ),
+              ],
+            ),
     );
   }
 }

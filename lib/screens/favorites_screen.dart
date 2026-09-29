@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
+import '../widgets/scroll_to_top_button.dart';
 import 'category_preferences_screen.dart';
 import 'deal_detail_screen.dart';
 
@@ -86,8 +87,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     }
     bool showCleanupNow = offset <= 15;
 
-    // 800px scroll sonrası yukarı fırlatma butonu kontrolü
-    bool showScrollToTopNow = offset > 800;
+    // 700px scroll sonrası yukarı fırlatma butonu kontrolü
+    bool showScrollToTopNow = offset > ScrollToTopButton.defaultThreshold;
 
     if (showBannerNow != _showBanner || showCleanupNow != _showCleanupButton || showScrollToTopNow != _showScrollToTop) {
       setState(() {
@@ -111,7 +112,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       setState(() {
         _showBanner = true;
         _showCleanupButton = offset <= 15;
-        _showScrollToTop = offset > 800;
+        _showScrollToTop = offset > ScrollToTopButton.defaultThreshold;
       });
     }
   }
@@ -312,31 +313,21 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           _buildFollowedCategories(currentUser, isDark),
         ],
       ),
-      floatingActionButton: _showScrollToTop
-          ? FloatingActionButton(
-              heroTag: 'favorites_scroll_to_top',
-              mini: true,
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                final controller = _tabController.index == 0
-                    ? _myFavoritesScrollController
-                    : _followedCategoriesScrollController;
-                if (controller.hasClients) {
-                  controller.animateTo(
-                    0,
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeOutCubic,
-                  );
-                }
-              },
-              backgroundColor: AppTheme.primary,
-              child: const Icon(Icons.keyboard_arrow_up_rounded, color: Colors.white, size: 24),
-            )
-          : null,
+      floatingActionButton: ScrollToTopButton(
+        isVisible: _showScrollToTop,
+        onPressed: () {
+          final controller = _tabController.index == 0
+              ? _myFavoritesScrollController
+              : _followedCategoriesScrollController;
+          if (controller.hasClients) {
+            controller.animateTo(
+              0,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOutCubic,
+            );
+          }
+        },
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }

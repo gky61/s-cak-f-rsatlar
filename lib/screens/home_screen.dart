@@ -14,6 +14,7 @@ import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/ad_deal_card.dart';
+import '../widgets/scroll_to_top_button.dart';
 import '../services/ad_manager_service.dart';
 import '../models/category.dart';
 import '../models/deal.dart';
@@ -521,10 +522,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_scrollController.hasClients) return;
     
     final offset = _scrollController.offset;
-    final maxScroll = _scrollController.position.maxScrollExtent;
     
-    // 150 piksel aşağı kaydırıldıysa veya en alta yakınsa butonu göster
-    final shouldShow = offset > 150 || (maxScroll > 0 && offset > maxScroll * 0.1);
+    // Kullanıcı en az 2-3 fırsat kartı aşağı kaydırdığında (700px) yukarı kaydırma butonunu göster
+    final shouldShow = offset > ScrollToTopButton.defaultThreshold;
     
     // Sadece değişiklik olduğunda setState çağır
     if (shouldShow != _showScrollToTop && mounted) {
@@ -533,6 +533,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
     
+    final maxScroll = _scrollController.position.maxScrollExtent;
     // Infinite scroll: En alta yaklaşıldığında daha fazla yükle
     if (offset > maxScroll - 200 && _hasMore && !_isLoadingMore && mounted) {
       _loadMoreDeals();
@@ -566,7 +567,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _scrollController.animateTo(
         0,
         duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOut,
+        curve: Curves.easeOutCubic,
       );
     }
   }
@@ -1913,18 +1914,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: _showScrollToTop
-          ? FloatingActionButton.small(
-              heroTag: 'scroll_to_top',
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                _scrollToTop();
-              },
-              backgroundColor: primaryColor,
-              elevation: 4,
-              child: const Icon(Icons.keyboard_arrow_up_rounded, color: Colors.white, size: 20),
-            )
-          : null,
+      floatingActionButton: ScrollToTopButton(
+        isVisible: _showScrollToTop,
+        onPressed: _scrollToTop,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
