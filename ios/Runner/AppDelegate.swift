@@ -5,10 +5,40 @@ import google_mobile_ads
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+  // Cold start bildirim verisini saklamak için statik önbellek
+  static var initialNotificationData: [String: Any]?
+  private var notificationChannel: FlutterMethodChannel?
+
+  /// APNs userInfo sözlüğünü Flutter MethodChannel ile uyumlu [String: Any] formatına dönüştürür
+  static func sanitizeNotificationUserInfo(_ userInfo: [AnyHashable: Any]) -> [String: Any] {
+    var dict = [String: Any]()
+    for (key, value) in userInfo {
+      if let stringKey = key as? String {
+        if let stringValue = value as? String {
+          dict[stringKey] = stringValue
+        } else if let numValue = value as? NSNumber {
+          dict[stringKey] = numValue
+        } else if let subDict = value as? [AnyHashable: Any] {
+          dict[stringKey] = sanitizeNotificationUserInfo(subDict)
+        } else if let array = value as? [Any] {
+          dict[stringKey] = array
+        } else {
+          dict[stringKey] = String(describing: value)
+        }
+      }
+    }
+    return dict
+  }
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Cold start bildirim verisini launchOptions üzerinden yakala
+    if let remoteNotification = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+      AppDelegate.initialNotificationData = AppDelegate.sanitizeNotificationUserInfo(remoteNotification)
+    }
+
     GeneratedPluginRegistrant.register(with: self)
 
     // iOS 10+ Ön plan bildirimleri için delegate kaydı
@@ -18,6 +48,23 @@ import google_mobile_ads
     application.registerForRemoteNotifications()
 
     if let controller = window?.rootViewController as? FlutterViewController {
+      // iOS Bildirim Köprüsü Kanalı (Cold Start & Warm Start Notification Bridge)
+      let notifChannel = FlutterMethodChannel(
+        name: "com.sicakfirsatlar.app/notifications",
+        binaryMessenger: controller.binaryMessenger
+      )
+      self.notificationChannel = notifChannel
+
+      notifChannel.setMethodCallHandler({ [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
+        if call.method == "getInitialNotification" {
+          let data = AppDelegate.initialNotificationData
+          AppDelegate.initialNotificationData = nil // Tüketildiğinde temizle
+          result(data)
+        } else {
+          result(FlutterMethodNotImplemented)
+        }
+      })
+
       let nativeHttpChannel = FlutterMethodChannel(
         name: "com.sicakfirsatlar.app/native_http",
         binaryMessenger: controller.binaryMessenger
@@ -160,11 +207,23 @@ import google_mobile_ads
   }
 
   // iOS Bildirim Tıklama Yanıtı (Notification Tap Response)
+  // Cold start ve warm start durumlarında tıklanan bildirimi yakalar ve Flutter tarafına aktarır.
   override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
+    let userInfo = response.notification.request.content.userInfo
+    let dict = AppDelegate.sanitizeNotificationUserInfo(userInfo)
+
+    // Cold start durumunda Flutter henüz getInitialNotification çağırmadıysa hafızada sakla
+    AppDelegate.initialNotificationData = dict
+
+    // Flutter kanalı zaten hazırsa (warm start veya hızlı boot) doğrudan ilet
+    if let channel = notificationChannel {
+      channel.invokeMethod("onNotificationTap", arguments: dict)
+    }
+
     super.userNotificationCenter(center, didReceive: response, withCompletionHandler: completionHandler)
   }
 

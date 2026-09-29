@@ -165,6 +165,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _initShareIntentListener();
     // In-App Tutorial Kontrolü
     _checkAndTriggerTutorial();
+
+    // Cold start bildirim kontrolü (iOS Native Bridge & FCM getInitialMessage)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notificationService.checkInitialNotification();
+    });
   }
 
   @override

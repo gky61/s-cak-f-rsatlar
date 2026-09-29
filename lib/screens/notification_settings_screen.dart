@@ -29,7 +29,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   
   NotificationPreferences _preferences = NotificationPreferences.defaultPreferences();
   
-  String _systemPermissionStatus = 'authorized';
+  String _systemPermissionStatus = 'checking';
   bool _isLoading = true;
   int _followedCategoryCount = 0;
 
@@ -78,6 +78,10 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _checkSystemPermission();
+      // iOS bazen ayar değişimini OS seviyesinde 300ms gecikmeli yansıtabilir; garanti çift kontrol:
+      Future.delayed(const Duration(milliseconds: 350), () {
+        if (mounted) _checkSystemPermission();
+      });
     }
   }
 
@@ -87,6 +91,9 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       setState(() {
         _systemPermissionStatus = status;
       });
+      if (status == 'authorized') {
+        _notificationService.saveFCMToken();
+      }
     }
   }
 
@@ -323,14 +330,138 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     return card;
   }
 
+  Widget _buildSystemPermissionBanner({
+    required BuildContext context,
+    required Color textMain,
+    required Color? textSub,
+  }) {
+    // Sistem bildirimi açık veya henüz ilk yükleme kontrolünde ise gizle
+    if (_systemPermissionStatus == 'authorized' || _systemPermissionStatus == 'checking') {
+      return const SizedBox.shrink();
+    }
+
+    final isDenied = _systemPermissionStatus == 'denied';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    // Reddedilmiş durum (denied): Kırmızı tonlar
+    // Henüz sorulmamış/onaylanmamış durum (notDetermined - iOS): Apple HIG uyumlu dikkat çekici amber/turuncu tonlar
+    final Color accentColor = isDenied
+        ? Colors.red
+        : (isDark ? const Color(0xFFFFB74D) : const Color(0xFFF57C00));
+
+    final Color backgroundColor = isDenied
+        ? Colors.red.withValues(alpha: isDark ? 0.15 : 0.08)
+        : (isDark ? const Color(0xFFFFB74D).withValues(alpha: 0.15) : const Color(0xFFFFF3E0));
+
+    final Color borderColor = isDenied
+        ? Colors.red.withValues(alpha: isDark ? 0.35 : 0.25)
+        : (isDark ? const Color(0xFFFFB74D).withValues(alpha: 0.35) : const Color(0xFFFFE0B2));
+
+    final String title = isDenied
+        ? 'Cihaz Bildirim İzinleri Kapalı'
+        : 'Bildirim İzinleri Aktif Değil';
+
+    final String description = isDenied
+        ? 'Fırsat bildirimlerini telefonunuza alabilmek için sistem ayarlarından bildirimleri aktif etmeniz gerekmektedir.'
+        : 'Sıcak indirimleri, kuponları ve anlık fırsatları kaçırmamak için bildirim izinlerini etkinleştirin.';
+
+    final IconData iconData = isDenied
+        ? Icons.warning_amber_rounded
+        : Icons.notification_important_outlined;
+
+    final IconData buttonIcon = isDenied
+        ? Icons.settings
+        : Icons.notifications_active_outlined;
+
+    final String buttonLabel = isDenied
+        ? 'Ayarlara Git'
+        : 'Bildirimleri Aç';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: borderColor,
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                iconData,
+                color: accentColor,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: textMain,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: TextStyle(
+              color: textSub,
+              fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 42,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                if (isDenied) {
+                  await AppSettings.openAppSettings(type: AppSettingsType.notification);
+                } else {
+                  await _notificationService.requestPermission();
+                  await _checkSystemPermission();
+                }
+              },
+              icon: Icon(buttonIcon, size: 18),
+              label: Text(
+                buttonLabel,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDenied ? Colors.red : primaryColor,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
     final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final textMain = isDark ? Colors.white : const Color(0xFF1C1C0D);
-    final textSub = isDark ? Colors.grey[400] : const Color(0xFF5C5C4F);
+    final Color textMain = isDark ? Colors.white : const Color(0xFF1C1C0D);
+    final Color textSub = isDark ? (Colors.grey[400] ?? Colors.grey) : const Color(0xFF5C5C4F);
 
     final isMasterOn = _preferences.pushMasterEnabled;
 
@@ -361,73 +492,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // System permission warning banner
-                  if (_systemPermissionStatus == 'denied') ...[
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.red.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.warning_amber_rounded,
-                                color: Colors.red,
-                                size: 24,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Cihaz Bildirim İzinleri Kapalı',
-                                  style: TextStyle(
-                                    color: textMain,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Fırsat bildirimlerini telefonunuza alabilmek için sistem ayarlarından bildirimleri aktif etmeniz gerekmektedir.',
-                            style: TextStyle(
-                              color: textSub,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                AppSettings.openAppSettings(type: AppSettingsType.notification);
-                              },
-                              icon: const Icon(Icons.settings, size: 18),
-                              label: const Text('Ayarlara Git'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                  // System permission warning banner (Apple HIG & Android adaptive)
+                  _buildSystemPermissionBanner(
+                    context: context,
+                    textMain: textMain,
+                    textSub: textSub,
+                  ),
 
                   // Katman 1: Master Switch (Telefon Bildirimleri)
                   Container(
@@ -456,7 +526,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                           style: TextStyle(color: textSub, fontSize: 12),
                         ),
                         value: _preferences.pushMasterEnabled,
-                        activeColor: primaryColor,
+                        activeThumbColor: primaryColor,
                         onChanged: (val) async {
                           if (val) {
                             await _notificationService.requestPermission();
@@ -585,7 +655,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                                   title: const Text('Sessiz Saatler'),
                                   subtitle: const Text('Belirlediğiniz saat aralığında telefonunuza anlık sesli uyarı gelmez; bildirimler sessizce Bildirim Kutusu\'na kaydedilir.'),
                                   value: _preferences.quietHoursEnabled,
-                                  activeColor: primaryColor,
+                                  activeThumbColor: primaryColor,
                                   onChanged: (val) {
                                     _updatePrefs(_preferences.copyWith(quietHoursEnabled: val));
                                   },

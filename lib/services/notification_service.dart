@@ -6,6 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -79,6 +80,8 @@ class NotificationService {
   static bool _notificationListenersSetup = false;
   static bool _isLocalNotificationsInitialized = false;
   static bool _hasHandledColdStartNotification = false;
+  static const MethodChannel _iosNotificationChannel = MethodChannel('com.sicakfirsatlar.app/notifications');
+  static bool _isIosChannelSetup = false;
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -1308,7 +1311,8 @@ class NotificationService {
       ''
     ).toString().trim();
 
-    final isDirectMessage = rawType == 'message' || rawType == 'user_message' || rawType == 'chat';
+    final category = (data['category'] ?? (data['aps'] is Map ? data['aps']['category'] : '') ?? '').toString().trim().toUpperCase();
+    final isDirectMessage = rawType == 'message' || rawType == 'user_message' || rawType == 'chat' || category == 'USER_MESSAGE';
 
     // Mesajlaşma Gönderici ID'si:
     // SADECE açıkça mesaj tiplerinde (message, user_message, chat) userId fallback'i kullanılır.
@@ -1331,6 +1335,7 @@ class NotificationService {
       data['senderName'] ??
       data['sender_name'] ??
       data['notification_title'] ??
+      (data['aps'] is Map && data['aps']['alert'] is Map ? data['aps']['alert']['title'] : null) ??
       'Kullanıcı'
     ).toString().replaceAll('💬 ', '').trim();
 
@@ -1444,21 +1449,34 @@ class NotificationService {
   }
 
   void _startPendingNotificationCheck(Map<String, dynamic> data) {
+    final decision = resolveRouting(data);
+    final rawType = (data['type'] ?? 'deal').toString().trim().toLowerCase();
+    final messageId = (data['messageId'] ?? data['message_id'] ?? '').toString().trim();
+    final tapKey = '$rawType:${decision.senderId ?? ""}:${decision.dealId ?? ""}:${decision.commentId ?? ""}:$messageId';
+
+    // Eğer aynı bildirim son 2.5 saniyede zaten işlendiyse sıraya tekrar ekleme
+    if (_lastHandledTapKey == tapKey && _lastHandledTapTime != null) {
+      if (DateTime.now().difference(_lastHandledTapTime!).inMilliseconds < 2500) {
+        _log('⚠️ Mükerrer bildirim sıraya alma engellendi: $tapKey');
+        return;
+      }
+    }
+
     _pendingNotificationTapData = data;
     _pendingTimer?.cancel();
     int attempts = 0;
-    _pendingTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
-      attempts++;
+
+    void tryNavigate() {
       final navigator = navigatorKey.currentState;
       final currentUser = _auth.currentUser;
-      final decision = resolveRouting(data);
       final isAuthRequired = decision.destination == NotificationDestinationType.chat ||
           decision.destination == NotificationDestinationType.messagesList;
 
       final isReady = navigator != null && (!isAuthRequired || currentUser != null);
 
       if (isReady) {
-        timer.cancel();
+        _pendingTimer?.cancel();
+        _pendingTimer = null;
         if (_pendingNotificationTapData != null) {
           final pendingData = _pendingNotificationTapData!;
           _pendingNotificationTapData = null;
@@ -1467,8 +1485,20 @@ class NotificationService {
             _handleNotificationTap(pendingData, isFromPending: true);
           });
         }
-      } else if (attempts > 75) {
+      }
+    }
+
+    // 1. Anında kontrol (Eğer Navigator ve Auth hemen şimdi hazırsa bekleme)
+    tryNavigate();
+    if (_pendingNotificationTapData == null) return;
+
+    // 2. Periyodik kontrol (Oturumun Keychain'den yüklenmesini veya Navigator'ı bekle)
+    _pendingTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
+      attempts++;
+      tryNavigate();
+      if (_pendingNotificationTapData == null || attempts > 75) {
         timer.cancel();
+        _pendingTimer = null;
         _pendingNotificationTapData = null;
       }
     });
@@ -1624,6 +1654,7 @@ class NotificationService {
           data['message_text'] ??
           data['notification_body'] ??
           data['body'] ??
+          (data['aps'] is Map && data['aps']['alert'] is Map ? data['aps']['alert']['body'] : null) ??
           ''
         ).toString().trim();
 
@@ -2184,13 +2215,89 @@ class NotificationService {
       _handleNotificationTap(message.data);
     });
     
-    // Uygulama kapalıyken bildirime tıklanırsa (FCM Initial Message)
-    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
-      if (message != null) {
-        _log('🔔 Uygulama kapalıyken FCM bildirimiyle açıldı: ${message.data}');
-        _handleNotificationTap(message.data);
+    // iOS Native Bildirim Köprüsünü dinle
+    _setupIosNativeNotificationChannel();
+
+    // Uygulama kapalıyken bildirime tıklanırsa (Cold Start: Hem iOS Native Köprü hem FCM getInitialMessage)
+    checkInitialNotification();
+  }
+
+  /// iOS Native AppDelegate bildirim köprü dinleyicisini bağlar
+  void _setupIosNativeNotificationChannel() {
+    if (_isIosChannelSetup || kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+    _isIosChannelSetup = true;
+    _iosNotificationChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onNotificationTap') {
+        if (call.arguments != null && call.arguments is Map) {
+          final data = Map<String, dynamic>.from(call.arguments as Map);
+          _log('🔔 [iOS Native Bridge] onNotificationTap alındı: $data');
+          _handleNotificationTap(data);
+        }
       }
     });
+  }
+
+  /// Uygulama kapalıyken (cold start) tıklanan bildirimi yakalar ve yönlendirir.
+  /// Hem iOS Native AppDelegate köprüsünü hem de FirebaseMessaging.getInitialMessage'ı
+  /// sorgular; iOS'taki asenkron delegate gecikmesini telafi etmek için retry mekanizması içerir.
+  Future<void> checkInitialNotification() async {
+    if (kIsWeb) return;
+
+    // 1. iOS Özel: Native AppDelegate kanalından başlangıç bildirim verisini sorgula
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      try {
+        final dynamic rawData = await _iosNotificationChannel.invokeMethod('getInitialNotification');
+        if (rawData != null && rawData is Map) {
+          final data = Map<String, dynamic>.from(rawData);
+          if (data.isNotEmpty) {
+            _log('🚀 [iOS Native Bridge] Cold start bildirimi yakalandı: $data');
+            _handleNotificationTap(data);
+            return;
+          }
+        }
+      } catch (e) {
+        _log('⚠️ iOS Native notification bridge sorgu hatası: $e');
+      }
+    }
+
+    // 2. Firebase Messaging getInitialMessage (iOS asenkron delegate gecikmesi için retry mekanizmalı)
+    try {
+      RemoteMessage? initialMessage = await _messaging.getInitialMessage();
+      if (initialMessage == null && defaultTargetPlatform == TargetPlatform.iOS) {
+        // iOS UNUserNotificationCenter delegate yanıtı asenkron aktığından
+        // ilk mikrosaniyede null dönebilir. 150ms aralıklarla 4 kez tekrar dene.
+        for (int i = 0; i < 4; i++) {
+          await Future.delayed(const Duration(milliseconds: 150));
+          initialMessage = await _messaging.getInitialMessage();
+          if (initialMessage != null) break;
+        }
+      }
+
+      if (initialMessage != null) {
+        _log('🔔 Uygulama kapalıyken FCM bildirimiyle açıldı: ${initialMessage.data}');
+        _handleNotificationTap(initialMessage.data);
+        return;
+      }
+    } catch (e) {
+      _log('⚠️ getInitialMessage hatası: $e');
+    }
+
+    // 3. Android Yerel Bildirim Cold Start kontrolü (Local Notifications)
+    if (defaultTargetPlatform == TargetPlatform.android && !_hasHandledColdStartNotification) {
+      _hasHandledColdStartNotification = true;
+      try {
+        final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
+        if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
+          final payload = launchDetails.notificationResponse?.payload;
+          if (payload != null && payload.isNotEmpty) {
+            _log('🚀 Uygulama kapalıyken tıklanan yerel bildirim (cold start): $payload');
+            _handlePayloadString(payload);
+          }
+        }
+      } catch (e) {
+        _log('⚠️ Cold start yerel bildirim kontrol hatası: $e');
+      }
+    }
   }
 
   // Yerel bildirim gösterme yardımcısı (Boş/başlıksız bildirim korumalı & deterministik ID)
