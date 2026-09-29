@@ -60,11 +60,36 @@ class HomeScreen extends StatefulWidget {
     this.initialTabIndex = 0,
   });
 
+  /// Kelime takibinden veya harici ekranlardan HomeScreen'e dönüp arama başlatır.
+  /// Rotaları ve widget ağacını yok etmek yerine, kök rotaya kadar güvenle pop eder
+  /// ve mevcut HomeScreenState üzerinde anında arama modunu açar.
+  static void searchKeyword(BuildContext context, String keyword) {
+    final cleanKeyword = keyword.trim();
+    if (cleanKeyword.isEmpty) return;
+
+    // 1. Kök rotaya (HomeScreen) kadar olan ara ekranları (KeywordTrackingScreen, ProfileScreen vb.) güvenle kapat
+    Navigator.of(context).popUntil((route) => route.isFirst);
+
+    // 2. Aktif HomeScreenState varsa arama modunu doğrudan ve anında aç
+    if (_HomeScreenState._activeState != null && _HomeScreenState._activeState!.mounted) {
+      _HomeScreenState._activeState!.openSearch(cleanKeyword);
+    } else {
+      // Güvenlik yedeği: Çok nadir bir durumda activeState yoksa yeniden başlat
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(initialSearchQuery: cleanKeyword),
+        ),
+        (route) => false,
+      );
+    }
+  }
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static _HomeScreenState? _activeState;
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
@@ -124,6 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _activeState = this;
     _currentTabIndex = widget.initialTabIndex;
     _tutorialService.refreshKeys();
     _startInitialLoadingTimeout();
@@ -232,6 +258,9 @@ class _HomeScreenState extends State<HomeScreen> {
   
   @override
   void dispose() {
+    if (_activeState == this) {
+      _activeState = null;
+    }
     _initialLoadingTimeoutTimer?.cancel();
     _authSub?.cancel();
     _blockedUserListener?.cancel();
@@ -823,6 +852,43 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       _log('❌ Admin kontrolü hatası: $e');
     }
+  }
+
+  /// Harici ekranlardan (örn: Kelime Takibi) arama modunu anında ve pürüzsüzce açar.
+  void openSearch(String query) {
+    final clean = query.trim();
+    if (clean.isEmpty) return;
+
+    setState(() {
+      _currentTabIndex = 0; // Fırsatlar sekmesine geç
+      _selectedCategory = 'tumu'; // Kategori filtresini sıfırla
+      _selectedSubCategory = null;
+      _isSearchMode = true; // Arama modunu aç
+      _searchQuery = clean;
+      _searchController.text = clean;
+      _activeSearchScope = SearchScope.deals;
+      _displayLimit = 20;
+      _matchedUsers = [];
+      _isSearchingUsers = false;
+    });
+
+    _loadFollowedKeywords();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_searchController.text.isNotEmpty) {
+        _searchController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _searchController.text.length),
+        );
+      }
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   void _toggleSearchMode() {

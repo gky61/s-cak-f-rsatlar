@@ -29,6 +29,7 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   List<String> _watchKeywords = [];
   bool _isLoading = true;
   bool _isAdding = false;
+  bool _isNavigatingToSearch = false;
 
   // Popüler / Hızlı Ekleme Önerileri
   final List<String> _popularSuggestions = [
@@ -743,13 +744,10 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                               children: [
                                 InkWell(
                                   onTap: () {
-                                    Navigator.pushAndRemoveUntil(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => HomeScreen(initialSearchQuery: keyword),
-                                      ),
-                                      (route) => false,
-                                    );
+                                    if (_isNavigatingToSearch) return;
+                                    _isNavigatingToSearch = true;
+                                    HapticFeedback.lightImpact();
+                                    HomeScreen.searchKeyword(context, keyword);
                                   },
                                   borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
                                   child: Padding(
