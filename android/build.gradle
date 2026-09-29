@@ -19,8 +19,11 @@ allprojects {
         mavenCentral()
     }
     tasks.withType(JavaCompile).configureEach {
+        options.deprecation = false
         options.compilerArgs += [
             "-Xlint:-options",
+            "-Xlint:-deprecation",
+            "-Xlint:-unchecked",
         ]
     }
 }
@@ -38,6 +41,14 @@ subprojects {
                     sourceCompatibility JavaVersion.VERSION_17
                     targetCompatibility JavaVersion.VERSION_17
                 }
+            }
+            project.tasks.withType(JavaCompile).configureEach {
+                options.deprecation = false
+                options.compilerArgs += [
+                    "-Xlint:-options",
+                    "-Xlint:-deprecation",
+                    "-Xlint:-unchecked",
+                ]
             }
             project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
                 kotlinOptions {
